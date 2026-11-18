@@ -1149,3 +1149,14 @@ development_status:
   44-1a-qr-facture-grille: done  # #944 ; ex-36-12b (partie) ; grille SIX, Payable by, montant fixe, largeurs mesurées, paliers R1, R4 et P3 ; revue P1 0/0/0/15 → P2 ciblée 0/0/0/2 ; clôture au dernier commit de code 8997f6349 : gate-ci 5528, E2E 437 + 7 KF-029, t4_pdfium vert
   44-1b-qr-facture-cascade: backlog  # sortie de la 0.19.0 à la coupure du 2026-11-18. — #944 ; ex-36-12b (suite) ; paliers intermédiaires R2, R3, P1, P2 ; release ultérieure, part de la 44-1a fusionnée ; à valider avant développement
   44-2-solde-dette-epic: backlog  # sortie de la 0.19.0 à la coupure du 2026-11-18. — story de solde de l'Epic 44 (CLAUDE.md) : au plus 2 issues ouvertes par les stories 44-* ; en fin d'epic, avant le tag
+
+  # 2026-11-18 — Epic 46 « Rapports par groupes de comptes » (Beat), branche epic/46-rapports-groupes ; numéro réservé par Guy.
+  epic-46: in-progress  # 2026-11-18 kickoff en esquisse (planning-artifacts/epic-46-rapports-groupes.md) ; sans migration ; 6 stories hors kickoff, solde comprise (46-5 conditionnelle, Q9) ; décomptes d'issues à mesurer au kickoff
+  46-0-kickoff: in-progress  # fichier d'epic écrit, revue de Beat à tenir, décomptes à mesurer
+  46-1-arbre-des-groupes-modele-api: backlog  # esquisse ; après la fusion de fix/bilan-resultat-reporte
+  46-2-groupes-ecrans: backlog  # esquisse ; suit 46-1
+  46-3-groupes-pdf-csv: backlog  # esquisse ; suit 46-1 et la fusion de fix/pdf-montants-alignes
+  46-4-groupes-mcp: backlog  # esquisse ; suit 46-1 ; sous réserve de Q5
+  46-5-aide-groupes-plan: backlog  # esquisse ; conditionnelle (Q9) ; après la fusion de fix/api-parent-compte
+  46-6-solde-dette-epic: backlog  # story de solde, plafond proposé 2 issues
+  epic-46-retrospective: optional
