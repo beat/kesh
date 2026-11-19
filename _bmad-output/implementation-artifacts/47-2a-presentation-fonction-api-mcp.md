@@ -21,11 +21,15 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    &PresentationLinks) -> BalanceSheet` et `present_income_statement(raw: IncomeStatement, links: &PresentationLinks)
    -> IncomeStatement`, sans I/O, testées seules ; `PresentationLinks` se construit depuis
    `accounts::presentation_links` (47-1a AC-9). Les générateurs `balance_sheet::generate` et
-   `income_statement::generate` **restent bruts et inchangés** (seuls appelants : `services/rapports.rs:619`, `:634`) :
+   `income_statement::generate` **restent bruts et inchangés** (seuls appelants de production : `services/rapports.rs:619`, `:634`, et
+   `balance_sheet.rs:263`, où `balance_sheet::generate` appelle `income_statement::generate` pour `equity_result` —
+   sur le brut, sans effet puisque `net_result` est invariant, AC 5) :
    l'accueil (`homepage_summary`, invariant `:6-11`), la balance, le grand livre, le journal, la TVA et les projets
    n'y passent pas (D7, Q4, Q11). La fonction ne lit et n'écrit que les sections `assets`, `liabilities` (bilan),
    `revenues`, `expenses` (résultat) — **jamais** `equity` ni les lignes calculées (D8). `PresentationLinks` vide →
-   le rapport est rendu **tel quel**, sans retri (chemin court).
+   le rapport est rendu **tel quel**, sans retri (chemin court) ; « vide » = **aucun lien** : un compte que le lecteur
+   garde dans son vecteur avec ses deux colonnes de lien à `None` (lien écarté, ou qui ne reçoit plus de lien valide,
+   47-1a AC-8 *Forme rendue*) ne compte pas et n'est jamais traité comme lié.
    **Liens incohérents écartés en amont** : le lecteur (47-1a AC-8, liste close (a)–(g) : orphelin, autre société,
    soi-même, paire non réciproque, chaîne, fonds propres, types) ne rend que des liens valides, avec `tracing::warn!`
    pour les autres ; la fonction ne revérifie rien, mais **ne touche jamais `equity`** (ci-dessus) : même un lien de
@@ -65,7 +69,8 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    chemin court de l'AC 1 et l'exigence : sans lien, ou avec des liens tous sans effet, la sortie **égale** l'entrée.
 6. **Sources** (D9) : chaque ligne présentée porte `sources: [{ accountId, accountNumber, accountName, balance, kind }]`
    — `kind` ∈ `own` (solde propre du miroir), `mirror` (source inversée), `offset` (membre de paire) ; `balance` =
-   solde **brut** du compte source, signé dans sa nature. **Ordre** : miroir — `own` d'abord (s'il est non nul), puis
+   solde **brut** du compte source, signé dans sa nature. **Ordre** : miroir — `own` d'abord (si le miroir a une ligne brute : solde CHF **ou** en devise non nul, la règle
+   du `HAVING` ; son `balance` peut alors valoir 0.00), puis
    les sources `mirror` par numéro ; paire — le membre qui porte la ligne, puis l'autre (47-2b écrit `Sources` dans
    cet ordre). Champ omis (`skip_serializing_if = "Vec::is_empty"`) sur une ligne non présentée : un rapport sans
    lien, ou dont les liens sont tous sans effet (AC 2, 3), rend **le même JSON qu'aujourd'hui**. Le rapport porte
@@ -82,7 +87,7 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    `presentation=brute|presentee` (défaut `presentee`) ; valeur inconnue → 400 (même patron que `validate_format`) ;
    `brute` rend exactement le rapport d'aujourd'hui (D6). **Où** : `presentation: Option<String>` s'ajoute à
    `ReportQuery` et à `ExportQuery`, que partagent la balance, les journaux et la TVA ; seuls les quatre handlers du
-   bilan et du compte de résultat le lisent et le valident (`validate_presentation`, patron de `validate_format`) —
+   bilan et du compte de résultat (`routes/reports.rs:235-258`, `:374-400`, `:504-530`) le lisent et le valident (`validate_presentation`, patron de `validate_format`) —
    les autres l'ignorent comme tout paramètre inconnu aujourd'hui (D7 : aucun 400 neuf sur la balance). Le service
    (`services/rapports.rs::bilan`, `::compte_de_resultat`) prend un paramètre de plus, `presentation: Presentation`
    (`enum { Brute, Presentee }`), **sans toucher `DemandePeriode`** (partagée par `balance` et `tva`) ; en
@@ -90,16 +95,21 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    aucune lecture en `Brute`) et applique la fonction. Lecture **sans instantané commun** avec celle des soldes (comme
    les sections entre elles, `homepage_summary.rs`, *Limite*) : un lien modifié entre les deux ne change qu'une
    présentation, jamais un solde. **Trace d'audit** : `DetailsTrace::Periode` gagne `presentation:
-   Option<Presentation>`, `None` pour la balance, les journaux et la TVA ; `emit_report_audit` et
+   Option<Presentation>`, `None` pour la balance, les journaux et la TVA ; `details_periode` (`:595`, appelé par les cinq rapports à période) prend la valeur, `tracer` (`:414-460`, qui
+   déstructure `Periode` champ par champ) la transmet, et `emit_report_audit` (sept arguments aujourd'hui : le
+   huitième demande `#[allow(clippy::too_many_arguments)]`, comme `emit_report_export_audit`) et
    `emit_report_export_audit` n'ajoutent la clé `"presentation": "brute"|"presentee"` à `details_json` que si elle est
    `Some` — le détail des autres rapports ne change pas. `crates/kesh-api/tests/services_motif.rs`
    (`TABLE_DES_TRACES`, `:390`, `:399`, `:408`, `:417`, détails écrits en dur) gagne la clé sur ses quatre entrées
-   bilan / compte de résultat, et un cas `brute`.
+   bilan / compte de résultat, et un cas `brute` ; ses appels du service (`:1104`, `:1110`, `:1882`) prennent le paramètre neuf.
 10. **MCP** `kesh_bilan`, `kesh_compte_de_resultat` : argument facultatif `presentation` (`"brute"` |
     `"presentee"`, défaut `presentee`). `SCHEMA_PERIODE` ne sert qu'à ces deux outils (`kesh_balance` a son schéma
-    en ligne, `:209`) : il gagne `"presentation":{"type":"string","enum":["brute","presentee"]}`. Mais
-    `ArgumentsPeriode` est **partagé** avec `kesh_balance` (`:225`, construit littéralement) : les deux outils
-    prennent leur propre structure (`deny_unknown_fields`) ; valeur inconnue → arguments invalides
+    en ligne, `:209`) : il gagne `"presentation":{"type":"string","enum":["brute","presentee"]}`. `kesh_balance` désérialise sa
+    propre structure, `ArgumentsBalance` (`:50`, `deny_unknown_fields`, sans `presentation` : l'argument y reste
+    refusé), mais construit littéralement un `ArgumentsPeriode` (`:225`) pour `resume_periode` et `demande` : soit
+    `ArgumentsPeriode` gagne `presentation` (`#[serde(default)]`, le littéral de `:225` à `None`), soit les deux
+    outils prennent leur propre structure (`deny_unknown_fields`) — au choix du développement, la balance ne
+    changeant ni de schéma ni de résumé ; valeur inconnue → arguments invalides
     (`TEXTE_ARGUMENTS_INVALIDES`). Le résumé (`resume_periode`, montré à l'Administrateur dans le détail d'un envoi,
     « Outil kesh_bilan : fiscalYearId=1 ») gagne `.code("presentation", …)` quand l'argument est donné.
     `LigneDeSolde` gagne `sources: Vec<SourceDeLigne>` (liste **toujours présente**, vide sans présentation : la
@@ -126,7 +136,9 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
     qu'à ce plan ; 2270, 6950, 6900, 1020, 2100 sont aux trois ; 2800 s'appelle « Capital de l'exploitant » au plan indépendant) : le manuel le dit. **1040 n'a aucune écriture** : sa ligne présentée n'a donc pas de source `own`, `sources` = `[2270 (mirror, −1 200.00)]` (CSV 47-2b : `Sources` = `2270:-1200.00`) ; 2100 de même `[1020 (mirror, −800.00)]`. **Liste des
     montants de l'exemple** (validation P2 de la 47-3b) — le test d'intégration la porte en constante
     `EXEMPLE_PRESENTATION` (chaînes sans signe ni apostrophe) entre `// exemple-presentation:debut` et
-    `// exemple-presentation:fin`, et affirme chacun de ces montants sur les rapports qu'il rejoue ; la garde de la
+    `// exemple-presentation:fin`, et affirme chacun de ces montants sur les rapports qu'il rejoue ; ces marqueurs `// …`
+    ne sont **pas** lus par `bloc_marque` (qui ne connaît que `% <nom>:debut|fin`, `textes_coherents.rs:2167`) : la
+    47-3b (AC-10) ajoute la fonction pure sœur `bloc_marque_rs(source, nom)` pour les lire ; la garde de la
     47-3b (AC-10) les retrouve dans le bloc marqué du manuel : `13700.00`, `11700.00`, `3800.00`, `1800.00`,
     `1200.00`, `800.00`, `570.00`, `1020.00`, `450.00`. *(Remplace, à la validation P1 de la 47-3b, un jeu aux numéros de la comptabilité
     de Beat — 1021, 1179, 2120, 6960, 6961 — que le manuel n'aurait pu citer sans rougir G4-bis.)*
@@ -139,8 +151,11 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
     synthèse de l'accueil (`:305`, « `totalRevenues` et `totalExpenses` égalent ceux de `GET
     /reports/income-statement` ») devient « … de `GET /reports/income-statement?presentation=brute` » — une paire au
     compte de résultat change ses totaux (non son résultat) ; manuel d'administration
-    (`docs/manual/fr/admin-manual.tex`, tableau des outils MCP `:3538`) — la présentation brute à l'API et aux outils
-    MCP. `.tex` seulement ; **le prompt de chaque passe de revue nomme ces documents** et exige le contrôle du PDF
+    (`docs/manual/fr/admin-manual.tex`, tableau des outils MCP `:3538`, troisième colonne seule : la garde
+    `mcp_matrice_manuel.rs` lit nom et portée ; seuil d'« environ 60 comptes » `:3564`, AC 10) — la présentation
+    brute à l'API et aux outils MCP. ⚠️ **Exemples aux comptes de l'AC 11** : G4-bis et G4-ter
+    (`textes_coherents.rs`) lisent `api-external.md`, le manuel d'administration et les doc-comments Rust (dont ceux
+    de `presentation.rs`) — un compte hors des plans livrés, ou sous un autre nom, y rougit le gate. `.tex` seulement ; **le prompt de chaque passe de revue nomme ces documents** et exige le contrôle du PDF
     compilé localement.
 14. **Accueil resté brut** (Q11, D6) : `GET /reports/homepage-summary` est inchangé ; ses totaux égalent ceux du
     compte de résultat **brut**. `crates/kesh-api/tests/homepage_summary_e2e.rs` (`income_totals`, `:76-91`, appel
@@ -183,12 +198,13 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
 - `crates/kesh-report/src/homepage_summary.rs:6-11` (invariant avec le compte de résultat **brut**).
 - `crates/kesh-api/src/services/rapports.rs:199-206` (`DemandePeriode`), `:610-636` (`bilan`, `compte_de_resultat`).
 - `crates/kesh-api/src/routes/reports.rs:64-79` (`ReportQuery`), `:174-200` (`ExportQuery`, `validate_format`),
-  `:235-258`, `:374-420` ; routage `crates/kesh-api/src/lib.rs:1381-1430`.
+  `:235-258`, `:374-400`, `:504-530` (les quatre handlers) ; routage `crates/kesh-api/src/lib.rs:1381-1430`.
 - `crates/kesh-api/src/mcp/outils/rapports.rs:38-112` (`ArgumentsPeriode` `deny_unknown_fields`, `SCHEMA_PERIODE`,
   `LigneDeSolde`, `Bilan`, `CompteDeResultat`), `:179-192` (`resume_periode`, `demande`), `:225` (`kesh_balance`
   construit un `ArgumentsPeriode`) ; `crates/kesh-api/src/mcp/sortie.rs:97` (`sortie!` : aucun attribut de champ,
   aucun `String`), `:400-460` (`Resume`, `.code`).
-- `crates/kesh-api/src/services/rapports.rs:266-273` (`DetailsTrace::Periode`), `:1059`, `:1116`
+- `crates/kesh-api/src/services/rapports.rs:266-273` (`DetailsTrace::Periode`), `:414-460` (`tracer`), `:595`
+  (`details_periode`), `:1059`, `:1116`
   (`emit_report_audit`, `emit_report_export_audit`) ; `crates/kesh-api/tests/services_motif.rs:390-417` (détails
   d'audit du bilan et du compte de résultat, en dur) ; `crates/kesh-api/tests/homepage_summary_e2e.rs:76-91`.
 
@@ -294,6 +310,24 @@ dès qu'un lien est posé (AC 13).
   relue et conforme. Concordances : forme du vecteur `sources` ; `compensated` ⇒ jamais vide (47-3b AC-4, `is_empty`
   ici) ; exemple identique 47-2b / 47-3b ; le fichier d'epic ne porte pas l'exemple (source unique, AC-11).
   Rapport : `kesh-gate-logs/epic-47-validation/47-2a-presentation-fonction-api-mcp-P2.md`.
+
+- 2026-11-19 — validation P3 (Opus 5.5) : 0 C / 0 H / 0 M / 7 L, remédiés. Axes que la P2 déclarait non exercés,
+  repris : (1) concordance avec la 47-1a AC-8/AC-9 — liens écartés jamais rendus, liste close (a)–(g), compte gardé
+  dans le vecteur liens à `None`, archivé non écarté, paire réciproque, attributs du miroir sans écriture
+  (`PresentationLinkAccount` : type, rôle, devise, `active`) : concordant ; L1 « `PresentationLinks` vide » précisé
+  (un compte du vecteur sans lien ne compte pas, AC 1) ; (2) lignes citées relues à `origin/main` `fd04099f` — toutes
+  justes, sauf : L2 `income_statement::generate` a un troisième appelant (`balance_sheet.rs:263`, `equity_result`,
+  sans effet : AC 1) ; L3 handler d'export du compte de résultat (`routes/reports.rs:504-530`) hors de la plage
+  citée ; L4 `details_periode` (`:595`) et `tracer` (`:414-460`) à modifier, `emit_report_audit` au huitième argument
+  (`clippy::too_many_arguments`), appels de `services_motif.rs` (`:1104`, `:1110`, `:1882`) (AC 9) ; L5 `kesh_balance`
+  désérialise `ArgumentsBalance` (`:50`) — le couplage n'est que le littéral de `:225` (AC 10) ; (3) manuel —
+  matrice MCP gardée par `mcp_matrice_manuel.rs` (nom, portée seuls), seuil `:3564` : L6 exemples de `api-external.md`,
+  du manuel d'administration et des doc-comments soumis à G4-bis/G4-ter (AC 13). L7 `own` défini par la ligne brute
+  (CHF ou devise, AC 6), pour concorder avec la règle de devise de l'AC 7. Relevé de la P3 de la 47-3b, transmis par
+  l'orchestrateur : marqueurs `// exemple-presentation:…` lus par `bloc_marque_rs` (47-3b AC-10), non par
+  `bloc_marque` (AC 11). Remédiation P2 relue : exemple au plan `pme`, `sources` de 1040 et 2100, liste
+  `EXEMPLE_PRESENTATION` — justes et concordants avec 47-2b AC 1, 4 et 47-3b AC-10. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-2a-presentation-fonction-api-mcp-P3.md`.
 
 ## Notes de version
 
