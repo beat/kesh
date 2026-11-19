@@ -122,8 +122,8 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
     côtés +2 000.00, fonds propres et `equityResult` inchangés, `equationHolds` vrai dans les deux ; compte de
     résultat : 6950 Produits financiers 1 020.00, 6900 Charges financières 450.00 en paire → 6950 à 570.00, 6900
     absent, `compensated` vrai, résultat net 570.00 identique ; la balance (`trial-balance`) montre toujours 1020 à
-    −800.00 et 2270 à −1 200.00 en `closingBalance` (côté naturel positif, `trial_balance.rs:87-88`). Comptes et noms du plan **PME** (1040 n'existe
-    qu'à ce plan ; 2800 s'appelle « Capital de l'exploitant » au plan indépendant) : le manuel le dit. **Liste des
+    −800.00 et 2270 à −1 200.00 en `closingBalance` (côté naturel positif, `trial_balance.rs:87-88`). Comptes et noms du plan **PME** — **l'exemple, l'E2E et le manuel qui le reprennent supposent une société au plan `pme`** (1040 n'existe
+    qu'à ce plan ; 2270, 6950, 6900, 1020, 2100 sont aux trois ; 2800 s'appelle « Capital de l'exploitant » au plan indépendant) : le manuel le dit. **1040 n'a aucune écriture** : sa ligne présentée n'a donc pas de source `own`, `sources` = `[2270 (mirror, −1 200.00)]` (CSV 47-2b : `Sources` = `2270:-1200.00`) ; 2100 de même `[1020 (mirror, −800.00)]`. **Liste des
     montants de l'exemple** (validation P2 de la 47-3b) — le test d'intégration la porte en constante
     `EXEMPLE_PRESENTATION` (chaînes sans signe ni apostrophe) entre `// exemple-presentation:debut` et
     `// exemple-presentation:fin`, et affirme chacun de ces montants sur les rapports qu'il rejoue ; la garde de la
@@ -284,6 +284,16 @@ dès qu'un lien est posé (AC 13).
   algorithme § 3) et liste des sept cas écartés du lecteur alignée sur 47-1a AC-8 (P3 de la 47-4) ; tri `String::cmp` contre collation SQL (chemin court) ; `is_empty` à aligner
   sur « `compensated` ⇒ jamais vide » de la 47-3b. Rapport :
   `kesh-gate-logs/epic-47-validation/47-2a-presentation-fonction-api-mcp-P1.md`.
+
+- 2026-11-19 — validation P2 (Sonnet 5.5) : 0 C / 0 H / 1 M / 1 L, remédiés. Exemple de l'AC-11 recalculé au centime
+  (actif brut 11 700.00 = 500 + 12 000 − 800 ; passif brut 1 800.00 = 3 000 − 1 200 ; contrepartie 2800 = 9 330.00,
+  fonds propres 9 900.00 ; présenté 13 700.00 / 3 800.00, équation 13 700 = 3 800 + 9 900 vraie dans les deux ; paire
+  1 020 − 450 = 570, résultat net inchangé) : tient ; comptes et noms vérifiés aux trois plans (`assets/charts/*.json`).
+  M : plan `pme` requis par 1040 non écrit à l'AC-11 (relevé P3 de la 47-2b), et absence de source `own` de 1040
+  (`Sources` = `2270:-1200.00`) — écrits. L : liste `EXEMPLE_PRESENTATION` (ajoutée par la validation P2 de la 47-3b)
+  relue et conforme. Concordances : forme du vecteur `sources` ; `compensated` ⇒ jamais vide (47-3b AC-4, `is_empty`
+  ici) ; exemple identique 47-2b / 47-3b ; le fichier d'epic ne porte pas l'exemple (source unique, AC-11).
+  Rapport : `kesh-gate-logs/epic-47-validation/47-2a-presentation-fonction-api-mcp-P2.md`.
 
 ## Notes de version
 
