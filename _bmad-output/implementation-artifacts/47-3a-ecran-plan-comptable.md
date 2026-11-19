@@ -22,7 +22,15 @@ afin de poser ces liens sans passer par l'API.
    **en dernier** des champs (sous `AccountCurrencyFields` en multi-devises, et sous le champ *Compte parent* de #1351
    s'il est fusionné). Absente du dialogue de création (47-1b AC-8). Elle a **quatre états**, calculés par une
    fonction pure (`presentationSectionState`, AC-2) depuis le compte enregistré **et** l'état du formulaire
-   (`editType`, `editRole`), testés chacun en Vitest :
+   (`editType`, `editRole`), testés chacun en Vitest. **Ordre de priorité quand plusieurs conviennent** : *lecture
+   impossible*, puis *cible*, puis *fonds propres*, puis *choix* (un compte cible dont le rôle choisi est de fonds
+   propres montre l'état *cible* : son texte dit quoi défaire, et l'API refusera le rôle, AC-4). Tant que l'index
+   (AC-6) n'est pas encore lu, la section est absente (aucun choix, aucun champ envoyé), comme en *lecture
+   impossible*. La section est un composant `frontend/src/lib/features/accounts/PresentationLinkFields.svelte`
+   (patron `AccountCurrencyFields.svelte` : `+page.svelte` compte déjà 951 lignes), les dialogues d'avertissement et
+   d'archivage restant dans la page ; il reçoit l'index en prop et porte donc, pour la garde d'inventaire
+   `fx-account-filter-inventory.test.ts` (prop `AccountResponse[]`), l'exemption écrite
+   `fx-filtre-comptes : exempté — un lien de présentation admet un compte de toute devise (Q3)` :
    - **choix** : un groupe de trois boutons radio — **Aucun** · **Compte miroir** · **Compenser avec (paire)** — puis,
      pour les deux derniers, un sélecteur de compte. À l'ouverture, le choix et le compte sont ceux du lien
      enregistré (le partenaire ou la cible actuels figurent toujours dans le sélecteur, même s'ils ne passeraient plus
@@ -32,8 +40,8 @@ afin de poser ces liens sans passer par l'API.
      texte « Les comptes de fonds propres ne se présentent pas autrement. » ; s'il a un lien, l'état **choix** reste
      affiché (l'API refusera le rôle, AC-4, et le refus dit quoi défaire) ;
    - **cible** : le compte est la cible d'un ou de plusieurs miroirs (une source au moins, archivée comprise, pointe
-     vers lui) : pas de choix (un compte joue au plus un rôle, 47-1a AC-5 `chain`), texte « Ce compte présente le
-     solde de sens inverse de 2270, 2271. Pour le lier autrement, retirez d'abord ces liens. » ;
+     vers lui) : pas de choix (un compte joue au plus un rôle, 47-1a AC-5 `chain`), texte « Le solde de sens inverse
+     de 2270, 2271 est présenté sur ce compte. Pour le lier autrement, retirez d'abord ces liens. » ;
    - **lecture impossible** : l'index des liens (AC-6) n'a pas pu être lu : pas de choix, texte d'erreur ; aucun
      envoi des champs de lien.
    Quand le **type** choisi dans le formulaire change et que le compte choisi dans la section ne passe plus le filtre
@@ -44,10 +52,14 @@ afin de poser ces liens sans passer par l'API.
    - `presentationLinkCandidates(index, account, kind, formType)` : les comptes admis par la règle de la 47-1a AC-5 —
      même société (la liste l'est), **actifs**, autres que le compte lui-même, **autre côté** du même rapport pour un
      miroir (actif ↔ passif, produit ↔ charge), **type opposé** du même rapport pour une paire, hors rôle de fonds
-     propres, hors comptes qui jouent déjà un autre rôle (source d'un miroir, cible d'un miroir — **sources archivées
-     comprises** —, membre d'une paire avec un tiers) ; **admis** : compte non imputable (compte de présentation),
+     propres, hors comptes qui jouent déjà un autre rôle — **selon la nature choisie** : pour un **miroir**, sont
+     exclus les comptes qui sont eux-mêmes **source** d'un miroir ou **membre d'une paire** (un miroir ne pointe pas
+     vers un compte qui a son propre lien, D2) mais **reste admis un compte déjà cible d'autres miroirs** (plusieurs
+     sources, un même compte miroir, D2 : « le solde inversé de ses sources ») ; pour une **paire**, sont exclus en plus
+     les comptes **cibles** d'un miroir — **sources archivées comprises** — et les membres d'une paire avec un tiers ; **admis** : compte non imputable (compte de présentation),
      compte en devise étrangère, de devise quelconque (Q3) ; le lien actuel toujours rendu. Table de vérité : quatre
-     types × deux natures × rôles × états (actif, archivé, déjà lié). La règle reste celle de l'API, qui seule fait
+     types × deux natures × rôles × états (actif, archivé, source, cible déjà d'un autre miroir — admise pour un miroir,
+     exclue pour une paire —, membre d'une paire). La règle reste celle de l'API, qui seule fait
      foi ;
    - `presentationSectionState(index, account, formType, formRole)` : l'état de l'AC-1 ;
    - `presentationLinkFieldsForUpdate(account, choice)` : les champs du `PUT`, **seulement ce qui change** (patron
@@ -68,8 +80,14 @@ afin de poser ces liens sans passer par l'API.
    produit, ou un actif et un passif, ce que CO 958c al. 1 ch. 7 interdit dans les comptes annuels ; Kesh présentera
    le net ; la présentation brute reste disponible pour les comptes officiels. Une paire actif/passif (D3) n'est donc
    pas avertie avec un texte de charges et de produits. Le texte est **la clé même du message `warnings`** de la 47-1b
-   (catalogue `crates/kesh-i18n/locales/*/messages.ftl`, que lit aussi `i18nMsg`) : aucune phrase recopiée ni seconde
-   clé. Boutons **Annuler**
+   (catalogue `crates/kesh-i18n/locales/*/messages.ftl`, que lit aussi `i18nMsg` par `/api/v1/i18n/messages`) : une
+   seule clé, un seul texte pour la paire charge/produit et la paire actif/passif, dont le **nom est celui que le Dev
+   Agent Record de la 47-1b écrit** (T0 le relit) ; l'écran n'ajoute que le repli de son site, égal à la valeur fr-CH
+   comme tout site `i18nMsg`. ⚠️ La 47-1b (Notes, « depuis ses propres textes ») dit encore le contraire : la
+   propagation est signalée à l'orchestrateur (rapport P2). **Ordre à l'enregistrement** : validation du formulaire,
+   puis avertissement, puis `PUT` ; l'avertissement est jugé sur l'état **affiché** (aucune pré-vérification serveur,
+   patron de la 25-2-a) : une pose concurrente donne au pire un avertissement en trop ou en moins, que la réponse
+   `warnings` (non affichée) ne corrige pas. Boutons **Annuler**
    (focus à l'ouverture, `autofocus` comme le dialogue de retypage ; il ferme l'avertissement sans rien envoyer et
    laisse la saisie intacte) et **Compenser quand même**. **Aucun** avertissement pour un miroir, un retrait, ni une
    paire inchangée (enregistrer le nom d'un compte déjà en paire). Si l'envoi confirmé rencontre ensuite
@@ -81,22 +99,28 @@ afin de poser ces liens sans passer par l'API.
    `ACCOUNT_PRESENTATION_LINKED` (`reason` `accountType` ou `equityRole`, au retypage ou à la pose d'un rôle de fonds
    propres, y compris après la confirmation du retypage) s'affiche au pied du dialogue (`editError`), le message
    nommant les comptes liés. Lecture des `details` validée, non supposée (`readPresentationLinked`, patron
-   `readDesignatedSettings` / `readRetypeImpact`) ; `details` illisible : le seul message.
+   `readDesignatedSettings` / `readRetypeImpact`) ; `details` illisible : le seul message. Un `PRESENTATION_LINK_INVALID`
+   reçu quand la section n'a pas de sélecteur (états *cible*, *fonds propres*, *lecture impossible*) s'affiche au pied
+   (`editError`), jamais perdu.
 5. **Archivage refusé (Q10)** : le dialogue *Archiver le compte* affiche, sur `ACCOUNT_PRESENTATION_LINKED`
    (`reason: archive`), un avis `role="alert"` (`data-testid="account-archive-presentation-linked"`) qui nomme le ou
    les comptes liés (`details.linkedAccounts`) et dit le remède **selon le lien et l'état de chaque compte lié** :
    - cible d'un miroir : « Retirez d'abord le lien depuis le compte 2270. » (une ligne par source) ;
    - membre d'une paire : « Retirez d'abord la paire, depuis ce compte ou depuis le compte 6961. » ;
-   - compte lié **archivé** (`linkedAccounts[].active` à `false`, 47-1b AC-2 ; une source archivée garde son lien,
-     47-1a AC-7, et un compte archivé ne se modifie pas) : « Le compte 2270 est archivé : réactivez-le, retirez le
-     lien, puis archivez-le de nouveau. »
+   - **source** de miroir **archivée** (`linkedAccounts[].active` à `false`, 47-1b AC-2 ; une source archivée garde son
+     lien, 47-1a AC-7, et un compte archivé ne se modifie pas ; une paire ne peut pas avoir de membre archivé) : « Le
+     compte 2270 est archivé : affichez les comptes archivés, réactivez-le, retirez le lien, puis archivez ce compte. »
+     (sa ligne n'est visible que si *Afficher les comptes archivés* est coché) ;
    Pour chaque compte lié **actif** présent dans la liste, un bouton « Ouvrir le compte 2270 » ferme le dialogue
-   d'archivage et ouvre son dialogue *Modifier* (`openEdit`) — le plan comptable n'a pas d'adresse par compte. **Aucun
+   d'archivage et ouvre son dialogue *Modifier* (`openEdit`) — le plan comptable n'a pas d'adresse par compte ; pour une
+   paire, un bouton « Ouvrir ce compte » ouvre de même le compte à archiver lui-même (le retrait de la paire se fait
+   de l'un ou l'autre côté). `details` illisible (`readPresentationLinked` rend `null`) : le dialogue montre
+   `err.message` seul, sans bouton, et le même pied (patron `archiveDesignatedMessage`). **Aucun
    bouton « Archiver quand même »** : ce refus remet `archiveDesignated` à `null` (il peut suivre une première
    question de désignation si un lien a été posé entre-temps) et le pied ne garde que **Annuler**.
 6. **Marque au plan comptable** : un compte lié porte une pastille discrète (patron des pastilles de devise et de
    « Non postable », `data-testid="account-row-{number}-presentation-badge"`) — « Miroir → 1179 », « Miroir de 2270,
-   2271 » (au-delà de trois sources : « Miroir de 2270, 2271 et 2 autres »), « Paire ↔ 6961 » — avec `title`
+   2271 » (au-delà de trois sources : « Miroir de 2270, 2271 et 2 autres », pluriel par sélecteur Fluent dans les quatre locales), « Paire ↔ 6961 » — avec `title`
    explicatif ; la flèche est `aria-hidden` et doublée d'un texte `sr-only` (« vers », « de », « compensé avec »), le
    `title` n'étant pas lu de façon fiable par les lecteurs d'écran. **Source des liens** : la page tient un **index des
    liens** construit sur le plan **archivés compris** (`fetchAccounts(true)`, ou la liste déjà chargée quand *Afficher
@@ -127,7 +151,9 @@ afin de poser ces liens sans passer par l'API.
     une autre spec ; liens retirés en `finally`. Parcours : poser un miroir (pastilles des deux côtés) ; poser une
     paire — *Annuler* n'envoie rien (aucun `PUT` observé), *Compenser quand même* enregistre ; état *cible* d'un compte
     miroir ; archivage refusé nommant le compte lié, sans « Archiver quand même » ; retrait du lien, puis archivage
-    accepté.
+    accepté ; **source archivée** : l'archivage de la cible est refusé avec le remède « réactivez-le » (la ligne source
+    n'apparaît qu'avec *Afficher les comptes archivés*), puis réactivation, retrait, archivage accepté. Le `finally`
+    réactive une source archivée avant de retirer son lien (`update` refuse un compte archivé).
 11. **Manuel utilisateur** (`docs/manual/fr/user-manual.tex`, section *Plan comptable* `:421`) :
     - nouvelle sous-section « Présenter un compte de l'autre côté : miroirs et paires » (`\label{sec:miroirs-paires}`),
       placée après *Modification d'un compte* (`:465` ; `\label{sec:modification-compte}` posé par #1351 s'il est
@@ -148,8 +174,9 @@ afin de poser ces liens sans passer par l'API.
     Le mot « miroir » est celui de l'écran (Q8). `.tex` seulement ; **le prompt de chaque passe de revue nomme le
     manuel** et exige le contrôle du PDF compilé localement (`pdftotext … | tr '\n' ' ' | tr -s ' '`).
 12. **i18n** : clés dans les quatre locales ; `sitesTotal` de `i18n-keys.test.ts` **recompté** depuis la garde après
-    la reprise de `main` (#1351 le relève de 4) ; `lint-i18n-ownership` (la clé de l'avertissement, partagée avec
-    l'API, doit y passer : espace de noms global ou exception écrite), `i18n-libelle-en-dur` verts. ⚠️ Aucun numéro de compte en dur dans un catalogue, un repli ou le manuel hors plans livrés : G4-bis et G4-ter (`textes_coherents.rs`) lisent les quatre catalogues et le manuel utilisateur — « Compenser 6960 et 6961 ? » se compose par variables Fluent, et les exemples du manuel citent des comptes des trois plans livrés (cf. 47-2a AC-11). *(Ajouté à la validation P1 de la 47-3b.)*
+    la reprise de `main` (#1351 le relève de 4) ; `lint-i18n-ownership` (il ne parcourt que `src/lib/features/` : `PresentationLinkFields.svelte` n'y emploie que des
+    clés `account-…`/`accounts-…`, la clé partagée de l'avertissement n'étant lue que par la page), `i18n-libelle-en-dur`
+    et `fx-account-filter-inventory.test.ts` (exemption de l'AC-1) verts. ⚠️ Aucun numéro de compte en dur dans un catalogue, un repli ou le manuel hors plans livrés : G4-bis et G4-ter (`textes_coherents.rs`) lisent les quatre catalogues et le manuel utilisateur — « Compenser 6960 et 6961 ? » se compose par variables Fluent, et les exemples du manuel citent des comptes des trois plans livrés (cf. 47-2a AC-11). *(Ajouté à la validation P1 de la 47-3b.)*
 
 ## Tâches / sous-tâches
 
@@ -159,7 +186,7 @@ afin de poser ces liens sans passer par l'API.
   (`CLAUDE.md` § *Travailler à plusieurs développeurs*). Relire le contrat livré par la 47-1b (`linkedAccounts[].active`,
   clés du message `warnings`).
 - [ ] **T1** : types, `readPresentationLinked`, `presentation-links.ts` + tests (AC 2, 7).
-- [ ] **T2** : index des liens, section du dialogue (quatre états), aide, refus au champ, défilement (AC 1, 2, 4, 6, 8).
+- [ ] **T2** : index des liens, composant `PresentationLinkFields.svelte` et section du dialogue (quatre états), aide, refus au champ, défilement (AC 1, 2, 4, 6, 8).
 - [ ] **T3** : dialogue d'avertissement (AC 3) ; archivage refusé (AC 5) ; pastilles (AC 6).
 - [ ] **T4** : Vitest, E2E, captures (AC 7, 9, 10).
 - [ ] **T5** : manuel, i18n (AC 11, 12). **T6** : gates frontend et E2E complets au dernier commit de code.
@@ -238,6 +265,19 @@ compte lié et dit comment lever le refus.
   nommé, T0 muet s'il n'est pas fusionné ; `archiveDesignated` laissé après un refus de lien ; `data-testid` et
   pastille à nombreuses sources ; `warnings` typé sur la liste. Rapport : `kesh-gate-logs/epic-47-validation/
   47-3a-ecran-plan-comptable-P1.md`.
+
+- 2026-11-19 — validation P2 (Sonnet 5.5) : 0 C / 0 H / 5 M / 5 L, remédiés. M : candidats d'un **miroir** excluant
+  les cibles d'autres miroirs, contre D2 (plusieurs sources sur un même compte miroir) et la pastille « Miroir de 2270,
+  2271 » — règle désormais par nature ; priorité des quatre états non fixée (compte cible au rôle de fonds propres) et
+  état « index pas encore lu » ; garde d'inventaire `fx-account-filter-inventory.test.ts` (prop `AccountResponse[]`)
+  sans exemption écrite, alors que le sélecteur admet toute devise (Q3) — section extraite en composant, exemption
+  posée ; archivage refusé : source archivée invisible sans *Afficher les comptes archivés*, `details` illisible non
+  traité ; clé de l'avertissement dite « sans phrase recopiée » alors que la 47-1b (Notes) dit que l'écran a ses
+  propres textes — contradiction signalée, clé tenue par le Dev Agent Record de la 47-1b. L : ordre validation →
+  avertissement → `PUT` ; `PRESENTATION_LINK_INVALID` sans sélecteur ; texte de l'état *cible* ; pluriel de la
+  pastille ; E2E de la source archivée et `finally`. Cohérence vérifiée sans écart : 47-1a AC-7 (`linked` porte `actif`),
+  47-1b AC-1 (table), AC-2 (`active`), #1351 (`sitesTotal` +4, `parentFieldForUpdate`, `sec:modification-compte`).
+  Rapport : `kesh-gate-logs/epic-47-validation/47-3a-ecran-plan-comptable-P2.md`.
 
 ## Dev Agent Record
 
