@@ -21,14 +21,14 @@ afin de remettre un document lisible sans masquer ce qui a été regroupé.
 1. **PDF présenté** (`render_balance_sheet_pdf`, `render_income_statement_pdf`) : une ligne qui porte des `sources`
    (47-2a AC 6 ; sections Actifs, Passifs, Produits, Charges — jamais Capitaux propres, D8) reçoit une **marque** :
    `*` (miroir : ses sources sont de `kind` `own` / `mirror`) ou `‡` (paire : `kind` `offset`), **écrite à la suite du
-   libellé** du compte, séparée par une espace (« Créances sociales * »), **jamais dans la colonne des montants**
+   libellé** du compte, séparée par une espace (« Avoirs à court terme * »), **jamais dans la colonne des montants**
    (alignée à droite sur le bord de #1327, marge de 15 mm : une marque après le montant sortirait de la page ; avant
    lui, elle décalerait l'alignement). Le libellé d'une ligne marquée est tronqué à `ACCOUNT_NAME_MAX_CHARS_FX` (34)
    **avant** d'ajouter la marque, qui n'est donc jamais coupée, y compris sans devise. Une **note de bas de rapport**,
    après le dernier total, liste par ligne marquée (symbole, numéro, libellé) **une ligne par source**, dans l'ordre
    des `sources` (47-2a AC 6) : numéro, libellé tronqué à `ACCOUNT_NAME_MAX_CHARS_FX`, solde brut formaté par
    `format_swiss_amount`. **Miroir** — p. ex. « * 1040 Avoirs à court terme » puis, en retrait, « comprend 2270
-   AVS/AI/APG, solde -1'200.00 » (la source `own`, si elle figure : « solde propre 300.00 »). **Paire** — p. ex.
+   AVS/AI/APG, solde -1'200.00 » (la source `own`, absente de l'exemple chiffré de la 47-2a AC 11 où 1040 est sans écriture ; si 1040 portait 300.00 : « solde propre 300.00 »). **Paire** — p. ex.
    « ‡ 6950 Produits financiers » puis, en retrait, « solde propre 1'020.00 » (le membre qui porte la ligne, premier
    des `sources`) et « déduit 6900 Charges financières, solde 450.00 » (l'autre membre : la ligne vaut le premier
    **moins** le second, tous deux signés dans leur nature ; « comprend » le dirait ajouté). ⚠️ **Exemples aux comptes
@@ -73,7 +73,7 @@ afin de remettre un document lisible sans masquer ce qui a été regroupé.
    rapport porte `compensated` (une paire de net nul supprime ses deux lignes sans laisser de ligne marquée, 47-2a
    AC 3 et 6 : sans cette clause, un tel CSV différerait du brut sans aucune trace) —, deux colonnes s'ajoutent en fin d'en-tête —
    `Presentation` (`miroir` si les sources sont `own`/`mirror`, `compense` si elles sont `offset`) et `Sources`
-   (`numéro:solde` brut, séparés par `|`, **dans l'ordre de `sources`**, 47-2a AC 6 : `1040:300.00|2270:-1200.00`,
+   (`numéro:solde` brut, séparés par `|`, **dans l'ordre de `sources`**, 47-2a AC 6 : `2270:-1200.00` pour 1040 de l'exemple chiffré de la 47-2a AC 11 (1040 sans écriture : pas de source `own`) — et `1040:300.00|2270:-1200.00` si 1040 portait un solde propre de 300.00 —,
    `6950:1020.00|6900:450.00` ; la première source est `own` ou le membre porteur quand son numéro égale
    `NumeroCompte`, aucune colonne de `kind`). Lecture : `miroir`, `Solde` = solde propre − somme des soldes des
    sources `mirror` (négatifs dans leur nature) ; `compense`, `Solde` = solde du membre porteur − solde de l'autre —
@@ -200,6 +200,12 @@ un rapport à nombreuses sources (saut de page, césure : AC 2) ; texte hors Win
   manuel d'administration (pas de section des rapports : `:84` est une puce, `sec:api-keys`, `sec:mcp-outils`) et
   `user-manual.tex:3937` mal décrit ; ligne `propre` des groupes de la 46-3 ; 48-11 absente du tableau du découpage
   du fichier d'epic. Rapport : `kesh-gate-logs/epic-47-validation/47-2b-presentation-pdf-csv-P2.md`.
+- 2026-11-19 — validation P3 ciblée (Sonnet 5.5) : 0 C / 0 H / 0 M / 1 L, remédié. Vérifié à `origin/main` : 1040 Avoirs à
+  court terme (plan `pme` seul), 2270 AVS/AI/APG, 6950 Produits financiers, 6900 Charges financières existent sous ces
+  noms (G4-bis/G4-ter) ; paire 1 020.00 − 450.00 = 570.00 et miroir 0 − (−1 200.00) = 1 200.00 concordent avec la
+  47-2a AC 11 ; `compensated` ⇒ colonnes et mention cohérents avec la 47-2a AC 3, 6 et la 47-3b AC 5, 8. L : exemples de
+  `Sources`/de note à « 1040:300.00 » (solde propre absent de l'exemple chiffré) rapprochés de l'exemple, valeur de la
+  47-3b (`2270:-1200.00`). Rapport : `kesh-gate-logs/epic-47-validation/47-2b-presentation-pdf-csv-P3.md`.
 - Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
   tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
 
