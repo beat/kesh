@@ -151,8 +151,8 @@ les lignes passent avant d'être groupées (à demander à son auteur ; Q5).
 |---|---|---|---|---|---|
 | `kesh-report/src/balance_sheet.rs` | 47-2a | probable | — | oui | — |
 | `kesh-report/src/income_statement.rs` | 47-2a | probable | — | — | — |
-| `kesh-report/src/pdf.rs` | 47-2b | probable | **oui (+1100 lignes)** | oui | — |
-| `kesh-report/src/csv.rs` | 47-2b | probable | — | oui | — |
+| `kesh-report/src/pdf.rs` | 47-2b ; 47-2a (littéraux des tests : champs `sources`, `compensated`) | probable | **oui (+1100 lignes)** | oui | — |
+| `kesh-report/src/csv.rs` | 47-2b ; 47-2a (littéraux des tests) | probable | — | oui | — |
 | `frontend/…/reports/` (vues, `reports.types.ts`, `reports.api.ts`) | 47-3b | probable | — | oui | — |
 | `kesh-db/src/entities/account.rs`, `repositories/accounts.rs` | 47-1a | possible | — | — | oui |
 | `kesh-api/src/routes/accounts.rs`, `errors.rs` (db, api) | 47-1a, 47-1b | possible | — | — | oui |
@@ -162,6 +162,7 @@ les lignes passent avant d'être groupées (à demander à son auteur ; Q5).
 | `kesh-db/migrations/`, audit, `test-schema/`, `migrations_upgrade_path.rs`, `account_columns_inventory.rs` | 47-1a | si migration | — | — | — |
 | `kesh-db/src/repositories/closing_checks.rs`, `FiscalYearChecks.svelte` | 47-4 | — | — | — | — |
 | MCP (`kesh_plan_comptable`, `kesh_bilan`, `kesh_compte_de_resultat`) | 47-1b, 47-2a | probable | — | — | — |
+| `kesh-api/tests/services_motif.rs` (détails d'audit en dur), `tests/homepage_summary_e2e.rs` | 47-2a | possible | — | — | — |
 | `kesh-api/src/exports/csv_tables.rs` | 47-1a (colonnes), 47-1b (test du ZIP) | — | — | — | — |
 
 **Hors tableau (0.20.0)** : la story **48-11** (arrondi au centime des rapports CSV et PDF, après #1327) touche `kesh-report/src/pdf.rs` et `csv.rs`, comme 47-2b ; elle part avant : le second arrivé (47-2b) reprend et résout. Les stories de l'Epic 49 changent les catalogues i18n et la migration (horodatage de la 47-1a postérieur).

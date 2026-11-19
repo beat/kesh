@@ -26,12 +26,11 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    n'y passent pas (D7, Q4, Q11). La fonction ne lit et n'écrit que les sections `assets`, `liabilities` (bilan),
    `revenues`, `expenses` (résultat) — **jamais** `equity` ni les lignes calculées (D8). `PresentationLinks` vide →
    le rapport est rendu **tel quel**, sans retri (chemin court).
-   **Liens incohérents écartés** (défense ; la 47-1a les refuse à l'écriture, son AC-8 ne couvre que l'orphelin) : à la
-   construction de `PresentationLinks`, un lien est ignoré, avec `tracing::warn!` (compte, raison), s'il touche un
-   compte de rôle de fonds propres, si source et cible ne sont pas de l'autre côté du même rapport (miroir) ou de types
-   opposés du même rapport (paire), si la paire n'est **pas réciproque** (`A.offset = B` sans `B.offset = A`), ou si
-   un compte y joue plus d'un rôle (chaîne). Ainsi un état posé hors de l'API (SQL, restauration) ne compte jamais une
-   ligne deux fois, ne déplace jamais un compte de fonds propres, et l'AC 5 tient sans condition sur les liens.
+   **Liens incohérents écartés en amont** : le lecteur (47-1a AC-8, liste close (a)–(g) : orphelin, autre société,
+   soi-même, paire non réciproque, chaîne, fonds propres, types) ne rend que des liens valides, avec `tracing::warn!`
+   pour les autres ; la fonction ne revérifie rien, mais **ne touche jamais `equity`** (ci-dessus) : même un lien de
+   fonds propres qui passerait ne déplacerait aucune ligne de fonds propres. Ainsi un état posé hors de l'API (SQL,
+   restauration) ne compte jamais une ligne deux fois, et l'AC 5 tient.
 2. **Miroir** (D2) : une source dont le solde est **de sens inverse** (`balance < 0` dans le signe de sa nature) quitte
    sa section ; la ligne de son compte miroir, de l'autre côté, vaut **solde propre du miroir + somme des soldes
    inversés de ses sources** ; libellé et numéro du miroir (Q7), même s'il ne porte aucune écriture (il ne paraît
@@ -39,8 +38,14 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    source de solde nul ou de sens normal reste à sa place, inchangée. **Une cible ne devient ligne présentée que si
    elle reçoit au moins une source de sens inverse** : sinon sa ligne brute (si elle en a une) reste telle quelle,
    sans `sources` (47-2b AC 3 : « liens posés dont aucune source n'est de sens inverse » → rendu identique au brut).
+   **Ligne présentée nulle** : la règle du brut s'applique (`HAVING balance != 0 OR balance_currency != 0`,
+   `balance_sheet.rs:346`, `income_statement.rs:87`) — une cible dont propre + sources vaut 0 en CHF **et** dont le
+   `balanceCurrency` (AC 7) est absent ou nul est omise ; nulle en CHF mais non nulle dans une devise commune, elle
+   **reste** (comme au brut). Ses sources ont quitté leur section : rien ne s'affiche (même règle pour la ligne d'une
+   paire, AC 3).
 3. **Paire** (D3) : pour A et B de types opposés, `net = solde(A) − solde(B)` dans le sens de A ; `net > 0` → une
-   ligne sur A ; `net < 0` → une ligne sur B, montant `−net` ; `net = 0` → aucune ligne ; les deux lignes brutes
+   ligne sur A ; `net < 0` → une ligne sur B, montant `−net` ; `net = 0` → aucune ligne (sauf solde en devise
+   commune non nul, règle du brut de l'AC 2) ; les deux lignes brutes
    disparaissent. Vaut au compte de résultat (produit / charge) et au bilan (actif / passif hors fonds propres).
    **Paire appliquée** : une paire ne s'applique que si elle change le rapport ; elle est **sans effet** — lignes
    brutes laissées telles quelles, sans `sources`, sans `compensated` — quand les deux soldes CHF sont nuls, ou quand
@@ -54,7 +59,7 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    equity_result` dès qu'il tient en brut, et `net_result` est identique ; `equation_holds` est recalculé et **égal**
    à celui du brut ; **test de propriété** (`proptest`, absent du workspace à `fd04099f` : dépendance de dev de
    `kesh-report`, `Cargo.lock` régénéré ; ou générateur maison si la dépendance n'est pas admise — à trancher en T0)
-   sur des jeux aléatoires de soldes et de liens, **valides et incohérents** (AC 1 : les seconds sont écartés). Une
+   sur des jeux aléatoires de soldes et de liens **valides** (le lecteur écarte les autres, 47-1a AC-8, testé là). Une
    section modifiée est retriée par numéro de compte avec la comparaison de chaînes de Rust (`String::cmp`) ; celle du
    SQL (`ORDER BY a.number`, collation de la colonne) peut différer sur la casse d'un numéro alphanumérique — d'où le
    chemin court de l'AC 1 et l'exigence : sans lien, ou avec des liens tous sans effet, la sortie **égale** l'entrée.
@@ -75,13 +80,36 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    rend déjà le générateur ; aucun traitement propre à la clôture.
 9. **API** : `GET /api/v1/reports/balance-sheet`, `/income-statement` et leurs `/export` acceptent
    `presentation=brute|presentee` (défaut `presentee`) ; valeur inconnue → 400 (même patron que `validate_format`) ;
-   `brute` rend exactement le rapport d'aujourd'hui (D6). Le service (`services/rapports.rs::bilan`,
-   `::compte_de_resultat`) lit les liens dans la même `Lecture` et applique la fonction ; la trace d'audit du rapport
-   porte la présentation demandée.
+   `brute` rend exactement le rapport d'aujourd'hui (D6). **Où** : `presentation: Option<String>` s'ajoute à
+   `ReportQuery` et à `ExportQuery`, que partagent la balance, les journaux et la TVA ; seuls les quatre handlers du
+   bilan et du compte de résultat le lisent et le valident (`validate_presentation`, patron de `validate_format`) —
+   les autres l'ignorent comme tout paramètre inconnu aujourd'hui (D7 : aucun 400 neuf sur la balance). Le service
+   (`services/rapports.rs::bilan`, `::compte_de_resultat`) prend un paramètre de plus, `presentation: Presentation`
+   (`enum { Brute, Presentee }`), **sans toucher `DemandePeriode`** (partagée par `balance` et `tva`) ; en
+   `Presentee`, il lit les liens par `accounts::presentation_links(lecture.pool(), acces.company_id())` (47-1a AC-9 ;
+   aucune lecture en `Brute`) et applique la fonction. Lecture **sans instantané commun** avec celle des soldes (comme
+   les sections entre elles, `homepage_summary.rs`, *Limite*) : un lien modifié entre les deux ne change qu'une
+   présentation, jamais un solde. **Trace d'audit** : `DetailsTrace::Periode` gagne `presentation:
+   Option<Presentation>`, `None` pour la balance, les journaux et la TVA ; `emit_report_audit` et
+   `emit_report_export_audit` n'ajoutent la clé `"presentation": "brute"|"presentee"` à `details_json` que si elle est
+   `Some` — le détail des autres rapports ne change pas. `crates/kesh-api/tests/services_motif.rs`
+   (`TABLE_DES_TRACES`, `:390`, `:399`, `:408`, `:417`, détails écrits en dur) gagne la clé sur ses quatre entrées
+   bilan / compte de résultat, et un cas `brute`.
 10. **MCP** `kesh_bilan`, `kesh_compte_de_resultat` : argument facultatif `presentation` (`"brute"` |
-    `"presentee"`, défaut `presentee`) au schéma (`SCHEMA_PERIODE` dédoublé si `kesh_balance` le partage) ;
-    `LigneDeSolde` gagne `sources` (liste, vide sans présentation) ; `Bilan` et `CompteDeResultat` gagnent
-    `compense` ; `mcp_contrat`, `mcp_gardes_lexicales` verts, **tailles re-mesurées**.
+    `"presentee"`, défaut `presentee`). `SCHEMA_PERIODE` ne sert qu'à ces deux outils (`kesh_balance` a son schéma
+    en ligne, `:209`) : il gagne `"presentation":{"type":"string","enum":["brute","presentee"]}`. Mais
+    `ArgumentsPeriode` est **partagé** avec `kesh_balance` (`:225`, construit littéralement) : les deux outils
+    prennent leur propre structure (`deny_unknown_fields`) ; valeur inconnue → arguments invalides
+    (`TEXTE_ARGUMENTS_INVALIDES`). Le résumé (`resume_periode`, montré à l'Administrateur dans le détail d'un envoi,
+    « Outil kesh_bilan : fiscalYearId=1 ») gagne `.code("presentation", …)` quand l'argument est donné.
+    `LigneDeSolde` gagne `sources: Vec<SourceDeLigne>` (liste **toujours présente**, vide sans présentation : la
+    macro `sortie!` sérialise chaque champ), `SourceDeLigne` déclarée par `sortie!` — `compte_id: i64`, `numero` et
+    `nom` en `TexteNonFiable`, `solde: Montant`, `nature` (énumération sans champ admise par `champ_enum!` : un
+    `String` ne compile pas) ; `Bilan` et `CompteDeResultat` gagnent `compense: bool`. Descriptions des deux outils
+    complétées (argument, `sources`, `compense`). `mcp_contrat`, `mcp_gardes_lexicales` verts ; **tailles
+    re-mesurées** : la mesure du bilan (57 comptes, 20 156 o pour un plafond de 24 576, doc du module `:9-13`) rejouée
+    avec `sources: []` sur chaque ligne et un miroir à plusieurs sources ; le seuil d'« environ 60 comptes » des
+    descriptions, du module et du manuel d'administration confirmé ou révisé sur cette mesure.
 11. **Exemple chiffré** (NFR-47-4 ; **source unique** de l'exemple : le fichier d'epic ne le porte pas, et le manuel
     utilisateur, l'E2E de la 47-3b et ce test reprennent **ces nombres et ces comptes**) — **comptes des plans livrés**
     (`plans_livres()`, garde G4-bis de `textes_coherents.rs`, qui rougit sur un numéro de compte absent des trois plans
@@ -91,9 +119,10 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
     1010 Poste 12 000.00, 1020 Banque **−800.00** (miroir 2100 Dettes bancaires à court terme), 2000 Créanciers
     3 000.00, 2270 AVS/AI/APG **−1 200.00** (miroir 1040 Avoirs à court terme) → présenté : 1040 à 1 200.00 à l'actif,
     2100 à 800.00 au passif, total actif 13 700.00 (brut 11 700.00), total passif 3 800.00 (brut 1 800.00), les deux
-    côtés +2 000.00 ; compte de résultat : 6950 Produits financiers 1 020.00, 6900 Charges financières 450.00 en paire
-    → 6950 à 570.00, 6900 absent, résultat net 570.00 identique ; la balance (`trial-balance`) montre toujours 1020 à
-    −800.00 et 2270 à −1 200.00. *(Remplace, à la validation P1 de la 47-3b, un jeu aux numéros de la comptabilité
+    côtés +2 000.00, fonds propres et `equityResult` inchangés, `equationHolds` vrai dans les deux ; compte de
+    résultat : 6950 Produits financiers 1 020.00, 6900 Charges financières 450.00 en paire → 6950 à 570.00, 6900
+    absent, `compensated` vrai, résultat net 570.00 identique ; la balance (`trial-balance`) montre toujours 1020 à
+    −800.00 et 2270 à −1 200.00 en `closingBalance` (côté naturel positif, `trial_balance.rs:87-88`). *(Remplace, à la validation P1 de la 47-3b, un jeu aux numéros de la comptabilité
     de Beat — 1021, 1179, 2120, 6960, 6961 — que le manuel n'aurait pu citer sans rougir G4-bis.)*
 12. **Aucune écriture** (NFR-47-1) : générer un rapport présenté ne crée ni ne modifie aucune ligne comptable ;
     balance et grand livre identiques avant et après.
@@ -118,12 +147,18 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
 - [ ] **T0** : reprise de `main` ; si l'Epic 46 est fusionnée, appliquer d'emblée le recâblage (§ ci-dessous) ;
   trancher `proptest` (dépendance de dev de `kesh-report`).
 - [ ] **T1 — types** (AC 6) : `PresentationSource`, `SourceKind`, champ `sources` d'`AccountBalance`
-  (`#[sqlx(skip)]`, défaut vide), `compensated` sur `BalanceSheet` et `IncomeStatement`.
-- [ ] **T2 — fonction** (AC 1–5, 7, 8) : `presentation.rs`, algorithme en trois temps (paires, miroirs, totaux),
+  (`#[sqlx(skip)]`, défaut vide), `compensated` sur `BalanceSheet` et `IncomeStatement`. ⚠️ **Littéraux à compléter**
+  (recomptés à `fd04099f`, `git grep -c "AccountBalance {"`) : `balance_sheet.rs` (3), `csv.rs` (8), `pdf.rs` (8),
+  `benches/export.rs` (2) ; `BalanceSheet {` / `IncomeStatement {` construits en une vingtaine de sites (tests et
+  bancs de `kesh-report`). La 47-2a touche donc les **tests** de `pdf.rs` et `csv.rs`, que réécrivent #1327 et #1346
+  (dont le helper `bs_with` de `balance_sheet.rs`) : conflit de texte au second arrivé, résolu en gardant les deux (le
+  champ neuf dans les littéraux neufs) ; tableau des fichiers communs du fichier d'epic complété.
+- [ ] **T2 — fonction** (AC 1–8) : `presentation.rs`, algorithme en trois temps (paires, miroirs, totaux),
   tests unitaires et de propriété.
-- [ ] **T3 — service et route** (AC 9, 12) : paramètre, lecture des liens, trace d'audit.
+- [ ] **T3 — service et route** (AC 9, 12) : paramètre, lecture des liens, trace d'audit (`services_motif.rs`).
 - [ ] **T4 — MCP** (AC 10).
-- [ ] **T5 — tests d'intégration** (AC 9, 11, 12) : `reports_e2e.rs`, `mcp_outils_e2e.rs`.
+- [ ] **T5 — tests d'intégration** (AC 9, 11, 12, 14) : `reports_e2e.rs`, `mcp_outils_e2e.rs`,
+  `homepage_summary_e2e.rs`.
 - [ ] **T6 — documentation** (AC 13).
 - [ ] **T7 — gate complet**, E2E complet au dernier commit de code.
 
@@ -132,7 +167,9 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
 ### Code lu (à `origin/main` `fd04099f`)
 
 - `crates/kesh-report/src/balance_sheet.rs:74-99` (`BalanceSheet`), `:113-121` (`is_empty`, source unique de la garde
-  « vide » : un bilan dont toutes les lignes se compensent reste à juger ainsi, à tester), `:152-174`
+  « vide », tenue en parallèle de `isReportEmpty` : la 47-3b y pose « `compensated` ⇒ jamais vide » ; `is_empty`
+  gagne donc `&& !self.compensated`, et un `IncomeStatement::is_empty` de même règle remplace le test en ligne de
+  `csv.rs:290` et du PDF — à reprendre par la 47-2b ; testé sur une paire à net nul), `:152-174`
   (`AccountBalance`, `sqlx::FromRow`), `:204-299` (`generate` : partition fonds propres par rôle, totaux, équation),
   `:319-360` (`fetch_cumulative_section`, `INNER JOIN` : un compte sans écriture n'y paraît pas — d'où le miroir
   « vide » construit depuis `PresentationLinks`).
@@ -142,20 +179,31 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
 - `crates/kesh-api/src/routes/reports.rs:64-79` (`ReportQuery`), `:174-200` (`ExportQuery`, `validate_format`),
   `:235-258`, `:374-420` ; routage `crates/kesh-api/src/lib.rs:1381-1430`.
 - `crates/kesh-api/src/mcp/outils/rapports.rs:38-112` (`ArgumentsPeriode` `deny_unknown_fields`, `SCHEMA_PERIODE`,
-  `LigneDeSolde`, `Bilan`, `CompteDeResultat`).
+  `LigneDeSolde`, `Bilan`, `CompteDeResultat`), `:179-192` (`resume_periode`, `demande`), `:225` (`kesh_balance`
+  construit un `ArgumentsPeriode`) ; `crates/kesh-api/src/mcp/sortie.rs:97` (`sortie!` : aucun attribut de champ,
+  aucun `String`), `:400-460` (`Resume`, `.code`).
+- `crates/kesh-api/src/services/rapports.rs:266-273` (`DetailsTrace::Periode`), `:1059`, `:1116`
+  (`emit_report_audit`, `emit_report_export_audit`) ; `crates/kesh-api/tests/services_motif.rs:390-417` (détails
+  d'audit du bilan et du compte de résultat, en dur) ; `crates/kesh-api/tests/homepage_summary_e2e.rs:76-91`.
 
 ### Algorithme (référence pour la fonction)
 
 1. Indexer les lignes brutes par compte ; `links` ne contient que des liens **valides** (le lecteur a écarté ceux de
-   47-1a AC-8 : orphelin, autre société, chaîne, paire non réciproque, fonds propres, types) — la fonction ne revérifie
+   47-1a AC-8, les sept cas (a)–(g) : orphelin, autre société, soi-même, paire non réciproque, chaîne, fonds
+   propres, types) — la fonction ne revérifie
    rien, et un compte à lien écarté reste à sa place, brut ; `links` donne, par compte lié, sa nature et ses attributs (y compris les
    miroirs et partenaires sans écriture).
 2. **Paires** (paire dédoublonnée par plus petit id) : calculer `net`, retirer les deux lignes, insérer la ligne du
-   sens du net avec `sources` (`offset` × 2) ; `compensated = true` si au moins un membre avait un solde non nul.
-3. **Miroirs** : pour chaque source à solde < 0, retirer sa ligne ; accumuler `−solde` sur la cible ; la ligne cible
-   = solde propre (source `own` si non nul) + accumulations ; insérer dans la section du type de la cible.
+   sens du net avec `sources` (`offset` × 2) — **seulement si la paire est appliquée** (AC 3 : sans effet si les
+   deux soldes sont nuls ou si un seul est non nul et positif) ; `compensated = true` dès qu'une paire est appliquée.
+3. **Miroirs** : pour chaque source à solde < 0, retirer sa ligne ; accumuler `−solde` sur la cible ; pour chaque cible
+   qui a reçu au moins une source (et elle seule), la ligne cible = solde propre (source `own` si non nul) +
+   accumulations ; insérer dans la section du type de la cible, **sauf** si elle est nulle selon la règle du brut
+   (`balance != 0 OR balance_currency != 0`, AC 2) : nulle en CHF et sans solde en devise commune non nul → omise.
 4. Retrier chaque section par numéro, recalculer `total_*` (bilan) ou `total_revenues`, `total_expenses` (résultat ;
-   `net_result` recalculé et **asserté** égal au brut en `debug_assert!`, journalisé en `tracing::error!` sinon).
+   `net_result` recalculé ; s'il diffère du brut — défaut de code, non de données —, `tracing::error!` et rendu du
+   rapport **brut** : jamais de `debug_assert!` ni de panique dans un handler (`CLAUDE.md` § *Pattern batch*, garde-fou
+   défensif) ; le test unitaire porte l'égalité).
 5. Cas limites à tester : miroir dont le solde propre est lui-même de sens inverse (sa ligne reste négative si ses
    sources de sens inverse ne la compensent pas : un miroir n'a pas de miroir — relevée alors par le contrôle K10 de
    la 47-4, qui juge la ligne présentée et non le solde propre ; test de cohérence K10 / présentation : 47-4 T3) ; source archivée ; miroir dont la ligne (propre + sources) vaut zéro : ligne omise, comme une paire à net nul ; compte à lien écarté par le lecteur (inchangé, relevé par K10) ; toutes les sources de sens normal
@@ -173,7 +221,10 @@ un champ `groupedRows` par section, sous le paramètre `detailLevel` (D2, D8 de 
    du net), jamais à celui du compte d'origine — c'est l'effet naturel de l'ordre ci-dessus si l'arbre des groupes
    contient le miroir (lecture de **tous** les comptes, NFR-46-3 : à vérifier).
 3. **Lignes groupées** : la ligne `kind: account` de `groupedRows` doit transporter `sources` ; le solde en devise d'un
-   groupe (D7 de l'Epic 46) se calcule sur les lignes présentées.
+   groupe (D7 de l'Epic 46) se calcule sur les lignes présentées. ⚠️ **Homonymie** : `groupedRows[].kind` vaut
+   `own` pour le solde propre d'un groupe (D5, D8 de l'Epic 46), `sources[].kind` vaut `own` pour le solde propre d'un
+   miroir — deux champs distincts ; à dire dans `api-external.md` au recâblage, ou à renommer d'un côté avec l'auteur
+   de la 46-1.
 4. **Rendus** : 46-3 (PDF, CSV groupés) et 46-4 (MCP groupé) reprennent la marque et les sources de la 47-2b / 47-2a.
 5. **Tests** : rejouer l'exemple chiffré à chaque niveau de détail ; propriété « somme des sous-totaux de premier
    niveau = total de section » (NFR-46-2) en présenté.
@@ -197,7 +248,10 @@ oublier le recalcul d'un total, appliquer la présentation à l'accueil — chac
 ### Risques
 
 Recâblage avec l'Epic 46 (deux règles sur les mêmes lignes) ; budgets MCP ; `fix/bilan-resultat-reporte` touche
-`balance_sheet.rs` (méthode `shows_retained_earnings_line`) : conflit de texte probable, sans conflit de règle.
+`balance_sheet.rs` (méthode `shows_retained_earnings_line`, helper de test `bs_with`) : conflit de texte probable,
+sans conflit de règle — son commentaire emploie « bilan **présenté** » au sens d'« affiché » (PDF, CSV), à ne pas
+confondre avec la présentation de l'Epic 47. Le défaut `presentee` change la réponse des routes pour tout client
+dès qu'un lien est posé (AC 13).
 
 ### References
 
@@ -205,6 +259,25 @@ Recâblage avec l'Epic 46 (deux règles sur les mêmes lignes) ; budgets MCP ; `
   D7, D8, NFR-46-2, NFR-46-3).
 - Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
   tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
+
+## Change Log
+
+- 2026-11-19 — validation P1 (Opus 5.5) : 0 C / 0 H / 6 M / 9 L, remédiés. M : « ligne présentée » mal bornée —
+  une cible sans source de sens inverse et une paire à un seul membre positif portaient des `sources` (et
+  `compensated`) sur un rapport identique au brut, contre 47-2b AC 3 (AC 2, 3, 6, algorithme) ; liens incohérents
+  (paire non réciproque, fonds propres) non écartés — couvert par la 47-1a AC-8 refondue en parallèle, la fonction
+  ne touchant jamais `equity` (AC 1) ; trace d'audit non spécifiée alors que `services_motif.rs` fige le détail des
+  dix-huit traces (AC 9) ; Q11 : `api-external.md:305` et `homepage_summary_e2e.rs` comparent l'accueil au compte de
+  résultat par défaut, devenu présenté (AC 13, AC 14 neuf) ; littéraux `AccountBalance` / `BalanceSheet` dans les
+  tests de `pdf.rs` / `csv.rs` (#1327, #1346) non déclarés (T1, fichier d'epic) ; contrat MCP sous-spécifié
+  (`ArgumentsPeriode` partagé avec `kesh_balance`, `SCHEMA_PERIODE` qui ne l'est pas, type des sources sous
+  `sortie!`, résumé visible de l'Administrateur, mesure des tailles) (AC 10). L : règle de devise (sources comptées,
+  signes) ; changement de contrat du défaut à écrire ; exemple (`equationHolds`, `compensated`, `closingBalance`) ;
+  `ReportQuery` / `ExportQuery` partagées avec la balance ; `debug_assert!` remplacé ; lecture sans instantané ;
+  homonymie `own` avec l'Epic 46 ; omission d'une ligne présentée nulle (règle du `HAVING` du brut, AC 2, AC 3,
+  algorithme § 3) et liste des sept cas écartés du lecteur alignée sur 47-1a AC-8 (P3 de la 47-4) ; tri `String::cmp` contre collation SQL (chemin court) ; `is_empty` à aligner
+  sur « `compensated` ⇒ jamais vide » de la 47-3b. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-2a-presentation-fonction-api-mcp-P1.md`.
 
 ## Notes de version
 
