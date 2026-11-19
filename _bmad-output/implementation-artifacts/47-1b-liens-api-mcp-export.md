@@ -41,8 +41,10 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
    (dit à `api-external.md`, AC-9) ; test : `PUT` d'un partenaire avec sa version d'avant la pose → 409.
 2. **Refus du dépôt mappés** (`crates/kesh-api/src/errors.rs`) : `PresentationLinkInvalid` → 400
    `PRESENTATION_LINK_INVALID`, `details: { field, reason[, linkedAccountNumber] }` ; `AccountPresentationLinked` →
-   409 `ACCOUNT_PRESENTATION_LINKED`, `details: { reason, linkedAccounts: [{ id, number, name }] }`. Message traduit
-   (quatre locales) qui **nomme** le compte lié — p. ex. fr-CH, archivage d'un compte cible : « Le compte 1040
+   409 `ACCOUNT_PRESENTATION_LINKED`, `details: { reason, linkedAccounts: [{ id, number, name, active }] }` (`active` : une source archivée garde son
+   lien et bloque l'archivage de sa cible, 47-1a AC-7 ; l'écran de la 47-3a AC-5 en tire le remède « réactivez-le, retirez le
+   lien »). Message traduit
+   (quatre locales) qui **nomme** le compte lié — et, s'il est archivé, dit de le réactiver d'abord — p. ex. fr-CH, archivage d'un compte cible : « Le compte 1040
    Avoirs à court terme est le compte miroir de 2270 AVS/AI/APG : retirez d'abord ce lien. » (Q10). ⚠️ **Les numéros
    et noms d'exemple écrits dans la documentation et les catalogues sont ceux d'un plan livré** (`kesh-core/assets/
    charts/*.json` : 2270 « AVS/AI/APG », 1040 « Avoirs à court terme ») : la garde G4-bis/G4-ter
@@ -211,6 +213,8 @@ refusé, le compte lié nommé.
 
 ## Change Log
 
+- 2026-11-19 — validation P1 de la **47-3a** (Opus 5.5), effet sur cette fiche : AC-2, `linkedAccounts[].active` et
+  message d'une source archivée (remède de l'archivage refusé, 47-3a AC-5).
 - 2026-11-19 — validation P1 (Sonnet 5.5) : 0 C / 2 H / 9 M / 4 L, remédiés (remplacement d'un lien par l'autre nature : aligné sur la 47-3a, qui n'envoie que le nouveau champ). H : colonnes CSV — la garde
   `chaque_colonne_du_schema_est_exportee_ou_ecartee` lit le squash que la 47-1a met à jour, donc le gate complet de la
   47-1a rougissait avant la 47-1b (colonnes déplacées en 47-1a AC-14) ; budget MCP dépassé à coup sûr (334 → ≈ 379

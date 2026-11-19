@@ -64,11 +64,12 @@ afin de poser ces liens sans passer par l'API.
 3. **Avertissement de la paire (Q9, CO 958c al. 1 ch. 7)** : à l'enregistrement, si `isNewOffsetPair`, un dialogue
    de confirmation s'ouvre **avant** l'appel, au-dessus du dialogue de modification qui reste ouvert (même empilement
    que le dialogue de retypage, mais ouvert avant l'envoi et non sur un 409) : titre « Compenser 6960 et 6961 ? »
-   (numéros en variables), texte selon les types — produit et charge : la compensation d'une charge et d'un produit
-   n'est pas admise dans les comptes annuels ; actif et passif : celle d'un actif et d'un passif non plus (CO 958c
-   al. 1 ch. 7 les interdit toutes deux) ; puis : Kesh présentera le net ; la présentation brute reste disponible pour
-   les comptes officiels. Le texte est **celui du message `warnings` de la 47-1b AC-4** — mêmes clés du catalogue
-   (`crates/kesh-i18n/locales/*/messages.ftl`, que lit aussi `i18nMsg`), aucune phrase recopiée. Boutons **Annuler**
+   (numéros en variables), puis le texte de l'avertissement de la **47-1b AC-4** — la paire compense une charge et un
+   produit, ou un actif et un passif, ce que CO 958c al. 1 ch. 7 interdit dans les comptes annuels ; Kesh présentera
+   le net ; la présentation brute reste disponible pour les comptes officiels. Une paire actif/passif (D3) n'est donc
+   pas avertie avec un texte de charges et de produits. Le texte est **la clé même du message `warnings`** de la 47-1b
+   (catalogue `crates/kesh-i18n/locales/*/messages.ftl`, que lit aussi `i18nMsg`) : aucune phrase recopiée ni seconde
+   clé. Boutons **Annuler**
    (focus à l'ouverture, `autofocus` comme le dialogue de retypage ; il ferme l'avertissement sans rien envoyer et
    laisse la saisie intacte) et **Compenser quand même**. **Aucun** avertissement pour un miroir, un retrait, ni une
    paire inchangée (enregistrer le nom d'un compte déjà en paire). Si l'envoi confirmé rencontre ensuite
@@ -140,10 +141,15 @@ afin de poser ces liens sans passer par l'API.
       (réactiver, retirer le lien, ré-archiver) ; archiver une source reste admis ;
     - le renvoi aux rapports présentés (`\ref` vers la sous-section de la 47-3b) est **écrit par la 47-3b**, qui pose
       le label : la 47-3a n'écrit aucun `\ref` vers un label qui n'existe pas encore (PDF sans « ?? »).
+    Les exemples du manuel et les replis des libellés citent des comptes **d'un plan livré, sous leur nom**
+    (`kesh-core/assets/charts/*.json`, gardes G4-bis et G4-ter de `crates/kesh-api/tests/textes_coherents.rs`, à
+    exécuter) — p. ex. miroir de 2270 AVS/AI/APG sur 1040 Avoirs à court terme, paire 6900 Charges financières / 6950
+    Produits financiers ; les 1179, 2120, 6960 et 6961 des exemples de cette fiche n'existent dans aucun plan livré.
     Le mot « miroir » est celui de l'écran (Q8). `.tex` seulement ; **le prompt de chaque passe de revue nomme le
     manuel** et exige le contrôle du PDF compilé localement (`pdftotext … | tr '\n' ' ' | tr -s ' '`).
 12. **i18n** : clés dans les quatre locales ; `sitesTotal` de `i18n-keys.test.ts` **recompté** depuis la garde après
-    la reprise de `main` (#1351 le relève de 4) ; `lint-i18n-ownership`, `i18n-libelle-en-dur` verts. ⚠️ Aucun numéro de compte en dur dans un catalogue, un repli ou le manuel hors plans livrés : G4-bis et G4-ter (`textes_coherents.rs`) lisent les quatre catalogues et le manuel utilisateur — « Compenser 6960 et 6961 ? » se compose par variables Fluent, et les exemples du manuel citent des comptes des trois plans livrés (cf. 47-2a AC-11). *(Ajouté à la validation P1 de la 47-3b.)*
+    la reprise de `main` (#1351 le relève de 4) ; `lint-i18n-ownership` (la clé de l'avertissement, partagée avec
+    l'API, doit y passer : espace de noms global ou exception écrite), `i18n-libelle-en-dur` verts. ⚠️ Aucun numéro de compte en dur dans un catalogue, un repli ou le manuel hors plans livrés : G4-bis et G4-ter (`textes_coherents.rs`) lisent les quatre catalogues et le manuel utilisateur — « Compenser 6960 et 6961 ? » se compose par variables Fluent, et les exemples du manuel citent des comptes des trois plans livrés (cf. 47-2a AC-11). *(Ajouté à la validation P1 de la 47-3b.)*
 
 ## Tâches / sous-tâches
 
@@ -220,8 +226,8 @@ compte lié et dit comment lever le refus.
 
 - 2026-11-19 — validation P1 (Opus 5.5) : 0 C / 1 H / 9 M / 5 L, remédiés. H : remède de l'archivage refusé
   impossible quand la source est archivée (elle garde son lien, un compte archivé ne se modifie pas) et « lien vers ce
-  compte » sans adresse au plan (AC-5 réécrite ; `active` ajouté à `linkedAccounts` dans les 47-1a AC-7 et 47-1b
-  AC-2). M : texte CO 958c réduit à charge/produit alors qu'une paire actif/passif existe (D3), et recopié au lieu de
+  compte » sans adresse au plan (AC-5 réécrite ; `active` ajouté à `linkedAccounts` dans la 47-1b
+  AC-2 ; le même champ dans `linked` de la 47-1a AC-7 reste à reporter). M : texte CO 958c réduit à charge/produit alors qu'une paire actif/passif existe (D3), et recopié au lieu de
   la clé du `warnings` de la 47-1b ; états de la section non définis (compte cible d'un miroir, rôle et type changés
   dans le formulaire) ; index des liens bâti sur la liste sans archivés ; champs du `PUT` non spécifiés (passage
   miroir → paire, « Aucun », champs absents) ; refus au champ « traduit selon la raison » en double du message
