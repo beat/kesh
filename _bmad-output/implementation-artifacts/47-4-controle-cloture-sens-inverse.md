@@ -15,39 +15,95 @@ afin de poser le lien ou de vérifier l'écriture avant d'arrêter les comptes, 
 ## Critères d'acceptation
 
 1. **Contrôle K10 `REVERSED_BALANCES_WITHOUT_PRESENTATION`**, sévérité **`warning`**, ajouté **en dernier** à
-   `closing_checks::for_fiscal_year` (les index de K1 à K9 ne bougent pas) ; la doc du module (« exactement neuf
-   contrôles ») passe à dix, table comprise.
-2. **Comptes relevés** : comptes de la société, hors rôles de fonds propres (D8), **sans** lien de présentation qui
-   les couvre — ni source d'un miroir, ni membre d'une paire —, dont le solde à la fin de l'exercice Y est **de sens
-   inverse** et non nul : actif et passif cumulés jusqu'à `end_date` (tous exercices, comme le bilan) ; produit et
-   charge sur `[start_date, end_date]` de Y (comme le compte de résultat). Signes : actif et charge = débit − crédit,
-   passif et produit = crédit − débit. Un **compte miroir** dont le solde propre est de sens inverse est relevé (il
-   n'a pas de miroir lui-même).
-3. **Détails** : `count` = nombre de comptes relevés ; liste triée par numéro des 50 premiers `{ accountId, number,
-   name, accountType, balance }` (et `truncated: true` au-delà), à l'image des listes de K6.
-4. **Non bloquant** (Q6) : `fiscal_years::close` est inchangé ; un test clôt un exercice dont K10 est en `attention`.
-5. **Une seule vue** : K10 lit sur le `ReadSnapshot` de la route, comme les neuf autres ; aucune écriture, aucun
-   verrou ; deux requêtes au plus (bilan, résultat).
-6. **API** : `GET` des contrôles de clôture (route existante de `kesh-api/src/routes/fiscal_years.rs`) rend K10 ;
-   `closing_checks_e2e.rs` étendu (dix contrôles, K10 `ok` sans compte relevé, `attention` avec un passif débiteur
-   sans miroir, `ok` dès que le miroir est posé).
-7. **Écran** `FiscalYearChecks.svelte` : K10 listé avec titre, aide et lignes « 2270 Dettes sociales : solde −1 200.00
-   (passif à solde débiteur) », lien **« Ouvrir le plan comptable »** ; icône et libellé « À vérifier » des
-   `warning`. Vitest dédié (`FiscalYearChecks.k10.test.ts`, patron de `.k9.test.ts`). Capture d'écran (thème clair).
-   La phrase d'intro (« deux d'entre eux, marqués Bloquant ») reste juste (K10 n'est pas bloquant).
-8. **Manuel utilisateur** (`docs/manual/fr/user-manual.tex`, *Préparer la clôture* `:940`) : le contrôle K10, ce qu'il
-   relève, le remède (poser un miroir ou une paire, renvoi à la sous-section de la 47-3a) ; `.tex` seulement ; le
-   prompt de revue nomme le manuel et exige le contrôle du PDF. `docs/api-external.md` : code et détails de K10.
-9. **i18n** : quatre locales ; `sitesTotal` recompté.
+   `closing_checks::for_fiscal_year` (les index de K1 à K9 ne bougent pas : `checks[8]` reste K9). Doc du module
+   (« exactement neuf contrôles », table, paragraphe `count`, « Ce que les contrôles ne disent pas » — coût de K10
+   comme celui de K6, devise principale, jugement par compte et non par groupe de l'Epic 46), doc de
+   `ClosingChecks::checks` (« Toujours neuf »), de `Severity::Warning` (« K2, K3 »), de `CheckDetails` et de
+   `for_fiscal_year` passées à dix.
+2. **Comptes relevés — ceux dont la ligne serait négative dans le rapport présenté** (règles D2, D3 et AC-2/AC-3
+   de la 47-2a, sur les liens rendus par `accounts::presentation_links`, 47-1a AC-9) : comptes de la société,
+   **archivés et non imputables compris** (comme le bilan), hors rôles de fonds propres (D8 ; en SQL
+   `(a.role IS NULL OR a.role NOT IN (…))`, jamais `NOT IN` seul, qui écarterait les comptes sans rôle), dont le
+   **solde brut** est de sens inverse (`< 0` exact dans le signe de sa nature, comme `HAVING balance != 0` du
+   bilan), et qui ne sont **pas couverts** :
+   - **membre d'une paire** valide (partenaire rendu par le lecteur) → couvert (le net paraît du côté du net) ;
+   - **source d'un miroir** valide → couvert (sa ligne passe de l'autre côté) ;
+   - **cible d'un miroir** → relevé si **sa ligne présentée** est négative : solde propre + somme des soldes
+     inversés de ses sources de sens inverse `< 0` (un miroir à solde propre inverse que ses sources compensent
+     n'est **pas** relevé ; sans source de sens inverse, il est relevé dès que son solde propre est inverse) ;
+   - un **lien orphelin** (cible absente, que le lecteur écarte, 47-1a AC-8) ne couvre rien : le compte est jugé
+     comme s'il n'avait pas de lien.
+   Soldes **en devise principale** (le solde en devise n'entre pas, comme les totaux du bilan, NFR-37-4-3) :
+   actif et passif cumulés `entry_date <= end_date` de Y, tous exercices (`balance_sheet.rs:336-345`) ; produit et
+   charge sur les écritures `fiscal_year_id = Y` **et** `entry_date BETWEEN start_date AND end_date`
+   (`income_statement.rs:76-88`). Signes : actif et charge = débit − crédit, passif et produit = crédit − débit
+   (`opening::is_debit_natured`).
+3. **Détails** — `{ "accounts": [{ accountId, number, name, accountType, balance }] }` : `count` = nombre de comptes
+   relevés, **jamais borné** ; liste des **`MAX_LISTED` (20)** premiers par numéro, la constante du module, **sans
+   champ `truncated`** — à l'image de K4, K6 et K9 (`fx_revaluation::not_revalued`, `:500-530`) : le client lit
+   `count > accounts.length`. `accountType` en PascalCase (`"Liability"`), `balance` en chaîne décimale, **signée
+   dans la nature du compte** (donc négative) ; pour une cible de miroir, `balance` = sa ligne présentée.
+4. **Non bloquant** (Q6) : `fiscal_years::close` est inchangé ; un test (`closing_checks_e2e.rs`) clôt (`POST
+   /fiscal-years/{id}/close`, 200) un exercice dont K10 est en `attention`.
+5. **Une seule vue, aucune écriture, aucun verrou** : K10 lit sur la connexion du `ReadSnapshot` de la route, comme
+   les neuf autres ; **trois requêtes au plus** — le lecteur des liens (`accounts::presentation_links`, ajouté à la
+   liste des fonctions externes « vérifiées en revue de code » de la doc du module) et deux agrégations (bilan,
+   résultat). Les deux agrégations sont des **constantes `…_SQL` statiques** inscrites à `ALL_SQL` (garde T-a2 :
+   premier argument de `query*` = une constante de `ALL_SQL`, nombre de constantes = longueur de `ALL_SQL`, aucun
+   mot de verrou) ; le signe s'écrit en SQL par un `CASE` sur `account_type`, sans `format!` ni appel à
+   `kesh_report::balance_sheet::sign_exprs` (`kesh-db` ne dépend pas de `kesh-report`).
+6. **API** : `GET /api/v1/fiscal-years/{id}/closing-checks` (`routes/fiscal_years.rs:264`, doc `:253-256` passée à
+   dix) rend K10 ; `closing_checks_e2e.rs` étendu (dix contrôles, `checks[9]` K10 `warning` ; `ok` sans compte
+   relevé ; `attention` avec un passif débiteur sans miroir, `count` 1 ; `ok` dès que le miroir est posé ; tout
+   rôle ; autre société jamais lue). Pas d'outil MCP des contrôles de clôture (aucun à `origin/main`) : rien à
+   faire au MCP.
+7. **Écran** `FiscalYearChecks.svelte` : K10 listé avec titre, aide et une ligne par compte — « 2270 Dettes
+   sociales : -1’200.00 CHF (passif à solde débiteur) », montant par `formatChfBalance`, motif par **quatre clés**
+   (actif à solde créditeur, passif à solde débiteur, produit à solde débiteur, charge à solde créditeur) ; ligne
+   « et N autres » quand `count` dépasse la liste (patron de `fiscal-years-checks-k8-more`) ; lien **« Ouvrir le
+   plan comptable »** (`/accounts`, `data-testid="fiscal-year-checks-link-REVERSED_BALANCES_WITHOUT_PRESENTATION"`) ;
+   icône et libellé « À vérifier » des `warning`. `checkTitle` et `checkHelp` (`closing-checks-labels.ts`) et le
+   type `ClosingCheckCode` (`fiscal-years.types.ts:65-78`, union `accounts` `:156`) étendus. Vitest dédié
+   (`FiscalYearChecks.k10.test.ts`, patron de `.k9.test.ts`). **Dialogue de clôture** (`+page.svelte`, rappel
+   `pointsToVerify`) : K10 en `attention` y paraît comme point à vérifier et **« Clôturer » reste actif**
+   (`closeBlockedByK9` inchangé) — test dans `fiscal-years-page.test.ts`. Capture d'écran (thème clair) du panneau
+   et du rappel. La phrase d'intro (« deux d'entre eux, marqués Bloquant ») reste juste (K10 n'est pas bloquant).
+8. **Documentation** : manuel utilisateur (`docs/manual/fr/user-manual.tex`, *Préparer la clôture* `:940` ;
+   « neuf contrôles » `:942` passé à dix) — le contrôle K10, ce qu'il relève, le remède (poser un miroir ou une
+   paire, renvoi par `\ref` à la sous-section de la 47-3a ; si la 47-4 est fusionnée dans la branche d'epic avant
+   la 47-3a, le renvoi s'écrit dans la story qui arrive la seconde) ; manuel d'administration (« les neuf contrôles »
+   `:1878` passé à dix) ; `.tex` seulement, PDF contrôlé au gate de release ; le prompt de chaque passe de revue
+   nomme les deux manuels et exige le contrôle du PDF compilé localement. `docs/api-external.md` (note ¹⁰,
+   `:270-272`) : « toujours dix » (avec la version d'avant, au tag), K10 **en dernier** (les neuf premiers gardent
+   leur rang), sa sévérité, ses détails, sa liste à 20, et **⚠️ changement de contrat** (la note dit elle-même
+   qu'« un contrôle neuf serait un changement de contrat annoncé ici ») ; la note de version le dit aussi.
+9. **i18n** : clés `fiscal-years-checks-k10-*` (préfixe du dossier, `lint-i18n-ownership`), quatre locales ;
+   `sitesTotal` recompté.
+10. **Sites « neuf contrôles » mis à dix** (inventaire à `origin/main`, à recompter par `git grep -nE
+    "neuf|\b9\b|toHaveCount\(9\)|len\(\), 9"` sur ces fichiers à la reprise de `main`) :
+    `crates/kesh-db/tests/closing_checks.rs:283-305` (`t_a1`, ordre et sévérités) et `:1683-1686` ;
+    `crates/kesh-db/tests/fx_revaluation.rs:1205` ; `crates/kesh-api/tests/closing_checks_e2e.rs:246-255` ;
+    `frontend/src/lib/features/fiscal-years/closing-checks.test-fixtures.ts` (`ORDER`, `base`, commentaire) ;
+    `frontend/tests/e2e/fiscal-year-closing-journey.spec.ts:158-167` (`toHaveCount(9)`, et revoir si ses données
+    mettent K10 en `attention`) ; tout test existant qui exige « tout `ok` sauf K7 » sur des données qui créent un
+    solde inverse.
 
 ## Tâches / sous-tâches
 
-- [ ] **T1** : `CheckCode::ReversedBalancesWithoutPresentation`, variante de `CheckDetails`, requêtes, ordre (AC 1–3,
-  5).
-- [ ] **T2** : tests de dépôt (`crates/kesh-db/tests/closing_checks.rs` : dix contrôles, cas de l'AC-2 — actif
-  créditeur, passif débiteur, produit débiteur, charge créditrice, fonds propres exclus, source de miroir exclue,
-  membre de paire exclu, miroir à solde propre inverse relevé, troncature à 50) ; clôture non bloquée (AC 4).
-- [ ] **T3** : API (AC 6). **T4** : écran, Vitest, capture (AC 7). **T5** : manuel, `api-external.md`, i18n (AC 8, 9).
+- [ ] **T1** : `CheckCode::ReversedBalancesWithoutPresentation`, variante de `CheckDetails`, deux constantes SQL à
+  `ALL_SQL`, appel du lecteur des liens, calcul de la ligne présentée des cibles, ordre, docs (AC 1–3, 5).
+- [ ] **T2** : tests de dépôt (`crates/kesh-db/tests/closing_checks.rs` : dix contrôles ; actif créditeur, passif
+  débiteur, produit débiteur, charge créditrice ; compte sans rôle relevé, fonds propres exclus ; archivé relevé ;
+  source de miroir exclue ; membre de paire exclu ; cible de miroir à solde propre inverse relevée sans source
+  inverse, **non** relevée quand ses sources la compensent ; lien orphelin sans effet ; produit d'une écriture d'un
+  autre exercice datée dans Y non compté ; autre société jamais lue ; troncature à 20 avec `count` complet) ; sites
+  de l'AC-10 côté dépôt.
+- [ ] **T3** : API (AC 4, 6) ; **test de cohérence avec la présentation** (dans la story, 47-2a ou 47-4, qui arrive
+  la seconde dans la branche d'epic) : sur le jeu de l'exemple chiffré de la 47-2a AC-11 et ses variantes, l'ensemble
+  relevé par K10 égale celui des lignes négatives (hors fonds propres et lignes calculées) du bilan et du compte de
+  résultat présentés au dernier jour de Y.
+- [ ] **T4** : écran, rappel du dialogue, Vitest, fixtures, E2E `toHaveCount(10)`, capture (AC 7, 10).
+- [ ] **T5** : manuels, `api-external.md`, i18n (AC 8, 9).
 - [ ] **T6** : gate complet (dépôt touché : jamais ciblé), E2E complet au dernier commit de code.
 
 ## Dev Notes
@@ -55,32 +111,53 @@ afin de poser le lien ou de vérifier l'écriture avant d'arrêter les comptes, 
 ### Code lu (à `origin/main` `fd04099f`)
 
 - `crates/kesh-db/src/repositories/closing_checks.rs:1-40` (table des contrôles, règle « ajouter en dernier »),
-  `:131-160` (`ClosingChecks`, `ClosingCheck`), `:168` (`CheckCode`), `:195` (`Severity`), `:222` (`CheckDetails`),
-  `:608-640` (`for_fiscal_year`), `:641` (`status_of`), `:690-800` (K2, K3 : patron d'un `warning` à liste).
-- `frontend/src/lib/features/fiscal-years/FiscalYearChecks.svelte:60-240` ; `FiscalYearChecks.k9.test.ts`.
-- Catalogue : `fiscal-years-checks-*` (`messages.ftl:1093-1154`).
+  `:60-80` (fonctions externes vérifiées en revue), `:131-160` (`ClosingChecks`, `ClosingCheck`), `:168`
+  (`CheckCode`), `:195` (`Severity`), `:222` (`CheckDetails`, `untagged` : le client distingue par `code`), `:461`
+  (`MAX_LISTED = 20`), `:585` (`ALL_SQL`), `:608-640` (`for_fiscal_year`), `:641` (`status_of`), `:1017`
+  (`foreign_accounts_not_revalued`, patron d'une liste de comptes par numéro), `:1071` (garde T-a2).
+- `crates/kesh-db/src/repositories/fx_revaluation.rs:95`, `:484-530` (`MAX_LISTED`, `NotRevaluedAccounts`,
+  `count` non borné, liste à 20).
+- `crates/kesh-report/src/balance_sheet.rs:183-202` (`sign_exprs`), `:319-360` (`fetch_cumulative_section`) ;
+  `income_statement.rs:76-88` (filtre `fiscal_year_id` et dates) ; `opening.rs:36` (`is_debit_natured`).
+- `crates/kesh-api/src/routes/fiscal_years.rs:253-275` (`get_closing_checks`).
+- `frontend/src/lib/features/fiscal-years/FiscalYearChecks.svelte:150-373` (intro `:155`, K9 `:333`, « … more »
+  de K8) ; `closing-checks-labels.ts` ; `fiscal-years.types.ts:65-78`, `:156` ; `fiscal-years.helpers.ts:115`
+  (`pointsToVerify`) ; `routes/(app)/settings/fiscal-years/+page.svelte:78-84` (`closePoints`,
+  `closeBlockedByK9`), `:296` (contrôles relus après une réévaluation) ; `FiscalYearChecks.k9.test.ts`.
+- Catalogue : `fiscal-years-checks-*` (`fr-CH/messages.ftl:1092-1201`).
+
+### Interaction avec K9 (Epic 37)
+
+K10 lit les soldes **en devise principale** à l'instant de la lecture : avant la réévaluation de fin d'exercice, le
+solde d'un compte en devise n'est pas encore réévalué, et K10 peut changer après elle. Le panneau relit les
+contrôles après une réévaluation (`+page.svelte:296`) ; K9, bloquant, se traite d'abord. K10 ne relève pas les
+comptes de K9 à part, et K9 garde son rang (`checks[8]`, tests `fx_revaluation_e2e.rs:775-796` inchangés).
 
 ### Stratégie de tests
 
-Dépôt (cas de l'AC-2), API, Vitest, capture ; mutations : oublier l'exclusion des fonds propres, inverser le signe
-d'un type, compter un membre de paire — chacune doit rougir.
+Dépôt (cas de T2), API, cohérence avec la présentation (T3), Vitest, capture ; mutations : oublier l'exclusion des
+fonds propres, écrire `role NOT IN` sans `IS NULL`, inverser le signe d'un type, compter un membre de paire, juger
+une cible de miroir sur son seul solde propre, tenir un lien orphelin pour couvrant, oublier le filtre
+`fiscal_year_id` du résultat — chacune doit rougir.
 
 ### Risques
 
-Coût de la requête sur un grand plan (une agrégation par type, bornée par l'index des lignes d'écriture : mesurer sur
-la base de démonstration) ; ordre des contrôles si une autre story en ajoute un entre-temps (le second arrivé prend
-K11).
+Coût de la requête du bilan sur un long historique (agrégation de tout le grand livre jusqu'à `end_date`, comme le
+bilan et comme K6 : mesurer sur la base de démonstration, le dire dans la doc du module) ; ordre des contrôles si une
+autre story en ajoute un entre-temps (le second arrivé prend K11) ; deux règles de « couverture » (K10 en `kesh-db`,
+présentation en `kesh-report`) qui pourraient diverger — d'où le test de cohérence de T3.
 
 ### References
 
-- Fiche 47-1a (colonnes) ; `CLAUDE.md` § *Priorités des défauts* (aucune).
-- Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
-  tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
+- Fiche 47-1a (AC-8 lien orphelin, AC-9 lecteur) ; fiche 47-2a (AC-2, AC-3, algorithme) ; `CLAUDE.md`
+  § *Priorités des défauts* (aucune).
 
 ## Notes de version
 
 « Préparer la clôture » signale, sans bloquer, les comptes dont le solde paraîtrait négatif au bilan ou au compte de
-résultat faute de compte miroir ou de paire.
+résultat faute de compte miroir ou de paire. ⚠️ **Changement de contrat de l'API** : `GET
+/fiscal-years/{id}/closing-checks` rend dix contrôles, le dixième (`REVERSED_BALANCES_WITHOUT_PRESENTATION`,
+`warning`) en dernier ; les neuf premiers gardent leur rang.
 
 ## Dev Agent Record
 
@@ -91,3 +168,19 @@ résultat faute de compte miroir ou de paire.
 ### Completion Notes List
 
 ### File List
+
+## Change Log
+
+- 2026-11-19 — validation P1 (Opus) : 0 C / 0 H / 7 M / 7 L, remédiés. M1 : une cible de miroir était relevée sur
+  son solde propre, non sur sa ligne présentée (faux positif quand ses sources la compensent) ; M2 : un lien orphelin
+  comptait comme couvrant (faux négatif : le bilan l'affiche négatif) ; M3 : liste à 50 avec `truncated`, contraire à
+  `MAX_LISTED = 20` et à la forme de K4, K6, K9, et ligne « et N autres » absente ; M4 : sites « neuf contrôles »
+  non inventoriés (tests dépôt, API, fixtures, E2E `toHaveCount(9)`, manuel d'administration `:1878`, doc de la
+  route) — AC-10 ; M5 : changement de contrat de l'API non dit ; M6 : garde T-a2 (`ALL_SQL`, SQL statique, pas de
+  `sign_exprs` de `kesh-report`), lecteur des liens à la liste des fonctions externes, « deux requêtes » passé à
+  trois ; M7 : rappel du dialogue de clôture non traité (« Clôturer » reste actif). LOW : filtre `fiscal_year_id`
+  du compte de résultat ; piège `NOT IN` / `NULL` ; quatre clés de motif, format `formatChfBalance`, clé `accounts`,
+  `balance` signé, archivés et devise principale ; renvoi du manuel selon l'ordre avec la 47-3a ; numéros de ligne
+  (catalogue `:1092-1201`, composant, patron K9) ; interaction avec K9 écrite ; jugement par compte, non par groupe
+  (Epic 46). Propagé à la 47-2a (algorithme, cas du miroir à solde propre inverse). Rapport :
+  `kesh-gate-logs/epic-47-validation/47-4-controle-cloture-sens-inverse-P1.md`.

@@ -117,8 +117,9 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    = solde propre (source `own` si non nul) + accumulations ; insérer dans la section du type de la cible.
 4. Retrier chaque section par numéro, recalculer `total_*` (bilan) ou `total_revenues`, `total_expenses` (résultat ;
    `net_result` recalculé et **asserté** égal au brut en `debug_assert!`, journalisé en `tracing::error!` sinon).
-5. Cas limites à tester : miroir dont le solde propre est lui-même de sens inverse (il reste négatif : un miroir n'a
-   pas de miroir — à signaler par le contrôle K10 de la 47-4) ; source archivée ; toutes les sources de sens normal
+5. Cas limites à tester : miroir dont le solde propre est lui-même de sens inverse (sa ligne reste négative si ses
+   sources de sens inverse ne la compensent pas : un miroir n'a pas de miroir — relevée alors par le contrôle K10 de
+   la 47-4, qui juge la ligne présentée et non le solde propre ; test de cohérence K10 / présentation : 47-4 T3) ; source archivée ; toutes les sources de sens normal
    (le miroir sans écriture ne paraît pas) ; paire à un seul membre mouvementé ; société sans lien.
 
 ### Recâblage à la fusion de l'Epic 46 (Q5)
