@@ -42,7 +42,7 @@ afin que l'epic ne fasse pas monter le compte d'issues plus que nécessaire.
 4. **Gates complets** (backend, frontend) et **E2E complet** au dernier commit de code (échecs attendus jugés contre
    `docs/testing.md`), `crates/kesh-db/` comprise le cas échéant (gate complet même en boucle) ; le compte d'issues
    et de bugs au moment de la story est écrit (relevé par le Project Lead si `gh` n'est pas accessible à l'agent),
-   à côté du compte du tag v0.20.0 et de l'objectif de l'epic.
+   à côté du compte du tag v0.20.0 (tag précédent, relevé par le Project Lead) et de l'objectif de l'epic (fichier d'epic, § *Décomptes d'issues*).
 5. Les issues traitées se ferment par le corps de la PR de release (`closes #N`), jamais par un message de commit
    (grep des mots-clés sur `git log` avant la PR) ; les lignes `closes #N` sont préparées par la story, la PR est
    ouverte et l'état des issues vérifié après la fusion par le Project Lead (l'agent de Beat n'a ni PR ni `gh`).
@@ -89,3 +89,4 @@ Selon les issues retenues (une ligne par correctif visible).
   entrée par les seules issues ouvertes (le registre fait foi désormais), choix des issues confié à la story alors
   qu'il revient au Project Lead ; le quatrième porte sur la règle de coupure du fichier d'epic (qui coupe un epic de contributeur,
   sort d'une 47-5 sortie, epic qui attend entier plutôt que de sortir amputé).
+- 2026-11-19 — validation P3 (Sonnet 5.5, ciblée sur la remédiation P2) : 0 C / 0 H / 0 M / 3 L, remédiés (rapport `kesh-gate-logs/epic-47-validation/47-5-solde-dette-epic-P3.md`).
