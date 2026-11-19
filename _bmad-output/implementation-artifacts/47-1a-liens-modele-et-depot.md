@@ -40,25 +40,30 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    `migrations_upgrade_path.rs` étendu (données d'avant intactes, colonnes neuves à `NULL`) et son compte en dur
    (`assert_eq!(total, 95, …)`, `:137-141` à `fd04099f`, garde de la fenêtre positionnelle « sauf les 61 dernières »)
    recompté. **Semis par le dépôt sur une base d'avant la migration** : `columns!()` lira les deux colonnes, si bien
-   que tout test qui monte une base partielle (`apply_migrations_up_to`) puis passe par le dépôt courant
-   (`accounts::create`, `find_by_id`…) rougit en `Unknown column` — mode d'échec déjà payé à la 37-1. Les deux
-   colonnes s'ajoutent à la liste que pose et retire `common::colonnes_multi_devises`
-   (`crates/kesh-db/tests/common/mod.rs:86-161`, `COLONNES_MULTI_DEVISES`, `COLONNES_LIGNES_EN_DEVISE` ; appelants :
-   `migrations_upgrade_path.rs:1397, 2197, 2423, 2529`, `lettering_documents_backfill.rs:246`), retrait **avant**
-   `MIGRATOR.run()` (pas d'`IF NOT EXISTS`). ⚠️ **Deux familles de bases partielles** : celles d'*avant la 37-1* (les
-   appelants ci-dessus : la liste posée porte aussi les colonnes de la 37-1, d'où une seule constante
-   `COLONNES_LIENS_DE_PRESENTATION` chaînée à `colonnes_multi_devises`) et celles **entre la 37-1 et cette migration**,
-   qui ont déjà les colonnes de la 37-1 — `grouped_settlements.rs:1301`
-   (`the_upgrade_keeps_unit_settlements_and_allows_a_group`, base d'avant la 43-1a, peuplée par `monter` →
-   `accounts::create`…, donc rouge en `Unknown column` sans traitement) : une fonction séparée
-   `common::colonnes_liens_de_presentation(pool, poser)` (la même constante, sans les colonnes de la 37-1 — un
-   `ADD COLUMN` redoublé échouerait) y pose les deux colonnes après `migrations_before` et les retire avant
-   `MIGRATOR.run()`. Les sites qui ne passent que par du SQL brut (`journal_entry_number_sequences_bootstrap.rs`, les
-   tests `n` / `n + 1` de `migrations_upgrade_path.rs`, `kesh-api/src/pre_upgrade_backup/tests.rs`,
-   `kesh-api/tests/sauvegarde_avant_migration.rs`) n'en ont pas besoin ; chaque autre site est inspecté (liste au
-   Change Log du développement). **Fenêtre positionnelle** : la migration s'y ajoute — `total - 61` devient `total - 62`
-   (frontière à 34 inchangée, comme aux stories précédentes) et `assert_eq!(total, N)` suit (96 avec la 49-1a fusionnée,
-   97 avec cette story).
+   qu'un test qui monte une base partielle (`apply_migrations_up_to`) puis passe, **avant** `MIGRATOR.run()`, par une
+   fonction du dépôt qui lit `COLUMNS` / `FIND_BY_ID_SQL` d'`accounts.rs` (`create`, `find_by_id`, `list_by_company`,
+   `update`, `archive*`, `bulk_create*`, `check_fx_accounts_in_tx`, `conversion_line_accounts_in_tx`…) rougirait en
+   `Unknown column` — mode d'échec payé à la 37-1. ⚠️ **À `origin/main` (`fd04099f`), aucun site n'est dans ce cas**
+   (vérifié à la validation P3) : les semis des fenêtres partielles passent par du SQL brut
+   (`test_fixtures::seed_accounting_company`, `monter` de `grouped_settlements.rs:198`) ou par des dépôts qui lisent
+   des listes de colonnes explicites d'`accounts` (`invoices.rs:608`, `journal_entries.rs:277`,
+   `refuse_foreign_currency_accounts_in_tx`) ; c'est vrai des appelants de `common::colonnes_multi_devises`
+   (`migrations_upgrade_path.rs:1397, 2197, 2423, 2529`, `lettering_documents_backfill.rs:246` : `companies::create`,
+   `supplier_invoices::*`, `payment_batches::*`, `journal_entries::reverse`), de `grouped_settlements.rs:1301`
+   (`the_upgrade_keeps_unit_settlements_and_allows_a_group`, base d'avant la 43-1a ; la 49-1a y pose
+   `common::colonnes_types_de_ligne`, non pour `accounts`) et des fenêtres en SQL brut
+   (`*_backfill.rs`, `journal_entry_number_sequences_bootstrap.rs`, tests `n` / `n + 1` de
+   `migrations_upgrade_path.rs`, `kesh-api/src/pre_upgrade_backup/tests.rs`, `kesh-api/tests/sauvegarde_avant_migration.rs`).
+   **Aucune pose ni aucun retrait n'est donc prescrit.** Le développement refait cet inventaire après la reprise de
+   `main` (T0 ; liste au Change Log) ; s'il trouve un site qui lit l'`Account` du dépôt avant la montée, il pose les
+   deux colonnes le temps du semis et les retire avant `MIGRATOR.run()` (pas d'`IF NOT EXISTS`) : par
+   `colonnes_multi_devises` sur une base d'avant la 37-1 (constante chaînée), par une fonction séparée sur une base
+   postérieure à la 37-1 (un `ADD COLUMN` redoublé des colonnes de la 37-1 échouerait). **Fenêtre positionnelle**
+   (couplage assumé, P6 : frontière historique figée à **34**, gardée par le compte en dur) : `total` et le
+   soustracteur `N` bougent du même pas, `N = total − 34` — `total - 61` / 95 deviennent `total - 62` / 96 si cette
+   migration est la seule ajoutée depuis `fd04099f`, et `total - 63` / 97 si la 49-1a (qui pose déjà `total - 62` /
+   96 sur `origin/epic/49-types-de-lignes-facture`) est fusionnée avant ; une ligne de plus à la généalogie du
+   commentaire. Laisser `N` en arrière déplacerait la frontière sans rien faire rougir.
 3. **Entité** : `Account` porte `mirror_account_id: Option<i64>` et `offset_account_id: Option<i64>` ; toutes les
    lectures `SELECT` d'`Account` (`FIND_BY_ID_SQL`, `FIND_BY_ID_FOR_UPDATE_SQL`, listes) les décodent ;
    `account_snapshot_json` les écrit (`mirrorAccountId`, `offsetAccountId`) : l'audit avant/après les montre.
@@ -122,7 +127,9 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
 8. **Lien hors règle lu comme absent** : l'import d'une sauvegarde (`check_schema_compat` contrôle les colonnes,
    jamais les valeurs ; pas de FK) ou un SQL peut écrire ce que l'AC-5 refuse. Le lecteur (AC-9) écarte, avec
    `tracing::warn!` nommant les comptes, la **liste close** suivante — et la 47-2a ne reçoit que des liens valides
-   (son test de propriété les suppose) : (a) cible absente (**orphelin**) ; (b) cible d'une autre société ; (c) lien
+   (son test de propriété les suppose) : (a) cible absente (**orphelin**) ; (b) cible d'une autre société — **même cas que (a) au lecteur** : la requête ne lit
+   que les comptes de la société, une cible d'ailleurs y est absente (anti-IDOR, comme `unknown` de l'AC-5) ; un
+   seul `case` pour les deux, deux tests (cible supprimée, cible d'une autre société) ; (c) lien
    vers soi-même ; (d) paire **non réciproque** (`A.offset = B` sans `B.offset = A`), les deux côtés écartés ;
    (e) **chaîne** : miroir dont la cible porte elle-même un lien, ou vise un membre de paire — le miroir est écarté ; (d) et
    (e) se jugent sur les liens **tels que lus**, avant tout écartement (résultat indépendant de l'ordre : un miroir vers
@@ -140,7 +147,8 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    vrai par construction ; un compte sans lien dans le vecteur est un compte dont le lien a été écarté ou qui n'en
    a plus d'entrant : ils l'ignorent.
 9. **Lecteur des liens pour les rapports** : `accounts::presentation_links(executor, company_id) ->
-   Vec<PresentationLinkAccount>` rend, en **une requête**, chaque compte de la société qui a ou reçoit un lien —
+   Vec<PresentationLinkAccount>` rend, en **une requête**, chaque compte de la société qui a ou reçoit un lien (reçu d'un compte **de la même société** : un lien posé
+   par SQL depuis une autre société vers celle-ci ne fait pas entrer la cible dans le vecteur) —
    `id`, `number`, `name`, `account_type`, `role`, `currency`, `active`, `mirror_account_id`, `offset_account_id` ;
    consommé par la 47-2a et la 47-4 ; ne rend que des liens valides (forme de l'AC-8). Test : une société sans lien → vecteur vide ; une autre société n'y paraît jamais.
 10. **Concurrence** : deux poses croisées (A→B et B→A en paire ; liaison de T pendant l'archivage de T) ne laissent
@@ -182,7 +190,13 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
     number, name, active }] }` — avec ses messages dans les quatre locales (`crates/kesh-i18n/locales/*/messages.ftl`),
     qui **nomment** le compte lié (Q10) et, s'il est archivé, disent de le réactiver d'abord (AC-7) ; le contrat
     exact (détails, texte d'exemple) est celui de la 47-1b AC-2, que cette story réalise, et un test unitaire de réponse par variante (patron `fx_account_invalid_response`,
-    `errors.rs:1881`). Les sites qui construisent un `AccountUpdate` (32 à `fd04099f`, dont la route
+    `errors.rs:1881`). ⚠️ **Toutes les clés i18n des raisons naissent ici**, dans les quatre locales : chaque raison de
+    `PresentationLinkReason::ALL` — les six du dépôt **et `bothLinks` et `onCreate`**, que seule l'API (47-1b) produit —
+    et chaque raison d'`AccountPresentationLinked` (`archive`, `accountType`, `equityRole`) ; la fonction de réponse
+    traite chaque raison par un `match` **sans cas par défaut** (comme `fx_account_invalid_response`), si bien qu'une
+    raison sans clé ne compile pas ; un test parcourt `ALL` et exige une clé présente dans les quatre catalogues. Le
+    Dev Agent Record **liste les noms de clés livrés** (la 47-1b le constate à son T0). Seule la clé de
+    l'avertissement de paire, `accounts-presentation-offset-warning`, reste à la 47-1b. Les sites qui construisent un `AccountUpdate` (32 à `fd04099f`, dont la route
     `routes/accounts.rs` et 22 dans `repositories/accounts.rs`) reçoivent `presentation_link: Unchanged` : la route
     n'expose les champs qu'en 47-1b.
 
@@ -193,7 +207,8 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
   vérifier sur MariaDB de dev que les deux `CHECK` de l'AC-1 (dont « pas soi-même », qui lit `id`) sont acceptés et
   n'interdisent rien d'attendu ; refus → arrêt et question (AC 1, C-47-1a-4).
 - [ ] **T1 — migration** (AC 1, 2) : fichier SQL, ligne d'audit et compteurs recomptés, squash régénéré, P6, upgrade
-  path et son compte en dur, colonnes posées et retirées par `common::colonnes_multi_devises`.
+  path et son compte en dur (`N = total − 34`), inventaire des semis par le dépôt sur base partielle (AC-2 : aucun à
+  `fd04099f` ; pose et retrait seulement si la reprise de `main` en fait apparaître un).
 - [ ] **T2 — entité et lectures** (AC 3, 4, 14) : champs, SQL des lectures, snapshot d'audit, `PresentationLinkChange`
   (variantes `Clear*`), `is_no_op_change`, colonnes de `accounts.csv` et sites de construction
   d'`Account`.
@@ -302,7 +317,9 @@ sur la ligne de T.
 ### Project Structure Notes
 
 Aucun fichier hors des chemins habituels ; migration nommée par horodatage ; pas de PDF de manuel commité ; les messages des deux
-erreurs (AC-15) sont ici, le reste de l'i18n et la documentation en 47-1b.
+erreurs (AC-15) sont ici — **toutes** les clés de leurs raisons, `bothLinks` et `onCreate` comprises (réponse sans cas
+par défaut, patron `fx_account_invalid_response`, `kesh-api/src/errors.rs:1881` ; noms livrés au Dev Agent Record) ;
+à la 47-1b ne reste que la clé `accounts-presentation-offset-warning` et la documentation.
 
 ### References
 
@@ -351,6 +368,22 @@ ou 0.20.0 s'importe ; la version précédente refuse la base migrée et les sauv
   epic 49 : 96, horodatage libre après `20261118000002`), sites positionnels, `Account` littéraux, sous-match
   d'`errors.rs`, écrivains de `accounts`, D1–D10. Non exercés : acceptation du `CHECK` sur `id` par MariaDB (T0, pas de
   base), manuels. Rapport : `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P2.md`.
+
+- 2026-11-19 — validation P3 ciblée sur la remédiation P2 (`c58de40a`), Opus 5.5 : **0 C / 0 H / 4 M / 1 L, remédiés**.
+  M1 : la prémisse du M1 de la P2 est fausse à `origin/main` — `monter` (`grouped_settlements.rs:198`) sème
+  `accounts` en SQL brut, `invoices.rs:608` et `journal_entries.rs:277` lisent des colonnes explicites ; aucune fenêtre
+  partielle ne lit `columns!()` d'`Account` avant la montée (appelants de `colonnes_multi_devises` compris) → AC-2 et
+  T1 : aucune pose prescrite, inventaire refait à la reprise, pose conditionnelle. M2 : `total - 62` écrit sans
+  condition alors que la 49-1a pose déjà `total - 62` / 96 (`origin/epic/49-types-de-lignes-facture`) : avec elle,
+  97 exige `total - 63`, sinon la frontière glisse à 35 sans rien faire rougir → AC-2 `N = total − 34`. M3 : le cas
+  (b) n'est pas distinguable de (a) par `retain_valid_links` sur les seuls comptes de la société (« un test par
+  cas » intestable tel qu'écrit) → AC-8 : un seul cas, deux tests. M4 (relevé par la P2 de la 47-1b, transmis par
+  l'orchestrateur) : toutes les clés i18n des raisons, `bothLinks` et `onCreate` comprises, naissent ici, réponse
+  sans cas par défaut, noms au Dev Agent Record ; seule `accounts-presentation-offset-warning` reste à la 47-1b →
+  AC-15, *Project Structure Notes*. L1 : « reçoit un lien » limité aux sources de la même société (AC-9). Forme du
+  vecteur (compte gardé, lien à `None`) conforme à ce qu'attendent la 47-2a (algorithme § 1, « reste à sa place,
+  brut ») et la 47-4 (T2, « le compte reste relevé ») : rien à signaler. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P3.md`.
 
 ## Dev Agent Record
 
