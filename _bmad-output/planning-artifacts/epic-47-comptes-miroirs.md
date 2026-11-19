@@ -14,6 +14,9 @@ CO, **sans aucune compensation**. Consigne de Beat : implémentation et interfac
 Cas d'usage : « Gains de change » seul porte les écritures de change, « Pertes de change » est son miroir (un gain net
 négatif paraît en charge) ; une dette sociale à solde débiteur paraît à l'actif ; une banque à découvert, au passif.
 
+**Approbation de Beat (2026-11-20)**, page de revue « miroir seul » : principe et écrans **approuvés** ; retrait du
+contrôle K10 **d'accord** ; cinq stories **approuvées**. Développement autorisé, 47-1 en premier.
+
 ### Règles retenues
 
 - **R1 — Modèle** : une seule colonne nullable `accounts.mirror_account_id`, sans clé étrangère (comme
