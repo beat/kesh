@@ -64,15 +64,21 @@ afin de poser ces liens sans passer par l'API.
      les comptes **cibles** d'un miroir — **sources archivées comprises** — et les membres d'une paire avec un tiers.
      Les rôles se comptent **hors le lien propre du compte édité**, que le changement libère (état résultant, 47-1a
      AC-5 et AC-6) : passer d'une paire avec D à un miroir vers D, ou d'un miroir vers T à une paire avec T quand ce
-     compte en est la seule source, est admis par l'API (état résultant : le lien propre est remplacé, AC-6) et donc proposé (si T a d'autres sources,
-     il reste exclu de la paire) — **ces deux transitions ne sont nommées par aucun test de la 47-1a** (T0 les contrôle
-     au code livré) ; **admis** : compte non imputable (compte de présentation),
+     compte en est la seule source, est admis par l'API et donc proposé — la 47-1a les admet en toutes lettres
+     (AC-5, transitions (1) et (2), `chain` jugé sur l'état **après** le `PUT` ; AC-6, écritures et deux tests
+     d'intégration). Si T a une autre source, **archivée comprise** (la lecture des référents de `chain` ne filtre pas
+     `active`), il reste exclu de la paire : c'est la sonde (2) de la 47-1a AC-5. Un compte D à la fois membre de la
+     paire du compte édité et cible du miroir d'un tiers est un état hors règle (posé par SQL seulement) : la règle
+     ci-dessus le propose pour un miroir (une cible admet plusieurs sources, D2) ; un refus éventuel s'affiche sous le
+     sélecteur (AC-4) ; **admis** : compte non imputable (compte de présentation),
      compte en devise étrangère, de devise quelconque (Q3) ; le lien actuel toujours rendu. Table de vérité : quatre
      types × deux natures × rôles × états (actif, archivé, source, cible déjà d'un autre miroir — admise pour un miroir,
      exclue pour une paire —, membre d'une paire, partenaire ou cible actuels du compte édité). La règle reste celle de l'API, qui seule fait
      foi ;
-   - `buildPresentationIndex(accounts)` : l'index de l'AC-6 (sources par cible, membres de paire), depuis le plan
-     archivés compris ; la page le construit pour les pastilles, le composant le recalcule de sa prop `accounts` ;
+   - `buildPresentationIndex(accounts)` : l'index de l'AC-6, depuis le plan archivés compris — il porte ce plan
+     (`accounts`, que `presentationLinkCandidates` parcourt pour énumérer les candidats, types, rôles et `active`
+     compris), les **sources par cible** (`mirrorAccountId ?? null`) et le **partenaire par membre de paire**
+     (`offsetAccountId ?? null`) ; la page le construit pour les pastilles, le composant le recalcule de sa prop `accounts` ;
    - `presentationSectionState(index, account, formType, formRole)` : l'état de l'AC-1 ;
    - `presentationLinkFieldsForUpdate(account, choice)` : les champs du `PUT`, **seulement ce qui change** (patron
      `currencyFieldsForUpdate` et `parentFieldForUpdate` de #1351) — rien si le lien choisi est le lien enregistré ;
@@ -194,9 +200,10 @@ afin de poser ces liens sans passer par l'API.
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** : contrôler au code livré par la 47-1a (`check_presentation_link`, dépôt) que les deux transitions de
-  l'AC-2 — paire avec D → miroir vers D, miroir vers T (seule source) → paire avec T — sont admises ; si le dépôt les
-  refuse, retirer ces deux lignes de la table de vérité (jamais un candidat que l'API refuse) et le dire au Change Log.
+- [ ] **T0** : relire au code livré par la 47-1a les deux tests d'intégration des transitions de l'AC-2 (47-1a AC-6 :
+  paire avec D → miroir vers D, seule source d'un miroir vers T → paire avec T) et la sonde (2) (T cible d'une autre
+  source, archivée comprise : refusée) ; les citer au Change Log. S'ils manquent ou disent autre chose, s'arrêter et
+  le signaler (jamais un candidat que l'API refuse).
   Reprise de `main`. Si #1351 y est, partir de son dialogue (champ parent, `parentFieldForUpdate`) ; sinon,
   ne pas fusionner sa branche : développer sur `main`, la section en dernier du formulaire et les fonctions dans un
   fichier neuf pour que les hunks soient distincts, et le second arrivé résout en gardant les deux champs du `PUT`
@@ -318,6 +325,22 @@ compte lié et dit comment lever le refus.
   `KNOWN_VIOLATIONS` sans entrée `accounts`, `.ts` du dossier parcourus aussi, aucune clé `i18nMsg` hors `accounts-`
   prescrite), `EXEMPT_RE`, `isCandidate` (un `.ts` à paramètre `AccountResponse[]` hors garde). Rapport :
   `kesh-gate-logs/epic-47-validation/47-3a-ecran-plan-comptable-P4.md`.
+
+- 2026-11-19 — validation P5, ciblée sur la remédiation P4 (Opus 5.5) : 0 C / 0 H / 1 M / 3 L, remédiés côté 47-3a. Concordance
+  avec la 47-1a depuis sa P3 (`aaf7b310`, `1cd1849d`) : AC-5 admet les deux transitions, jugées sur l'état après le
+  `PUT`, AC-6 les écrit avec deux tests d'intégration et leurs sondes ; la table de vérité des candidats concorde
+  (miroir : cible admise, source et membre de paire exclus hors lien propre ; paire : cibles, sources archivées
+  comprises, et membres d'une paire avec un tiers exclus). L : phrase « aucun test de la 47-1a » périmée → renvoi à
+  la 47-1a AC-5/AC-6, T0 réduit à un contrôle (tests cités, arrêt s'ils manquent) ; « autres sources » de T précisé
+  « archivée comprise » (sonde (2)) ; `buildPresentationIndex` ne portait pas le plan que `presentationLinkCandidates`
+  doit parcourir → contenu de l'index écrit. Vérifié sans écart à `origin/main` `fd04099f` : `PROP_RE`
+  (`fx-account-filter-inventory.test.ts:26`) recopiée exactement, `isCandidate` (`.svelte` seul pour la prop),
+  `AccountCurrencyFields.svelte:33` (`accounts: AccountResponse[];` dans `interface Props`), page à 951 lignes, aucun
+  `PresentationIndex` existant. M : concordance non exacte sur la sonde (1) de la 47-1a — **signalé à l'orchestrateur
+  pour la 47-1a** (non modifiée), comportement de l'écran écrit à l'AC-2 : sa sonde (1) — D, libéré,
+  « cible du miroir d'un tiers » refusé en `chain` — contredit D2 (une cible admet plusieurs sources) ; D en paire ne
+  peut porter d'autre rôle que celui de cible (`CHECK` « pas les deux »), la sonde est donc à reformuler ou à retirer.
+  Rapport : `kesh-gate-logs/epic-47-validation/47-3a-ecran-plan-comptable-P5.md`.
 
 ## Dev Agent Record
 
