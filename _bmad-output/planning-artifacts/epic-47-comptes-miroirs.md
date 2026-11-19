@@ -97,8 +97,7 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
 
 | Story | Objet | Migration | Dépend de |
 |---|---|---|---|
-| 47-0 | kickoff : décomptes, validation du fichier, annonce de la migration | non | — |
-| 47-0 | kickoff — **done** (2026-11-19) | non | — |
+| 47-0 | kickoff : décomptes, validation du fichier, annonce de la migration — **done** (2026-11-19) | non | — |
 | 47-1a | modèle : migration, entité, dépôt, validation, archivage, retypage, lecteur des liens, sauvegarde | **oui**, non breaking | — |
 | 47-1b | API des comptes, avertissement de la paire, MCP `kesh_plan_comptable`, export CSV, `api-external.md`, manuel d'administration | non | 47-1a |
 | 47-2a | fonction de présentation, rapports JSON (`presentation=brute`, `sources`), MCP `kesh_bilan` / `kesh_compte_de_resultat` | non | 47-1a ; **avant** le regroupement de l'Epic 46 (recâblage à sa fusion) |
@@ -106,7 +105,9 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
 | 47-3a | écran du plan comptable : section *Présentation*, avertissement CO 958c, refus nommés, marque | non | 47-1b |
 | 47-3b | écrans des rapports : marque, sources, bascule brute, exports, E2E du parcours, manuel utilisateur | non | 47-2a, 47-2b, 47-3a |
 | 47-4 | contrôle de clôture K10 « sens inverse sans miroir ni paire », non bloquant | non | 47-1a |
-| 47-5 | solde de la dette de l'epic (plafond : 2 issues) | non | fin d'epic |
+| 47-5 | solde de la dette de l'epic (**plafond : 2 issues**, fixé au kickoff) | non | 47-1a à 47-4 closes (fin d'epic, avant le tag) |
+
+**Dérogation à la borne de six stories** — *à confirmer par Guy* (le kickoff dit la dérogation, Guy ne l'a pas encore confirmée ; `sprint-status.yaml` la porte telle quelle). Motif : epic de **fonctionnalité nouvelle**, huit stories issues du splitting préventif ci-dessous, aucune n'étant trop longue ; alternative écrite : sortir la 47-4 vers un epic ultérieur (la seule story sans lien d'aval).
 
 **Découpage du 2026-11-19 (splitting préventif, `CLAUDE.md` § *Règle de splitting préventif*)** : à l'écriture des
 fiches complètes, 47-1, 47-2 et 47-3 touchaient chacune plus de cinq modules au grain retenu par la release 0.20.0
@@ -116,6 +117,27 @@ versions*), ce qu'admet un epic de **fonctionnalité nouvelle** à condition de 
 confirmer par Guy** (alternative : sortir 47-4 vers un epic ultérieur). 47-1a, 47-1b et 47-4 peuvent avancer pendant
 l'Epic 46 ; 47-2a se développe sans lui (fonction pure appliquée avant tout regroupement) et se recâble à sa fusion ;
 47-2b attend #1327 et `fix/bilan-resultat-reporte`.
+
+## Ordre de développement
+
+1. **47-1a** d'abord : elle porte la migration, **ne sort jamais** (une story sortie emporte sa migration ; sans elle, rien ne se présente), et son horodatage se contrôle à la reprise de `main` (D10).
+2. **En parallèle, après la 47-1a** : 47-1b (API, MCP, export), 47-2a (fonction de présentation, JSON, MCP) et 47-4 (K10). Aucune ne touche les fichiers des autres, hors catalogues i18n et manuels (blocs propres).
+3. **47-3a** après la 47-1b.
+4. **Reprise de `main`** (Epic 46, #1327, #1346, 48-11 de la 0.20.0 si fusionnés) **avant** la 47-2b et avant le recâblage de la 47-2a ; puis **47-2b** (après 47-2a et les correctifs de `pdf.rs` / `csv.rs`).
+5. **47-3b** après 47-2a, 47-2b et 47-3a (E2E du parcours complet, manuel utilisateur).
+6. **47-5** en dernier, une fois 47-1a à 47-4 closes : elle ne prend que la dette de ces stories.
+
+**Si le temps manque** (coupure du jeudi soir : n'entrent que les stories closes ; `CLAUDE.md` § *Cadence*) : la **47-5** sort la première, puis la **47-4** ; la 47-3b ne sort pas sans la 47-2b ; la 47-1a ne sort jamais. L'epic ne se publie pas amputé de sa présentation (47-2a à 47-3b) : sans elle, les liens n'ont aucun effet visible. Le Project Lead garde le dernier mot.
+
+Hors epic : la story de correction de bugs que chaque release planifiée porte (`CLAUDE.md` § *Cadence*) est celle de la **release**, non de l'epic ; elle ne compte pas dans les huit stories ici.
+
+## Registre de la dette de l'epic
+
+Les revues de chaque story consignent ici (une ligne : story, passe, sévérité, objet, sort) tout finding **non remédié** qui devrait s'ouvrir en issue (« on trace toujours »). L'agent de Beat n'ouvre pas d'issue (lecture seule sur le dépôt de Guy) : le Project Lead ouvre les issues d'après ce registre, et la 47-5 en part. Une ligne par problème, sans regroupement ; l'étiquette `bug` seulement pour un comportement faux visible (`CLAUDE.md` § *Priorités des défauts*).
+
+| Story | Passe | Sévérité | Objet | Issue | Sort |
+|---|---|---|---|---|---|
+| — | — | — | (vide à ce jour) | — | — |
 
 ## Dépendance à l'Epic 46
 
@@ -143,6 +165,8 @@ les lignes passent avant d'être groupées (à demander à son auteur ; Q5).
 | MCP (`kesh_plan_comptable`, `kesh_bilan`, `kesh_compte_de_resultat`) | 47-1b, 47-2a | probable | — | — | — |
 | `kesh-api/src/exports/csv_tables.rs` | 47-1b | — | — | — | — |
 
+**Hors tableau (0.20.0)** : la story **48-11** (arrondi au centime des rapports CSV et PDF, après #1327) touche `kesh-report/src/pdf.rs` et `csv.rs`, comme 47-2b ; elle part avant : le second arrivé (47-2b) reprend et résout. Les stories de l'Epic 49 changent les catalogues i18n et la migration (horodatage de la 47-1a postérieur).
+
 Geste : reprendre `main` (avec l'Epic 46 et les trois correctifs) dans la branche **avant** 47-2b et avant le recâblage de 47-2a ; ordre des
 migrations contrôlé à cette reprise si l'Epic 46 en porte une.
 
@@ -158,6 +182,8 @@ migrations contrôlé à cette reprise si l'Epic 46 en porte une.
 | P1 ouvertes | 14 | 14 | 14 |
 
 Hors les 56 issues masquées du compte de l'agent de Beat (#1266–#1271, #1277–#1326), non comptées (décision de Guy).
+**Plafond de la story de solde (47-5)** : **2 issues**, fixé ici au kickoff (`CLAUDE.md` § *Priorités des défauts*).
+
 **Objectif de l'epic** (règle de release, non barrière) : moins d'issues ouvertes au tag de sa release qu'au tag de la
 release précédente (la 0.20.0, compte **à relever au tag v0.20.0**) ; le compte au tag de l'Epic 47 s'écrit à sa PR
 de release et à sa rétrospective, avec l'écart et sa cause.
