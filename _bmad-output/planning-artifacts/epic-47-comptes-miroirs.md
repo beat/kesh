@@ -101,7 +101,7 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
 | 47-1a | modèle : migration, entité, dépôt, validation, archivage, retypage, lecteur des liens, sauvegarde, colonnes de l'export CSV, mapping HTTP des deux refus (sous-match exhaustif de `DbError`) | **oui**, non breaking | — |
 | 47-1b | API des comptes, avertissement de la paire, MCP `kesh_plan_comptable` (plafonds révisés), test de l'export global, `api-external.md`, manuel d'administration (colonnes de l'export CSV : en 47-1a) | non | 47-1a |
 | 47-2a | fonction de présentation, rapports JSON (`presentation=brute`, `sources`), MCP `kesh_bilan` / `kesh_compte_de_resultat` | non | 47-1a ; **avant** le regroupement de l'Epic 46 (recâblage à sa fusion) |
-| 47-2b | PDF et CSV présentés : marque, note, « présentation compensée », brut | non | 47-2a ; #1327 et `fix/bilan-resultat-reporte` fusionnés ; 46-3 si fusionnée |
+| 47-2b | PDF et CSV présentés : marque, note, « présentation compensée », brut | non | 47-2a ; #1327 et `fix/bilan-resultat-reporte` fusionnés ; 48-11 et 46-3 si fusionnées |
 | 47-3a | écran du plan comptable : section *Présentation*, avertissement CO 958c, refus nommés, marque | non | 47-1b |
 | 47-3b | écrans des rapports : marque, sources, bascule brute, exports, E2E du parcours, manuel utilisateur | non | 47-2a, 47-2b, 47-3a |
 | 47-4 | contrôle de clôture K10 « sens inverse sans miroir ni paire », non bloquant | non | 47-1a |
