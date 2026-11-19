@@ -107,14 +107,13 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
 | 47-4 | contrôle de clôture K10 « sens inverse sans miroir ni paire », non bloquant | non | 47-1a |
 | 47-5 | solde de la dette de l'epic (**plafond : 2 issues**, fixé au kickoff) | non | 47-1a à 47-4 closes (fin d'epic, avant le tag) |
 
-**Dérogation à la borne de six stories** — *à confirmer par Guy* (le kickoff dit la dérogation, Guy ne l'a pas encore confirmée ; `sprint-status.yaml` la porte telle quelle). Motif : epic de **fonctionnalité nouvelle**, huit stories issues du splitting préventif ci-dessous, aucune n'étant trop longue ; alternative écrite : sortir la 47-4 vers un epic ultérieur (la seule story sans lien d'aval).
+**Dérogation à la borne de six stories** — **décision de Beat (2026-11-19)** : l'Epic 47 reste **un seul epic** de huit stories (47-1a, 47-1b, 47-2a, 47-2b, 47-3a, 47-3b, 47-4, 47-5) ; la 47-4 n'en sort pas. Dérogation assumée pour un epic de **fonctionnalité nouvelle**, dite au kickoff (`CLAUDE.md` § *Numérotation des versions*), aucune story n'étant trop longue ; **à signaler à Guy** (Beat pense qu'il sera d'accord).
 
 **Découpage du 2026-11-19 (splitting préventif, `CLAUDE.md` § *Règle de splitting préventif*)** : à l'écriture des
 fiches complètes, 47-1, 47-2 et 47-3 touchaient chacune plus de cinq modules au grain retenu par la release 0.20.0
 (49-1 « neuf modules ») ; chacune est découpée en deux (clés `47-1`, `47-2`, `47-3` passées à `split`). L'epic compte
 donc **huit stories hors kickoff**, solde comprise : il dépasse la borne de six (`CLAUDE.md` § *Numérotation des
-versions*), ce qu'admet un epic de **fonctionnalité nouvelle** à condition de le dire au kickoff — **dit ici, à
-confirmer par Guy** (alternative : sortir 47-4 vers un epic ultérieur). 47-1a, 47-1b et 47-4 peuvent avancer pendant
+versions*), ce qu'admet un epic de **fonctionnalité nouvelle** à condition de le dire au kickoff — **dit ici** (décision de Beat du 2026-11-19, à signaler à Guy ; 47-4 reste dans l'epic). 47-1a, 47-1b et 47-4 peuvent avancer pendant
 l'Epic 46 ; 47-2a se développe sans lui (fonction pure appliquée avant tout regroupement) et se recâble à sa fusion ;
 47-2b attend #1327 et `fix/bilan-resultat-reporte`.
 
@@ -127,7 +126,7 @@ l'Epic 46 ; 47-2a se développe sans lui (fonction pure appliquée avant tout re
 5. **47-3b** après 47-2a, 47-2b et 47-3a (E2E du parcours complet, manuel utilisateur).
 6. **47-5** en dernier, une fois 47-1a à 47-4 closes : elle ne prend que la dette de ces stories.
 
-**Si le temps manque** (coupure du jeudi soir : n'entrent que les stories closes ; `CLAUDE.md` § *Cadence*) : la **47-5** sort la première, puis la **47-4** ; la 47-3b ne sort pas sans la 47-2b ; la 47-1a ne sort jamais. L'epic ne se publie pas amputé de sa présentation (47-2a à 47-3b) : sans elle, les liens n'ont aucun effet visible. Le Project Lead garde le dernier mot.
+**Si le temps manque** (coupure du jeudi soir : n'entrent que les stories closes ; `CLAUDE.md` § *Cadence*) : la **47-5** sort la première, puis, si la coupure l'impose (la 47-4 reste dans l'epic par décision de Beat), la **47-4** ; la 47-3b ne sort pas sans la 47-2b ; la 47-1a ne sort jamais. L'epic ne se publie pas amputé de sa présentation (47-2a à 47-3b) : sans elle, les liens n'ont aucun effet visible. Le Project Lead garde le dernier mot.
 
 Hors epic : la story de correction de bugs que chaque release planifiée porte (`CLAUDE.md` § *Cadence*) est celle de la **release**, non de l'epic ; elle ne compte pas dans les huit stories ici.
 
