@@ -95,9 +95,12 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
      son partenaire de paire libéré dans la même transaction (AC-6). Deux transitions sont donc **admises** (D2, D3 ;
      la 47-3a les propose) : (1) un compte **en paire avec D** passe en **miroir vers D** — D, libéré, n'est plus que
      cible ; (2) un compte **seule source d'un miroir vers T** passe en **paire avec T** — T, qui n'est plus cible de
-     personne, devient partenaire. Leurs sondes sont refusées en `chain` : (1) D joue encore un autre rôle une fois
-     libéré (cible du miroir d'un tiers, posé par SQL) ; (2) T reste cible du miroir d'une autre source X
-     (`linked_account_number` = X).
+     personne, devient partenaire. **Une seule sonde de refus, pour (2)** : T reste cible du miroir d'une autre
+     source X, archivée comprise (`linked_account_number` = X) → `chain`. **La transition (1) n'a pas de sonde** : D,
+     libéré, ne porte aucun lien propre, et être cible du miroir d'un tiers n'est pas un autre rôle pour une cible (D2 :
+     plusieurs sources, un même compte miroir). L'état « D en paire avec A *et* cible du miroir de X » n'existe que forgé
+     par SQL (`CHECK` « pas les deux », un rôle par compte) : le lecteur de l'AC-8 l'écarte (cas (d)/(e)) et le `PUT` juge
+     l'état après changement, sans règle spéciale.
    Deux raisons de plus appartiennent à la même énumération (`PresentationLinkReason`, `as_str`, `ALL`), **posées par
    l'API** (47-1b) et **jamais produites par le dépôt** (test sur toutes les entrées de ce dernier) : `bothLinks`
    (deux liens entiers dans une même requête) et `onCreate` (un lien à la création) ; elles suivent les six
@@ -108,13 +111,12 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    `B.offset = A` ; déplacer (A passe de D à B) remet `D.offset` à `NULL` ; quitter la paire autrement — retrait
    (`ClearOffset`, `ClearAll`) ou passage à un miroir (`Mirror(T)` sur A, membre d'une paire avec D, **T = D compris** :
    D libéré puis cible du miroir de A, AC-5 transition (1)) — remet les deux
-   côtés à `NULL` (`A.offset` et `D.offset`), le miroir posé dans la même instruction que le retrait sur A (le `CHECK`
+   côtés à `NULL` (`A.offset` et `D.offset` — **le côté de D seulement s'il désigne A** : une paire non réciproque posée par SQL laisse D intact, AC-8 (d)), le miroir posé dans la même instruction que le retrait sur A (le `CHECK`
    « pas les deux » se juge à la ligne) ; chaque compte modifié voit sa `version` incrémentée et reçoit **son** entrée d'audit `account.updated`
    (avant/après), dans la même transaction. Un miroir ne s'écrit que sur la source ; passer de « source unique d'un
    miroir vers T » à `Offset(T)` (AC-5 transition (2)) écrit `A.mirror = NULL, A.offset = T` dans la même instruction
    et `T.offset = A`. **Deux tests d'intégration du dépôt** (`account_presentation_links.rs`) pour les transitions (1)
-   et (2) — état final des deux comptes, versions, une entrée d'audit par compte modifié —, plus leurs deux sondes de
-   refus (AC-5), état inchangé après le refus.
+   et (2) — état final des deux comptes, versions, une entrée d'audit par compte modifié —, plus la sonde de refus de (2) (AC-5), état inchangé après le refus.
 7. **Garde des gestes existants sur un compte lié** (Q10 étendu au retypage) — refus **`DbError::AccountPresentationLinked
    { reason, linked }`** (HTTP 409 `ACCOUNT_PRESENTATION_LINKED`, mappé ici, AC-15), `linked` = comptes liés (id, numéro,
    nom, actif), triés par numéro :
@@ -148,7 +150,7 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    un compte dont la paire est écartée reste écarté comme chaîne) ;
    (f) lien d'un compte ou vers un compte de rôle de fonds propres ; (g) types qui ne sont plus de l'autre côté du
    même rapport. Un compte archivé (source ou cible) n'est **pas** écarté. Aucune panique, aucune boucle (la règle (e)
-   suffit à rendre la relation acyclique). Un test par cas, posé par SQL direct.
+   suffit à rendre la relation acyclique). Un test par cas, posé par SQL direct (cas (a) et (b) : deux tests, un seul cas).
    **Forme rendue (AC-9)** : un lien écarté n'est **jamais** rendu ; le compte qui le portait **reste dans le vecteur**,
    ses colonnes de lien concernées à `None` (un compte qui ne fait que recevoir un lien écarté y reste aussi, sans lien
    entrant), et chaque écart est tracé par un `tracing::warn!` nommant les comptes et le cas (a)–(g). Le tri se fait
@@ -399,6 +401,22 @@ ou 0.20.0 s'importe ; la version précédente refuse la base migrée et les sauv
   P4 de la 47-3a, transmis par l'orchestrateur ; M5) : transitions paire avec D → miroir vers D et source unique d'un
   miroir vers T → paire avec T, refusées en `chain` si l'état d'avant était jugé → AC-5 (jugement sur l'état après le
   `PUT`, sondes nommées) et AC-6 (écritures, deux tests d'intégration et deux sondes). Total P3 : 0 C / 0 H / 5 M / 1 L.
+
+- 2026-11-19 — validation P4 ciblée sur la remédiation P3 (`aaf7b310`, `1cd1849d`), Opus 5.5 : **0 C / 0 H / 1 M / 2 L,
+  remédiés**. Vérifié sans écart à `origin/main` `fd04099f` et `origin/epic/49-types-de-lignes-facture` : compte en dur
+  95 / `total - 61` (`migrations_upgrade_path.rs:137-140, 239`), 96 / `total - 62` à la 49-1a, d'où 96 / 62 ou 97 / 63
+  (`N = total − 34`) ; entête du squash « 95 migrations » (`:3`) ; sites de `apply_migrations_up_to` et de
+  `migrations_before` résolus par version ou relatifs (P6) ; « aucune base partielle ne lit `columns!()` d'`Account` » :
+  hors `accounts.rs`, les lecteurs sont `companies.rs:1076` (`check_fx_accounts_in_tx`), `journal_entry_conversions`
+  (`:287, :318, :455`), des routes et `kesh-seed`, aucun dans une fenêtre partielle (`invoices.rs:608`,
+  `journal_entries.rs:277`, `refuse_foreign_currency_accounts_in_tx` lisent des colonnes explicites ; `journal_entries.rs:3629,
+  5545` sont dans `mod tests`) ; la 49-1a ne touche pas `accounts`. `retain_valid_links` : (a)/(b) un cas, deux tests,
+  conforme. **M** (aussi relevé par la P5 de la 47-3a) : la sonde (1) de l'AC-5 refusait en `chain` un D libéré encore cible
+  du miroir d'un tiers, contre D2 et l'AC-5 (« cible d'un ou de plusieurs miroirs ») → sonde (1) retirée, sonde (2)
+  gardée, état forgé renvoyé à l'AC-8 (d)/(e), un seul test de refus (AC-6). Les deux transitions sont exactement celles
+  de la 47-3a AC-2 (lue à HEAD, non modifiée). **L** : AC-6, le côté de D n'est remis à `NULL` que s'il désigne A.
+  **L** : AC-8, « un test par cas » précisé pour (a)/(b). Rapport :
+  `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P4.md`.
 
 ## Dev Agent Record
 
