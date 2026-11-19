@@ -33,9 +33,10 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
    `account.updated` du compte source porte `mirrorAccountId` (47-1 AC-3). Tests : `crates/kesh-api/tests/accounts_e2e.rs`
    — trois états, chaque refus avec son détail (une cible **d'une autre société** rend la même `unknown` qu'une cible
    inexistante), création avec miroir, RBAC (la boucle de `consultation_role_cannot_write` couvre un corps portant
-   `mirrorAccountId`), aucune entrée d'audit ni version touchée sur la cible. **Interblocage** : la 47-1 (AC-7)
-   verrouille {source, cible} par `id` à la pose, et `archive_guarded` lit les sources du compte sous verrou après
-   avoir pris sa ligne — deux gestes concurrents (poser A → T, archiver T) peuvent fermer un cycle ; `create_account`
+   `mirrorAccountId`), aucune entrée d'audit ni version touchée sur la cible. **Interblocage** : à la pose
+   (47-1 AC-7), A est déjà sous `FOR UPDATE` puis T se verrouille ; `archive_guarded` de T prend sa ligne puis lit
+   « qui désigne T » sous verrou — deux gestes concurrents (poser A → T, archiver T) ferment un cycle (A tenue et T
+   attendue d'un côté, T tenue et A attendue de l'autre), que la 47-1 range parmi les refus acceptables ; `create_account`
    et `update_account` sont déjà rejouées par `retry_app_on_deadlock`, **`archive_account` ne l'est pas** : elle le
    devient (`"accounts::archive"`, patron de `update_account`), sans quoi le cycle se lit « 500 » à l'archivage.
 2. **Dialogue du compte** (`routes/(app)/accounts/+page.svelte`, création **et** modification) : **un seul `<select>`
@@ -144,9 +145,10 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** : reprise de `main` ; relire au code livré par la 47-1 les noms de clés et les raisons ; `fix/api-parent-compte`
+- [ ] **T0** : reprise de `main` ; relire au code livré par la 47-1 les codes d'erreur et les raisons (les messages sont
+  ceux du serveur : aucune clé de refus à reprendre) ; `fix/api-parent-compte`
   (#1351) — s'il est fusionné, le champ *Compte parent* précède le `<select>` ; sinon le second arrivé résout.
-- [ ] **T1 — route** (AC 1, 12) et tests `accounts_e2e.rs`.
+- [ ] **T1 — route** (AC 1, 12) : champs, réponse, rejeu de l'archivage sur interblocage ; tests `accounts_e2e.rs`.
 - [ ] **T2 — front** (AC 2–5) : types, `mirror.ts`, `<select>`, phrase, refus, archivage.
 - [ ] **T3** : Vitest, E2E, captures (AC 6–8).
 - [ ] **T4** : manuels, `api-external.md`, i18n (AC 9–11).
@@ -161,8 +163,8 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
 - `frontend/src/routes/(app)/accounts/+page.svelte` (951 lignes : préférer un petit composant si le dialogue grossit),
   `frontend/src/lib/features/accounts/AccountCurrencyFields.svelte` (`<select>` natif des comptes de change, prop
   `accounts` ligne 33), `fx-account-filter-inventory.test.ts` (`PROP_RE`), `accounts.types.ts`.
-- `docs/manual/fr/user-manual.tex:421` (*Plan comptable*), `:446` (*Ajout d'un compte* : parent facultatif), `:465`,
-  `:486` ; `docs/api-external.md:226`, `:1060` ; `docs/manual/fr/admin-manual.tex:2302`, `:2497`, `:2550`.
+- `docs/manual/fr/user-manual.tex:421` (*Plan comptable*), `:449-451` (*Ajout d'un compte* : parent facultatif, *Postable*), `:465`, `:468`
+  (champs modifiables), `:486` ; `docs/api-external.md:226`, `:1060` ; `docs/manual/fr/admin-manual.tex:2302`, `:2497`, `:2550`.
 
 ### Choix KISS (refonte du 2026-11-19)
 
@@ -172,12 +174,16 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
   l'usage le demande.
 - **C-47-2-3** : le MCP `kesh_plan_comptable` est inchangé (aucune clé neuve, aucun plafond à remesurer). *Écarté* :
   `compte_miroir_id` dans la sortie MCP, qui imposait la révision des plafonds (34 / 61 estimés).
-- **C-47-2-4** : les candidats se filtrent au client sur ce qu'il sait (type, imputable, rôle, actif, chaîne) ; la
+- **C-47-2-4** : les candidats se filtrent au client sur ce qu'il sait (type, postable, rôle, actif, chaîne) ; la
   condition « sans écriture » reste au serveur.
+- **C-47-2-5** (validation P1) : l'écran ne traduit aucun refus et ne décide d'aucune règle — il affiche `err.message`
+  et ne cache jamais le `<select>` (rôle de fonds propres, type changé : le serveur refuse, sous le champ). *Écarté* :
+  `readMirrorError`, clés de refus côté écran, `<select>` absent pour les fonds propres.
+- **C-47-2-6** (validation P1) : douze captures (six états × deux largeurs) ramenées à six plus une en 390 × 844.
 
 ### Risques
 
-Conflit avec #1351 (même dialogue, mêmes requêtes) ; `sitesTotal` à recompter après chaque reprise de `main` ;
+Conflit avec #1351 (même dialogue, mêmes requêtes) ; interblocage pose / archivage (rejeu de l'archivage, AC-1) ; `sitesTotal` à recompter après chaque reprise de `main` ;
 G4-bis sur les exemples du manuel.
 
 ### References
@@ -189,12 +195,24 @@ G4-bis sur les exemples du manuel.
 
 ## Notes de version
 
-Le dialogue d'un compte propose un **compte miroir** : un compte de présentation, non imputable, sur lequel le solde de
+Le dialogue d'un compte propose un **compte miroir** : un compte de présentation, non postable, sur lequel le solde de
 sens inverse du compte paraîtra dans le bilan ou le compte de résultat. API : champ `mirrorAccountId` des comptes ;
 colonne `mirror_account_id` en fin de ligne de `accounts.csv`.
 
 ## Change Log
 
+- 2026-11-19 — validation P1 (Sonnet 5.5) : 0 C / 0 H / 8 M / 8 L, remédiés. M : candidats « archivés compris » alors que la
+  page ne charge les archivés que sur case cochée ; `<select>` caché pour les fonds propres (refus `equity` sans champ,
+  miroir laissé en place) — cas particulier retiré, le serveur juge ; contradiction clés de refus / `err.message`
+  (`readMirrorError` retiré) ; `archive_account` non rejouée sur interblocage alors que la pose et l'archivage ferment
+  un cycle ; `api-external.md` : sous-section placée entre les sections multi-devises, rangées du § 10, note du
+  tableau, gardes G4/G25 ; manuel utilisateur : listes de champs d'*Ajout* et de *Modification* omises, constat promis
+  par la 47-1 (*Risques*) absent ; « conforme à l'art. 959a CO » contre l'avertissement du bilan ; sélecteurs d'E2E
+  absents, bouton *Archiver* laissé après refus. L : défilement aussi à la création ; captures réduites ; « postable »
+  (mot de la case) pour « imputable » ; `putAccount` porte le champ ; cible d'une autre société ; numéros de ligne ;
+  sens inverse de la compatibilité de sauvegarde ; Notes de version. Concordance 47-1 (état 99bc3636) : écart signalé à
+  l'orchestrateur — la 47-1 AC-9 dit que « la 47-2 reprend » les clés de refus, or l'écran affiche `err.message`.
+  Rapport : `kesh-gate-logs/epic-47-validation/47-2-miroir-api-et-ecran-du-plan-P1.md`.
 - 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : fiche renommée de `47-3a-ecran-plan-comptable`, fusionnée
   avec la partie API de `47-1b-liens-api-mcp-export` (superseded). Retirés : section à trois boutons radio et ses quatre
   états, paire, avertissement CO 958c et son dialogue, pastilles du plan, MCP `kesh_plan_comptable` et ses plafonds,

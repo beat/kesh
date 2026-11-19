@@ -7,6 +7,10 @@ epic » (`CLAUDE.md` § *Priorités des défauts*, puce « Une story de solde à
 le tag. **Dépend de** la clôture des stories 47-1 à 47-4 ; part du **registre de la dette** du fichier d'epic
 (§ *Registre de la dette de l'epic*). Dans l'ordre des coupures, elle sort la première.
 
+## Modules touchés (règle de splitting préventif)
+
+Selon les issues retenues (deux au plus) ; au plus cinq modules, sinon la ligne n'est pas retenue.
+
 ## Story
 
 En tant que mainteneur de Kesh,
@@ -82,6 +86,7 @@ Selon les issues retenues (une ligne par correctif visible).
 
 ### Change Log
 
+- 2026-11-19 — validation P1 (Sonnet 5.5) : 0 C / 0 H / 0 M / 1 L, remédié (en-tête *Modules touchés* ajouté). Références (`release-0.20.0.md`, 48-14, § Cadence, § Décomptes, § Registre) vérifiées à `origin/main`.
 - 2026-11-19 — validation P1 (Sonnet 5.5) : 0 C / 0 H / 4 M / 3 L, remédiés (voir le rapport de passe).
 - 2026-11-19 — validation P2 (Opus 5.5) : 0 C / 0 H / 4 M / 4 L, remédiés (rapport
   `kesh-gate-logs/epic-47-validation/47-5-solde-dette-epic-P2.md`). Trois des quatre MEDIUM viennent de la remédiation

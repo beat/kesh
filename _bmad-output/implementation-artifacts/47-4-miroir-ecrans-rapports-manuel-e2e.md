@@ -22,18 +22,23 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
 1. **Mention sous la ligne du miroir** : dans `BalanceSheetView.svelte` (actifs, passifs) et
    `IncomeStatementView.svelte` (produits, charges), une ligne qui porte `mirrorOf` affiche sous son libellé, en petit
    texte discret, « Solde de 2270 AVS/AI/APG » (plusieurs sources : « Soldes de … », séparées par
-   des virgules ; numéros et noms en variables Fluent, numéro lié au grand livre là où la vue lie déjà les numéros).
+   des virgules ; numéros et noms en variables Fluent, **texte seul, sans lien** : les sources n'ont pas de ligne à
+   ce rapport, et le compte de résultat ne lie aucun numéro ; une clé Fluent à pluriel sur `$count`, les sources déjà
+   jointes en une chaîne). Le numéro de la ligne du miroir reste lié au grand livre comme aujourd'hui (vue du bilan),
+   sans traitement propre.
    Une ligne **sans** `mirrorOf` est rendue exactement comme aujourd'hui. Pas de bascule, pas de bandeau, pas de
-   dépliage (R6, R7). La mention est rendue par un **petit composant unique** (`MirrorOfNote.svelte`) appelé aux quatre
-   endroits, non par quatre copies.
+   dépliage (R6, R7). La mention est rendue par un **petit composant unique** (`MirrorOfNote.svelte`), placé dans la
+   cellule du nom (à côté d'`AccountCurrencyBalance`) aux quatre endroits, non par quatre copies.
 2. **Types** : `reports.types.ts` — `mirrorOf?: MirrorSource[]` sur `AccountBalance`, type `MirrorSource` (`accountId`,
    `accountNumber`, `accountName`, `balance`). `reports.api.ts` et `isReportEmpty` inchangés (un rapport présenté est
    vide si et seulement si le brut l'est : aucune compensation).
-3. **Vitest** : vues (mention présente sur une ligne à `mirrorOf`, absente sinon, une et plusieurs sources, fonds
+3. **Vitest** (dans `BalanceSheetView.test.ts` et `IncomeStatementView.test.ts`, existants) : vues (mention présente sur une ligne à `mirrorOf`, absente sinon, une et plusieurs sources, fonds
    propres jamais concernés), `MirrorOfNote` seul. Mutation à faire rougir : mention rendue sur une ligne sans
    `mirrorOf`.
-4. **Sélecteurs d'E2E** (`data-testid`) : `report-row-{numéro}` s'il n'existe pas déjà, `mirror-of-{numéro}` (la
-   mention).
+4. **Sélecteurs d'E2E** (`data-testid`) : `report-row-{numéro}` — **n'existe pas** (aucun `data-testid` aux lignes des
+   quatre tableaux) : à poser sur les `<tr>` d'actifs, de passifs, de produits et de charges —, `mirror-of-{numéro}` (la
+   mention, numéro du **miroir**) ; la balance garde `tb-row`, sans numéro : l'E2E filtre par le texte du numéro
+   (`getByTestId('tb-row').filter({ hasText: … })`).
 5. **E2E du parcours** (NFR-47-4, `frontend/tests/e2e/reports-mirror.spec.ts`, `seedTestState('with-company')`,
    `describe.configure({ mode: 'serial' })` comme `reports-currency.spec.ts`) — **l'exemple du fichier d'epic**, semé
    par l'API. ⚠️ Le seed `with-company` ne charge aucun plan livré (cinq comptes ad hoc, `test_fixtures.rs:149-166` :
@@ -41,15 +46,18 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
    1020, 2270, 2800 (rôle capital), 3200, 6900, 6950.1, et les miroirs 6900.1, 1040.1, 2100.1 (non imputables) ; il
    **n'asserte jamais un libellé de compte semé** ; écritures contre 2800 à la date du jour de Zurich (`todayInZurich()`).
    Parcours : miroirs **posés à l'écran** (dialogue de la 47-2 : 1020 → 2100.1, 2270 → 1040.1, 6950.1 → 6900.1) →
-   *Générer* le bilan : **aucune cellule de montant négative**, 1040.1 à `1’200.00` (actif) avec la mention « Solde de
+   *Générer* le bilan (onglet `#reports-tab-balance-sheet`, bouton *Générer*) : **aucune cellule de montant négative**
+   (`locator('td.text-right')` des quatre tableaux, aucune ne commence par `-`), 1040.1 à `1’200.00` (actif) avec la mention « Solde de
    2270 », 2100.1 à `800.00` (passif), total actif `13’700.00`, total passif `3’800.00` → compte de résultat : 6900.1 à
    `250.00` en charges avec la mention « Solde de 6950.1 », 6950.1 absent des produits, total produits `2’000.00`, total
    charges `300.00`, résultat `1’700.00` → balance de vérification : 1020 à `-800.00`, 2270 à `-1’200.00`, 6950.1 à
-   `-250.00` (soldes réels). **Exports** déclenchés par les boutons : le PDF et le CSV du bilan portent 1040.1 et
-   2100.1 avec leurs montants présentés, et ni 1020 ni 2270 (texte du PDF **extrait** : flux Flate, `Tj` hexadécimal
+   `-250.00` (soldes réels). **Exports** déclenchés par les boutons (*Export PDF*, *Export CSV*, par leur nom, comme
+   `reports-export-pdf.spec.ts`) : le PDF et le CSV du bilan portent 1040.1 et 2100.1 avec leurs montants présentés,
+   **dans leur forme propre** — PDF `1'200.00` (apostrophe ASCII U+0027, `format_swiss_amount`, Latin-1 des `Tj`),
+   CSV `1200.00` (ISO, sans séparateur, `format_amount_iso`) —, et ni 1020 ni 2270 (texte du PDF **extrait** : flux Flate, `Tj` hexadécimal
    en Latin-1 — `contenuDuPdf` et `hexWinAnsi` d'`invoice-qr-caracteres.spec.ts:13-37`, **déplacés** dans `helpers/`
-   plutôt que recopiés). ⚠️ Formes à l'écran : apostrophe U+2019 des milliers et signe `-` ASCII
-   (`formatSwissAmount`).
+   plutôt que recopiés). ⚠️ Formes **à l'écran seulement** : apostrophe U+2019 des milliers et signe `-` ASCII
+   (`formatSwissAmount`) ; ni le PDF ni le CSV n'emploient l'U+2019.
 6. **Captures d'écran** (thème clair ; `KESH_CAPTURES_DIR`, patron de `reports-currency.spec.ts`) : bilan présenté,
    compte de résultat présenté, balance ; les figures du manuel en sont tirées (PNG seulement,
    `docs/manual/fr/screenshots/`, patron de l'Epic 37 ; aucun PDF commité).
@@ -60,7 +68,14 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
    inverse présenté sous le miroir, aucune compensation, conforme à l'art. 959a CO), la mention « Solde de … », les
    exports, la balance et le grand livre restés sur les soldes réels, l'accueil sur les soldes réels ; les phrases
    d'ouverture à **corriger** (« les comptes d'actif et de passif à solde non nul, triés par numéro », `:3914`, et son
-   pendant du compte de résultat, `:3945`). **L'exemple chiffré est celui du fichier d'epic, sans autre jeu** : un
+   pendant du compte de résultat, `:3945`), **et les deux affirmations que le miroir rend fausses** : *Balance des
+   comptes*, « La balance concorde avec le bilan et le grand livre » (`:3968-3972` : vrai ligne à ligne sans miroir ;
+   avec un miroir, la balance garde le solde de la source, le bilan le présente sous le miroir — les totaux restent
+   égaux au résultat près) et l'accueil, « Le total des barres égale le compte de résultat de l'exercice » (`:308` :
+   l'accueil reste sur les soldes réels, Q11, le résultat net seul est le même). **Sans dire que le bilan de Kesh est
+   « conforme » à l'art. 959a CO** : l'avertissement qui ouvre *Bilan* (« pas encore structuré selon l'art. 959a CO »,
+   `:3918`) et celui du compte de résultat (`:3948`) restent vrais ; le miroir ne règle que le signe d'un solde de sens
+   inverse, comme la présentation du CO l'attend. **L'exemple chiffré est celui du fichier d'epic, sans autre jeu** : un
    tableau avant/après sur une société au plan **PME** (qu'il nomme), comptes à créer en sous-comptes (6950.1, 6900.1,
    1040.1, 2100.1), comptes livrés sous leur nom (1000 « Caisse », 1010 « Poste », 1020 « Banque », 2000
    « Créanciers », 2270 « AVS/AI/APG », 2800 « Capital social », 3200 « Prestations de services », 6900 « Charges
@@ -103,11 +118,20 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
 - `frontend/tests/e2e/invoice-qr-caracteres.spec.ts:13-37`, `reports-currency.spec.ts`,
   `crates/kesh-db/src/test_fixtures.rs:149-166`.
 
+- Formes des montants : écran `formatSwissAmount` (U+2019, `-`) ; PDF `kesh-report/src/pdf.rs:274`
+  (`format_swiss_amount`, apostrophe U+0027) ; CSV `csv.rs:50` (`{amount:.2}`) ; même bibliothèque `printpdf 0.7` pour le
+  PDF des factures et celui des rapports (le texte se lit en `Tj` hexadécimal dans les deux). Testids existants :
+  `account-fx-{numéro}`, `tb-row`, `tb-fx-row-{numéro}`. Manuel : figures `docs/manual/fr/screenshots/` (préfixes `md-`,
+  `rd-` de l'Epic 37 ; préfixe `mi-` ici).
+
 ### Choix KISS (refonte du 2026-11-19)
 
 - **C-47-4-1** : une mention en petit texte sous la ligne du miroir. *Écarté* : composant `PresentedRow` à pastille
   « miroir / compensé », chevron et ligne dépliée des sources, bandeaux « présentation compensée » et « présentation
   brute », bascule *Présentée · Brute* persistée en `localStorage`, transmission aux exports.
+- **C-47-4-3** (validation P1) : mention en texte seul, sans lien vers le grand livre (les sources n'ont pas de ligne
+  au rapport ; le compte de résultat ne lie aucun numéro). *Écarté* : numéro de source lié, prop de lien, deux
+  comportements selon la vue.
 - **C-47-4-2** : l'E2E vérifie la présentation à l'écran, aux exports et la balance réelle. *Écarté* : les contrôles
   croisés présenté / brut des exports (plus de bascule).
 
@@ -129,6 +153,13 @@ le manuel utilisateur décrit les comptes miroirs, avec un exemple chiffré.
 
 ## Change Log
 
+- 2026-11-19 — validation P1 (Sonnet 5.5) : 0 C / 0 H / 4 M / 4 L, remédiés. M : deux affirmations du manuel que le miroir
+  rend fausses, hors AC-7 (`:3968` « la balance concorde avec le bilan », `:308` « le total des barres égale le compte de
+  résultat ») ; « conforme à l'art. 959a CO » contre les avertissements `:3918` et `:3948` ; formes des montants aux
+  exports non dites (PDF `1'200.00`, CSV `1200.00`, U+2019 à l'écran seulement) ; sélecteurs d'E2E (`report-row-` n'existe
+  pas, `tb-row` sans numéro, test « aucune cellule négative »). L : mention sans lien au grand livre (KISS) ; Vitest dans
+  les fichiers existants ; place du composant ; préfixe des figures. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-4-miroir-ecrans-rapports-manuel-e2e-P1.md`.
 - 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : fiche renommée de `47-3b-ecrans-rapports-e2e-manuel`.
   Retirés : bascule *Présentée · Brute* et sa persistance, `PresentedRow` à pastille et dépliage, bandeaux compensé et
   brut, changement d'`isReportEmpty`, mention « Présentation compensée », colonnes `Presentation` / `Sources` des
