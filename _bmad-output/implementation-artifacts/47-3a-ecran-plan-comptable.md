@@ -28,9 +28,12 @@ afin de poser ces liens sans passer par l'API.
    (AC-6) n'est pas encore lu, la section est absente (aucun choix, aucun champ envoyé), comme en *lecture
    impossible*. La section est un composant `frontend/src/lib/features/accounts/PresentationLinkFields.svelte`
    (patron `AccountCurrencyFields.svelte` : `+page.svelte` compte déjà 951 lignes), les dialogues d'avertissement et
-   d'archivage restant dans la page ; il reçoit l'index en prop et porte donc, pour la garde d'inventaire
-   `fx-account-filter-inventory.test.ts` (prop `AccountResponse[]`), l'exemption écrite
-   `fx-filtre-comptes : exempté — un lien de présentation admet un compte de toute devise (Q3)` :
+   d'archivage restant dans la page ; il reçoit en prop le **plan archivés compris** (`accounts: AccountResponse[]`,
+   source de l'index de l'AC-6) et relève donc de la garde d'inventaire `fx-account-filter-inventory.test.ts`
+   (`PROP_RE`) : il porte l'exemption écrite
+   `fx-filtre-comptes : exempté — un lien de présentation admet un compte de toute devise (Q3)`. Le sélecteur est un
+   `<select>` natif alimenté par `presentationLinkCandidates` (patron des comptes de change d'`AccountCurrencyFields`),
+   **jamais** `AccountAutocomplete`, qui écarte par défaut les comptes en devise étrangère que Q3 admet :
    - **choix** : un groupe de trois boutons radio — **Aucun** · **Compte miroir** · **Compenser avec (paire)** — puis,
      pour les deux derniers, un sélecteur de compte. À l'ouverture, le choix et le compte sont ceux du lien
      enregistré (le partenaire ou la cible actuels figurent toujours dans le sélecteur, même s'ils ne passeraient plus
@@ -56,10 +59,14 @@ afin de poser ces liens sans passer par l'API.
      exclus les comptes qui sont eux-mêmes **source** d'un miroir ou **membre d'une paire** (un miroir ne pointe pas
      vers un compte qui a son propre lien, D2) mais **reste admis un compte déjà cible d'autres miroirs** (plusieurs
      sources, un même compte miroir, D2 : « le solde inversé de ses sources ») ; pour une **paire**, sont exclus en plus
-     les comptes **cibles** d'un miroir — **sources archivées comprises** — et les membres d'une paire avec un tiers ; **admis** : compte non imputable (compte de présentation),
+     les comptes **cibles** d'un miroir — **sources archivées comprises** — et les membres d'une paire avec un tiers.
+     Les rôles se comptent **hors le lien propre du compte édité**, que le changement libère (état résultant, 47-1a
+     AC-5 et AC-6) : passer d'une paire avec D à un miroir vers D, ou d'un miroir vers T à une paire avec T quand ce
+     compte en est la seule source, est admis par l'API et donc proposé (si T a d'autres sources, il reste exclu de
+     la paire) ; **admis** : compte non imputable (compte de présentation),
      compte en devise étrangère, de devise quelconque (Q3) ; le lien actuel toujours rendu. Table de vérité : quatre
      types × deux natures × rôles × états (actif, archivé, source, cible déjà d'un autre miroir — admise pour un miroir,
-     exclue pour une paire —, membre d'une paire). La règle reste celle de l'API, qui seule fait
+     exclue pour une paire —, membre d'une paire, partenaire ou cible actuels du compte édité). La règle reste celle de l'API, qui seule fait
      foi ;
    - `presentationSectionState(index, account, formType, formRole)` : l'état de l'AC-1 ;
    - `presentationLinkFieldsForUpdate(account, choice)` : les champs du `PUT`, **seulement ce qui change** (patron
@@ -77,8 +84,8 @@ afin de poser ces liens sans passer par l'API.
    de confirmation s'ouvre **avant** l'appel, au-dessus du dialogue de modification qui reste ouvert (même empilement
    que le dialogue de retypage, mais ouvert avant l'envoi et non sur un 409) : titre « Compenser 6960 et 6961 ? »
    (numéros en variables), puis le texte de l'avertissement de la **47-1b AC-4** — la paire compense une charge et un
-   produit, ou un actif et un passif, ce que CO 958c al. 1 ch. 7 interdit dans les comptes annuels ; Kesh présentera
-   le net ; la présentation brute reste disponible pour les comptes officiels. Une paire actif/passif (D3) n'est donc
+   produit, ou un actif et un passif, ce que CO 958c al. 1 ch. 7 interdit dans les comptes annuels ; la présentation
+   brute reste disponible pour les comptes officiels (contenu décrit par la 47-1b AC-4, que l'écran ne reformule pas). Une paire actif/passif (D3) n'est donc
    pas avertie avec un texte de charges et de produits. Le texte est **la clé même du message `warnings`** de la 47-1b
    (catalogue `crates/kesh-i18n/locales/*/messages.ftl`, que lit aussi `i18nMsg` par `/api/v1/i18n/messages`) : une
    seule clé, un seul texte pour la paire charge/produit et la paire actif/passif, dont le **nom est celui que le Dev
@@ -174,8 +181,10 @@ afin de poser ces liens sans passer par l'API.
     Le mot « miroir » est celui de l'écran (Q8). `.tex` seulement ; **le prompt de chaque passe de revue nomme le
     manuel** et exige le contrôle du PDF compilé localement (`pdftotext … | tr '\n' ' ' | tr -s ' '`).
 12. **i18n** : clés dans les quatre locales ; `sitesTotal` de `i18n-keys.test.ts` **recompté** depuis la garde après
-    la reprise de `main` (#1351 le relève de 4) ; `lint-i18n-ownership` (il ne parcourt que `src/lib/features/` : `PresentationLinkFields.svelte` n'y emploie que des
-    clés `account-…`/`accounts-…`, la clé partagée de l'avertissement n'étant lue que par la page), `i18n-libelle-en-dur`
+    la reprise de `main` (#1351 le relève de 4) ; `lint-i18n-ownership` (il ne parcourt que `src/lib/features/` ; le dossier `accounts` n'a qu'un segment,
+    `keyBelongsToFeature` compare donc le premier segment de la clé à `accounts` : `PresentationLinkFields.svelte`
+    n'emploie que des clés **`accounts-…`**, comme `AccountCurrencyFields` — une clé `account-…` y serait une
+    violation —, la clé partagée de l'avertissement n'étant lue que par la page), `i18n-libelle-en-dur`
     et `fx-account-filter-inventory.test.ts` (exemption de l'AC-1) verts. ⚠️ Aucun numéro de compte en dur dans un catalogue, un repli ou le manuel hors plans livrés : G4-bis et G4-ter (`textes_coherents.rs`) lisent les quatre catalogues et le manuel utilisateur — « Compenser 6960 et 6961 ? » se compose par variables Fluent, et les exemples du manuel citent des comptes des trois plans livrés (cf. 47-2a AC-11). *(Ajouté à la validation P1 de la 47-3b.)*
 
 ## Tâches / sous-tâches
@@ -278,6 +287,17 @@ compte lié et dit comment lever le refus.
   pastille ; E2E de la source archivée et `finally`. Cohérence vérifiée sans écart : 47-1a AC-7 (`linked` porte `actif`),
   47-1b AC-1 (table), AC-2 (`active`), #1351 (`sitesTotal` +4, `parentFieldForUpdate`, `sec:modification-compte`).
   Rapport : `kesh-gate-logs/epic-47-validation/47-3a-ecran-plan-comptable-P2.md`.
+
+- 2026-11-19 — validation P3, ciblée sur la remédiation P2 (Opus 5.5) : 0 C / 0 H / 1 M / 3 L, remédiés. M : l'AC-12
+  disait les clés du composant `account-…`/`accounts-…` ; `lint-i18n-ownership.js` (dossier `accounts` à un segment,
+  `keyBelongsToFeature`) refuse `account-…` — clés `accounts-…` seulement, comme `AccountCurrencyFields`. L : sélecteur
+  nommé (`<select>` natif, non `AccountAutocomplete`, qui écarte les comptes en devise contre Q3) et prop du composant
+  précisée (`accounts: AccountResponse[]`, ce qui fonde l'exemption au regard de `PROP_RE`) ; candidats comptés hors le
+  lien propre du compte édité (état résultant, 47-1a AC-5/AC-6) ; texte de l'avertissement non reformulé (« Kesh
+  présentera le net » absent de la 47-1b AC-4). Vérifié sans écart à `origin/main` `fd04099f` : forme de l'exemption
+  (`EXEMPT_RE`), précédents `AccountCurrencyFields.svelte:22` et page `:84`, 951 lignes ; candidats contre D2, D3,
+  47-1a AC-5 (`chain`) et C-47-1a-3. Propagation toujours en attente : 47-1b, Notes (« depuis ses propres textes »)
+  et nom de la clé de l'avertissement. Rapport : `kesh-gate-logs/epic-47-validation/47-3a-ecran-plan-comptable-P3.md`.
 
 ## Dev Agent Record
 
