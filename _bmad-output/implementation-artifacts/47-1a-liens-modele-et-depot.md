@@ -91,6 +91,13 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
      lien ; `linked_account_number` nomme le compte qui occupe le rôle. ⚠️ **Reposer le même lien est un no-op, jamais un
      `chain`** : la cible d'un miroir de ce compte-ci, ou le partenaire actuel de sa paire, ne « joue pas un autre
      rôle » — un client qui renvoie à `PUT` le corps lu par `GET` n'a ni refus ni changement de version (test).
+     ⚠️ **`chain` et le rôle de cible se jugent sur l'état APRÈS le `PUT`** : le lien propre du compte édité retiré et
+     son partenaire de paire libéré dans la même transaction (AC-6). Deux transitions sont donc **admises** (D2, D3 ;
+     la 47-3a les propose) : (1) un compte **en paire avec D** passe en **miroir vers D** — D, libéré, n'est plus que
+     cible ; (2) un compte **seule source d'un miroir vers T** passe en **paire avec T** — T, qui n'est plus cible de
+     personne, devient partenaire. Leurs sondes sont refusées en `chain` : (1) D joue encore un autre rôle une fois
+     libéré (cible du miroir d'un tiers, posé par SQL) ; (2) T reste cible du miroir d'une autre source X
+     (`linked_account_number` = X).
    Deux raisons de plus appartiennent à la même énumération (`PresentationLinkReason`, `as_str`, `ALL`), **posées par
    l'API** (47-1b) et **jamais produites par le dépôt** (test sur toutes les entrées de ce dernier) : `bothLinks`
    (deux liens entiers dans une même requête) et `onCreate` (un lien à la création) ; elles suivent les six
@@ -99,10 +106,15 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    devise quelconque (Q3).
 6. **Paire écrite des deux côtés, dans une transaction** : poser `Offset(B)` sur A écrit `A.offset = B` et
    `B.offset = A` ; déplacer (A passe de D à B) remet `D.offset` à `NULL` ; quitter la paire autrement — retrait
-   (`ClearOffset`, `ClearAll`) ou passage à un miroir (`Mirror(T)` sur A, membre d'une paire avec D) — remet les deux
+   (`ClearOffset`, `ClearAll`) ou passage à un miroir (`Mirror(T)` sur A, membre d'une paire avec D, **T = D compris** :
+   D libéré puis cible du miroir de A, AC-5 transition (1)) — remet les deux
    côtés à `NULL` (`A.offset` et `D.offset`), le miroir posé dans la même instruction que le retrait sur A (le `CHECK`
    « pas les deux » se juge à la ligne) ; chaque compte modifié voit sa `version` incrémentée et reçoit **son** entrée d'audit `account.updated`
-   (avant/après), dans la même transaction. Un miroir ne s'écrit que sur la source.
+   (avant/après), dans la même transaction. Un miroir ne s'écrit que sur la source ; passer de « source unique d'un
+   miroir vers T » à `Offset(T)` (AC-5 transition (2)) écrit `A.mirror = NULL, A.offset = T` dans la même instruction
+   et `T.offset = A`. **Deux tests d'intégration du dépôt** (`account_presentation_links.rs`) pour les transitions (1)
+   et (2) — état final des deux comptes, versions, une entrée d'audit par compte modifié —, plus leurs deux sondes de
+   refus (AC-5), état inchangé après le refus.
 7. **Garde des gestes existants sur un compte lié** (Q10 étendu au retypage) — refus **`DbError::AccountPresentationLinked
    { reason, linked }`** (HTTP 409 `ACCOUNT_PRESENTATION_LINKED`, mappé ici, AC-15), `linked` = comptes liés (id, numéro,
    nom, actif), triés par numéro :
@@ -383,7 +395,10 @@ ou 0.20.0 s'importe ; la version précédente refuse la base migrée et les sauv
   AC-15, *Project Structure Notes*. L1 : « reçoit un lien » limité aux sources de la même société (AC-9). Forme du
   vecteur (compte gardé, lien à `None`) conforme à ce qu'attendent la 47-2a (algorithme § 1, « reste à sa place,
   brut ») et la 47-4 (T2, « le compte reste relevé ») : rien à signaler. Rapport :
-  `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P3.md`.
+  `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P3.md`. Complément de la même passe (relevé par la
+  P4 de la 47-3a, transmis par l'orchestrateur ; M5) : transitions paire avec D → miroir vers D et source unique d'un
+  miroir vers T → paire avec T, refusées en `chain` si l'état d'avant était jugé → AC-5 (jugement sur l'état après le
+  `PUT`, sondes nommées) et AC-6 (écritures, deux tests d'intégration et deux sondes). Total P3 : 0 C / 0 H / 5 M / 1 L.
 
 ## Dev Agent Record
 
