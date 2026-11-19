@@ -79,7 +79,10 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
    `presented-sources-{numéro}` (la ligne dépliée).
 8. **E2E du parcours** (NFR-47-4, `frontend/tests/e2e/reports-presentation.spec.ts`, `seedTestState('with-company')`,
    `describe.configure({ mode: 'serial' })` comme `reports-currency.spec.ts`) — **le jeu de la 47-2a AC-11** (comptes
-   des plans livrés, nombres identiques au test d'intégration et au manuel), semé par l'API : le seed `with-company`
+   des plans livrés, nombres identiques au test d'intégration et au manuel), semé par l'API. ⚠️ Le seed
+   `with-company` ne charge **aucun** plan livré (cinq comptes ad hoc, `test_fixtures.rs:149-166`) : l'E2E ne suppose
+   donc pas une société au plan `pme` et **crée par l'API** tout compte du jeu absent du seed, 1040 compris (1040
+   n'existe qu'au plan `pme` ; le manuel, lui, suppose une société au plan `pme` et le dit, AC-10). Le seed
    porte déjà 1000 « Caisse CI », 1100, 2000 « Capital CI » (passif), 3000, 4000 ; l'E2E **crée** 1010, 1020, 1040,
    2100, 2270, 2800 (rôle capital), 6900, 6950, **n'asserte jamais un libellé de compte semé** (2000 se nomme « Capital
    CI » ici, « Créanciers » au plan), et passe une écriture par compte contre 2800 à la date du jour de Zurich
