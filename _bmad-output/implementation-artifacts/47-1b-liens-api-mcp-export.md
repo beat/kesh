@@ -39,7 +39,9 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
    `OPTIMISTIC_LOCK_CONFLICT`) ; **poser, déplacer ou retirer une paire incrémente aussi la `version` du ou des
    partenaires touchés** (47-1a AC-6) : un client qui tient une copie du partenaire la **relit** avant de la modifier
    (dit à `api-external.md`, AC-9) ; test : `PUT` d'un partenaire avec sa version d'avant la pose → 409.
-2. **Refus du dépôt mappés** (`crates/kesh-api/src/errors.rs`) : `PresentationLinkInvalid` → 400
+2. **Refus du dépôt mappés** (`crates/kesh-api/src/errors.rs`) — **réalisé par la 47-1a AC-15** (validation P1 de
+   la 47-1a : le sous-match exhaustif de `DbError` y impose le mapping dès que les variantes existent) ; cette story
+   l'exerce de bout en bout par les routes (T5), contrat inchangé : `PresentationLinkInvalid` → 400
    `PRESENTATION_LINK_INVALID`, `details: { field, reason[, linkedAccountNumber] }` ; `AccountPresentationLinked` →
    409 `ACCOUNT_PRESENTATION_LINKED`, `details: { reason, linkedAccounts: [{ id, number, name, active }] }` (`active` : une source archivée garde son
    lien et bloque l'archivage de sa cible, 47-1a AC-7 ; l'écran de la 47-3a AC-5 en tire le remède « réactivez-le, retirez le
@@ -150,7 +152,8 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
 - [ ] **T1 — route** (AC 1, 3, 4, 8) : champs, `presentation_link_for_update` (comme `own_fx_for_update` ; table de
   l'AC-1, `bothLinks` jugé avant le dépôt), `presentation_link_for_create` (`onCreate`), réponse, `warnings`
   (`with_warnings`).
-- [ ] **T2 — erreurs** (AC 2, 10) : mapping, messages, clés i18n.
+- [ ] **T2 — erreurs** (AC 2, 10) : mapping et messages des deux refus déjà posés par la 47-1a (AC-15) ; ici, les
+  messages propres à l'API (`bothLinks`, `onCreate`, avertissement de la paire) et leurs clés i18n.
 - [ ] **T3 — MCP** (AC 6) : `Compte`, mesure des tailles.
 - [ ] **T4 — export** (AC 7) : test du ZIP global ; les colonnes elles-mêmes sont de la 47-1a.
 - [ ] **T5 — tests** : `crates/kesh-api/tests/accounts_e2e.rs` (chaque refus, trois états, `warnings`, audit, RBAC

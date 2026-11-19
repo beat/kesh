@@ -20,15 +20,33 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    reprise qui précède le développement (proposé : `20261119000001`, contrôlé à ce moment) : sur `accounts`,
    `mirror_account_id BIGINT NULL` et `offset_account_id BIGINT NULL` (commentaires de colonne, **sans clé
    étrangère**, comme `fx_gain_account_id`), index `(company_id, mirror_account_id)` et `(company_id,
-   offset_account_id)`, `CHECK` « pas les deux » (`mirror_account_id IS NULL OR offset_account_id IS NULL`) ; **DDL
-   seul**, aucune ligne réécrite ; `kesh_version_min_required` reste à 0.17.6 ; en-tête qui dit P1/P3 (non breaking),
-   P7 (rien à trier) et la raison de l'absence de FK.
+   offset_account_id)`, et les `CHECK` de **D10** (« pas soi-même, pas les deux ») : `chk_accounts_presentation_single`
+   (`mirror_account_id IS NULL OR offset_account_id IS NULL`), `chk_accounts_presentation_not_self`
+   (`(mirror_account_id IS NULL OR mirror_account_id <> id) AND (offset_account_id IS NULL OR offset_account_id <>
+   id)`) — en **une seule instruction** `ALTER TABLE accounts` (une instruction DDL MariaDB est atomique ; deux
+   laisseraient une demi-migration après une coupure). Si MariaDB 10.11 refuse un `CHECK` qui lit `id`
+   (`AUTO_INCREMENT`), **l'écart à D10 ne se tranche pas seul** : arrêt et question à Beat et Guy, constat au Change
+   Log (T0) ; le contrôle `self` du dépôt (AC-5) existe de toute façon. **DDL seul**, aucune ligne réécrite ;
+   `kesh_version_min_required` reste à 0.17.6 ; en-tête qui dit P1/P3 (non breaking), P7 (rien à trier), la raison
+   de l'absence de FK (celle de `20261114000001` : cycle, remise à zéro, import sans ordre) et **le SQL qui défait la
+   migration** (P1 : `DROP` des deux contraintes, des deux index, des deux colonnes, puis `DELETE FROM
+   _sqlx_migrations WHERE version = …`), comme l'en-tête `(c)` de `20261118000002_invoice_line_types.sql`.
 2. **Garde-fous de migration** : P5 — ligne à `docs/migrations-idempotence-audit.md` (verdict `tracked-by-sqlx`),
    les **deux** sites du total et les trois compteurs de partition **recomptés depuis la source** ; P6 — `grep -rn
    "migrations.len()\|apply_migrations_up_to" crates/` inspecté, chaque site positionnel résolu par version ou gardé ;
    P7 — `every_data_backfill_migration_is_triaged` vert sans entrée (DDL seul) ; squash
-   `crates/kesh-db/test-schema/0001_schema_squash.sql` mis à jour, `test_schema_guard` vert ;
-   `migrations_upgrade_path.rs` étendu (données d'avant intactes, colonnes neuves à `NULL`).
+   `crates/kesh-db/test-schema/0001_schema_squash.sql` **régénéré** (`scripts/regen-test-schema.sh`, fichier
+   « GÉNÉRÉ, NE PAS ÉDITER » ; son en-tête « Équivalent des 95 migrations », `:3`, suit), `test_schema_guard` vert ;
+   `migrations_upgrade_path.rs` étendu (données d'avant intactes, colonnes neuves à `NULL`) et son compte en dur
+   (`assert_eq!(total, 95, …)`, `:137-141` à `fd04099f`, garde de la fenêtre positionnelle « sauf les 61 dernières »)
+   recompté. **Semis par le dépôt sur une base d'avant la migration** : `columns!()` lira les deux colonnes, si bien
+   que tout test qui monte une base partielle (`apply_migrations_up_to`) puis passe par le dépôt courant
+   (`accounts::create`, `find_by_id`…) rougit en `Unknown column` — mode d'échec déjà payé à la 37-1. Les deux
+   colonnes s'ajoutent à la liste que pose et retire `common::colonnes_multi_devises`
+   (`crates/kesh-db/tests/common/mod.rs:86-161`, `COLONNES_MULTI_DEVISES`, `COLONNES_LIGNES_EN_DEVISE` ; appelants :
+   `migrations_upgrade_path.rs:1397, 2197, 2423, 2529`, `lettering_documents_backfill.rs:246`), retrait **avant**
+   `MIGRATOR.run()` (pas d'`IF NOT EXISTS`) ; chaque autre site `apply_migrations_up_to` + dépôt est inspecté (liste
+   au Change Log du développement).
 3. **Entité** : `Account` porte `mirror_account_id: Option<i64>` et `offset_account_id: Option<i64>` ; toutes les
    lectures `SELECT` d'`Account` (`FIND_BY_ID_SQL`, `FIND_BY_ID_FOR_UPDATE_SQL`, listes) les décodent ;
    `account_snapshot_json` les écrit (`mirrorAccountId`, `offsetAccountId`) : l'audit avant/après les montre.
@@ -41,7 +59,7 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    `OwnFxAccountsChange` ; `is_no_op_change` le prend en compte. Traduction depuis le corps de l'API : 47-1b AC-1.
 5. **Règles de validité** (jugées sur l'état résultant, une seule fonction pure `check_presentation_link` testée sans
    base, puis le dépôt pour les lectures) ; refus **`DbError::PresentationLinkInvalid { field, reason,
-   linked_account_number }`** (HTTP 400 `PRESENTATION_LINK_INVALID` en 47-1b), raisons d'une **liste close**, dans
+   linked_account_number }`** (HTTP 400 `PRESENTATION_LINK_INVALID`, mappé ici, AC-15), raisons d'une **liste close**, dans
    cet ordre :
    - `self` — la cible est le compte lui-même ;
    - `unknown` — cible introuvable ou d'une autre société (non distingués, anti-IDOR) ;
@@ -63,21 +81,41 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    Une cible **non imputable** est admise (compte de présentation) ; une cible **en devise étrangère** aussi, de
    devise quelconque (Q3).
 6. **Paire écrite des deux côtés, dans une transaction** : poser `Offset(B)` sur A écrit `A.offset = B` et
-   `B.offset = A` ; déplacer (A passe de D à B) remet `D.offset` à `NULL` ; retirer (`None`) remet les deux côtés à
-   `NULL` ; chaque compte modifié voit sa `version` incrémentée et reçoit **son** entrée d'audit `account.updated`
+   `B.offset = A` ; déplacer (A passe de D à B) remet `D.offset` à `NULL` ; quitter la paire autrement — retrait
+   (`ClearOffset`, `ClearAll`) ou passage à un miroir (`Mirror(T)` sur A, membre d'une paire avec D) — remet les deux
+   côtés à `NULL` (`A.offset` et `D.offset`), le miroir posé dans la même instruction que le retrait sur A (le `CHECK`
+   « pas les deux » se juge à la ligne) ; chaque compte modifié voit sa `version` incrémentée et reçoit **son** entrée d'audit `account.updated`
    (avant/après), dans la même transaction. Un miroir ne s'écrit que sur la source.
 7. **Garde des gestes existants sur un compte lié** (Q10 étendu au retypage) — refus **`DbError::AccountPresentationLinked
-   { reason, linked }`** (HTTP 409 `ACCOUNT_PRESENTATION_LINKED` en 47-1b), `linked` = comptes liés (id, numéro,
-   nom), triés par numéro :
+   { reason, linked }`** (HTTP 409 `ACCOUNT_PRESENTATION_LINKED`, mappé ici, AC-15), `linked` = comptes liés (id, numéro,
+   nom, actif), triés par numéro :
    - `archive` — archiver un compte **cible** d'un miroir ou **membre** d'une paire est refusé, **sans recours**
      (`confirm_designated` ne le lève pas) ; le message nomme le compte lié (Q10). Archiver une **source** de miroir
-     reste admis (le lien demeure ; un rapport le présente encore) ;
-   - `accountType` — retyper un compte qui a ou reçoit un lien est refusé tant que le lien existe ;
-   - `equityRole` — poser un rôle de fonds propres sur un compte qui a ou reçoit un lien est refusé.
+     reste admis (le lien demeure ; un rapport le présente encore). **Une source archivée compte** parmi les comptes
+     liés — comme une désignation de change « archivé compris » : la cible ne s'archive qu'une fois le lien retiré,
+     ce qui suppose de réactiver la source (`reactivate`, `accounts.rs:1430`), `update` refusant un compte archivé
+     (`:983-988`) ; le message le dit (47-1b). `reactivate` n'a pas de garde neuve : tant que la source est archivée,
+     sa cible ne peut être ni archivée, ni retypée, ni passée en fonds propres, si bien que le lien reste valide ;
+   - `accountType` — retyper un compte qui **reçoit** un lien (cible d'un miroir, ou partenaire d'une paire que le
+     même geste ne quitte pas) est refusé tant que le lien existe ;
+   - `equityRole` — poser un rôle de fonds propres sur un compte qui **reçoit** un lien est refusé.
+   **Partage avec l'AC-5, jugé sur l'état résultant du même `PUT`** (aucune situation n'a deux codes) : le **propre**
+   lien du compte (source d'un miroir, ou son côté de la paire) se juge par l'AC-5 dès qu'il subsiste après le geste
+   — posé, déplacé **ou inchangé** (`Unchanged`) : retyper ou passer en fonds propres un compte qui garde son miroir
+   rend donc `PRESENTATION_LINK_INVALID` (`accountType` ou `equity`) ; le retirer dans le même `PUT` lève ce refus.
+   L'AC-7 ne juge que ce que le compte **reçoit** des autres, que ce geste ne peut retirer. Dans une paire A↔B, retyper
+   A en gardant la paire relève de l'AC-5 (côté propre de A) ; tests des deux branches.
    Ordre dans `archive_guarded` : sous-comptes actifs → différence de change → **lien de présentation** →
    désignation de facturation → version. Dans `update` : après les refus de devise (37-1) et avant le rôle singleton.
-8. **Lien orphelin** (cible supprimée hors de l'API — SQL, ou restauration partielle) lu comme absent : le lecteur
-   des liens (AC-9) l'écarte avec `tracing::warn!` ; aucune panique, aucune boucle.
+8. **Lien hors règle lu comme absent** : l'import d'une sauvegarde (`check_schema_compat` contrôle les colonnes,
+   jamais les valeurs ; pas de FK) ou un SQL peut écrire ce que l'AC-5 refuse. Le lecteur (AC-9) écarte, avec
+   `tracing::warn!` nommant les comptes, la **liste close** suivante — et la 47-2a ne reçoit que des liens valides
+   (son test de propriété les suppose) : (a) cible absente (**orphelin**) ; (b) cible d'une autre société ; (c) lien
+   vers soi-même ; (d) paire **non réciproque** (`A.offset = B` sans `B.offset = A`), les deux côtés écartés ;
+   (e) **chaîne** : miroir dont la cible porte elle-même un lien, ou vise un membre de paire — le miroir est écarté ;
+   (f) lien d'un compte ou vers un compte de rôle de fonds propres ; (g) types qui ne sont plus de l'autre côté du
+   même rapport. Un compte archivé (source ou cible) n'est **pas** écarté. Aucune panique, aucune boucle (la règle (e)
+   suffit à rendre la relation acyclique). Un test par cas, posé par SQL direct.
 9. **Lecteur des liens pour les rapports** : `accounts::presentation_links(executor, company_id) ->
    Vec<PresentationLinkAccount>` rend, en **une requête**, chaque compte de la société qui a ou reçoit un lien —
    `id`, `number`, `name`, `account_type`, `role`, `currency`, `active`, `mirror_account_id`, `offset_account_id` ;
@@ -86,13 +124,22 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
     jamais un état qui viole l'AC-5 ou l'AC-7 : l'un passe, l'autre est refusé (409 de version ou refus nommé) ;
     test de dépôt à deux transactions.
 11. **Sauvegarde** : une sauvegarde **0.19.0** (sans les deux colonnes) s'importe, liens vides (règle générique de
-    `check_schema_compat`, colonnes facultatives) ; l'aller-retour d'une sauvegarde neuve conserve les liens ; une
-    base migrée est refusée par l'image 0.19.0 (constat, non test : `sqlx`), d'où la sauvegarde d'avant la mise à
-    jour (Notes de version).
+    `check_schema_compat`, colonnes facultatives ; `import.rs:597-640`) — de même une sauvegarde 0.20.0 ; test sur le
+    patron de `full_import_of_a_0_17_6_backup_takes_the_multi_currency_defaults`
+    (`crates/kesh-api/tests/admin_full_import_e2e.rs:5946`) : sauvegarde **privée des deux colonnes** ; l'aller-retour
+    d'une sauvegarde neuve conserve les liens (paire des deux côtés, miroir) ; une base migrée est refusée par l'image
+    de la **release précédente** (0.20.x : constat, non test, `sqlx` refuse une migration appliquée inconnue), d'où
+    la sauvegarde d'avant la mise à jour (Notes de version). Les colonnes n'ont pas à figurer à
+    `ABSENCES_ADMISES_EPIC_37` (`kesh-db/src/backup.rs:156-245`), liste close des seules migrations de l'Epic 37.
 12. **Inventaire des colonnes de compte** : `crates/kesh-db/tests/account_columns_inventory.rs` classe les deux
     colonnes neuves (elles finissent par `_account_id`) avec leur preuve : une variante neuve de `Preuve`
     (« présentation seule : aucune écriture ne s'y impute, devise admise, Q3 ») adossée aux tests de l'AC-5 et à un
-    test qui établit qu'aucun chemin d'écriture ne lit ces colonnes (grep des requêtes d'écriture, inventaire clos).
+    test, pur, qui établit qu'aucun chemin d'écriture ne lit ces colonnes : il parcourt `crates/*/src/**/*.rs` et
+    exige que l'ensemble des fichiers qui nomment `mirror_account_id` ou `offset_account_id` **égale**, dans les deux
+    sens, une liste close écrite en dur — à cette story `kesh-db/src/entities/account.rs`,
+    `kesh-db/src/repositories/accounts.rs`, `kesh-api/src/exports/csv_tables.rs` (AC-14) et `kesh-api/src/errors.rs`
+    si l'AC-15 y nomme un champ ; chaque story suivante (47-1b, 47-2a, 47-4) y ajoute ses fichiers, aucun d'un chemin
+    d'écriture comptable (`journal_entries`, `invoices`, `fx_revaluation`…).
 13. **Aucune écriture comptable** (NFR-47-1) : poser, déplacer, retirer un lien ne crée ni ne modifie aucune ligne
     de `journal_entries` / `journal_entry_lines` (assertion de comptage dans les tests de l'AC-6).
 14. **Export CSV des tables** (déplacé de la 47-1b à la validation P1 de celle-ci) : `serialize_accounts_csv` ajoute
@@ -102,27 +149,41 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
     en-tête au squash `test-schema/0001_schema_squash.sql` que l'AC-2 met à jour ; sans ces deux colonnes, le gate
     complet de cette story rougit. Les sites qui construisent un `Account` à la main (`sample_account`, tests de
     `exports/`, `journal_entry_reversal_e2e.rs`…) gagnent les deux champs à `None` (compilation).
+15. **Erreurs mappées à l'API dans cette story** (déplacé de la 47-1b à la validation P1 de celle-ci) :
+    `crates/kesh-api/src/errors.rs` tient un **sous-match exhaustif** sur `DbError`, sans `_ =>` (commentaire
+    `:4229-4231`, match `:4380`, à `fd04099f`) : ajouter `PresentationLinkInvalid` et `AccountPresentationLinked`
+    sans les y mapper ne compile pas. Cette story pose donc le mapping que décrivait la 47-1b AC-2 —
+    `PresentationLinkInvalid` → 400 `PRESENTATION_LINK_INVALID`, `details: { field, reason[, linkedAccountNumber] }` ;
+    `AccountPresentationLinked` → 409 `ACCOUNT_PRESENTATION_LINKED`, `details: { reason, linkedAccounts: [{ id,
+    number, name, active }] }` — avec ses messages dans les quatre locales (`crates/kesh-i18n/locales/*/messages.ftl`),
+    qui **nomment** le compte lié (Q10) et, s'il est archivé, disent de le réactiver d'abord (AC-7) ; le contrat
+    exact (détails, texte d'exemple) est celui de la 47-1b AC-2, que cette story réalise, et un test unitaire de réponse par variante (patron `fx_account_invalid_response`,
+    `errors.rs:1881`). Les sites qui construisent un `AccountUpdate` (32 à `fd04099f`, dont la route
+    `routes/accounts.rs` et 22 dans `repositories/accounts.rs`) reçoivent `presentation_link: Unchanged` : la route
+    n'expose les champs qu'en 47-1b.
 
 ## Tâches / sous-tâches
 
 - [ ] **T0 — reprise et contrôle** (AC 1, 2) : `git fetch origin`, reprise de `main` dans `epic/47-comptes-miroirs`
   (49-1a et ses migrations comprises si fusionnées) ; lister `crates/kesh-db/migrations/` et choisir l'horodatage ;
-  vérifier sur MariaDB de dev qu'un `CHECK` n'interdit rien d'attendu (AC 1).
-- [ ] **T1 — migration** (AC 1, 2) : fichier SQL, ligne d'audit et compteurs recomptés, squash, P6, upgrade path.
+  vérifier sur MariaDB de dev que les deux `CHECK` de l'AC-1 (dont « pas soi-même », qui lit `id`) sont acceptés et
+  n'interdisent rien d'attendu ; refus → arrêt et question (AC 1, C-47-1a-4).
+- [ ] **T1 — migration** (AC 1, 2) : fichier SQL, ligne d'audit et compteurs recomptés, squash régénéré, P6, upgrade
+  path et son compte en dur, colonnes posées et retirées par `common::colonnes_multi_devises`.
 - [ ] **T2 — entité et lectures** (AC 3, 4, 14) : champs, SQL des lectures, snapshot d'audit, `PresentationLinkChange`
   (variantes `Clear*`), `is_no_op_change`, colonnes de `accounts.csv` et sites de construction
   d'`Account`.
 - [ ] **T3 — validation** (AC 5) : `check_presentation_link` pure (table de vérité : 4 types × 2 liens × rôles) ;
   `DbError::PresentationLinkInvalid`, `PresentationLinkField`, `PresentationLinkReason` (`as_str`, `ALL`), à l'image
-  de `FxAccountInvalid` ; `error_code()`.
+  de `FxAccountInvalid` ; `error_code()` ; mapping HTTP et messages des quatre locales (AC 15).
 - [ ] **T4 — écriture et verrous** (AC 6, 10, 13) : dans `accounts::update`, résolution sous verrou, écriture des deux
   côtés, audit par compte modifié ; ordre des verrous ci-dessous.
 - [ ] **T5 — gestes gardés** (AC 7) : `archive_guarded`, retypage et rôle dans `update` ;
   `DbError::AccountPresentationLinked`.
 - [ ] **T6 — lecteur** (AC 8, 9) : `presentation_links`.
 - [ ] **T7 — tests** : dépôt (`crates/kesh-db/tests/account_presentation_links.rs`, neuf), inventaire des colonnes
-  (AC 12), sauvegarde (`crates/kesh-api/tests/admin_backup_e2e.rs` ou fichier voisin : import d'une sauvegarde au
-  schéma 0.19.0 et aller-retour), mutations.
+  (AC 12), sauvegarde (`crates/kesh-api/tests/admin_full_import_e2e.rs`, patron `:5946` : import d'une sauvegarde
+  privée des deux colonnes et aller-retour), réponses d'erreur (AC-15), mutations.
 - [ ] **T8 — gate complet** (exception `kesh-db` : jamais ciblé, `CLAUDE.md` § *Pendant une boucle de revue*).
 
 ## Dev Notes
@@ -160,7 +221,9 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
 
 `update` garde son préfixe : `company_id` lu sur le pool ; `companies` en partage (en `FOR UPDATE` si comptes propres
 changent) ; réglages de facturation en partage. Puis, **au lieu du seul `FOR UPDATE` du compte**, quand
-`presentation_link` n'est pas `Unchanged` : lire **hors verrou** l'ancien partenaire de paire du compte, former
+`presentation_link` n'est pas `Unchanged` : lire **hors verrou** — sur le pool, avant `begin()`, comme
+`company_of_account` (une lecture non verrouillante dans la transaction figerait son instantané) — l'ancien
+partenaire de paire du compte, former
 l'ensemble {compte, ancien partenaire, nouvelle cible}, et le verrouiller **en une instruction ordonnée par id**
 (`SELECT … WHERE id IN (…) ORDER BY id FOR UPDATE`) ; relu sous verrou, si l'ancien partenaire diffère de la lecture
 hors verrou, la version du compte a changé : `OptimisticLockConflict` (409). Les lectures de « qui pointe vers ce
@@ -177,9 +240,10 @@ sur la ligne de T.
 - **C-47-1a-2** : « un compte joue au plus un rôle » est la forme décidable de « pas de chaîne » (D2) : elle couvre
   aussi miroir vers un compte en paire et paire avec une cible de miroir, que la présentation ne saurait ordonner.
 - **C-47-1a-3** : plusieurs sources peuvent viser la même cible (D2 : « le solde inversé de ses sources »).
-- **C-47-1a-4** : pas de `CHECK (mirror_account_id <> id)` : le contrôle `self` est au dépôt. MySQL refuse un `CHECK`
-  qui lit une colonne `AUTO_INCREMENT` ; MariaDB l'admet peut-être, sans gain (le lien ne se pose que par `UPDATE`) —
-  à confirmer en T0, sinon écrit tel quel au Change Log.
+- **C-47-1a-4** *(révisé à la validation P1 : la rédaction d'origine écartait ce `CHECK`, contre D10)* : le `CHECK`
+  « pas soi-même » de D10 est posé (AC-1), **en plus** du contrôle `self` du dépôt. MySQL refuse un `CHECK` qui lit
+  une colonne `AUTO_INCREMENT` ; MariaDB 10.11 l'admet selon toute vraisemblance — vérifié en T0 sur la MariaDB de
+  dev ; s'il est refusé, arrêt et question à Beat et Guy (écart à une décision), jamais un retrait silencieux.
 
 ### Stratégie de tests
 
@@ -190,21 +254,31 @@ sur la ligne de T.
   déplacement, retrait d'une paire (deux côtés, versions, deux entrées d'audit) ; source archivée admise ; lien
   orphelin ; lecteur ; concurrence (AC-10) ; comptage des écritures inchangé (AC-13).
 - **Migration** : `test_schema_guard`, `migrations_upgrade_path`, `migrations_fresh_install`.
-- **Sauvegarde** : import d'une sauvegarde au schéma 0.19.0, aller-retour neuf.
+- **Sauvegarde** : import d'une sauvegarde privée des deux colonnes (0.19.0 ou 0.20.0), aller-retour neuf.
+- **Lecteur** : un test par cas de la liste close de l'AC-8, posé par SQL direct.
+- **Partage AC-5 / AC-7** : retyper ou passer en fonds propres un compte qui garde son lien (`PRESENTATION_LINK_INVALID`),
+  qui le retire dans le même `PUT` (admis), qui reçoit un lien (`ACCOUNT_PRESENTATION_LINKED`) ; cible dont la seule
+  source est archivée (archivage refusé).
 - **Mutations** (à consigner) : retirer l'écriture du second côté de la paire ; inverser l'ordre de deux raisons ;
   supprimer la garde d'archivage ; supprimer la lecture verrouillante des référents — chacune doit rougir un test.
 
 ### Risques
 
-- Conflit de texte et de règle avec `fix/api-parent-compte` (même fonction `update`, mêmes erreurs).
+- Conflit de texte et de règle avec `fix/api-parent-compte` (même fonction `update`, mêmes erreurs). **Ordre des
+  verrous** : ce correctif prend le nouveau parent `FOR UPDATE` **après** le compte, puis ses ancêtres en lecture
+  verrouillante (`guard_parent_change_in_tx`) ; cette story verrouille un ensemble ordonné par id. Un `PUT` qui
+  change à la fois parent et lien : le parent se prend après l'ensemble ordonné (jamais avant), et le cas se teste à
+  la résolution du conflit.
+- Recette de montée (`scripts/recette-montee.sh`) : l'empreinte de `accounts` change (deux colonnes) ; l'écart
+  attendu s'écrit au journal de la release, comme `bank_accounts` à la 0.17.6.
 - Ordre des migrations : si une autre migration entre sur `main` avant la fusion, renommer l'horodatage **avant toute
   publication** (P8 : jamais après).
 - Interaction muette avec un test positionnel (P6) ou un compteur de l'audit (P5) : gate complet obligatoire.
 
 ### Project Structure Notes
 
-Aucun fichier hors des chemins habituels ; migration nommée par horodatage ; pas de PDF de manuel commité ; i18n et
-documentation en 47-1b.
+Aucun fichier hors des chemins habituels ; migration nommée par horodatage ; pas de PDF de manuel commité ; les messages des deux
+erreurs (AC-15) sont ici, le reste de l'i18n et la documentation en 47-1b.
 
 ### References
 
@@ -230,6 +304,19 @@ ou 0.20.0 s'importe ; la version précédente refuse la base migrée et les sauv
   47-1b : la garde d'exhaustivité des colonnes lit le squash), T2 et stratégie de tests. Rapport :
   `kesh-gate-logs/epic-47-validation/47-1b-liens-api-mcp-export-P1.md`. Cette fiche n'a pas subi sa propre passe
   de validation ici.
+- 2026-11-19 — validation P1 (Opus 5.5) : **0 C / 1 H / 5 M / 6 L, remédiés**. H1 : le sous-match exhaustif de
+  `DbError` (`kesh-api/src/errors.rs:4229-4231`, `:4380`) rendait la story non compilable avec le mapping en 47-1b →
+  AC-15 neuve (mapping et messages des deux refus ici ; 47-1b AC-2 et T2, fichier d'epic ajustés). M1 : semis par le
+  dépôt sur base partielle (`common::colonnes_multi_devises`) → AC-2. M2 : contradiction avec D10 (`CHECK` « pas
+  soi-même » écarté) → AC-1, C-47-1a-4 révisé, T0 (arrêt et question si MariaDB refuse). M3 : chevauchement AC-5 /
+  AC-7 (deux codes pour un même cas, retypage et retrait dans un même `PUT`) → partage écrit à l'AC-7. M4 : source
+  archivée parmi les référents, non dit → AC-7 (comptée ; `reactivate` sans garde neuve, motif écrit). M5 : lecteur
+  limité aux orphelins alors que l'import et le SQL peuvent écrire tout état refusé → AC-8, liste close (a)–(g). L :
+  AC-6 (sortie de paire par `Mirror`, `None` périmé), AC-11 (image de la release précédente, patron
+  `admin_full_import_e2e.rs:5946`), AC-12 (liste close des fichiers sources, testable), AC-1 (une instruction,
+  noms des contraintes, SQL qui défait la migration), AC-2 (squash régénéré, compte en dur de
+  `migrations_upgrade_path.rs`), ordre des verrous (lecture hors verrou sur le pool ; parent de `fix/api-parent-compte`)
+  et recette de montée aux Risques. Rapport : `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P1.md`.
 
 ## Dev Agent Record
 

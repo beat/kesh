@@ -98,7 +98,7 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
 | Story | Objet | Migration | Dépend de |
 |---|---|---|---|
 | 47-0 | kickoff : décomptes, validation du fichier, annonce de la migration — **done** (2026-11-19) | non | — |
-| 47-1a | modèle : migration, entité, dépôt, validation, archivage, retypage, lecteur des liens, sauvegarde | **oui**, non breaking | — |
+| 47-1a | modèle : migration, entité, dépôt, validation, archivage, retypage, lecteur des liens, sauvegarde, colonnes de l'export CSV, mapping HTTP des deux refus (sous-match exhaustif de `DbError`) | **oui**, non breaking | — |
 | 47-1b | API des comptes, avertissement de la paire, MCP `kesh_plan_comptable` (plafonds révisés), test de l'export global, `api-external.md`, manuel d'administration (colonnes de l'export CSV : en 47-1a) | non | 47-1a |
 | 47-2a | fonction de présentation, rapports JSON (`presentation=brute`, `sources`), MCP `kesh_bilan` / `kesh_compte_de_resultat` | non | 47-1a ; **avant** le regroupement de l'Epic 46 (recâblage à sa fusion) |
 | 47-2b | PDF et CSV présentés : marque, note, « présentation compensée », brut | non | 47-2a ; #1327 et `fix/bilan-resultat-reporte` fusionnés ; 46-3 si fusionnée |
@@ -157,12 +157,12 @@ les lignes passent avant d'être groupées (à demander à son auteur ; Q5).
 | `kesh-db/src/entities/account.rs`, `repositories/accounts.rs` | 47-1a | possible | — | — | oui |
 | `kesh-api/src/routes/accounts.rs`, `errors.rs` (db, api) | 47-1a, 47-1b | possible | — | — | oui |
 | `frontend/…/accounts/`, `routes/(app)/accounts/+page.svelte` | 47-3a | — | — | — | oui |
-| catalogues i18n (4 locales), `sitesTotal` | 47-1b à 47-4 | oui | oui | — | oui |
+| catalogues i18n (4 locales), `sitesTotal` | 47-1a (messages des deux refus) à 47-4 | oui | oui | — | oui |
 | `docs/manual/fr/user-manual.tex`, `docs/api-external.md` | 47-1b à 47-4 | oui | oui | oui | oui |
 | `kesh-db/migrations/`, audit, `test-schema/`, `migrations_upgrade_path.rs`, `account_columns_inventory.rs` | 47-1a | si migration | — | — | — |
 | `kesh-db/src/repositories/closing_checks.rs`, `FiscalYearChecks.svelte` | 47-4 | — | — | — | — |
 | MCP (`kesh_plan_comptable`, `kesh_bilan`, `kesh_compte_de_resultat`) | 47-1b, 47-2a | probable | — | — | — |
-| `kesh-api/src/exports/csv_tables.rs` | 47-1b | — | — | — | — |
+| `kesh-api/src/exports/csv_tables.rs` | 47-1a (colonnes), 47-1b (test du ZIP) | — | — | — | — |
 
 **Hors tableau (0.20.0)** : la story **48-11** (arrondi au centime des rapports CSV et PDF, après #1327) touche `kesh-report/src/pdf.rs` et `csv.rs`, comme 47-2b ; elle part avant : le second arrivé (47-2b) reprend et résout. Les stories de l'Epic 49 changent les catalogues i18n et la migration (horodatage de la 47-1a postérieur).
 
