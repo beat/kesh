@@ -32,7 +32,8 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
    `OPTIMISTIC_LOCK_CONFLICT` 409 sur la version du compte modifié. Audit : l'entrée `account.created` /
    `account.updated` du compte source porte `mirrorAccountId` (47-1 AC-3). Tests : `crates/kesh-api/tests/accounts_e2e.rs`
    — trois états, chaque refus avec son détail (une cible **d'une autre société** rend la même `unknown` qu'une cible
-   inexistante), création avec miroir, RBAC (la boucle de `consultation_role_cannot_write` couvre un corps portant
+   inexistante), création avec miroir, RBAC (la boucle de `consultation_role_cannot_write`, qui ne parcourt à
+   `fd04099f` que `POST /accounts` et `PUT /accounts/{id}/reactivate`, gagne `PUT /accounts/{id}`, avec un corps portant
    `mirrorAccountId`), aucune entrée d'audit ni version touchée sur la cible. **Interblocage** : à la pose
    (47-1 AC-7), A est déjà sous `FOR UPDATE` puis T se verrouille ; `archive_guarded` de T prend sa ligne puis lit
    « qui désigne T » sous verrou — deux gestes concurrents (poser A → T, archiver T) ferment un cycle (A tenue et T
@@ -44,10 +45,12 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
    les **candidats** calculés par une fonction pure `mirrorCandidates(account, form, accounts)` (fichier neuf
    `frontend/src/lib/features/accounts/mirror.ts`, testée en Vitest) depuis **le plan que la page a chargé**
    (`fetchAccounts(showArchived)` : les archivés n'y sont que si *Afficher les archivés* est cochée, ce que la fonction
-   ne corrige pas — le serveur reste juge, 47-1 AC-4 et AC-5) : comptes de la société, actifs (non archivés), autres
+   ne corrige pas — le serveur reste juge, 47-1 AC-4 et AC-5 ; ce plan est déjà celui de la société) : comptes actifs (non archivés), autres
    que le compte lui-même, de l'autre côté du type **choisi dans le formulaire** (actif ↔ passif, produit ↔ charge),
    **non postables** (la case *Postable* décochée), sans rôle, qui n'ont pas eux-mêmes de miroir ; libellés « numéro
-   nom », dans l'ordre du plan. Le miroir enregistré figure toujours dans la liste, même s'il ne passe plus le filtre.
+   nom », dans l'ordre du plan. Le miroir enregistré figure toujours dans la liste, même s'il ne passe plus le filtre :
+   par `withCurrentAccount` (`account-options.ts`, en tête de liste), non par une seconde règle. Les comptes de
+   regroupement (parents d'un sous-compte, donc non postables) y figurent : la 47-1 les admet, l'écran ne les écarte pas.
    **Aucun cas particulier de rôle** : un rôle de fonds propres, un type changé dans le formulaire, un compte qui porte
    des écritures sont jugés par le serveur (`equity`, `accountType`, `notPresentationAccount`), dont le refus s'affiche
    sous le champ (AC-3) — le `<select>` n'a donc jamais à disparaître ni à décider seul (un `<select>` caché laisserait
@@ -68,11 +71,14 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
    `fx-filtre-comptes : exempté — un compte miroir admet un compte de toute devise`.
 3. **Refus de l'API à l'écran** : l'écran n'a **aucun texte de refus à lui** — le serveur rend `err.message` traduit,
    qui nomme le compte en cause (47-1 AC-9), comme pour `FX_ACCOUNT_INVALID`. `MIRROR_ACCOUNT_INVALID` (reconnu par son
-   code) s'affiche **sous le `<select>`** (`role="alert"`, `aria-invalid`), en création et en modification ;
+   code) s'affiche **sous le `<select>`** (`role="alert"`, `aria-invalid`), en création et en modification — y compris
+   au rejeu de `confirmRetype`, où tombe la raison `accountType` d'un retypage : un seul assistant
+   `mirrorFieldErrorOf(err)` (patron de `fxFieldErrorOf`, `+page.svelte:150`) aux trois `catch` (`submitCreate`,
+   `submitEdit`, `confirmRetype`) ;
    `ACCOUNT_IS_MIRROR` à la modification (rendre postable, retyper, poser un rôle) prend le chemin existant
    (`editError`, au pied du formulaire : aucun code neuf) ; au dialogue *Archiver le compte*, `ACCOUNT_IS_MIRROR`
    (`archive`) s'affiche **dans le dialogue** (état `archiveMirrorMessage`, `role="alert"`,
-   `data-testid="account-archive-mirror"`, patron de `archiveDesignated`), **sans** « Archiver quand même » **et sans**
+   `data-testid="account-archive-mirror"`, patron de `archiveDesignated`, remis à vide par `openArchive` comme lui), **sans** « Archiver quand même » **et sans**
    le bouton *Archiver* (rien n'est à confirmer : seul *Annuler* reste), et sans toast ; le remède d'une source
    archivée (« réactivez-la, retirez le lien, puis archivez ») est dans le message du serveur, que l'écran n'a pas à
    reconstruire.
@@ -90,7 +96,7 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
 7. **Captures d'écran** (thème clair, 1280 × 720) : dialogue sans miroir, miroir choisi, compte miroir (phrase),
    refus sous le champ, archivage refusé (source active, source archivée) ; **une** capture du dialogue le plus haut à
    390 × 844 — jointes au Dev Agent Record et au prompt de revue (`kesh-gate-logs/`).
-8. **E2E** (fichier neuf `frontend/tests/e2e/accounts-mirror.spec.ts`) : comptes **créés par l'API** à numéros uniques
+8. **E2E** (fichier neuf `frontend/tests/e2e/accounts-mirror.spec.ts`) : comptes **créés par l'API**, sans parent, à numéros uniques
    (patron `D${Date.now()…}` d'`accounts.spec.ts`), jamais de miroir sur un compte du seed ; liens retirés en `finally`
    (le `finally` réactive une source archivée avant de retirer son lien). Sélecteurs : ceux de l'AC-2 et de l'AC-3, plus
    les existants (`account-row-{numéro}-edit-button`, `-archive-button`, `-reactivate-button`,
@@ -102,9 +108,12 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
 9. **Manuel utilisateur** (`docs/manual/fr/user-manual.tex`, section *Plan comptable* `:421`) : nouvelle sous-section
    « Compte miroir » (`\label{sec:compte-miroir}`), après *Modification d'un compte* (`:465`) : à quoi sert un compte
    miroir (un solde de sens inverse présenté de l'autre côté, comme le prévoit la présentation du bilan de l'art. 959a
-   CO, sans compensation ni écriture ; **sans dire que le bilan de Kesh y est « conforme »** : l'avertissement du bilan
-   (`:3913`, « pas encore structuré selon l'art. 959a CO ») reste vrai) ; créer le compte de présentation (*Postable*
-   décoché, sans rôle) puis le choisir ; plusieurs comptes peuvent
+   CO, sans compensation ni écriture — l'article n'est cité que pour le bilan ; **sans dire que le bilan de Kesh y est
+   « conforme »** : les avertissements du bilan (`:3918`, « pas encore structuré selon l'art. 959a CO ») et du compte de
+   résultat (`:3948`) restent vrais) ; créer le compte de présentation (*Postable* décoché, sans rôle, **sans compte
+   parent** : un parent devient non imputable à son premier sous-compte — règle 14-3a, `accounts::create` —, si bien
+   que 6900.1 créé sous 6900 rendrait 6900 non imputable ; l'exemple de *Ajout d'un compte*, `:446-449`, pose un parent,
+   la sous-section dit l'inverse en toutes lettres, comme le fichier d'epic) puis le choisir ; plusieurs comptes peuvent
    partager un miroir ; ce qui est refusé tant qu'un compte est miroir (écriture, case *Postable*, retypage, rôle,
    archivage) ; **ne pas choisir comme miroir un compte que les réglages de facturation, un article ou une règle de
    rapprochement désignent** : le flux qui l'emploierait serait refusé, nommé (constat promis par la 47-1, *Risques*) ; les exemples de l'**exemple chiffré du fichier d'epic** (comptes **à créer** 6900.1 « Pertes de
@@ -133,7 +142,8 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
       renommé au tag) — **en tête la sauvegarde complète**, la migration (total recompté), le retour par la sauvegarde
       d'avant la mise à jour, puis, pour les intégrations, le champ de l'API et la colonne de `accounts.csv` ; dans
       *Compatibilité* de la sauvegarde (`:2302`), une phrase : une sauvegarde de la release précédente s'importe, sans
-      miroir, et le sens inverse (sa sauvegarde dans la release précédente) tel que la recette de montée l'a constaté. Gardes G4-bis/ter, G19, G25 respectées.
+      miroir ; et, tel que la recette de montée le constate, si une sauvegarde de cette release s'importe dans la
+      précédente (à la 0.17.5, une colonne inconnue faisait refuser l'import, `:2302`). Gardes G4-bis/ter, G19, G25 respectées.
     - `.tex` seulement (aucun PDF commité) ; **le prompt de chaque passe de revue nomme ces documents** et exige le
       contrôle du PDF compilé localement (`pdftotext … | tr '\n' ' ' | tr -s ' '`).
 11. **i18n** : clés `accounts-…` (préfixe du dossier, `lint-i18n-ownership`) dans les quatre locales ; `sitesTotal` de
@@ -201,6 +211,24 @@ colonne `mirror_account_id` en fin de ligne de `accounts.csv`.
 
 ## Change Log
 
+- 2026-11-19 — validation P2 (Opus 5.5, complète, contexte frais) : **0 C / 0 H / 2 M / 6 L, remédiés**. Remédiation P1
+  relue au code d'`origin/main` `fd04099f` : `fetchAccounts(showArchived)` (`+page.svelte:212`), `archiveDesignated`
+  et ses boutons (`:117`, `:920-925`), `fxFieldErrorOf` (`:150`), `putAccount`/`confirmRetype` (`:324`, `:392`),
+  `archive_account` sans rejeu (`routes/accounts.rs:524`, `archive_guarded` ouvre sa transaction à chaque appel :
+  rejeu sûr), `max-h-[90vh]` (`contacts/+page.svelte:828`), `PROP_RE`, sélecteurs existants, `api-external.md`
+  (`:226`, `:1060`-`:1139`, `:1257`, `:1307`, `:1323`), gardes G4-bis (lit le manuel utilisateur), G4-ter et G25 (lisent
+  `api-external.md`), lignes du manuel `:421`, `:446-451`, `:465`, `:468`, `:486`, `:2302`, `:2497`, `:2550`. M1 :
+  sous-comptes à créer **sans compte parent** non dit, alors que l'exemple d'*Ajout d'un compte* en pose un et qu'un
+  parent devient non imputable à son premier sous-compte (`accounts::create`, règle 14-3a) — 6900.1 sous 6900 rendait
+  6900 non imputable (AC-9, AC-8 ; propagé à la 47-4). M2 : le refus `MIRROR_ACCOUNT_INVALID` au rejeu de
+  `confirmRetype` (raison `accountType`, celle d'un retypage) tombait au pied du formulaire, contre « sous le `<select>`
+  en modification » → un assistant aux trois `catch` (AC-3). L : `withCurrentAccount` pour le miroir gardé (DRY) ;
+  « de la société » redondant ; comptes de regroupement parmi les candidats, dit ; `archiveMirrorMessage` remis à vide à
+  l'ouverture ; boucle RBAC sans `PUT /accounts/{id}` ; `:3913` → `:3918`, art. 959a cité pour le bilan seul, `:3948` ;
+  phrase de compatibilité de la sauvegarde récrite. Concordance : 47-1 à HEAD (`c7ba5bb5`) — AC-9 ne dit plus que la
+  47-2 reprend les clés, AC-7 décrit l'interblocage pose / archivage et le rejeu de la 47-2 : écart de la P1 levé ;
+  47-3 (exports par le service, aucun rendu propre) et 47-4 (label `sec:compte-miroir`, renvoi) concordants. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-2-miroir-api-et-ecran-du-plan-P2.md`.
 - 2026-11-19 — validation P1 (Sonnet 5.5) : 0 C / 0 H / 8 M / 8 L, remédiés. M : candidats « archivés compris » alors que la
   page ne charge les archivés que sur case cochée ; `<select>` caché pour les fonds propres (refus `equity` sans champ,
   miroir laissé en place) — cas particulier retiré, le serveur juge ; contradiction clés de refus / `err.message`

@@ -29,8 +29,9 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
    Une ligne **sans** `mirrorOf` est rendue exactement comme aujourd'hui. Pas de bascule, pas de bandeau, pas de
    dépliage (R6, R7). La mention est rendue par un **petit composant unique** (`MirrorOfNote.svelte`), placé dans la
    cellule du nom (à côté d'`AccountCurrencyBalance`) aux quatre endroits, non par quatre copies.
-2. **Types** : `reports.types.ts` — `mirrorOf?: MirrorSource[]` sur `AccountBalance`, type `MirrorSource` (`accountId`,
-   `accountNumber`, `accountName`, `balance`). `reports.api.ts` et `isReportEmpty` inchangés (un rapport présenté est
+2. **Types** : `reports.types.ts` — `mirrorOf?: MirrorSource[]` sur `AccountBalance`, type `MirrorSource` (`accountId:
+   number`, `accountNumber: string`, `accountName: string`, `balance: string` — chaîne décimale, comme
+   `AccountBalance.balance`). `reports.api.ts` et `isReportEmpty` inchangés (un rapport présenté est
    vide si et seulement si le brut l'est : aucune compensation).
 3. **Vitest** (dans `BalanceSheetView.test.ts` et `IncomeStatementView.test.ts`, existants) : vues (mention présente sur une ligne à `mirrorOf`, absente sinon, une et plusieurs sources, fonds
    propres jamais concernés), `MirrorOfNote` seul. Mutation à faire rougir : mention rendue sur une ligne sans
@@ -43,18 +44,21 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
    `describe.configure({ mode: 'serial' })` comme `reports-currency.spec.ts`) — **l'exemple du fichier d'epic**, semé
    par l'API. ⚠️ Le seed `with-company` ne charge aucun plan livré (cinq comptes ad hoc, `test_fixtures.rs:149-166` :
    1000 « Caisse CI », 1100, 2000 « Capital CI » (passif, sans rôle), 3000, 4000) : l'E2E **crée par l'API** 1010,
-   1020, 2270, 2800 (rôle capital), 3200, 6900, 6950.1, et les miroirs 6900.1, 1040.1, 2100.1 (non imputables) ; il
+   1020, 2270, 2800 (rôle capital), 3200, 6900, 6950.1, et les miroirs 6900.1, 1040.1, 2100.1 (non imputables), tous
+   **sans parent** (un parent deviendrait non imputable) ; il
    **n'asserte jamais un libellé de compte semé** ; écritures contre 2800 à la date du jour de Zurich (`todayInZurich()`).
    Parcours : miroirs **posés à l'écran** (dialogue de la 47-2 : 1020 → 2100.1, 2270 → 1040.1, 6950.1 → 6900.1) →
    *Générer* le bilan (onglet `#reports-tab-balance-sheet`, bouton *Générer*) : **aucune cellule de montant négative**
-   (`locator('td.text-right')` des quatre tableaux, aucune ne commence par `-`), 1040.1 à `1’200.00` (actif) avec la mention « Solde de
+   (cellules `td.text-right` des lignes `[data-testid^="report-row-"]`, AC-4 — non de toute la page, où le tableau des
+   fonds propres a les siennes —, au bilan puis au compte de résultat ; aucune ne commence par `-`), 1040.1 à `1’200.00` (actif) avec la mention « Solde de
    2270 », 2100.1 à `800.00` (passif), total actif `13’700.00`, total passif `3’800.00` → compte de résultat : 6900.1 à
    `250.00` en charges avec la mention « Solde de 6950.1 », 6950.1 absent des produits, total produits `2’000.00`, total
    charges `300.00`, résultat `1’700.00` → balance de vérification : 1020 à `-800.00`, 2270 à `-1’200.00`, 6950.1 à
    `-250.00` (soldes réels). **Exports** déclenchés par les boutons (*Export PDF*, *Export CSV*, par leur nom, comme
    `reports-export-pdf.spec.ts`) : le PDF et le CSV du bilan portent 1040.1 et 2100.1 avec leurs montants présentés,
    **dans leur forme propre** — PDF `1'200.00` (apostrophe ASCII U+0027, `format_swiss_amount`, Latin-1 des `Tj`),
-   CSV `1200.00` (ISO, sans séparateur, `format_amount_iso`) —, et ni 1020 ni 2270 (texte du PDF **extrait** : flux Flate, `Tj` hexadécimal
+   CSV `1200.00` (ISO, sans séparateur, `format_amount_iso`) —, et ni 1020 ni 2270, cherchés comme **jetons entiers**
+   (au PDF, la chaîne `<…>` entière d'un `Tj` ; au CSV, un champ entier), non comme sous-chaînes (texte du PDF **extrait** : flux Flate, `Tj` hexadécimal
    en Latin-1 — `contenuDuPdf` et `hexWinAnsi` d'`invoice-qr-caracteres.spec.ts:13-37`, **déplacés** dans `helpers/`
    plutôt que recopiés). ⚠️ Formes **à l'écran seulement** : apostrophe U+2019 des milliers et signe `-` ASCII
    (`formatSwissAmount`) ; ni le PDF ni le CSV n'emploient l'U+2019.
@@ -65,7 +69,7 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
    *Bilan* `:3910`, *Compte de résultat* `:3941`) : nouvelle sous-section « Comptes miroirs dans les rapports »
    (`\label{sec:rapports-miroirs}`, renvoyée depuis la sous-section *Compte miroir* de la 47-2, `\ref{sec:compte-miroir}`
    — c'est ici que le renvoi s'écrit dans les deux sens) : ce que montrent bilan et compte de résultat (solde de sens
-   inverse présenté sous le miroir, aucune compensation, conforme à l'art. 959a CO), la mention « Solde de … », les
+   inverse présenté sous le miroir, aucune compensation, comme la présentation du bilan de l'art. 959a CO le prévoit), la mention « Solde de … », les
    exports, la balance et le grand livre restés sur les soldes réels, l'accueil sur les soldes réels ; les phrases
    d'ouverture à **corriger** (« les comptes d'actif et de passif à solde non nul, triés par numéro », `:3914`, et son
    pendant du compte de résultat, `:3945`), **et les deux affirmations que le miroir rend fausses** : *Balance des
@@ -76,8 +80,8 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
    « conforme » à l'art. 959a CO** : l'avertissement qui ouvre *Bilan* (« pas encore structuré selon l'art. 959a CO »,
    `:3918`) et celui du compte de résultat (`:3948`) restent vrais ; le miroir ne règle que le signe d'un solde de sens
    inverse, comme la présentation du CO l'attend. **L'exemple chiffré est celui du fichier d'epic, sans autre jeu** : un
-   tableau avant/après sur une société au plan **PME** (qu'il nomme), comptes à créer en sous-comptes (6950.1, 6900.1,
-   1040.1, 2100.1), comptes livrés sous leur nom (1000 « Caisse », 1010 « Poste », 1020 « Banque », 2000
+   tableau avant/après sur une société au plan **PME** (qu'il nomme), comptes à créer en sous-comptes **sans compte
+   parent** (6950.1, 6900.1, 1040.1, 2100.1 ; 47-2 AC-9), comptes livrés sous leur nom (1000 « Caisse », 1010 « Poste », 1020 « Banque », 2000
    « Créanciers », 2270 « AVS/AI/APG », 2800 « Capital social », 3200 « Prestations de services », 6900 « Charges
    financières »), montants au format du manuel (apostrophe : `13'700.00`, jamais un montant de quatre chiffres sans
    apostrophe, que G4-bis lirait comme un compte). ⚠️ G4-bis et G4-ter lisent ce manuel : les exécuter.
@@ -153,6 +157,19 @@ le manuel utilisateur décrit les comptes miroirs, avec un exemple chiffré.
 
 ## Change Log
 
+- 2026-11-19 — validation P2 (Opus 5.5, complète, contexte frais) : **0 C / 0 H / 1 M / 4 L, remédiés**. Remédiation P1
+  relue au code d'`origin/main` `fd04099f` : manuel `:308`, `:3908`-`:3918`, `:3941`-`:3948`, `:3968` (lignes exactes) ;
+  `format_swiss_amount` (`kesh-report/src/pdf.rs:274`, apostrophe U+0027), `format_amount_iso` (`csv.rs:50`) ;
+  `contenuDuPdf` et `hexWinAnsi` (`invoice-qr-caracteres.spec.ts:24`, `:40`), absents de `helpers/` ; aucun
+  `data-testid` aux lignes de `BalanceSheetView`/`IncomeStatementView`, `tb-row` sans numéro (`TrialBalanceView.svelte:65`),
+  `#reports-tab-…` (`reports/+page.svelte:598`, `reports-currency.spec.ts:167`) ; G26 libre (G25 dernière) ; exemple
+  chiffré du fichier d'epic recalculé, montants de l'E2E exacts. M1 : l'AC-7 disait encore « conforme à l'art. 959a CO »
+  dans sa parenthèse, contre sa propre phrase « sans dire que le bilan de Kesh est conforme » (résidu de la P1). L :
+  comptes à créer **sans parent** (E2E et manuel ; propagation de la 47-2 P2 M1 : un parent devient non imputable) ;
+  types de `MirrorSource` (`balance: string`) ; « aucune cellule négative » bornée aux lignes `report-row-` ; 1020 et
+  2270 absents cherchés en jetons entiers. Concordance : 47-3 à HEAD (exports par le service, `mirrorOf`, quatorze
+  montants entre marqueurs `//`) et 47-2 (dialogue, label) concordantes. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-4-miroir-ecrans-rapports-manuel-e2e-P2.md`.
 - 2026-11-19 — validation P1 (Sonnet 5.5) : 0 C / 0 H / 4 M / 4 L, remédiés. M : deux affirmations du manuel que le miroir
   rend fausses, hors AC-7 (`:3968` « la balance concorde avec le bilan », `:308` « le total des barres égale le compte de
   résultat ») ; « conforme à l'art. 959a CO » contre les avertissements `:3918` et `:3948` ; formes des montants aux
