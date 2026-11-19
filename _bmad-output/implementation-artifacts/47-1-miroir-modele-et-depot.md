@@ -27,13 +27,11 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
    postérieur à `20261118000002`** (Epic 49, 0.20.0) et à toute migration présente sur `main` à la reprise qui précède
    le développement (proposé : `20261119000001`, contrôlé à ce moment). En **une seule instruction** `ALTER TABLE
    accounts` (atomique sous MariaDB) : `mirror_account_id BIGINT NULL` (commentaire de colonne, **sans clé
-   étrangère**, comme `fx_gain_account_id`), index `(company_id, mirror_account_id)`, contrainte
-   `chk_accounts_mirror_not_self` (`mirror_account_id IS NULL OR mirror_account_id <> id`). Si MariaDB 10.11 refuse un
-   `CHECK` qui lit `id` (`AUTO_INCREMENT`), l'écart à D10 ne se tranche pas seul : arrêt et question à Beat et Guy,
-   constat au Change Log (T0) ; le contrôle `self` du dépôt (AC-4) existe de toute façon. **DDL seul**, aucune ligne
+   étrangère**, comme `fx_gain_account_id`), index `(company_id, mirror_account_id)`. **Pas de `CHECK` « pas
+   soi-même »** : écart constaté au T0 le 2026-11-20 (MariaDB 10.11 : ERROR 1901, AUTO_INCREMENT interdit dans un CHECK) ; contrainte retirée, refus tenu par le code (`self` de l'AC-4, testé ; lien vers soi-même écarté par l'AC-8 (b), testé). **DDL seul**, aucune ligne
    réécrite ; `kesh_version_min_required` reste à 0.17.6 ; en-tête qui dit P1/P3 (non breaking), P7 (rien à trier),
    la raison de l'absence de FK (celle de `20261114000001` : cycle, remise à zéro, import sans ordre) et **le SQL qui
-   défait la migration** (`DROP` de la contrainte, de l'index, de la colonne, puis `DELETE FROM _sqlx_migrations WHERE
+   défait la migration** (`DROP` de l'index, de la colonne, puis `DELETE FROM _sqlx_migrations WHERE
    version = …`), comme l'en-tête `(c)` de `20261118000002_invoice_line_types.sql`.
 2. **Garde-fous de migration** (repris de l'ancienne 47-1a, AC-2, validé) : P5 — ligne à
    `docs/migrations-idempotence-audit.md` (verdict `tracked-by-sqlx`), les **deux** sites du total et les trois
@@ -181,7 +179,7 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
 
 - [ ] **T0 — reprise et contrôle** (AC 1, 2) : `git fetch origin`, reprise de `main` dans `epic/47-comptes-miroirs`
   (49-1a et ses migrations comprises si fusionnées) ; horodatage choisi ; `CHECK` sur `id` vérifié sur la MariaDB de
-  dev (refus → arrêt et question) ; inventaire des bases partielles.
+  dev (refusé, ERROR 1901 : contrainte retirée, décision du 2026-11-20) ; inventaire des bases partielles.
 - [ ] **T1 — migration** (AC 1, 2) : SQL, audit et compteurs, squash, P6, upgrade path (`N = total − 34`).
 - [ ] **T2 — entité** (AC 3, 13) : champ, lectures, snapshot, `MirrorChange`, `NewAccount`, `is_no_op_change`, CSV.
 - [ ] **T3 — règles** (AC 4, 5) : `check_mirror` pure (table de vérité : 4 types × rôles × imputable × écritures ×
@@ -234,7 +232,7 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
   false` et posteraient sur un miroir) ; un code d'erreur neuf.
 - **C-47-1-5** : un miroir se pose aussi à la création (même contrôle) : un seul `<select>` dans le dialogue, création
   et modification. *Écarté* : le refus à la création (raison `onCreate`) de l'ancienne 47-1b.
-- **C-47-1-6** : le `CHECK` « pas soi-même » de D10 est gardé ; le `CHECK` « pas les deux » disparaît avec la paire.
+- **C-47-1-6** : le `CHECK` « pas soi-même » de D10 : écart constaté au T0 le 2026-11-20 (MariaDB 10.11 : ERROR 1901, AUTO_INCREMENT interdit dans un CHECK) ; contrainte retirée, refus tenu par le code ; le `CHECK` « pas les deux » disparaît avec la paire.
 
 ### Stratégie de tests
 
@@ -334,6 +332,14 @@ compte de présentation sur lequel aucune écriture ne se passe.
   UPDATE` qui refuse `mirror_account_id = id` — aucune migration du dépôt n'emploie de trigger à ce jour, et sur un
   `INSERT` l'`id` auto-incrémenté n'est pas encore connu dans `NEW.id` (le cas ne se présente qu'à la modification).
   Inventaire des bases partielles non fait (après la décision).
+
+- 2026-11-20 — **Décision de l'orchestrateur : option (a)**, on renonce au `CHECK` (KISS, aucun trigger neuf). Le refus
+  `self` reste dans `check_mirror` (AC-4) et le lien vers soi-même est écarté par `retain_valid_links` (AC-8 (b)), chacun
+  avec son test. Fiche corrigée (AC-1, en-tête de la migration, T0, C-47-1-6) ; fichier d'epic : R1, D10 (adaptation),
+  reste à faire T0, avec la mention « écart constaté au T0 le 2026-11-20 (MariaDB 10.11 : ERROR 1901, AUTO_INCREMENT
+  interdit dans un CHECK) ; contrainte retirée, refus tenu par le code ». Grep `CHECK` / `not_self` sur les cinq fiches :
+  aucun autre renvoi vivant (47-2 l. 330 : historique du `CHECK` « pas les deux » ; 47-3, 47-4, 47-5 : aucun). Le
+  développement reprend.
 
 ### Historique — Change Log de la 47-1a (avant la refonte, laissé tel quel)
 

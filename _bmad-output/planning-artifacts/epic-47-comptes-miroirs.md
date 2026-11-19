@@ -20,8 +20,8 @@ contrôle K10 **d'accord** ; cinq stories **approuvées**. Développement autori
 ### Règles retenues
 
 - **R1 — Modèle** : une seule colonne nullable `accounts.mirror_account_id`, sans clé étrangère (comme
-  `fx_gain_account_id`), un index `(company_id, mirror_account_id)`, un `CHECK` « pas soi-même ». Le lien s'écrit sur
-  la source seulement.
+  `fx_gain_account_id`), un index `(company_id, mirror_account_id)` ; le « pas soi-même » est refusé par le code (`check_mirror`, raison `self`)
+  — écart constaté au T0 le 2026-11-20 (MariaDB 10.11 : ERROR 1901, AUTO_INCREMENT interdit dans un CHECK) ; contrainte retirée, refus tenu par le code. Le lien s'écrit sur la source seulement.
 - **R2 — Le miroir est un compte de présentation** : même société, non archivé, **non imputable, sans rôle, sans
   écriture** ; de l'autre côté du même rapport (actif ↔ passif, produit ↔ charge). La source ne porte pas de rôle de
   fonds propres (D8).
@@ -216,7 +216,7 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
   0.19.0 s'importe (colonnes facultatives) ; la version précédente refuse la base migrée et les sauvegardes neuves :
   retour par la sauvegarde d'avant la mise à jour. **Annoncée au projet au kickoff** (tableau des fichiers communs).
   *Guy, 2026-11-19 :* d'accord sur le principe. **Ordre : cette migration passe après celle de l'Epic 49 (`20261118000002`, release 0.20.0 du 2026-11-27)**, dans une release ultérieure à la 0.20.0 ; l'Epic 47 dépend de l'Epic 46. Annoncée au projet GitHub au kickoff, avec **la sauvegarde complète avant mise à jour en tête des notes**. → **décidé (Guy et Beat, 2026-11-19).**
-  ⇒ adapté par la décision du 2026-11-19 : `<horodatage>_account_mirror.sql`, une colonne, un index, le `CHECK` « pas soi-même » ; tout le reste (non breaking, après `20261118000002`, P5–P8, squash, sauvegarde) tient (fiche 47-1).
+  ⇒ adapté par la décision du 2026-11-19 : `<horodatage>_account_mirror.sql`, une colonne, un index ; le `CHECK` « pas soi-même » : écart constaté au T0 le 2026-11-20 (MariaDB 10.11 : ERROR 1901, AUTO_INCREMENT interdit dans un CHECK) ; contrainte retirée, refus tenu par le code ; tout le reste (non breaking, après `20261118000002`, P5–P8, squash, sauvegarde) tient (fiche 47-1).
 
 ## Exigences
 
@@ -446,7 +446,7 @@ fiches visées : 47-1a AC-15 et AC-9, 47-2a AC-1 et AC-2).
 **Reste à faire au développement** :
 
 - **47-1a, T0** : vérifier sur la MariaDB de dev que le `CHECK` « pas soi-même » (sur `id`, colonne
-  `AUTO_INCREMENT`) est accepté ; arrêt et question à Beat s'il est refusé (D10, C-47-1a-4). Horodatage de la migration
+  `AUTO_INCREMENT`) est accepté ; arrêt et question à Beat s'il est refusé (D10, C-47-1a-4). *(Fait à la 47-1 : écart constaté au T0 le 2026-11-20 (MariaDB 10.11 : ERROR 1901, AUTO_INCREMENT interdit dans un CHECK) ; contrainte retirée, refus tenu par le code.)* Horodatage de la migration
   postérieur à `20261118000002` **et** à la migration de l'Epic 49 (compte en dur et fenêtre `N = total − 34` de
   `migrations_upgrade_path.rs`), contrôlé à la reprise de `main`.
 - **Tailles MCP** : 47-1b, plafonds de `kesh_plan_comptable` **mesurés** (estimés 34 / 61, jamais devinés ; changement
