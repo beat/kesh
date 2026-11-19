@@ -30,7 +30,9 @@ afin de poser ces liens sans passer par l'API.
    (patron `AccountCurrencyFields.svelte` : `+page.svelte` compte déjà 951 lignes), les dialogues d'avertissement et
    d'archivage restant dans la page ; il reçoit en prop le **plan archivés compris** (`accounts: AccountResponse[]`,
    source de l'index de l'AC-6) et relève donc de la garde d'inventaire `fx-account-filter-inventory.test.ts`
-   (`PROP_RE`) : il porte l'exemption écrite
+   (`PROP_RE = /^\s*\w+\??\s*:\s*(readonly\s+)?AccountResponse\[\]\s*;/m` : la prop se déclare **sur sa propre ligne,
+   terminée par `;`**, dans `interface Props` comme `AccountCurrencyFields.svelte:33` — ni `| null`, ni type littéral en
+   ligne, qui feraient échapper le fichier à la garde sans que rien ne le dise) : il porte l'exemption écrite
    `fx-filtre-comptes : exempté — un lien de présentation admet un compte de toute devise (Q3)`. Le sélecteur est un
    `<select>` natif alimenté par `presentationLinkCandidates` (patron des comptes de change d'`AccountCurrencyFields`),
    **jamais** `AccountAutocomplete`, qui écarte par défaut les comptes en devise étrangère que Q3 admet :
@@ -62,12 +64,15 @@ afin de poser ces liens sans passer par l'API.
      les comptes **cibles** d'un miroir — **sources archivées comprises** — et les membres d'une paire avec un tiers.
      Les rôles se comptent **hors le lien propre du compte édité**, que le changement libère (état résultant, 47-1a
      AC-5 et AC-6) : passer d'une paire avec D à un miroir vers D, ou d'un miroir vers T à une paire avec T quand ce
-     compte en est la seule source, est admis par l'API et donc proposé (si T a d'autres sources, il reste exclu de
-     la paire) ; **admis** : compte non imputable (compte de présentation),
+     compte en est la seule source, est admis par l'API (état résultant : le lien propre est remplacé, AC-6) et donc proposé (si T a d'autres sources,
+     il reste exclu de la paire) — **ces deux transitions ne sont nommées par aucun test de la 47-1a** (T0 les contrôle
+     au code livré) ; **admis** : compte non imputable (compte de présentation),
      compte en devise étrangère, de devise quelconque (Q3) ; le lien actuel toujours rendu. Table de vérité : quatre
      types × deux natures × rôles × états (actif, archivé, source, cible déjà d'un autre miroir — admise pour un miroir,
      exclue pour une paire —, membre d'une paire, partenaire ou cible actuels du compte édité). La règle reste celle de l'API, qui seule fait
      foi ;
+   - `buildPresentationIndex(accounts)` : l'index de l'AC-6 (sources par cible, membres de paire), depuis le plan
+     archivés compris ; la page le construit pour les pastilles, le composant le recalcule de sa prop `accounts` ;
    - `presentationSectionState(index, account, formType, formRole)` : l'état de l'AC-1 ;
    - `presentationLinkFieldsForUpdate(account, choice)` : les champs du `PUT`, **seulement ce qui change** (patron
      `currencyFieldsForUpdate` et `parentFieldForUpdate` de #1351) — rien si le lien choisi est le lien enregistré ;
@@ -189,7 +194,10 @@ afin de poser ces liens sans passer par l'API.
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** : reprise de `main`. Si #1351 y est, partir de son dialogue (champ parent, `parentFieldForUpdate`) ; sinon,
+- [ ] **T0** : contrôler au code livré par la 47-1a (`check_presentation_link`, dépôt) que les deux transitions de
+  l'AC-2 — paire avec D → miroir vers D, miroir vers T (seule source) → paire avec T — sont admises ; si le dépôt les
+  refuse, retirer ces deux lignes de la table de vérité (jamais un candidat que l'API refuse) et le dire au Change Log.
+  Reprise de `main`. Si #1351 y est, partir de son dialogue (champ parent, `parentFieldForUpdate`) ; sinon,
   ne pas fusionner sa branche : développer sur `main`, la section en dernier du formulaire et les fonctions dans un
   fichier neuf pour que les hunks soient distincts, et le second arrivé résout en gardant les deux champs du `PUT`
   (`CLAUDE.md` § *Travailler à plusieurs développeurs*). Relire le contrat livré par la 47-1b (`linkedAccounts[].active`,
@@ -298,6 +306,18 @@ compte lié et dit comment lever le refus.
   (`EXEMPT_RE`), précédents `AccountCurrencyFields.svelte:22` et page `:84`, 951 lignes ; candidats contre D2, D3,
   47-1a AC-5 (`chain`) et C-47-1a-3. Propagation toujours en attente : 47-1b, Notes (« depuis ses propres textes »)
   et nom de la clé de l'avertissement. Rapport : `kesh-gate-logs/epic-47-validation/47-3a-ecran-plan-comptable-P3.md`.
+
+- 2026-11-19 — validation P4, ciblée sur la remédiation P3 (Sonnet 5.5) : 0 C / 0 H / 1 M / 2 L, remédiés. M : les deux
+  transitions que la remédiation P3 a ajoutées à la table de vérité des candidats (paire avec D → miroir vers D ; miroir
+  vers T, seule source → paire avec T) reposent sur « l'état résultant » (47-1a AC-5, AC-6) mais aucun test ni texte de
+  la 47-1a ne les nomme (AC-5 `chain` dit « la cible qui a son propre lien » : D, encore en paire avec le compte, y
+  répond avant libération) — contrôle ajouté en T0, retrait des lignes si le dépôt refuse ; **signalé à l'orchestrateur
+  pour la 47-1a** (non modifiée) : deux tests d'intégration de ces transitions. L : `PROP_RE` écrite avec sa forme
+  exacte (ligne propre terminée par `;`, `interface Props`) ; fonction de construction de l'index absente de l'AC-2
+  (`buildPresentationIndex`). Vérifié sans écart à `origin/main` : `lint-i18n-ownership.js` (premier segment ;
+  `KNOWN_VIOLATIONS` sans entrée `accounts`, `.ts` du dossier parcourus aussi, aucune clé `i18nMsg` hors `accounts-`
+  prescrite), `EXEMPT_RE`, `isCandidate` (un `.ts` à paramètre `AccountResponse[]` hors garde). Rapport :
+  `kesh-gate-logs/epic-47-validation/47-3a-ecran-plan-comptable-P4.md`.
 
 ## Dev Agent Record
 
