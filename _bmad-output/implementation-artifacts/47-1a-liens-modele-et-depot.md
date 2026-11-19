@@ -194,6 +194,8 @@ documentation en 47-1b.
   FR-47-7, NFR-47-1, NFR-47-3).
 - `CLAUDE.md` § *Migration breaking policy* (P1–P8), § *Pendant une boucle de revue* (exception `kesh-db`).
 - `_bmad-output/planning-artifacts/release-0.20.0.md` (migration de la 49-1a, ordre).
+- Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
+  tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
 
 ## Notes de version
 

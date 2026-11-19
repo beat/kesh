@@ -107,6 +107,8 @@ Conflit avec `fix/api-parent-compte` (même corps de requête, mêmes mappings) 
 ### References
 
 - Fiche 47-1a ; `CLAUDE.md` § *Le prompt d'une passe doit NOMMER le manuel* ; `docs/api-external.md`.
+- Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
+  tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
 
 ## Notes de version
 

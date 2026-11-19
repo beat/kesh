@@ -119,20 +119,20 @@ l'Epic 46 ; 47-2a se développe sans lui (fonction pure appliquée avant tout re
 
 ## Ordre de développement
 
-1. **47-1a** d'abord : elle porte la migration, **ne sort jamais** (une story sortie emporte sa migration ; sans elle, rien ne se présente), et son horodatage se contrôle à la reprise de `main` (D10).
-2. **En parallèle, après la 47-1a** : 47-1b (API, MCP, export), 47-2a (fonction de présentation, JSON, MCP) et 47-4 (K10). Aucune ne touche les fichiers des autres, hors catalogues i18n et manuels (blocs propres).
+1. **47-1a** d'abord : elle porte la migration, **ne sort jamais** (une story sortie emporte sa migration ; sans elle, rien ne se présente), et son horodatage se contrôle à la reprise de `main` (D10) ; `fix/api-parent-compte` (même `update`, mêmes erreurs : fiche 47-1a) repris s'il est fusionné, sinon le second arrivé résout.
+2. **En parallèle, après la 47-1a** : 47-1b (API, MCP, export), 47-2a (fonction de présentation, JSON, MCP) et 47-4 (K10). Fichiers partagés entre elles : catalogues i18n, manuels, `docs/api-external.md` (les trois) et `crates/kesh-api/tests/mcp_outils_e2e.rs` (47-1b, 47-2a) ; chacune y écrit son bloc, la seconde fusionnée dans la branche d'epic résout en gardant les deux.
 3. **47-3a** après la 47-1b.
 4. **Reprise de `main`** (Epic 46, #1327, #1346, 48-11 de la 0.20.0 si fusionnés) **avant** la 47-2b et avant le recâblage de la 47-2a ; puis **47-2b** (après 47-2a et les correctifs de `pdf.rs` / `csv.rs`).
 5. **47-3b** après 47-2a, 47-2b et 47-3a (E2E du parcours complet, manuel utilisateur).
 6. **47-5** en dernier, une fois 47-1a à 47-4 closes : elle ne prend que la dette de ces stories.
 
-**Si le temps manque** (coupure du jeudi soir : n'entrent que les stories closes ; `CLAUDE.md` § *Cadence*) : la **47-5** sort la première, puis, si la coupure l'impose (la 47-4 reste dans l'epic par décision de Beat), la **47-4** ; la 47-3b ne sort pas sans la 47-2b ; la 47-1a ne sort jamais. L'epic ne se publie pas amputé de sa présentation (47-2a à 47-3b) : sans elle, les liens n'ont aucun effet visible. Le Project Lead garde le dernier mot.
+**Si le temps manque** (coupure du jeudi soir : n'entrent que les stories closes ; `CLAUDE.md` § *Cadence*) : epic de contributeur, **l'orchestrateur n'y touche pas** (`CLAUDE.md` § *Cadence*) ; la coupure se décide par **Beat**, responsable de l'epic, et **le Project Lead garde le dernier mot**. Ordre : la **47-5** sort la première (ses lignes du registre restent ouvertes en issues, au milestone que décide le Project Lead, et l'absence de solde s'écrit à la PR de release et à la rétrospective), puis, si la coupure l'impose (la 47-4 reste dans l'epic par décision de Beat), la **47-4** ; la 47-3b ne sort pas sans la 47-2b ; la 47-1a ne sort jamais. L'epic ne se publie pas amputé de sa présentation (47-2a à 47-3b) : sans elle, les liens n'ont aucun effet visible ; si elle n'est pas close, **l'epic entier attend une release suivante** (la date de la release ne bouge pas : elle part sans lui).
 
-Hors epic : la story de correction de bugs que chaque release planifiée porte (`CLAUDE.md` § *Cadence*) est celle de la **release**, non de l'epic ; elle ne compte pas dans les huit stories ici.
+Hors epic : la story de correction de bugs que chaque release planifiée porte (`CLAUDE.md` § *Cadence*) est celle de la **release**, non de l'epic ; elle compte dans la borne de six de l'epic qui la porte (un epic interne du Project Lead, comme l'Epic 48 à la 0.20.0), non dans les huit stories ici.
 
 ## Registre de la dette de l'epic
 
-Les revues de chaque story consignent ici (une ligne : story, passe, sévérité, objet, sort) tout finding **non remédié** qui devrait s'ouvrir en issue (« on trace toujours »). L'agent de Beat n'ouvre pas d'issue (lecture seule sur le dépôt de Guy) : le Project Lead ouvre les issues d'après ce registre, et la 47-5 en part. Une ligne par problème, sans regroupement ; l'étiquette `bug` seulement pour un comportement faux visible (`CLAUDE.md` § *Priorités des défauts*).
+Les revues de chaque story consignent ici, à la clôture de leur boucle (chaque fiche 47-1a à 47-4 le rappelle en § *References*), une ligne par finding **non remédié** qui devrait s'ouvrir en issue (« on trace toujours ») : story, passe, sévérité, objet, issue (numéro reporté quand le Project Lead l'ouvre), sort (ouverte, retenue en 47-5, corrigée en 47-5, reportée). L'agent de Beat n'ouvre pas d'issue (lecture seule sur le dépôt de Guy) : le Project Lead ouvre les issues d'après ce registre, et la 47-5 en part. Une ligne par problème, sans regroupement ; l'étiquette `bug` seulement pour un comportement faux visible (`CLAUDE.md` § *Priorités des défauts*).
 
 | Story | Passe | Sévérité | Objet | Issue | Sort |
 |---|---|---|---|---|---|

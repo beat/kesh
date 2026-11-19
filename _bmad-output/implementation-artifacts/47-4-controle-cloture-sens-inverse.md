@@ -74,6 +74,8 @@ K11).
 ### References
 
 - Fiche 47-1a (colonnes) ; `CLAUDE.md` § *Priorités des défauts* (aucune).
+- Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
+  tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
 
 ## Notes de version
 

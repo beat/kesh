@@ -15,74 +15,153 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
 
 ## Critères d'acceptation
 
-1. **Bascule « Présentation »** dans la barre de commandes des onglets *Bilan* et *Compte de résultat*
-   (`routes/(app)/reports/+page.svelte`) : **Présentée** (défaut) · **Brute** ; elle recharge le rapport avec
-   `presentation=…` et passe aux exports PDF et CSV de l'onglet (`getReportExportUrl`). Retenue par visiteur
-   (`localStorage`, lecture et écriture sous `try/catch`), jamais pour les autres onglets.
-2. **Marque d'une ligne présentée** (`BalanceSheetView.svelte`, `IncomeStatementView.svelte`) : une ligne avec
-   `sources` porte une pastille « miroir » ou « compensé » après le libellé ; un bouton (chevron, `aria-expanded`)
-   **déplie** ses sources sous la ligne : numéro (lien vers le grand livre, `ledgerHref`), libellé, solde brut signé.
-   Accessible au clavier ; au survol, `title` résumant les sources.
-3. **Bandeau « Présentation compensée »** (Q9) : quand le rapport porte `compensated`, un avis au-dessus des tableaux
-   (style d'information) — « Présentation compensée : les paires de comptes sont présentées nettes. Pour les comptes
-   annuels officiels, utilisez la présentation brute (CO 958c al. 1 ch. 7). » — avec un lien qui bascule en brute.
-4. **Présentation brute** : rendu identique à l'écran d'aujourd'hui (aucune pastille, aucun bandeau) ; un bandeau
-   discret rappelle « Présentation brute : soldes signés, compte par compte. ».
-5. **Types** : `reports.types.ts` (`sources`, `compensated`, `PresentationSource`), `reports.api.ts`
-   (`presentation` dans la requête et l'URL d'export) ; `isReportEmpty` inchangé dans son sens (un rapport présenté
-   vide l'est aussi en brut, à tester).
-6. **Vitest** : vues (marque, dépliage, bandeaux, brute), API (paramètre), page (bascule persistée, exports).
-7. **E2E du parcours** (NFR-47-4, `frontend/tests/e2e/`) : jeu de l'exemple chiffré du fichier d'epic semé par l'API ;
-   lien posé à l'écran (47-3a) → bilan sans montant négatif (1179 à 1 200.00, 2120 à 800.00) → dépliage des sources
-   → bascule brute (2270 à −1 200.00) → export PDF en présenté contenant « Présentation compensée » quand la paire
-   6960/6961 est posée.
-8. **Captures d'écran** (thème clair) : bilan présenté, sources dépliées, compte de résultat compensé avec bandeau,
-   présentation brute.
-9. **Manuel utilisateur** (`docs/manual/fr/user-manual.tex`, section *Rapports comptables* `:3908`, sous-sections
-   *Bilan* `:3910`, *Compte de résultat* `:3941`, *Visualisation et exports* `:4171`) : ce que montrent le bilan et le
-   compte de résultat présentés, la marque et les sources, la mention « présentation compensée » et l'avertissement
-   CO 958c, comment obtenir la présentation brute (écran, PDF, CSV), et **l'exemple chiffré du fichier d'epic**
-   (rejoué par le test de la 47-2a AC-11 : le manuel et le test portent les mêmes nombres) ; renvoi à la sous-section
-   du plan comptable (47-3a). Les sections des rapports en devise (`:4051`) disent la règle Q3. `.tex` seulement ;
-   **le prompt de chaque passe de revue nomme le manuel** et exige le contrôle du PDF compilé localement.
-10. **i18n** : quatre locales ; `sitesTotal` recompté ; gardes de libellés vertes.
+1. **Bascule « Présentation »** : un groupe de deux boutons radio (`role="radiogroup"`) **Présentée** (défaut) ·
+   **Brute**, posé par `routes/(app)/reports/+page.svelte` **sous** `ReportSelector` (la barre de commandes des cinq
+   rapports classiques est ce composant, partagé : il n'est pas modifié), rendu **seulement** sur les onglets *Bilan* et
+   *Compte de résultat* et pour toute société (la société sans lien le voit aussi : le manuel dit qu'il ne change alors
+   rien). **Un seul réglage pour les deux onglets** (`presentation` : `'presentee' | 'brute'`), retenu par visiteur sous
+   une clé `localStorage` propre (`kesh.reports.presentation`), lecture et écriture sous `try/catch`, toute autre valeur
+   lue valant `presentee`, jamais lue ni écrite pour un autre onglet. Le changement :
+   a. invalide **les deux** rapports en mémoire (`balanceSheet`, `incomeStatement` à `null`) et toute génération en vol
+      (`genSeq++`), comme le changement d'exercice (`+page.svelte` effet `lastFyId`) — sans quoi l'onglet quitté
+      garderait un rapport dans l'ancien mode sous un réglage qui dit l'inverse ;
+   b. **regénère** le rapport de l'onglet actif **s'il en affichait un** (rien n'est lancé sinon : la page ne génère
+      qu'au clic sur *Générer*) ;
+   c. passe `presentation` à `getBalanceSheet`, `getIncomeStatement` **et** à `getReportExportUrl` (PDF et CSV), valeur
+      lue **au clic** de l'export comme `query` l'est déjà ; **jamais** envoyé aux autres rapports (trial-balance, TVA,
+      journaux, projets, grand livre) ni aux exports de ceux-ci.
+   Valeurs d'API : `brute` | `presentee` (47-2a AC-9).
+2. **Marque d'une ligne présentée** : composant **unique** `PresentedRow.svelte` (le patron `<tr>` est répété à cinq
+   endroits, trois au bilan, deux au compte de résultat : pas de sixième copie), utilisé par `BalanceSheetView.svelte`
+   (actifs, passifs ; **pas** les fonds propres, D8) et `IncomeStatementView.svelte` (produits, charges), avec une
+   propriété `ledgerLinks` (le bilan lie le numéro au grand livre, le compte de résultat ne le fait pas aujourd'hui et
+   ne change pas). Une ligne avec `sources` porte une pastille après le libellé : **« compensé »** si une source est de
+   `kind: offset`, **« miroir »** sinon ; un bouton (chevron, `aria-expanded`, `aria-controls`) **déplie** ses sources
+   dans une ligne de tableau sous la ligne : numéro (lien vers le grand livre, `ledgerHref`, sur les deux rapports),
+   libellé, solde brut signé (`formatReportAmount`), et le genre (`own` « solde propre », `mirror`, `offset`). Accessible
+   au clavier ; `title` de la pastille résumant les sources. Une ligne **sans** `sources` est rendue exactement comme
+   aujourd'hui.
+3. **Bandeau « Présentation compensée »** (Q9) : quand le rapport porte `compensated`, un avis (style d'information,
+   `role="status"`) au-dessus des tableaux — « Présentation compensée : les paires de comptes sont présentées nettes.
+   Pour les comptes annuels officiels, utilisez la présentation brute (CO 958c al. 1 ch. 7). » — avec un bouton-lien
+   qui bascule en brute (propriété `onSwitchToRaw` des vues ; même effet que le groupe de l'AC-1). Jamais affiché pour
+   un miroir seul.
+4. **Présentation brute** : rendu identique à l'écran d'aujourd'hui (aucune pastille, aucun bandeau compensé) ; un
+   bandeau discret rappelle « Présentation brute : soldes signés, compte par compte. ». ⚠️ Un rapport brut ne se
+   distingue pas, par son JSON, d'un rapport présenté sans lien : **les vues reçoivent `presentation`** en propriété
+   (le bandeau brut ne se déduit pas du DTO).
+5. **Types** : `reports.types.ts` (`sources?: PresentationSource[]` sur `AccountBalance`, `compensated?: boolean` sur
+   `BalanceSheetDto` et `IncomeStatementDto`, `PresentationSource`, `ReportPresentation`), `reports.api.ts`
+   (`presentation` facultatif de `ReportQuery`, jamais émis s'il est absent ; ajouté par `getBalanceSheet`,
+   `getIncomeStatement` et `getReportExportUrl` pour ces deux types seulement). **`isReportEmpty` change** : un rapport
+   présenté dont **tout** s'est compensé (paire à net nul : `revenues` et `expenses` vides, `compensated: true`) n'est
+   **pas** vide — il afficherait sinon « Aucune écriture dans la période sélectionnée », faux alors que les écritures
+   existent. Règle : `compensated === true` ⇒ jamais vide, pour le bilan comme pour le compte de résultat (le contraire
+   — « un rapport présenté vide l'est aussi en brut » — est faux, et le test le démontre). Tests : paire à net nul au
+   compte de résultat, brut non vide ; sans lien, inchangé.
+6. **Vitest** : vues (marque, genre des sources, dépliage au clavier, bandeaux compensé et brut, absence de pastille en
+   brut, fonds propres jamais marqués), `PresentedRow` seul, API (paramètre émis pour les deux rapports et leurs exports,
+   **absent** pour les autres types), `isReportEmpty` (cas de l'AC-5), page (bascule persistée, valeur illisible =
+   présentée, invalidation des deux rapports, regénération du seul onglet actif, export portant la valeur courante).
+   Mutations à faire rougir : bandeau compensé pour un miroir seul ; bascule non transmise à l'export ; bascule
+   transmise au rapport TVA ; DTO de l'autre onglet gardé après la bascule.
+7. **Sélecteurs d'E2E** (`data-testid`, fixés ici pour que l'E2E de l'AC-8 et les captures y renvoient) :
+   `report-presentation` (groupe), `report-presentation-presentee`, `report-presentation-brute`,
+   `report-banner-compensated`, `report-banner-compensated-raw` (le lien), `report-banner-raw`,
+   `presented-row-{numéro}` (la ligne), `presented-badge-{numéro}`, `presented-toggle-{numéro}`,
+   `presented-sources-{numéro}` (la ligne dépliée).
+8. **E2E du parcours** (NFR-47-4, `frontend/tests/e2e/reports-presentation.spec.ts`, `seedTestState('with-company')`,
+   `describe.configure({ mode: 'serial' })` comme `reports-currency.spec.ts`) — **le jeu de la 47-2a AC-11** (comptes
+   des plans livrés, nombres identiques au test d'intégration et au manuel), semé par l'API : le seed `with-company`
+   porte déjà 1000 « Caisse CI », 1100, 2000 « Capital CI » (passif), 3000, 4000 ; l'E2E **crée** 1010, 1020, 1040,
+   2100, 2270, 2800 (rôle capital), 6900, 6950, **n'asserte jamais un libellé de compte semé** (2000 se nomme « Capital
+   CI » ici, « Créanciers » au plan), et passe une écriture par compte contre 2800 à la date du jour de Zurich
+   (`todayInZurich()`, dans l'exercice du seed). Parcours : liens **posés à l'écran** par la 47-3a (miroirs 1020→2100 et
+   2270→1040, paire 6900/6950 avec l'avertissement confirmé) → *Générer* le bilan présenté : **aucune cellule de
+   montant négative**, 1040 à `1’200.00` (actif), 2100 à `800.00` (passif), total actif `13’700.00` → dépliage des
+   sources de 1040 (2270 à `-1’200.00`, genre miroir) → bascule **Brute** : la requête partie porte `presentation=brute`
+   (`page.waitForRequest`), le bilan montre 2270 à `-1’200.00` et 1020 à `-800.00`, le bandeau brut paraît, aucune
+   pastille → compte de résultat : présenté, 6950 à `570.00`, 6900 absent, bandeau compensé ; brut, deux lignes ;
+   **exports** déclenchés par les boutons : en présenté, le PDF contient « Présentation compensée » (paire posée) et le
+   CSV porte la colonne `Presentation` ; en brut, le **PDF ne la contient pas** et le CSV n'a pas la colonne (c'est la
+   transmission de la bascule à l'export, vérifiée dans les deux sens). ⚠️ Formes à l'écran : apostrophe U+2019 des
+   milliers et signe `-` ASCII (`formatSwissAmount`), non « 1 200.00 » ni « − ». ⚠️ Le PDF n'est pas du texte brut :
+   flux Flate, `Tj` hexadécimal en Latin-1 — **extraire** (précédent `contenuDuPdf` et `hexWinAnsi` de
+   `invoice-qr-caracteres.spec.ts`, à **déplacer** dans `helpers/` plutôt que recopier) ; une recherche d'octets
+   naïve donnerait un faux rouge ou un faux vert. Le test d'une paire à net nul (rapport « compensé » sans ligne) est
+   l'objet d'un Vitest, non de l'E2E.
+9. **Captures d'écran** (thème clair ; `KESH_CAPTURES_DIR`, patron de `reports-currency.spec.ts`) : bilan présenté,
+   sources dépliées, compte de résultat compensé avec bandeau, présentation brute. Les figures du **manuel** en sont
+   tirées (PNG seulement, `docs/manual/fr/screenshots/`, patron de l'Epic 37 ; aucun PDF commité).
+10. **Manuel utilisateur** (`docs/manual/fr/user-manual.tex`, section *Rapports comptables* `:3908`, sous-sections
+    *Bilan* `:3910`, *Compte de résultat* `:3941`, *Visualisation et exports* `:4171`) : ce que montrent le bilan et le
+    compte de résultat présentés, la marque et les sources, la mention « présentation compensée » et l'avertissement
+    CO 958c, comment obtenir la présentation brute (écran, PDF, CSV), renvoi à la sous-section du plan comptable
+    (47-3a) ; les phrases d'ouverture à **corriger** (« les comptes d'actif et de passif à solde non nul, triés par
+    numéro », `:3914`, et son pendant du compte de résultat, `:3945`) ; les sections des rapports en devise (`:4051`)
+    disent la règle Q3. **L'exemple chiffré est celui de la 47-2a AC-11, sans autre jeu** : un tableau avant/après aux
+    **comptes des plans livrés**, nombres au format du manuel (apostrophe : `1'200.00`, jamais un montant de quatre
+    chiffres sans apostrophe, que G4-bis lirait comme un compte). ⚠️ **G4-bis et G4-ter (`textes_coherents.rs`) lisent
+    ce manuel** : tout numéro de quatre chiffres doit être un compte d'un plan livré, et, nommé, sous le nom du plan
+    (2000 « Créanciers », 2270 « AVS/AI/APG », 6900 « Charges financières », 6950 « Produits financiers »…) ; un compte
+    d'un autre jeu — 1179, 2120, 6960… — fait rougir le gate backend. **Le lien entre l'exemple et le test** (NFR-47-4)
+    est contrôlé par une garde ajoutée à `textes_coherents.rs` : chaque nombre de l'exemple (liste fixée à la 47-2a
+    AC-11 : `13'700.00`, `11'700.00`, `3'800.00`, `1'800.00`, `1'200.00`, `800.00`, `570.00`, `1'020.00`, `450.00`) figure
+    au manuel, et le test de la 47-2a affirme les mêmes. `.tex` seulement ; **le prompt de chaque passe de revue nomme
+    le manuel** et exige le contrôle du PDF compilé localement (aplati : `pdftotext … | tr '\n' ' ' | tr -s ' '`).
+11. **i18n** : quatre locales ; `sitesTotal` recompté ; `lint-i18n-ownership` et `i18n-libelle-en-dur` verts. Aucun
+    numéro de compte écrit en dur dans un catalogue ou un repli (G4-bis lit les quatre catalogues) : les numéros passent
+    en variables Fluent.
 
 ## Tâches / sous-tâches
 
 - [ ] **T0** : reprise de `main` ; `fix/bilan-resultat-reporte` touche `BalanceSheetView.svelte` et `reports.api.ts`
-  (`showsRetainedEarningsLine`) ; si l'Epic 46 est fusionnée, la bascule cohabite avec le sélecteur de niveau (46-2).
-- [ ] **T1** : types et API (AC 5). **T2** : bascule et persistance (AC 1). **T3** : marque, dépliage, bandeaux
-  (AC 2–4).
-- [ ] **T4** : Vitest, E2E, captures (AC 6–8). **T5** : manuel, i18n (AC 9, 10). **T6** : gates frontend et E2E
-  complets au dernier commit de code.
+  (`showsRetainedEarningsLine`) ; si l'Epic 46 est fusionnée, la bascule cohabite avec le sélecteur de niveau (46-2) :
+  deux groupes indépendants, tous deux transmis aux exports.
+- [ ] **T1** : types et API (AC 5). **T2** : bascule, persistance, invalidation (AC 1). **T3** : `PresentedRow`, marque,
+  dépliage, bandeaux (AC 2–4, 7).
+- [ ] **T4** : Vitest, E2E (assistant `contenuDuPdf` déplacé dans `helpers/`), captures (AC 6, 8, 9).
+- [ ] **T5** : manuel (exemple, garde `textes_coherents.rs`), i18n (AC 10, 11).
+- [ ] **T6** : gates frontend, **backend** (`textes_coherents`) et E2E complets au dernier commit de code.
 
 ## Dev Notes
 
 ### Code lu (à `origin/main` `fd04099f`)
 
-- `frontend/src/routes/(app)/reports/+page.svelte:622-715` (barre de commandes, boutons PDF/CSV, patron de la
-  bascule).
-- `frontend/src/lib/features/reports/BalanceSheetView.svelte` (tableaux par section, `ledgerHref`,
-  `AccountCurrencyBalance`), `IncomeStatementView.svelte`, `reports.types.ts:14-60`, `reports.api.ts:36-50`,
-  `:138` (`isReportEmpty`), `:303` (`getReportExportUrl`).
+- `frontend/src/routes/(app)/reports/+page.svelte` : `ReportSelector` `:626-638` (la barre des cinq rapports
+  classiques, composant `lib/features/reports/ReportSelector.svelte`, props liées) ; les contrôles du grand livre
+  `:640-714` (patron de case à cocher) ; `generate` `:245-342` (requête construite **sans** valeur d'onglet à
+  l'appel) ; `exportReport` `:391-493` (`query` figée au clic) ; effet de changement d'exercice `:152-175` (patron de
+  l'invalidation) ; états `balanceSheet`/`incomeStatement` conservés d'un onglet à l'autre ; vues `:854-857`.
+- `frontend/src/lib/features/reports/BalanceSheetView.svelte` (trois répétitions de ligne, `ledgerHref`,
+  `AccountCurrencyBalance`), `IncomeStatementView.svelte` (deux répétitions, numéro sans lien), `reports.types.ts:14-60`,
+  `reports.api.ts:36-50`, `:138` (`isReportEmpty`), `:303` (`getReportExportUrl`), `:260` (`formatReportAmount`) ;
+  `routes/(app)/reports/reports-page.test.ts` existe (la page est testable).
+- `crates/kesh-api/tests/textes_coherents.rs:414` (G4-bis), `:582` (G4-ter) : lisent le manuel utilisateur, les
+  catalogues et le code ; `crates/kesh-core/assets/charts/{pme,independant,association}.json` (comptes livrés).
+- `frontend/tests/e2e/invoice-qr-caracteres.spec.ts:13-37` (extraction du texte d'un PDF), `reports-currency.spec.ts`
+  (société, comptes et écritures semés par l'API, captures), `crates/kesh-db/src/test_fixtures.rs:152` (comptes du
+  seed `with-company`).
 
 ### Interaction avec l'Epic 46
 
 Si la 46-2 (sélecteur de niveau) est fusionnée, les deux réglages sont indépendants et passent tous deux aux exports ;
-les lignes de compte groupées portent la même marque (47-2a § *Recâblage*).
+les lignes de compte groupées portent la même marque (47-2a § *Recâblage*) : `PresentedRow` sert aussi aux lignes
+`kind: account` des groupes.
 
 ### Stratégie de tests
 
-Vitest, E2E du parcours, captures ; mutations : bandeau compensé affiché pour un miroir seul, bascule non transmise à
-l'export.
+Vitest (AC 6), E2E du parcours (AC 8), captures (AC 9), garde du manuel (AC 10) ; mutations de l'AC 6.
 
 ### Risques
 
-Conflits avec `fix/bilan-resultat-reporte` et la 46-2 dans les mêmes vues.
+Conflits avec `fix/bilan-resultat-reporte` et la 46-2 dans les mêmes vues ; extraction du texte du PDF (dépend de la
+mise en page de la 47-2b : la mention doit tenir sur une ligne de texte).
 
 ### References
 
-- Fiches 47-2a, 47-2b, 47-3a ; maquettes M4, M5 ; `CLAUDE.md` § *Recette visuelle*.
+- Fiches 47-2a (AC-11, source de l'exemple), 47-2b, 47-3a ; maquettes M4, M5 ; `CLAUDE.md` § *Recette visuelle*, §
+  *Le prompt d'une passe doit NOMMER le manuel*.
 
 ## Notes de version
 
@@ -98,3 +177,15 @@ Le bilan et le compte de résultat marquent les lignes présentées et en montre
 ### Completion Notes List
 
 ### File List
+
+## Change Log
+
+- **2026-11-19 — validation P1 (Sonnet 5.5) : 0 C / 2 H / 6 M / 4 L, remédiés.** H1 : l'exemple chiffré cité au
+  manuel (1179, 1021, 2120, 6960, 6961 ; « Fournisseurs », « Dettes sociales ») fait rougir G4-bis et G4-ter, et le
+  fichier d'epic ne porte aucun exemple : jeu transposé aux comptes des plans livrés, source unique à la 47-2a AC-11
+  (propagé). H2 : « un rapport présenté vide l'est aussi en brut » est faux (paire à net nul) : `isReportEmpty`
+  corrigé. M : invalidation des deux rapports et génération en vol à la bascule ; bandeau brut non déductible du DTO ;
+  extraction du texte du PDF, formats des montants à l'écran, jeu semé et équilibré de l'E2E, transmission à l'export
+  vérifiée dans les deux sens ; composant unique de ligne (DRY) et sélecteurs fixés ; lien manuel/test tenu par une
+  garde. L : renvoi à `ReportSelector`, bascule visible pour toute société, valeur `localStorage` illisible, figures du
+  manuel. Rapport : `kesh-gate-logs/epic-47-validation/47-3b-P1.md`.

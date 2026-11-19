@@ -56,12 +56,19 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
     `"presentee"`, défaut `presentee`) au schéma (`SCHEMA_PERIODE` dédoublé si `kesh_balance` le partage) ;
     `LigneDeSolde` gagne `sources` (liste, vide sans présentation) ; `Bilan` et `CompteDeResultat` gagnent
     `compense` ; `mcp_contrat`, `mcp_gardes_lexicales` verts, **tailles re-mesurées**.
-11. **Exemple chiffré** (NFR-47-4) : le jeu du fichier d'epic, rejoué par un test d'intégration (`reports_e2e.rs`) —
-    bilan : 1000 Caisse 500.00, 1020 Banque A 12 000.00, 1021 Banque B −800.00 (miroir 2120 Découverts bancaires),
-    2000 Fournisseurs 3 000.00, 2270 Dettes sociales −1 200.00 (miroir 1179 Créances sociales) → présenté : 1179 à
-    1 200.00 à l'actif, 2120 à 800.00 au passif, total actif 13 700.00 (brut 11 700.00), les deux côtés +2 000.00 ;
-    compte de résultat : 6961 Gains de change 1 020.00, 6960 Pertes de change 450.00 en paire → 6961 à 570.00, 6960
-    absent, résultat net identique ; la balance (`trial-balance`) montre toujours 2270 à −1 200.00 et 1021 à −800.00.
+11. **Exemple chiffré** (NFR-47-4 ; **source unique** de l'exemple : le fichier d'epic ne le porte pas, et le manuel
+    utilisateur, l'E2E de la 47-3b et ce test reprennent **ces nombres et ces comptes**) — **comptes des plans livrés**
+    (`plans_livres()`, garde G4-bis de `textes_coherents.rs`, qui rougit sur un numéro de compte absent des trois plans
+    ou sous un autre nom : 1021, 1179, 2120, 6960, 6961 n'y sont pas, 2000 s'y nomme « Créanciers » et 2270
+    « AVS/AI/APG »). Contrepartie : une écriture par compte contre `2800` *Capital social* (rôle capital) ; solde de
+    `2800` = 9 330.00 (équilibre), fonds propres 9 900.00 avec le résultat de 570.00. Bilan brut : 1000 Caisse 500.00,
+    1010 Poste 12 000.00, 1020 Banque **−800.00** (miroir 2100 Dettes bancaires à court terme), 2000 Créanciers
+    3 000.00, 2270 AVS/AI/APG **−1 200.00** (miroir 1040 Avoirs à court terme) → présenté : 1040 à 1 200.00 à l'actif,
+    2100 à 800.00 au passif, total actif 13 700.00 (brut 11 700.00), total passif 3 800.00 (brut 1 800.00), les deux
+    côtés +2 000.00 ; compte de résultat : 6950 Produits financiers 1 020.00, 6900 Charges financières 450.00 en paire
+    → 6950 à 570.00, 6900 absent, résultat net 570.00 identique ; la balance (`trial-balance`) montre toujours 1020 à
+    −800.00 et 2270 à −1 200.00. *(Remplace, à la validation P1 de la 47-3b, un jeu aux numéros de la comptabilité
+    de Beat — 1021, 1179, 2120, 6960, 6961 — que le manuel n'aurait pu citer sans rougir G4-bis.)*
 12. **Aucune écriture** (NFR-47-1) : générer un rapport présenté ne crée ni ne modifie aucune ligne comptable ;
     balance et grand livre identiques avant et après.
 13. **Documentation (exigence de Guy, 2026-11-19)** : `docs/api-external.md` — paramètre `presentation`, champs
@@ -156,6 +163,8 @@ Recâblage avec l'Epic 46 (deux règles sur les mêmes lignes) ; budgets MCP ; `
 
 - Fiche 47-1a (AC-9) ; `epic/46-rapports-groupes:_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` (D2, D3,
   D7, D8, NFR-46-2, NFR-46-3).
+- Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
+  tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
 
 ## Notes de version
 

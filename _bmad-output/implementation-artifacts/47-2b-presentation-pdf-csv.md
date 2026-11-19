@@ -163,6 +163,8 @@ un rapport à nombreuses sources (saut de page, césure : AC 2) ; texte hors Win
   rapport vidé) ; garde `rapports_mono_devise.rs` non nommée, marque `‡` = U+0087 aux helpers ; 48-11 absente des
   dépendances. L : numéros de ligne de `csv.rs`, nom de fichier identique brut/présenté, numéro de compte avec `:`
   ou `|`. Rapport : `kesh-gate-logs/epic-47-validation/47-2b-presentation-pdf-csv-P1.md`.
+- Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
+  tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
 
 ## Notes de version
 
