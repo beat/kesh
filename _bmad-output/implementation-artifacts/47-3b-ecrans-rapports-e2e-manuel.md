@@ -89,7 +89,7 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
    (`todayInZurich()`, dans l'exercice du seed). Parcours : liens **posés à l'écran** par la 47-3a (miroirs 1020→2100 et
    2270→1040, paire 6900/6950 avec l'avertissement confirmé) → *Générer* le bilan présenté : **aucune cellule de
    montant négative**, 1040 à `1’200.00` (actif), 2100 à `800.00` (passif), total actif `13’700.00` → dépliage des
-   sources de 1040 (2270 à `-1’200.00`, genre miroir) → bascule **Brute** : la requête partie porte `presentation=brute`
+   sources de 1040 (2270 à `-1’200.00`, genre « comprend ») → bascule **Brute** : la requête partie porte `presentation=brute`
    (`page.waitForRequest`), le bilan montre 2270 à `-1’200.00` et 1020 à `-800.00`, le bandeau brut paraît, aucune
    pastille → compte de résultat : présenté, 6950 à `570.00`, 6900 absent, bandeau compensé, résultat net `570.00` ;
    brut, deux lignes, même résultat net ; total passif présenté du bilan `3’800.00`. L'assertion « aucune cellule de
@@ -127,7 +127,13 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
     (2000 « Créanciers », 2270 « AVS/AI/APG », 6900 « Charges financières », 6950 « Produits financiers »…) ; un compte
     d'un autre jeu — 1179, 2120, 6960… — fait rougir le gate backend. **Le lien entre l'exemple et le test** (NFR-47-4)
     est contrôlé par une garde ajoutée à `textes_coherents.rs`, décidable et non vide : l'exemple du manuel est écrit
-    entre `% exemple-presentation:debut` et `% exemple-presentation:fin` (lu par `bloc_marque`, la fonction de G23) ;
+    entre `% exemple-presentation:debut` et `% exemple-presentation:fin` (lu par `bloc_marque`, la fonction de G23,
+    sur le source **brut** lu par `lire`, jamais le texte normalisé de `manuels_fr`/`normaliser`, qui efface les sauts
+    de ligne et les marqueurs avec eux) ; ⚠️ **`bloc_marque` ne lit que des marqueurs `% <nom>:debut|fin`** (préfixe
+    `% ` codé en dur, `textes_coherents.rs:2167`) : les marqueurs du test Rust sont en `//`, qu'elle ne trouverait pas
+    (« bloc absent », donc une garde rouge dès le premier passage, ou, pire, contournée) — la garde ajoute une
+    fonction pure sœur `bloc_marque_rs(source, nom)` (marqueurs `// <nom>:debut|fin`, mêmes erreurs : absent, non
+    fermé), avec son témoin dans `g23_les_fonctions_pures` ou un test voisin ; `bloc_marque` n'est pas modifiée ;
     le test d'intégration de la 47-2a (`crates/kesh-api/tests/reports_e2e.rs`, sa T5) porte la liste
     `EXEMPLE_PRESENTATION` entre `// exemple-presentation:debut` et
     `// exemple-presentation:fin` (47-2a AC-11, qui fixe la liste) ; la garde extrait des deux blocs les montants
@@ -240,3 +246,14 @@ Le bilan et le compte de résultat marquent les lignes présentées et en montre
   jeu, paires et miroirs de types opposés, D2/D3), arithmétique du jeu, seed `with-company`, rôle à la création
   (`CreateAccountRequest.role`), `formatSwissAmount`, `isReportEmpty`, #1351 et #1327 (PR ouvertes).
   Rapport : `kesh-gate-logs/epic-47-validation/47-3b-P2.md`.
+- **2026-11-19 — validation P3 (Sonnet 5.5, passe ciblée sur la remédiation P2) : 0 C / 0 H / 1 M / 1 L, remédiés.**
+  M : la garde de l'AC-10 lisait le bloc Rust par `bloc_marque`, qui ne connaît que le préfixe `% ` (`textes_coherents.rs:2167`),
+  alors que les marqueurs de `reports_e2e.rs` sont en `// ` (47-2a AC-11) : fonction sœur `bloc_marque_rs` et témoin
+  prescrits, lecture du source brut (non normalisé) précisée. L : genre des sources de l'E2E dit « miroir » là où l'écran
+  affiche « comprend » (AC-2). Vérifié au code de `origin/main` : `bloc_marque` (existence, signature, erreurs),
+  `lire` (source brut), seed `with-company` (`test_fixtures.rs:149-166` : 1000, 1100, 2000 Liability, 3000, 4000 ;
+  aucun rôle ; exercice 2020-2030), `CreateAccountRequest.role`, `todayInZurich` (`helpers/api-fixtures`),
+  `contenuDuPdf` (`invoice-qr-caracteres.spec.ts:24`), lignes du manuel `:3908`, `:3910`, `:3941`, `:4051`, `:4171`,
+  liste de neuf montants et blocs `//` de la 47-2a AC-11, mots « comprend / solde propre / déduit » de la 47-2b
+  AC-1. Rien à modifier à la 47-2a (à signaler à son validateur : ses marqueurs `//` supposent la fonction sœur de
+  la 47-3b). Rapport : `kesh-gate-logs/epic-47-validation/47-3b-P3.md`.
