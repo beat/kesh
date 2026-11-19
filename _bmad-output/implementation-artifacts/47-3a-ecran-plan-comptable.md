@@ -207,6 +207,8 @@ aux captures de téléphone).
 
 - Fiches 47-1a (AC-5, AC-7), 47-1b (AC-2, AC-3, AC-4) ; maquettes M1 à M3 du formulaire d'approbation ; `CLAUDE.md`
   § *Recette visuelle*, § *Le prompt d'une passe doit NOMMER le manuel*.
+- Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
+  tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
 
 ## Notes de version
 

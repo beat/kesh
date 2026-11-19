@@ -162,6 +162,8 @@ mise en page de la 47-2b : la mention doit tenir sur une ligne de texte).
 
 - Fiches 47-2a (AC-11, source de l'exemple), 47-2b, 47-3a ; maquettes M4, M5 ; `CLAUDE.md` § *Recette visuelle*, §
   *Le prompt d'une passe doit NOMMER le manuel*.
+- Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
+  tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
 
 ## Notes de version
 
