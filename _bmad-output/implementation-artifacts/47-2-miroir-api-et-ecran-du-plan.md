@@ -116,9 +116,9 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
    la sous-section dit l'inverse en toutes lettres, comme le fichier d'epic) puis le choisir ; plusieurs comptes peuvent
    partager un miroir ; ce qui est refusé tant qu'un compte est miroir (écriture, case *Postable*, retypage, rôle,
    archivage) ; **ne pas choisir comme miroir un compte que les réglages de facturation, un article ou une règle de
-   rapprochement désignent** : le flux qui l'emploierait serait refusé, nommé (constat promis par la 47-1, *Risques*) ; les exemples de l'**exemple chiffré du fichier d'epic** (comptes **à créer** 6900.1 « Pertes de
-   change », 1040.1 « Créances AVS/AI/APG », 2100.1 « Découvert bancaire », comptes livrés 6950, 1020, 2270 sous leur
-   nom), et, pour les comptes en devise, la désignation de 6950.1 comme compte des gains **et** des pertes de change
+   rapprochement désignent** : le flux qui l'emploierait serait refusé, nommé (constat promis par la 47-1, *Risques*) ; les exemples de l'**exemple chiffré du fichier d'epic** (comptes **à créer** 6950.1 « Gains de
+   change » (imputable), 6900.1 « Pertes de change », 1040.1 « Créances AVS/AI/APG », 2100.1 « Découvert bancaire »,
+   comptes livrés 1020, 2270 sous leur nom), et, pour les comptes en devise, la désignation de 6950.1 comme compte des gains **et** des pertes de change
    (un compte non imputable ne peut pas l'être, `FxAccountReason::NotPostable`). À *Suppression d'un compte* (`:486`),
    le refus d'archivage d'un compte miroir et le cas d'une source archivée. Les deux listes de champs sont complétées
    du champ **Compte miroir** : *Ajout d'un compte* (`:449-451`, après *Postable*) et le paragraphe de *Modification*
@@ -211,6 +211,17 @@ colonne `mirror_account_id` en fin de ligne de `accounts.csv`.
 
 ## Change Log
 
+- 2026-11-19 — validation P3 (Sonnet 5.5, ciblée sur la remédiation P2) : **0 C / 0 H / 1 M / 0 L, remédié**. Relu au
+  code d'`origin/main` `fd04099f` : règle 14-3a (`accounts::create` passe le parent à non imputable, `repositories/accounts.rs:308-317`),
+  les trois `catch` de `+page.svelte` (`submitCreate` `:269`, `submitEdit` `:362`, `confirmRetype` `:398`, patron `fxFieldErrorOf` `:150`),
+  `withCurrentAccount` (`account-options.ts:59`, en tête de liste), boucle de `consultation_role_cannot_write`
+  (`accounts_e2e.rs:977`, `POST` et `PUT …/reactivate` seulement ; la boucle branche sur `POST` sinon `put`, `PUT /accounts/{id}`
+  s'y ajoute sans autre changement), `archive_account` sans rejeu (`routes/accounts.rs:524`) contre `accounts::create` / `accounts::update`
+  (`:415`, `:509`), lignes du manuel (`:421`, `:446-451`, `:465`, `:468`, `:486`, `:3918`, `:3948`) et de `api-external.md`
+  (`:226`, `:1060`, `:1092`, `:1113`, `:1139`, `:1257`), `admin-manual.tex` `:2302`, `:2497`, `:2550`, `max-h-[90vh]`
+  de `contacts/+page.svelte:828` — exacts. M1 : l'AC-9 listait « comptes livrés 6950 » et omettait 6950.1, contre le
+  fichier d'epic (§ *Exemple chiffré* : 6950.1 « Gains de change », à créer, imputable) et la 47-4 AC-7 : aligné.
+  Rapport : `kesh-gate-logs/epic-47-validation/47-2-miroir-api-et-ecran-du-plan-P3.md`.
 - 2026-11-19 — validation P2 (Opus 5.5, complète, contexte frais) : **0 C / 0 H / 2 M / 6 L, remédiés**. Remédiation P1
   relue au code d'`origin/main` `fd04099f` : `fetchAccounts(showArchived)` (`+page.svelte:212`), `archiveDesignated`
   et ses boutons (`:117`, `:920-925`), `fxFieldErrorOf` (`:150`), `putAccount`/`confirmRetype` (`:324`, `:392`),

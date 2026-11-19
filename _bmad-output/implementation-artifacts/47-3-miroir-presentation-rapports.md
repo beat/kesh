@@ -77,7 +77,7 @@ d'intégration de `kesh-api`. Aucun écran (47-4), aucun rendu PDF ou CSV propre
    « appliquer la présentation à l'accueil » le rougit) ; ses cas sans miroir restent égaux au compte de résultat.
 10. **Exemple chiffré** (NFR-47-4) — celui du fichier d'epic (§ *Exemple chiffré*, source unique), rejoué par un test
     d'intégration (`crates/kesh-api/tests/reports_e2e.rs`) sur une société au plan **`pme`** : comptes créés (6950.1,
-    6900.1, 1040.1, 2100.1), miroirs posés, écritures contre 2800, puis bilan et compte de résultat présentés **et**
+    6900.1, 1040.1, 2100.1, tous **sans compte parent** : un parent deviendrait non imputable, règle 14-3a), miroirs posés, écritures contre 2800, puis bilan et compte de résultat présentés **et**
     balance (`trial-balance`, soldes réels inchangés). Le test porte la liste des montants en constante
     `EXEMPLE_PRESENTATION` (chaînes sans signe ni apostrophe) entre `// exemple-presentation:debut` et
     `// exemple-presentation:fin`, et affirme chacun : `13700.00`, `11700.00`, `3800.00`, `1800.00`, `9900.00`,
@@ -195,6 +195,8 @@ restent à `GET /reports/trial-balance`.
 
 ## Change Log
 
+- 2026-11-19 — retouche de la validation P3 des fiches 47-2 et 47-4 (Sonnet 5.5) : AC-10, les sous-comptes de l'exemple
+  se créent **sans parent** (propagation de la 47-2 P2 M1 ; signalé par la P2 de la 47-4). Aucune autre modification.
 - 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : fiche renommée de `47-2a-presentation-fonction-api-mcp` ;
   l'ancienne 47-2b (PDF et CSV) est superseded. Retirés : paire et `net`, « paire appliquée », `compensated`, `sources`
   à genres, paramètre `presentation=brute|presentee` (route, service, audit, MCP), règle de devise Q3, `proptest`,

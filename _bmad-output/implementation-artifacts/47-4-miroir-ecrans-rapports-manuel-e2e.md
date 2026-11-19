@@ -71,8 +71,8 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
    — c'est ici que le renvoi s'écrit dans les deux sens) : ce que montrent bilan et compte de résultat (solde de sens
    inverse présenté sous le miroir, aucune compensation, comme la présentation du bilan de l'art. 959a CO le prévoit), la mention « Solde de … », les
    exports, la balance et le grand livre restés sur les soldes réels, l'accueil sur les soldes réels ; les phrases
-   d'ouverture à **corriger** (« les comptes d'actif et de passif à solde non nul, triés par numéro », `:3914`, et son
-   pendant du compte de résultat, `:3945`), **et les deux affirmations que le miroir rend fausses** : *Balance des
+   d'ouverture à **corriger** (« les comptes d'actif et de passif à solde non nul, triés par numéro », `:3914-3915`, et son
+   pendant du compte de résultat, `:3945-3946`), **et les deux affirmations que le miroir rend fausses** : *Balance des
    comptes*, « La balance concorde avec le bilan et le grand livre » (`:3968-3972` : vrai ligne à ligne sans miroir ;
    avec un miroir, la balance garde le solde de la source, le bilan le présente sous le miroir — les totaux restent
    égaux au résultat près) et l'accueil, « Le total des barres égale le compte de résultat de l'exercice » (`:308` :
@@ -157,6 +157,18 @@ le manuel utilisateur décrit les comptes miroirs, avec un exemple chiffré.
 
 ## Change Log
 
+- 2026-11-19 — validation P3 (Sonnet 5.5, ciblée sur la remédiation P2) : **0 C / 0 H / 0 M / 1 L, remédié**. Relu au
+  code d'`origin/main` `fd04099f` : AC-7 sans « conforme à l'art. 959a CO » (la parenthèse ne dit plus que « comme la
+  présentation du bilan de l'art. 959a CO le prévoit », les avertissements `:3918` et `:3948` intacts), sous-comptes
+  **sans parent** (E2E AC-5, manuel AC-7, d'accord avec le fichier d'epic et la 47-2 AC-9), `MirrorSource.balance: string`,
+  test « aucune cellule négative » borné aux `td.text-right` des lignes `report-row-` (les `<tr>` de `BalanceSheetView`
+  `:131`, `:170`, `:225` n'ont aucun testid ; les lignes de fonds propres n'en reçoivent pas), exports : le numéro de
+  compte est un `use_text` propre dans `pdf.rs` (`:565`, `:1030`) et un champ propre dans `csv.rs` (`:111`, `:410`), donc
+  « jeton entier » est testable ; formes des montants (`format_swiss_amount`, `format_amount_iso`), `contenuDuPdf` /
+  `hexWinAnsi` (`invoice-qr-caracteres.spec.ts:24`, `:40`), G26 libre (G25 dernière). L : lignes citées des phrases
+  d'ouverture, `:3914` et `:3945` (début de la phrase) corrigées en `:3914-3915` et `:3945-3946` (« d'actif et de passif
+  à solde non nul », « et les comptes de charges à solde non nul »). Rapport :
+  `kesh-gate-logs/epic-47-validation/47-4-miroir-ecrans-rapports-manuel-e2e-P3.md`.
 - 2026-11-19 — validation P2 (Opus 5.5, complète, contexte frais) : **0 C / 0 H / 1 M / 4 L, remédiés**. Remédiation P1
   relue au code d'`origin/main` `fd04099f` : manuel `:308`, `:3908`-`:3918`, `:3941`-`:3948`, `:3968` (lignes exactes) ;
   `format_swiss_amount` (`kesh-report/src/pdf.rs:274`, apostrophe U+0027), `format_amount_iso` (`csv.rs:50`) ;
