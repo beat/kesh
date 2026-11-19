@@ -21,30 +21,56 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    &PresentationLinks) -> BalanceSheet` et `present_income_statement(raw: IncomeStatement, links: &PresentationLinks)
    -> IncomeStatement`, sans I/O, testées seules ; `PresentationLinks` se construit depuis
    `accounts::presentation_links` (47-1a AC-9). Les générateurs `balance_sheet::generate` et
-   `income_statement::generate` **restent bruts et inchangés** : l'accueil (`homepage_summary`, invariant
-   `:6-11`), la balance, le grand livre, le journal, la TVA et les projets n'y passent pas (D7, Q4, Q11).
+   `income_statement::generate` **restent bruts et inchangés** (seuls appelants : `services/rapports.rs:619`, `:634`) :
+   l'accueil (`homepage_summary`, invariant `:6-11`), la balance, le grand livre, le journal, la TVA et les projets
+   n'y passent pas (D7, Q4, Q11). La fonction ne lit et n'écrit que les sections `assets`, `liabilities` (bilan),
+   `revenues`, `expenses` (résultat) — **jamais** `equity` ni les lignes calculées (D8). `PresentationLinks` vide →
+   le rapport est rendu **tel quel**, sans retri (chemin court).
+   **Liens incohérents écartés** (défense ; la 47-1a les refuse à l'écriture, son AC-8 ne couvre que l'orphelin) : à la
+   construction de `PresentationLinks`, un lien est ignoré, avec `tracing::warn!` (compte, raison), s'il touche un
+   compte de rôle de fonds propres, si source et cible ne sont pas de l'autre côté du même rapport (miroir) ou de types
+   opposés du même rapport (paire), si la paire n'est **pas réciproque** (`A.offset = B` sans `B.offset = A`), ou si
+   un compte y joue plus d'un rôle (chaîne). Ainsi un état posé hors de l'API (SQL, restauration) ne compte jamais une
+   ligne deux fois, ne déplace jamais un compte de fonds propres, et l'AC 5 tient sans condition sur les liens.
 2. **Miroir** (D2) : une source dont le solde est **de sens inverse** (`balance < 0` dans le signe de sa nature) quitte
    sa section ; la ligne de son compte miroir, de l'autre côté, vaut **solde propre du miroir + somme des soldes
    inversés de ses sources** ; libellé et numéro du miroir (Q7), même s'il ne porte aucune écriture (il ne paraît
-   alors que par ses sources). Une source de solde nul ou de sens normal reste à sa place, inchangée.
+   alors que par ses sources ; ses attributs — type, rôle, devise, `active` — viennent de `PresentationLinks`). Une
+   source de solde nul ou de sens normal reste à sa place, inchangée. **Une cible ne devient ligne présentée que si
+   elle reçoit au moins une source de sens inverse** : sinon sa ligne brute (si elle en a une) reste telle quelle,
+   sans `sources` (47-2b AC 3 : « liens posés dont aucune source n'est de sens inverse » → rendu identique au brut).
 3. **Paire** (D3) : pour A et B de types opposés, `net = solde(A) − solde(B)` dans le sens de A ; `net > 0` → une
    ligne sur A ; `net < 0` → une ligne sur B, montant `−net` ; `net = 0` → aucune ligne ; les deux lignes brutes
    disparaissent. Vaut au compte de résultat (produit / charge) et au bilan (actif / passif hors fonds propres).
+   **Paire appliquée** : une paire ne s'applique que si elle change le rapport ; elle est **sans effet** — lignes
+   brutes laissées telles quelles, sans `sources`, sans `compensated` — quand les deux soldes CHF sont nuls, ou quand
+   un seul est non nul **et positif** (il resterait sur son compte, au même montant). Un seul membre non nul **et
+   négatif** passe sur son partenaire (appliquée : la ligne change de compte). Une paire appliquée liste ses **deux**
+   membres en `sources` (`offset`), le membre sans écriture à `balance` 0.
 4. **Fonds propres et lignes calculées inchangés** (D8) : `equity`, `total_equity`, `retained_earnings`,
    `equity_result` identiques en brut et en présenté (un compte de rôle de fonds propres ne porte jamais de lien,
    47-1a AC-5) ; une perte reste en déduction (CO 959a).
 5. **Invariants** (NFR-47-2) : en présenté, `total_assets = total_liabilities + total_equity + retained_earnings +
-   equity_result` dès qu'il tient en brut, et `net_result` est identique ; **test de propriété** (`proptest`, ou
-   générateur maison si la dépendance n'est pas admise — à trancher en T0) sur des jeux aléatoires de soldes et de
-   liens valides. Chaque section reste triée par numéro de compte ; sans lien, la sortie **égale** l'entrée.
+   equity_result` dès qu'il tient en brut, et `net_result` est identique ; `equation_holds` est recalculé et **égal**
+   à celui du brut ; **test de propriété** (`proptest`, absent du workspace à `fd04099f` : dépendance de dev de
+   `kesh-report`, `Cargo.lock` régénéré ; ou générateur maison si la dépendance n'est pas admise — à trancher en T0)
+   sur des jeux aléatoires de soldes et de liens, **valides et incohérents** (AC 1 : les seconds sont écartés). Une
+   section modifiée est retriée par numéro de compte avec la comparaison de chaînes de Rust (`String::cmp`) ; celle du
+   SQL (`ORDER BY a.number`, collation de la colonne) peut différer sur la casse d'un numéro alphanumérique — d'où le
+   chemin court de l'AC 1 et l'exigence : sans lien, ou avec des liens tous sans effet, la sortie **égale** l'entrée.
 6. **Sources** (D9) : chaque ligne présentée porte `sources: [{ accountId, accountNumber, accountName, balance, kind }]`
    — `kind` ∈ `own` (solde propre du miroir), `mirror` (source inversée), `offset` (membre de paire) ; `balance` =
-   solde **brut** du compte source, signé dans sa nature. Champ omis (`skip_serializing_if = "Vec::is_empty"`) sur
-   une ligne non présentée : un rapport sans lien rend **le même JSON qu'aujourd'hui**. Le rapport porte
-   `compensated: true` (omis quand faux) dès qu'une paire produit ou supprime une ligne (Q9 : mention de la 47-2b).
-7. **Devise** (Q3) : la ligne présentée porte `currency` et `balanceCurrency` **seulement si** toutes ses sources à
-   solde non nul ont la même devise étrangère (somme des soldes en devise, inversés comme en CHF) ; sinon les deux
-   absents. Les totaux restent en devise principale (NFR-37-4-3).
+   solde **brut** du compte source, signé dans sa nature. **Ordre** : miroir — `own` d'abord (s'il est non nul), puis
+   les sources `mirror` par numéro ; paire — le membre qui porte la ligne, puis l'autre (47-2b écrit `Sources` dans
+   cet ordre). Champ omis (`skip_serializing_if = "Vec::is_empty"`) sur une ligne non présentée : un rapport sans
+   lien, ou dont les liens sont tous sans effet (AC 2, 3), rend **le même JSON qu'aujourd'hui**. Le rapport porte
+   `compensated: true` (omis quand faux) dès qu'**une paire est appliquée** (AC 3) — y compris une paire de net nul,
+   qui supprime ses deux lignes (Q9 : mention de la 47-2b) ; un miroir seul ne le pose jamais.
+7. **Devise** (Q3) : la ligne présentée porte `currency` et `balanceCurrency` **seulement si** toutes ses sources qui
+   avaient une ligne brute (solde CHF **ou** en devise non nul) portent la même devise étrangère ; `balanceCurrency`
+   = somme de leurs soldes en devise, signés comme en CHF (`own` et membre porteur `+`, source `mirror` et autre
+   membre `−`) ; sinon les deux absents — y compris quand le compte qui porte la ligne est lui-même en devise. Une
+   ligne non présentée garde ses champs de devise. Les totaux restent en devise principale (NFR-37-4-3).
 8. **Date d'arrêté** (D4, Q2) : la présentation s'applique à toute période et toute date d'arrêté, sur les soldes que
    rend déjà le générateur ; aucun traitement propre à la clôture.
 9. **API** : `GET /api/v1/reports/balance-sheet`, `/income-statement` et leurs `/export` acceptent
@@ -72,9 +98,20 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
 12. **Aucune écriture** (NFR-47-1) : générer un rapport présenté ne crée ni ne modifie aucune ligne comptable ;
     balance et grand livre identiques avant et après.
 13. **Documentation (exigence de Guy, 2026-11-19)** : `docs/api-external.md` — paramètre `presentation`, champs
-    `sources` et `compensated`, règle de devise, exemple JSON ; manuel d'administration — la présentation brute à
-    l'API et aux outils MCP. `.tex` seulement ; **le prompt de chaque passe de revue nomme ces documents** et exige le
-    contrôle du PDF compilé localement.
+    `sources` et `compensated`, règle de devise, exemple JSON, clé `presentation` de la trace d'audit ; ⚠️ **le défaut
+    change ce que rend la route dès qu'un lien est posé** : une intégration qui recalcule depuis les lignes de compte
+    demande `presentation=brute` (écrit comme les autres changements de contrat du document) ; et la phrase de la
+    synthèse de l'accueil (`:305`, « `totalRevenues` et `totalExpenses` égalent ceux de `GET
+    /reports/income-statement` ») devient « … de `GET /reports/income-statement?presentation=brute` » — une paire au
+    compte de résultat change ses totaux (non son résultat) ; manuel d'administration
+    (`docs/manual/fr/admin-manual.tex`, tableau des outils MCP `:3538`) — la présentation brute à l'API et aux outils
+    MCP. `.tex` seulement ; **le prompt de chaque passe de revue nomme ces documents** et exige le contrôle du PDF
+    compilé localement.
+14. **Accueil resté brut** (Q11, D6) : `GET /reports/homepage-summary` est inchangé ; ses totaux égalent ceux du
+    compte de résultat **brut**. `crates/kesh-api/tests/homepage_summary_e2e.rs` (`income_totals`, `:76-91`, appel
+    sans paramètre) demande désormais `presentation=brute`, et un cas neuf pose une paire au compte de résultat :
+    l'accueil égale le brut et **diffère** du présenté sur `totalRevenues` / `totalExpenses` (sonde négative : la
+    mutation « appliquer la présentation à l'accueil » le rougit).
 
 ## Tâches / sous-tâches
 
@@ -109,7 +146,9 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
 
 ### Algorithme (référence pour la fonction)
 
-1. Indexer les lignes brutes par compte ; `links` donne, par compte lié, sa nature et ses attributs (y compris les
+1. Indexer les lignes brutes par compte ; `links` ne contient que des liens **valides** (le lecteur a écarté ceux de
+   47-1a AC-8 : orphelin, autre société, chaîne, paire non réciproque, fonds propres, types) — la fonction ne revérifie
+   rien, et un compte à lien écarté reste à sa place, brut ; `links` donne, par compte lié, sa nature et ses attributs (y compris les
    miroirs et partenaires sans écriture).
 2. **Paires** (paire dédoublonnée par plus petit id) : calculer `net`, retirer les deux lignes, insérer la ligne du
    sens du net avec `sources` (`offset` × 2) ; `compensated = true` si au moins un membre avait un solde non nul.
@@ -119,7 +158,7 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
    `net_result` recalculé et **asserté** égal au brut en `debug_assert!`, journalisé en `tracing::error!` sinon).
 5. Cas limites à tester : miroir dont le solde propre est lui-même de sens inverse (sa ligne reste négative si ses
    sources de sens inverse ne la compensent pas : un miroir n'a pas de miroir — relevée alors par le contrôle K10 de
-   la 47-4, qui juge la ligne présentée et non le solde propre ; test de cohérence K10 / présentation : 47-4 T3) ; source archivée ; toutes les sources de sens normal
+   la 47-4, qui juge la ligne présentée et non le solde propre ; test de cohérence K10 / présentation : 47-4 T3) ; source archivée ; miroir dont la ligne (propre + sources) vaut zéro : ligne omise, comme une paire à net nul ; compte à lien écarté par le lecteur (inchangé, relevé par K10) ; toutes les sources de sens normal
    (le miroir sans écriture ne paraît pas) ; paire à un seul membre mouvementé ; société sans lien.
 
 ### Recâblage à la fusion de l'Epic 46 (Q5)

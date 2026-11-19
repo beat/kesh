@@ -31,8 +31,10 @@ afin de poser le lien ou de vérifier l'écriture avant d'arrêter les comptes, 
    - **cible d'un miroir** → relevé si **sa ligne présentée** est négative : solde propre + somme des soldes
      inversés de ses sources de sens inverse `< 0` (un miroir à solde propre inverse que ses sources compensent
      n'est **pas** relevé ; sans source de sens inverse, il est relevé dès que son solde propre est inverse) ;
-   - un **lien orphelin** (cible absente, que le lecteur écarte, 47-1a AC-8) ne couvre rien : le compte est jugé
-     comme s'il n'avait pas de lien.
+   - **tout lien que le lecteur écarte** (47-1a AC-8 : cible absente ou d'une autre société, lien vers soi, paire non
+     réciproque, chaîne, fonds propres, types qui ne sont plus de l'autre côté) ne couvre rien : le compte est jugé
+     comme s'il n'avait pas de lien ; K10 ne relit jamais les colonnes de lien, seulement le vecteur du lecteur ;
+   - une cible de miroir dont la ligne présentée vaut **zéro** (propre + sources) n'est pas relevée (0 n'est pas `< 0`).
    Soldes **en devise principale** (le solde en devise n'entre pas, comme les totaux du bilan, NFR-37-4-3) :
    actif et passif cumulés `entry_date <= end_date` de Y, tous exercices (`balance_sheet.rs:336-345`) ; produit et
    charge sur les écritures `fiscal_year_id = Y` **et** `entry_date BETWEEN start_date AND end_date`
@@ -95,7 +97,8 @@ afin de poser le lien ou de vérifier l'écriture avant d'arrêter les comptes, 
 - [ ] **T2** : tests de dépôt (`crates/kesh-db/tests/closing_checks.rs` : dix contrôles ; actif créditeur, passif
   débiteur, produit débiteur, charge créditrice ; compte sans rôle relevé, fonds propres exclus ; archivé relevé ;
   source de miroir exclue ; membre de paire exclu ; cible de miroir à solde propre inverse relevée sans source
-  inverse, **non** relevée quand ses sources la compensent ; lien orphelin sans effet ; produit d'une écriture d'un
+  inverse, **non** relevée quand ses sources la compensent ni quand elles l'annulent à zéro ; liens écartés sans effet
+  (orphelin, chaîne, paire non réciproque, posés par SQL direct : un test par cas, le compte reste relevé) ; produit d'une écriture d'un
   autre exercice datée dans Y non compté ; autre société jamais lue ; troncature à 20 avec `count` complet) ; sites
   de l'AC-10 côté dépôt.
 - [ ] **T3** : API (AC 4, 6) ; **test de cohérence avec la présentation** (dans la story, 47-2a ou 47-4, qui arrive
@@ -137,7 +140,7 @@ comptes de K9 à part, et K9 garde son rang (`checks[8]`, tests `fx_revaluation_
 
 Dépôt (cas de T2), API, cohérence avec la présentation (T3), Vitest, capture ; mutations : oublier l'exclusion des
 fonds propres, écrire `role NOT IN` sans `IS NULL`, inverser le signe d'un type, compter un membre de paire, juger
-une cible de miroir sur son seul solde propre, tenir un lien orphelin pour couvrant, oublier le filtre
+une cible de miroir sur son seul solde propre, tenir pour couvrant un lien que le lecteur écarte (orphelin, chaîne, paire non réciproque), oublier le filtre
 `fiscal_year_id` du résultat — chacune doit rougir.
 
 ### Risques
@@ -151,6 +154,8 @@ présentation en `kesh-report`) qui pourraient diverger — d'où le test de coh
 
 - Fiche 47-1a (AC-8 lien orphelin, AC-9 lecteur) ; fiche 47-2a (AC-2, AC-3, algorithme) ; `CLAUDE.md`
   § *Priorités des défauts* (aucune).
+- Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
+  tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
 
 ## Notes de version
 
@@ -171,6 +176,11 @@ résultat faute de compte miroir ou de paire. ⚠️ **Changement de contrat de 
 
 ## Change Log
 
+- 2026-11-19 — validation P2 (Sonnet 5.5) : 0 C / 0 H / 1 M / 2 L, remédiés. M : K10 ne nommait que le lien orphelin parmi
+  les liens que le lecteur écarte (47-1a AC-8 en compte sept cas) : un miroir en chaîne ou une paire non réciproque
+  aurait été tenu pour couvrant alors que la présentation n'applique rien (faux négatif, même classe que le M2 de P1) ;
+  L : cible dont la ligne présentée vaut zéro (non relevée), tests des cas écartés ; L : 47-2a alignée (§ Propagation).
+  Rapport : `kesh-gate-logs/epic-47-validation/47-4-controle-cloture-sens-inverse-P2.md`.
 - 2026-11-19 — validation P1 (Opus) : 0 C / 0 H / 7 M / 7 L, remédiés. M1 : une cible de miroir était relevée sur
   son solde propre, non sur sa ligne présentée (faux positif quand ses sources la compensent) ; M2 : un lien orphelin
   comptait comme couvrant (faux négatif : le bilan l'affiche négatif) ; M3 : liste à 50 avec `truncated`, contraire à
