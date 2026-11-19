@@ -1,6 +1,6 @@
 # Story 47-5 : solde de la dette de l'Epic 47
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — règle « une story de solde à la fin de chaque
 epic » (`CLAUDE.md` § *Priorités des défauts*, puce « Une story de solde à la fin de chaque epic »). Fin d'epic, avant

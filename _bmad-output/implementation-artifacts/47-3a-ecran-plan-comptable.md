@@ -1,6 +1,6 @@
 # Story 47-3a : écran du plan comptable — poser un miroir ou une paire
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — D2, D3 ; Q8, Q9, Q10 ; FR-47-1 (écran),
 FR-47-6, FR-47-7, FR-47-8 (manuel utilisateur, partie « poser un lien »). Née du découpage de l'esquisse 47-3
@@ -341,6 +341,11 @@ compte lié et dit comment lever le refus.
   « cible du miroir d'un tiers » refusé en `chain` — contredit D2 (une cible admet plusieurs sources) ; D en paire ne
   peut porter d'autre rôle que celui de cible (`CHECK` « pas les deux »), la sonde est donc à reformuler ou à retirer.
   Rapport : `kesh-gate-logs/epic-47-validation/47-3a-ecran-plan-comptable-P5.md`.
+
+- 2026-11-19 — clôture : la passe P5 ciblée de la 47-1a (Sonnet 5.5, sur `d5eff9e0`, qui retire la sonde (1) signalée
+  ci-dessus) a exercé l'AC-1, l'AC-2 et le T0 de cette fiche contre la 47-1a AC-5, AC-6 et AC-8 : **0 C / 0 H / 0 M /
+  0 L**, aucune fiche modifiée ; le M de la P5 est levé des deux côtés. Boucle close ; `Status: ready-for-dev`.
+  Rapport : `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P5-ciblee.md`.
 
 ## Dev Agent Record
 

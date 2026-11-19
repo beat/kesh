@@ -1,6 +1,6 @@
 # Story 47-1a : liens de présentation — modèle et dépôt (migration)
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — D1, D2, D3, D8, D10 ; Q3, Q10 ; FR-47-1 (dépôt),
 FR-47-2, FR-47-7 ; NFR-47-1, NFR-47-3. Née du découpage de l'esquisse 47-1 (2026-11-19, splitting préventif : sept
@@ -417,6 +417,12 @@ ou 0.20.0 s'importe ; la version précédente refuse la base migrée et les sauv
   de la 47-3a AC-2 (lue à HEAD, non modifiée). **L** : AC-6, le côté de D n'est remis à `NULL` que s'il désigne A.
   **L** : AC-8, « un test par cas » précisé pour (a)/(b). Rapport :
   `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P4.md`.
+
+- 2026-11-19 — validation P5 ciblée sur la remédiation P4 (`d5eff9e0`), Sonnet 5.5, une lentille : concordance de
+  l'AC-5, de l'AC-6 et de l'AC-8 avec la 47-3a AC-2 : **0 C / 0 H / 0 M / 0 L**, aucune fiche modifiée. Sonde (1)
+  absente partout (citée aux seuls Change Log), sonde (2) identique dans les deux fiches, candidats conformes à l'AC-5,
+  état forgé renvoyé à l'AC-8 (d)/(e). Non exercés : code de `origin/main`, manuel, i18n (hors lentille). Boucle close ;
+  `Status: ready-for-dev`. Rapport : `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P5-ciblee.md`.
 
 ## Dev Agent Record
 

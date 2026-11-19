@@ -1154,14 +1154,14 @@ development_status:
   epic-47: in-progress  # 2026-11-19 kickoff accompli : orientation approuvée par Guy puis par Beat telle quelle (D1–D10, Q1–Q11 décidés) ; fiches complètes drafted ; 47-1, 47-2, 47-3 découpées (splitting préventif) → huit stories hors kickoff, dérogation à la borne de six dite au kickoff, décision de Beat du 2026-11-19 (un seul epic, 47-4 incluse), à signaler à Guy. — 2026-11-19 orientation approuvée par Guy (Q9 paire avec avertissement, Q10, D10 migration après 20261118000002, release > 0.20.0, documentation des manuels exigée). — 2026-11-18 kickoff en esquisse
   47-0-kickoff: done  # 2026-11-19 — approbations de Guy et de Beat reportées au fichier d'epic ; décomptes repris du kickoff de la 0.20.0 (496 issues, 247 bugs au tag v0.19.0)
   47-1-liens-miroir-et-paire: split  # 2026-11-19 → 47-1a, 47-1b (plus de cinq modules)
-  47-1a-liens-modele-et-depot: backlog  # fiche complète (drafted) ; migration non breaking, horodatage > 20261118000002 ; validation à faire
-  47-1b-liens-api-mcp-export: backlog  # fiche complète (drafted) ; après 47-1a ; conflit attendu fix/api-parent-compte
+  47-1a-liens-modele-et-depot: ready-for-dev  # 2026-11-19 validée (P1–P5 : 1 H/5 M → 2 M → 5 M → 1 M → 0) ; migration non breaking, horodatage > 20261118000002 (après celle de l'Epic 49) ; T0 : CHECK « pas soi-même » sur MariaDB
+  47-1b-liens-api-mcp-export: ready-for-dev  # 2026-11-19 validée (P1–P3 : 2 H/9 M → 4 M → 0 M) ; après 47-1a ; conflit attendu fix/api-parent-compte ; plafonds MCP à mesurer
   47-2-presentation-bilan-resultat: split  # 2026-11-19 → 47-2a, 47-2b (plus de cinq modules)
-  47-2a-presentation-fonction-api-mcp: backlog  # fiche complète (drafted) ; après 47-1a ; avant le regroupement de l'Epic 46, recâblé à sa fusion
-  47-2b-presentation-pdf-csv: backlog  # fiche complète (drafted) ; après 47-2a, #1327 et fix/bilan-resultat-reporte fusionnés
+  47-2a-presentation-fonction-api-mcp: ready-for-dev  # 2026-11-19 validée (P1–P3 : 6 M → 1 M → 0 M) ; après 47-1a ; avant le regroupement de l'Epic 46, recâblé à sa fusion
+  47-2b-presentation-pdf-csv: ready-for-dev  # 2026-11-19 validée (P1–P3 : 3 H/6 M → 3 M → 0 M) ; après 47-2a, #1327 et fix/bilan-resultat-reporte (#1346) fusionnés
   47-3-ecrans-plan-et-rapports: split  # 2026-11-19 → 47-3a, 47-3b (plus de cinq modules)
-  47-3a-ecran-plan-comptable: backlog  # fiche complète (drafted) ; après 47-1b
-  47-3b-ecrans-rapports-e2e-manuel: backlog  # fiche complète (drafted) ; après 47-2a, 47-2b, 47-3a
-  47-4-controle-cloture-sens-inverse: backlog  # fiche complète (drafted) ; K10 non bloquant (Q6) ; après 47-1a
-  47-5-solde-dette-epic: backlog  # fiche complète (drafted) ; plafond 2 issues
+  47-3a-ecran-plan-comptable: ready-for-dev  # 2026-11-19 validée (P1–P5, close par la passe de concordance avec la 47-1a : 1 H/9 M → 5 M → 1 M → 1 M → 1 M → 0) ; après 47-1b ; #1351
+  47-3b-ecrans-rapports-e2e-manuel: ready-for-dev  # 2026-11-19 validée (P1–P4 : 2 H/6 M → 3 M → 1 M → 0 M) ; après 47-2a, 47-2b, 47-3a
+  47-4-controle-cloture-sens-inverse: ready-for-dev  # 2026-11-19 validée (P1–P3 : 7 M → 1 M → 0 M) ; K10 non bloquant (Q6) ; après 47-1a
+  47-5-solde-dette-epic: ready-for-dev  # 2026-11-19 validée (P1–P3 : 4 M → 4 M → 0 M) ; plafond 2 issues ; en dernier
   epic-47-retrospective: optional

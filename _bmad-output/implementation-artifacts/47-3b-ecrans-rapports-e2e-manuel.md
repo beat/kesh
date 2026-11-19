@@ -1,6 +1,6 @@
 # Story 47-3b : écrans des rapports présentés, parcours E2E, manuel utilisateur
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — D4, D6, D9 ; Q9 ; FR-47-3 (écran), FR-47-4,
 FR-47-6, FR-47-8 (manuel utilisateur) ; NFR-47-4. Née du découpage de l'esquisse 47-3 (2026-11-19). Dépend des

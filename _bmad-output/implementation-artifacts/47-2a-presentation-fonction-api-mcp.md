@@ -1,6 +1,6 @@
 # Story 47-2a : présentation au bilan et au compte de résultat — fonction, API, MCP
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — D2–D9 ; Q2, Q3, Q5, Q7, Q11 ; FR-47-3, FR-47-4
 (API, MCP) ; NFR-47-1, NFR-47-2, NFR-47-4. Née du découpage de l'esquisse 47-2 (2026-11-19) ; PDF et CSV : **47-2b**.

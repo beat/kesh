@@ -1,6 +1,6 @@
 # Story 47-2b : présentation au bilan et au compte de résultat — PDF et CSV
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — D6, D9 ; Q9 ; FR-47-4 (PDF, CSV), FR-47-6
 (mention « présentation compensée »), FR-47-8. Née du découpage de l'esquisse 47-2 (2026-11-19). Dépend de la

@@ -1,6 +1,6 @@
 # Story 47-1b : liens de présentation — API, MCP, export et documentation
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — D1, D9 ; Q9, Q10 ; FR-47-1 (API), FR-47-2,
 FR-47-6 (avertissement à la création), FR-47-7, FR-47-8 (`api-external.md`, manuel d'administration). Née du

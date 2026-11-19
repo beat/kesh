@@ -1,6 +1,6 @@
 # Story 47-4 : contrôle de clôture — solde de sens inverse sans miroir ni paire
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — FR-47-5 ; Q6 (avertissement **non bloquant**,
 Guy, 2026-11-19), D8. Dépend de la **47-1a** (colonnes de lien). Maquette : § M6 du formulaire d'approbation.

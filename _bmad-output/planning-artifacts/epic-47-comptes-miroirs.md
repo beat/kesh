@@ -246,10 +246,55 @@ toutes les décisions D1–D10 et toutes les réponses de Guy aux questions Q1�
 chaque Q porte ci-dessus la mention « décidé (Guy et Beat, 2026-11-19) ». Le kickoff (47-0) est accompli ;
 `sprint-status.yaml` : `epic-47: in-progress`, `47-0-kickoff: done`.
 
+## Validation des fiches (2026-11-19)
+
+Les huit fiches ont été validées en boucle (`CLAUDE.md` § *Review Iteration Rule*), en contexte frais, P1 par Sonnet
+ou Opus, rotation Sonnet ↔ Opus, passes ciblées sur la dernière remédiation en fin de boucle ; chaque boucle se clôt
+sur une passe sans finding au-dessus de LOW. `Status: ready-for-dev` aux huit fiches et au registre. Décomptes recomptés
+depuis les entrées de Change Log des fiches et les rapports de `kesh-gate-logs/epic-47-validation/` (29 rapports) ;
+sévérités en C / H / M / L, les LOW tous remédiés.
+
+| Fiche | Passes | Modèles | Trend (C/H/M/L) | Dernier commit de validation |
+|---|---|---|---|---|
+| 47-1a | 5 (P3 à P5 ciblées) | Opus, Sonnet, Opus, Opus, Sonnet | 0/1/5/6 → 0/0/2/2 → 0/0/5/1 → 0/0/1/2 → 0/0/0/0 | `d5eff9e0` (P4 ; la P5 n'a rien modifié) |
+| 47-1b | 3 (P3 ciblée) | Sonnet, Opus, Sonnet | 0/2/9/4 → 0/0/4/4 → 0/0/0/1 | `c384655a` |
+| 47-2a | 3 | Opus, Sonnet, Opus | 0/0/6/9 → 0/0/1/1 → 0/0/0/7 | `2367e233` |
+| 47-2b | 3 (P3 ciblée) | Sonnet, Opus, Sonnet | 0/3/6/3 → 0/0/3/6 → 0/0/0/1 | `93b1669b` |
+| 47-3a | 5 (P3 à P5 ciblées) + clôture par la P5 ciblée de la 47-1a | Opus, Sonnet, Opus, Sonnet, Opus ; clôture Sonnet | 0/1/9/5 → 0/0/5/5 → 0/0/1/3 → 0/0/1/2 → 0/0/1/3 → 0/0/0/0 | `a1870a45` (P5) |
+| 47-3b | 4 (P3, P4 ciblées) | Sonnet, Opus, Sonnet, Opus | 0/2/6/4 → 0/0/3/6 → 0/0/1/1 → 0/0/0/3 | `004cf24b` |
+| 47-4 | 3 (P3 ciblée) | Opus, Sonnet, Opus | 0/0/7/7 → 0/0/1/2 → 0/0/0/3 | `44fbd414` |
+| 47-5 | 3 (P3 ciblée) | Sonnet, Opus, Sonnet | 0/0/4/3 → 0/0/4/4 → 0/0/0/3 | `d35dec24` |
+
+Total : 29 passes (la P5 ciblée de la 47-1a clôt aussi la 47-3a, dont elle exerce l'AC-2) ; 0 CRITICAL, 9 HIGH,
+toutes en P1. Deux passes sans baisse de sévérité, signalées ici (`CLAUDE.md` § *Règle de splitting préventif*) :
+47-1a P3 (2 → 5 M : trois nés de la remédiation P2, deux transmis par la P2 de la 47-1b et la P4 de la 47-3a) et 47-5
+P2 (4 → 4 M : trois nés de la remédiation P1) ; toutes deux closes par des passes ciblées qui ne rendent plus de
+MEDIUM, sans nouveau découpage (les fiches sont déjà issues du découpage de 47-1, 47-2, 47-3). Haiku n’a mené
+aucune passe. Registre de la dette : aucun
+finding non remédié (les écarts « signalés, non remédiés » des P2 de la 47-1b et P3 de la 47-4 ont été repris par les
+fiches visées : 47-1a AC-15 et AC-9, 47-2a AC-1 et AC-2).
+
+**Reste à faire au développement** :
+
+- **47-1a, T0** : vérifier sur la MariaDB de dev que le `CHECK` « pas soi-même » (sur `id`, colonne
+  `AUTO_INCREMENT`) est accepté ; arrêt et question à Beat s'il est refusé (D10, C-47-1a-4). Horodatage de la migration
+  postérieur à `20261118000002` **et** à la migration de l'Epic 49 (compte en dur et fenêtre `N = total − 34` de
+  `migrations_upgrade_path.rs`), contrôlé à la reprise de `main`.
+- **Tailles MCP** : 47-1b, plafonds de `kesh_plan_comptable` **mesurés** (estimés 34 / 61, jamais devinés ; changement
+  de contrat MCP écrit aux Notes de version) ; 47-2a, mesure du bilan et du compte de résultat rejouée avec les champs
+  `sources`.
+- **Dépendances** : 47-2b et le recâblage de la 47-2a attendent l'**Epic 46** (point d'entrée du regroupement, Q5) ;
+  47-2b attend **#1327** (`fix/pdf-montants-alignes`) et **#1346** (`fix/bilan-resultat-reporte`) fusionnés, et la 48-11
+  si elle passe avant ; 47-1b et 47-3a résolvent avec **#1351** (`fix/api-parent-compte`) selon l'ordre de fusion ;
+  migration de l'**Epic 49** avant la nôtre.
+- **Annonce de la migration** au projet GitHub « Kesh » : par le **Project Lead** (l'agent de Beat n'écrit pas sur le
+  dépôt de Guy).
+
 ## Avant le développement
 
 Fait le 2026-11-19 : réponses de Beat (approuvé tel quel), décomptes repris du kickoff de la 0.20.0, fiches complètes
 47-1a à 47-5 (`Status: drafted`), fichier de l'Epic 46 lu pour Q5 (`epic/46-rapports-groupes`, `4d23b3f9`).
 Reste : approbation des fiches et maquettes par Beat (formulaire hors dépôt), puis validation en boucle de chaque
 fiche (`CLAUDE.md` § *Review Iteration Rule*), `Status: ready-for-dev` à sa clôture ; point d'entrée du regroupement
-convenu dans la fiche 46-1 (Q5).
+convenu dans la fiche 46-1 (Q5). *(Annoté le 2026-11-19 : validation des huit fiches faite, § *Validation des fiches*
+ci-dessus ; `Status: ready-for-dev`.)*
