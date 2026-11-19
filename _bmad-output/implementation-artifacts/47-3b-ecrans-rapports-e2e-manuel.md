@@ -126,14 +126,19 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
     ce manuel** : tout numéro de quatre chiffres doit être un compte d'un plan livré, et, nommé, sous le nom du plan
     (2000 « Créanciers », 2270 « AVS/AI/APG », 6900 « Charges financières », 6950 « Produits financiers »…) ; un compte
     d'un autre jeu — 1179, 2120, 6960… — fait rougir le gate backend. **Le lien entre l'exemple et le test** (NFR-47-4)
-    est contrôlé par une garde ajoutée à `textes_coherents.rs`, décidable et non vide : l'exemple du manuel est écrit
+    est contrôlé par une garde ajoutée à `textes_coherents.rs` (**G26**, prochain numéro libre à `origin/main` —
+    à recontrôler à l'intégration —, avec sa rangée au tableau des gardes de l'en-tête du module), décidable et non
+    vide : l'exemple du manuel est écrit
     entre `% exemple-presentation:debut` et `% exemple-presentation:fin` (lu par `bloc_marque`, la fonction de G23,
     sur le source **brut** lu par `lire`, jamais le texte normalisé de `manuels_fr`/`normaliser`, qui efface les sauts
     de ligne et les marqueurs avec eux) ; ⚠️ **`bloc_marque` ne lit que des marqueurs `% <nom>:debut|fin`** (préfixe
     `% ` codé en dur, `textes_coherents.rs:2167`) : les marqueurs du test Rust sont en `//`, qu'elle ne trouverait pas
     (« bloc absent », donc une garde rouge dès le premier passage, ou, pire, contournée) — la garde ajoute une
     fonction pure sœur `bloc_marque_rs(source, nom)` (marqueurs `// <nom>:debut|fin`, mêmes erreurs : absent, non
-    fermé), avec son témoin dans `g23_les_fonctions_pures` ou un test voisin ; `bloc_marque` n'est pas modifiée ;
+    fermé), avec son témoin dans `g23_les_fonctions_pures` ou un test voisin ; la signature et le comportement de
+    `bloc_marque` ne changent pas (son témoin G23 reste vert), mais les deux fonctions peuvent partager un corps commun
+    (une fonction privée prenant le préfixe du marqueur) plutôt que dupliquer ses dix lignes (règle DRY) ; les deux
+    fichiers, manuel et test, sont lus bruts par `lire` ;
     le test d'intégration de la 47-2a (`crates/kesh-api/tests/reports_e2e.rs`, sa T5) porte la liste
     `EXEMPLE_PRESENTATION` entre `// exemple-presentation:debut` et
     `// exemple-presentation:fin` (47-2a AC-11, qui fixe la liste) ; la garde extrait des deux blocs les montants
@@ -257,3 +262,15 @@ Le bilan et le compte de résultat marquent les lignes présentées et en montre
   liste de neuf montants et blocs `//` de la 47-2a AC-11, mots « comprend / solde propre / déduit » de la 47-2b
   AC-1. Rien à modifier à la 47-2a (à signaler à son validateur : ses marqueurs `//` supposent la fonction sœur de
   la 47-3b). Rapport : `kesh-gate-logs/epic-47-validation/47-3b-P3.md`.
+- **2026-11-19 — validation P4 (Opus 5.5, passe ciblée sur la remédiation P3) : 0 C / 0 H / 0 M / 3 L, remédiés.**
+  Vérifié au code de `origin/main` (`textes_coherents.rs`) : `lire` (`:48`, lecture brute, panique si absent),
+  `manuels_fr` (`:55`) et `normaliser` (`common/manuel.rs`, efface les sauts de ligne), `bloc_marque` (`:2167`,
+  préfixe `% ` codé en dur, erreurs « bloc absent » / « bloc non fermé »), structure de G23 et de son témoin
+  `g23_les_fonctions_pures` (`:2215`, textes fabriqués) ; `regex` déjà dépendance de dev de `kesh-api` ; le jeton
+  `-?\d+(?:['’]\d{3})*\.\d{2}` rend entiers les neuf montants de la 47-2a AC-11 (`13700.00` … `450.00`), au manuel
+  comme au test, et aucun montant à apostrophe du manuel (`1'020.00`, `13'700.00`) n'a quatre chiffres contigus que
+  `nombres_isoles` (G4-bis, `:283`) lirait comme un compte ; `reports_e2e.rs` existe. Garde implémentable telle que
+  décrite. L1 : numéro de garde et rangée du tableau d'en-tête non prescrits (convention du module) → G26. L2 :
+  « `bloc_marque` n'est pas modifiée » poussait à dupliquer son corps (DRY) → corps commun permis, signature et
+  comportement inchangés. L3 : lecture brute par `lire` dite du seul manuel → des deux fichiers. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-3b-P4.md`.
