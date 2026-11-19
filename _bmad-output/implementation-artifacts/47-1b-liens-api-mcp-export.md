@@ -255,6 +255,17 @@ poser ou retirer une paire incrémente la `version` du partenaire ; `POST /accou
 
 ## Change Log
 
+- 2026-11-19 — validation P3 ciblée (Sonnet 5.5) sur la remédiation de la P2 : 0 C / 0 H / 0 M / 1 L, remédié. Sites
+  relus à `origin/main` `fd04099f` sans écart : `errors.rs:1881` (`fx_account_invalid_response`), `admin-manual.tex:3533`
+  (tableau des outils) et `:2302`/`:2497`/`:2550`/`:2569`, `lib.rs:1282` et `routes/i18n.rs` (`all_messages` sert tout
+  le catalogue, la clé de l'avertissement y sera), `mcp_outils_e2e.rs:183` (`(68, 38)`), `:1439` (`plafond_au_maximum`),
+  `:2217`, `fixture_tailles :792`, `audit_labels.rs:77`, `api-external.md:226` et `:1060` ; arithmétique des 45 / 379
+  octets et des plafonds 34 / 61 refaite (13 255 et 23 488 o, sous 13 312 et 23 552). Cohérence : 47-1a AC-15 (clés de
+  `bothLinks` et `onCreate`, test sur `ALL`, noms au Dev Agent Record, seule clé d'avertissement ici) et 47-3a AC-3 (clé
+  lue au catalogue, `isNewOffsetPair` = définition de l'AC-4) alignées. L1 : la 47-3a AC-3 disait encore que la 47-1b
+  contredisait la clé unique → phrase corrigée dans la 47-3a (une phrase, propagation). Rapport :
+  `kesh-gate-logs/epic-47-validation/47-1b-liens-api-mcp-export-P3.md`.
+
 - 2026-11-19 — validation P2 (Opus 5.5) : 0 C / 0 H / 4 M / 4 L, remédiés. M1 : doublon et trou avec la 47-1a sur
   les messages — l'AC-2 listait comme travail de cette story les messages que la 47-1a AC-15 pose, T2 gardait ici
   `bothLinks` et `onCreate` alors que la fonction de réponse exhaustive de la 47-1a les exige, et le test comptait

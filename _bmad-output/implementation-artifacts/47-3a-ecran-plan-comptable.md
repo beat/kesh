@@ -95,8 +95,8 @@ afin de poser ces liens sans passer par l'API.
    (catalogue `crates/kesh-i18n/locales/*/messages.ftl`, que lit aussi `i18nMsg` par `/api/v1/i18n/messages`) : une
    seule clé, un seul texte pour la paire charge/produit et la paire actif/passif, dont le **nom est celui que le Dev
    Agent Record de la 47-1b écrit** (T0 le relit) ; l'écran n'ajoute que le repli de son site, égal à la valeur fr-CH
-   comme tout site `i18nMsg`. ⚠️ La 47-1b (Notes, « depuis ses propres textes ») dit encore le contraire : la
-   propagation est signalée à l'orchestrateur (rapport P2). **Ordre à l'enregistrement** : validation du formulaire,
+   comme tout site `i18nMsg`. La 47-1b (AC-4, Notes) dit la même chose depuis sa validation P2 : clé
+   `accounts-presentation-offset-warning`, aucun texte propre à l'écran. **Ordre à l'enregistrement** : validation du formulaire,
    puis avertissement, puis `PUT` ; l'avertissement est jugé sur l'état **affiché** (aucune pré-vérification serveur,
    patron de la 25-2-a) : une pose concurrente donne au pire un avertissement en trop ou en moins, que la réponse
    `warnings` (non affichée) ne corrige pas. Boutons **Annuler**
