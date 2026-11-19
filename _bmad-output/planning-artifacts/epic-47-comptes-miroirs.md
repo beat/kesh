@@ -27,7 +27,7 @@ négatif paraît en charge) ; une dette sociale à solde débiteur paraît à l'
   plus ; le cas des dettes sociales le demande).
 - **R4 — Garde** : tant qu'un compte est le miroir d'un autre (source archivée comprise), le rendre imputable, le
   retyper, lui poser un rôle ou l'archiver est refusé (409, nommant les sources) ; **aucune écriture** ne s'y passe,
-  saisie manuelle **et** flux automatiques — refus `ACCOUNTS_NOT_POSTABLE` au seul point de passage des lignes
+  saisie manuelle **et** flux automatiques — refus `ACCOUNT_NOT_POSTABLE` (`DbError::AccountsNotPostable`) au seul point de passage des lignes
   (`validate_lines_accounts_in_tx`), les flux automatiques ne contrôlant pas `postable` (`enforce_postable = false`).
 - **R5 — Présentation** : bilan et compte de résultat, à toute date d'arrêté (D4) ; une source dont le solde est de sens
   inverse quitte sa section ; la ligne du miroir, de l'autre côté, vaut la somme des soldes inversés de ses sources ;

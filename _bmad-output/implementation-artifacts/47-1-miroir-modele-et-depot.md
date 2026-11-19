@@ -58,8 +58,9 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
    peut se poser à la création, AC-4) ; `AccountUpdate` gagne `mirror: MirrorChange` à trois états — `Unchanged`
    (défaut : un client qui ne connaît pas le champ n'efface rien), `Clear`, `Set(id)` — sur le patron de
    `CurrencyChange` ; `is_no_op_change` le prend en compte (reposer le miroir déjà posé est un no-op, sans changement de
-   version). Les sites qui construisent un `AccountUpdate` ou un `NewAccount` (une trentaine à `fd04099f`, dont la
-   route) reçoivent `Unchanged` / `None` : la route n'expose le champ qu'en 47-2.
+   version). Les sites qui construisent un `AccountUpdate` (32 littéraux à `fd04099f`, `git grep -c "AccountUpdate {"`,
+   dont la route ; le type ne dérive pas `Default`) ou un `NewAccount` (54 littéraux, même commande) reçoivent
+   `Unchanged` / `None` : la route n'expose le champ qu'en 47-2.
 4. **Règles de validité** (R2, R3), jugées sur l'état résultant par une **fonction pure** `check_mirror` testée sans
    base, puis par le dépôt pour les lectures ; refus **`DbError::MirrorAccountInvalid { reason, linked_account_number
    }`** (HTTP 400 `MIRROR_ACCOUNT_INVALID`, mappé ici, AC-9), raisons d'une **liste close**, dans cet ordre :
@@ -79,7 +80,8 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
    miroir) comme à la **modification** ; à la modification d'un compte qui **garde** son miroir (`Unchanged`), il se
    rejoue sur l'état résultant — retyper la source de sorte que sa cible ne soit plus de l'autre côté, ou lui poser un
    rôle de fonds propres, rend `MIRROR_ACCOUNT_INVALID` (`accountType`, `equity`) ; retirer le miroir dans le même
-   `PUT` lève ce refus.
+   `PUT` lève ce refus. Sur `Unchanged`, seules ces deux règles du côté de la source se rejouent : la cible, figée par
+   l'AC-5, n'est ni relue ni verrouillée — un état forgé de la cible (lignes, rôle) n'empêche pas de renommer la source.
 5. **Garde du compte miroir** (R4) — tant qu'au moins un compte de la société le désigne comme miroir (**source
    archivée comprise**), refus **`DbError::AccountIsMirror { reason, sources }`** (HTTP 409 `ACCOUNT_IS_MIRROR`, mappé
    ici, AC-9), `sources` = comptes qui le désignent (id, numéro, nom, actif), triés par numéro, raisons d'une liste
@@ -96,32 +98,49 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
    — y compris quand `enforce_postable` est faux, c'est-à-dire pour les flux automatiques (factures, avoirs, factures
    fournisseur, rapprochement, réévaluation de change) — toute ligne sur un compte désigné comme miroir par un compte
    de la même société : même erreur que la saisie manuelle sur un compte non imputable,
-   **`DbError::AccountsNotPostable`**, qui nomme le compte (un compte miroir est non imputable par l'AC-4 ; aucun code
-   neuf, aucun message neuf). La lecture se fait dans la même requête verrouillante (`LOCK IN SHARE MODE`), par un
-   `EXISTS` sur `accounts` filtré par `company_id` et `mirror_account_id` ; l'ordre des refus devient : absent ou
-   archivé → non imputable (si `enforce_postable`) **ou miroir** (toujours). Tests : saisie manuelle et un flux
-   automatique (`create_in_tx` avec `enforce_postable = false`) refusés sur un compte miroir, nommé ; acceptés une fois
-   le lien retiré (et le compte rendu imputable pour la saisie manuelle).
-7. **Concurrence** : poser un miroir A → T verrouille **en une instruction ordonnée par id** l'ensemble {A, T}
-   (`SELECT … WHERE id IN (…) ORDER BY id FOR UPDATE`), puis lit sous verrou les lignes d'écriture de T et « qui
-   désigne A comme miroir » (`LOCK IN SHARE MODE` par l'index de l'AC-1). L'ancienne cible, si le miroir change, n'est
-   pas verrouillée (retirer un lien ne viole aucune règle). Ainsi « lier T » se sérialise sur la ligne de T avec
-   « passer une écriture sur T » (`validate_lines_accounts_in_tx` lit T en `LOCK IN SHARE MODE`), « archiver T »,
-   « rendre T imputable », et avec « désigner A comme miroir d'un tiers » (qui verrouille A). Test de dépôt à deux
-   transactions pour deux de ces couples (pose contre écriture ; pose contre archivage) : l'un passe, l'autre est
-   refusé (409 de version ou refus nommé), jamais un état qui viole l'AC-4 ou l'AC-5.
+   **`DbError::AccountsNotPostable`** (fil : `400 ACCOUNT_NOT_POSTABLE`, `account_not_postable_response`,
+   `kesh-api/src/errors.rs:2069`), qui nomme le compte (un compte miroir est non imputable par l'AC-4 ; aucun code
+   neuf, aucun message neuf). **Lecture fraîche, verrouillante** : après la lecture `LOCK IN SHARE MODE` des comptes
+   (`:276-283`), une **seconde instruction verrouillante**, `SELECT DISTINCT mirror_account_id FROM accounts WHERE
+   company_id = ? AND mirror_account_id IN (…) LOCK IN SHARE MODE` (par l'index de l'AC-1) — **et non** un `EXISTS`
+   corrélé dans la première : sous REPEATABLE READ, une sous-requête non verrouillante lit l'instantané de la
+   transaction, déjà ouvert par la lecture non verrouillante de `books_locked_through` (`create_in_tx_inner`, `:531`)
+   et par celles des appelants ; une pose commitée pendant l'attente du verrou sur la cible n'y serait pas vue, et la
+   ligne passerait. La lecture verrouillante lit la dernière version commitée et pose ses verrous d'intervalle sur
+   l'index, qui font aussi attendre une pose concurrente. L'ordre des refus devient : absent ou archivé → non
+   imputable (si `enforce_postable`) **ou miroir** (toujours). Tests : saisie manuelle et un flux automatique
+   (`create_in_tx` avec `enforce_postable = false`) refusés sur un compte miroir, nommé ; acceptés une fois le lien
+   retiré (et le compte rendu imputable pour la saisie manuelle).
+7. **Concurrence** : à la modification, A est **déjà** sous `FOR UPDATE` (`FIND_BY_ID_FOR_UPDATE_SQL`, première
+   lecture d'`update`, `accounts.rs:968`) ; poser un miroir A → T verrouille ensuite **T seul** (`SELECT … WHERE id = ?
+   AND company_id = ? FOR UPDATE`, patron du parent dans `create`, `:211`), après les gardes de devise ; à la création,
+   seul T se verrouille (A n'existe pas). Puis lecture **verrouillante** (`LOCK IN SHARE MODE`, jamais une lecture
+   d'instantané : même motif qu'à l'AC-6) des lignes d'écriture de T (`has_journal_line_locked`) et de « qui désigne A
+   comme miroir » (index de l'AC-1). L'ancienne cible, si le miroir change, n'est pas verrouillée (retirer un lien ne
+   viole aucune règle). Côté cible, les gardes de l'AC-5 (`update` et `archive_guarded` de T, qui tiennent T en `FOR
+   UPDATE`) lisent « qui désigne T » de même, en lecture verrouillante. Ainsi « lier T » se sérialise sur la ligne de T
+   avec « passer une écriture sur T » (`validate_lines_accounts_in_tx` lit T en `LOCK IN SHARE MODE`), « archiver T »,
+   « rendre T imputable », et avec « désigner A comme miroir d'un tiers » (qui verrouille A). Un **interblocage**
+   (`1213`) reste possible quand une écriture porte à la fois sur A et sur T (elle prend A et T en partage dans l'ordre
+   de l'index, la pose tient A puis attend T) : InnoDB annule l'une, ce qui est un refus, non un état faux. Test de
+   dépôt à deux transactions pour deux de ces couples (pose contre écriture, l'écriture ayant fait une lecture non
+   verrouillante **avant** d'attendre — c'est ce qui rend la mutation « `EXISTS` d'instantané » rouge ; pose contre
+   archivage) : l'un passe, l'autre est refusé (409 de version, refus nommé ou interblocage), jamais un état qui viole
+   l'AC-4, l'AC-5 ou l'AC-6.
 8. **Lecteur des liens pour les rapports** : `accounts::mirror_links(executor, company_id) -> Vec<MirrorLink>` rend,
    en **une requête**, chaque lien valide de la société — `source_id` et, pour la cible, `id`, `number`, `name`,
-   `account_type` (la cible n'a aucune écriture : les rapports n'en ont pas la ligne et la construisent de là). **Lien
-   hors règle lu comme absent** : l'import d'une sauvegarde (`check_schema_compat` contrôle les colonnes, jamais les
-   valeurs) ou un SQL peut écrire ce que l'AC-4 refuse ; une fonction **pure** `retain_valid_links(rows) ->
-   (Vec<MirrorLink>, Vec<DiscardedLink { source_id, case }>)` écarte, avec `tracing::warn!` nommant les comptes et le
-   cas, la **liste close** : (a) cible absente ou d'une autre société (la requête ne lit que la société : un seul cas,
-   deux tests) ; (b) lien vers soi-même ; (c) chaîne — la cible a elle-même un miroir (les liens se jugent **tels que
-   lus**, avant tout écartement) ; (d) source de rôle de fonds propres, ou cible à rôle ; (e) types qui ne sont plus de
-   l'autre côté du même rapport. Une cible imputable ou porteuse d'écritures (état forgé) **n'est pas écartée** : la
-   présentation ajoute alors son solde propre (47-3). Un compte archivé n'est pas écarté. Un test par cas, sans base
-   (lignes construites) et par SQL direct ; une société sans lien → vecteur vide ; une autre société n'y paraît jamais.
+   `account_type`, `active` (la cible n'a aucune écriture : les rapports n'en ont pas la ligne et la construisent de là,
+   `AccountBalance` exigeant `active`). **Lien hors règle lu comme absent** : l'import d'une sauvegarde
+   (`check_schema_compat` contrôle les colonnes, jamais les valeurs) ou un SQL peut écrire ce que l'AC-4 refuse ; une
+   fonction **pure** `retain_valid_links(rows) -> Vec<MirrorLink>` écarte, avec un `tracing::warn!` par lien écarté
+   nommant les comptes et le cas, la **liste close** de ce qui fausserait la présentation : (a) cible absente ou d'une
+   autre société (la requête ne lit que la société : un seul cas, deux tests) ; (b) types qui ne sont pas de l'autre
+   côté du même rapport (le lien vers soi-même y tombe : même type) ; (c) chaîne — la cible a elle-même un miroir (les
+   liens se jugent **tels que lus**, avant tout écartement). Ne sont **pas** écartés, faute d'effet sur les invariants de
+   la 47-3 : une source de rôle de fonds propres (la présentation ne lit jamais la section `equity`), une cible à rôle,
+   imputable ou porteuse d'écritures (état forgé : la présentation ajoute son solde propre, 47-3), un compte archivé. Un
+   test par cas, sans base (lignes construites) et par SQL direct ; une société sans lien → vecteur vide ; une autre
+   société n'y paraît jamais.
 9. **Erreurs mappées à l'API dans cette story** (le sous-match de `crates/kesh-api/src/errors.rs` sur `DbError` est
    exhaustif, sans `_ =>` : ajouter les variantes sans les mapper ne compile pas) — `MirrorAccountInvalid` → 400
    `MIRROR_ACCOUNT_INVALID`, `details: { reason[, linkedAccountNumber] }` ; `AccountIsMirror` → 409
@@ -140,12 +159,11 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
     `ABSENCES_ADMISES_EPIC_37`.
 11. **Inventaire des colonnes de compte** : `crates/kesh-db/tests/account_columns_inventory.rs` classe la colonne
     neuve (elle finit par `_account_id`) avec une variante neuve de `Preuve` (« présentation seule : aucune écriture ne
-    s'y impute, refusée au point de passage des lignes ») adossée aux tests des AC-4 et AC-6, et un test, pur, qui exige
-    que l'ensemble des fichiers de `crates/*/src/**/*.rs` qui nomment `mirror_account_id` **égale**, dans les deux sens,
-    une liste close écrite en dur — à cette story `kesh-db/src/entities/account.rs`,
-    `kesh-db/src/repositories/accounts.rs`, `kesh-db/src/repositories/journal_entries.rs` (**lu pour refuser, jamais
-    pour imputer**), `kesh-api/src/exports/csv_tables.rs` et `kesh-api/src/errors.rs` s'il y nomme le champ ; la 47-2
-    et la 47-3 y ajoutent leurs fichiers.
+    s'y impute, refusée au point de passage des lignes ; une cible en devise est admise, R8 ») adossée aux tests des
+    AC-4 et AC-6 ; l'en-tête du fichier, qui dit l'inventaire limité aux colonnes « qui ne peuvent pas désigner un
+    compte en devise », est élargi d'une phrase. *(Pas de liste close des fichiers qui nomment `mirror_account_id` :
+    la garde de l'AC-6, au seul point de passage des lignes, refuse toute écriture sur un miroir quel que soit le code
+    qui lit la colonne ; une telle liste ne garderait rien de plus et coûterait une mise à jour à chaque story.)*
 12. **Aucune écriture comptable produite** (NFR-47-1) : poser, changer, retirer un miroir ne crée ni ne modifie aucune
     ligne de `journal_entries` / `journal_entry_lines` (assertion de comptage) ; seul le compte source est écrit (une
     entrée d'audit `account.updated`, sa `version` incrémentée ; la cible n'est pas modifiée).
@@ -166,11 +184,12 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
   `AccountIsMirrorReason` ; `error_code()`.
 - [ ] **T4 — écriture et verrous** (AC 4, 5, 7, 12) : `create`, `update`, `archive_guarded`.
 - [ ] **T5 — garde des lignes** (AC 6) : `validate_lines_accounts_in_tx`.
-- [ ] **T6 — lecteur** (AC 8) : `mirror_links`, `retain_valid_links`.
+- [ ] **T6 — lecteur** (AC 8) : `mirror_links`, `retain_valid_links` (trois cas).
 - [ ] **T7 — erreurs et i18n** (AC 9).
 - [ ] **T8 — tests** : dépôt (`crates/kesh-db/tests/account_mirror.rs`, neuf), inventaire (AC 11), sauvegarde (AC 10),
   réponses d'erreur (AC 9), mutations (retirer la garde des lignes en flux automatique ; inverser deux raisons ;
-  supprimer la garde d'archivage ; supprimer le verrou de la cible — chacune doit rougir un test).
+  supprimer la garde d'archivage ; supprimer le verrou de la cible ; remplacer la lecture verrouillante de l'AC-6 par
+  un `EXISTS` corrélé d'instantané — chacune doit rougir un test).
 - [ ] **T9 — gate complet** (exception `kesh-db` : jamais ciblé).
 
 ## Dev Notes
@@ -206,7 +225,7 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
   plus, l'admettre une somme dans la présentation ; le cas des dettes sociales le demande (plusieurs passifs débiteurs,
   un seul compte d'actif de présentation).
 - **C-47-1-4** : aucune écriture sur un miroir, gardée **au seul point de passage** des lignes, par l'erreur existante
-  `ACCOUNTS_NOT_POSTABLE`. *Écarté* : compter sur `postable` seul (les flux automatiques passent `enforce_postable =
+  `DbError::AccountsNotPostable` (`400 ACCOUNT_NOT_POSTABLE`). *Écarté* : compter sur `postable` seul (les flux automatiques passent `enforce_postable =
   false` et posteraient sur un miroir) ; un code d'erreur neuf.
 - **C-47-1-5** : un miroir se pose aussi à la création (même contrôle) : un seul `<select>` dans le dialogue, création
   et modification. *Écarté* : le refus à la création (raison `onCreate`) de l'ancienne 47-1b.
@@ -222,10 +241,10 @@ lignes manuelle et automatique, lecteur, concurrence, comptage des écritures) ;
 ### Risques
 
 - Conflit avec `fix/api-parent-compte` (même `update`, mêmes erreurs). Un `PUT` qui change parent et miroir : le parent
-  se verrouille après l'ensemble ordonné.
+  se verrouille après la cible du miroir (A, puis T, puis le parent).
 - Un réglage qui désigne un compte jamais mouvementé puis rendu non imputable (compte de produit d'un article, compte
   d'un relevé bancaire…) peut être choisi comme miroir : le flux automatique qui l'emploierait est alors refusé
-  (`ACCOUNTS_NOT_POSTABLE`, nommé) — bruyant, jamais faux. Constat au manuel (47-2), non garde de plus.
+  (`ACCOUNT_NOT_POSTABLE`, nommé) — bruyant, jamais faux. Constat au manuel (47-2), non garde de plus.
 - Recette de montée : l'empreinte de `accounts` change (une colonne) ; l'écart attendu s'écrit au journal de la
   release.
 - Ordre des migrations : renommer l'horodatage **avant toute publication** si une autre migration entre sur `main`
@@ -257,6 +276,26 @@ compte de présentation sur lequel aucune écriture ne se passe.
   des bases partielles, lecteur tolérant (`retain_valid_links`, `tracing::warn!`), sauvegarde, inventaire des colonnes,
   export CSV, sous-match exhaustif. Treize critères (quinze avant). **Statut remis à `drafted`** en attendant la
   revalidation (boucle complète, P1 par Sonnet ou Opus).
+
+- 2026-11-19 — validation P1 de la fiche refondue (Opus 5.5, avec la 47-3) : **0 C / 0 H / 5 M / 4 L, remédiés**.
+  M1 : code du fil `ACCOUNT_NOT_POSTABLE` (non `ACCOUNTS_NOT_POSTABLE`, `kesh-api/src/errors.rs:2080`) → AC-6, C-47-1-4,
+  Risques ; propagé au fichier d'epic (R4) et à la 47-2 (AC-11). M2 : l'`EXISTS` corrélé de l'AC-6 lisait
+  l'instantané de la transaction, ouvert avant par `books_locked_through` (`journal_entries.rs:531`) : une pose
+  commitée pendant l'attente du verrou de la cible n'était pas vue → seconde instruction `LOCK IN SHARE MODE` ; même
+  exigence pour « qui désigne T » aux gardes de l'AC-5 (AC-7) ; mutation ajoutée (T8). M3 : « {A, T} en une instruction
+  ordonnée par id » contredisait `update`, qui tient A en `FOR UPDATE` dès `:968` → A puis T seul, interblocage admis
+  comme refus (AC-7, Risques). M4 (KISS) : `DiscardedLink`, vestige du contrôle K10 retiré, sans consommateur →
+  `retain_valid_links` rend `Vec<MirrorLink>`, trois cas (cible absente, types, chaîne ; soi-même tombe sous les types ;
+  fonds propres et rôle de cible sans effet sur la présentation) (AC-8). M5 (KISS) : la liste close des fichiers qui
+  nomment `mirror_account_id` ne gardait rien que la garde de l'AC-6 ne garde déjà, et coûtait une mise à jour à
+  chaque story → retirée (AC-11 ; 47-2 AC-12 et 47-3 AC-14 alignés). L : `MirrorLink` porte `active` (exigé par
+  `AccountBalance`, 47-3) ; décomptes 32 `AccountUpdate` / 54 `NewAccount` ; sur `Unchanged`, seules les règles de la
+  source se rejouent (AC-4) ; ordre des verrous du parent (Risques). Vérifié sans écart à `origin/main` `fd04099f` :
+  95 migrations, dernière `20261118000002` sur `origin/epic/49-types-de-lignes-facture` (96, `total - 62`) ;
+  `validate_lines_accounts_in_tx` (`:263`, `LOCK IN SHARE MODE`, `enforce_postable`), deux seuls `INSERT` de lignes
+  (`insert_lines`) ; `check_schema_compat` (`import.rs:597-640`) ; `serialize_accounts_csv` (`csv_tables.rs:287`) ;
+  `fx_account_invalid_response` (`errors.rs:1881`) ; `full_import_of_a_0_17_6_…` (`:5946`) ; `scripts/regen-test-schema.sh`.
+  Rapport : `kesh-gate-logs/epic-47-validation/47-1-miroir-modele-et-depot-P1.md`.
 
 ### Historique — Change Log de la 47-1a (avant la refonte, laissé tel quel)
 

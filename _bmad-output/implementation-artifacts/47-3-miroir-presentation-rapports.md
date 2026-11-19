@@ -36,7 +36,8 @@ d'intégration de `kesh-api`. Aucun écran (47-4), aucun rendu PDF ou CSV propre
 2. **Règle** (R5) : une source dont le solde est **de sens inverse** (`balance < 0` dans le signe de sa nature) quitte
    sa section ; la ligne de son miroir, insérée dans la section du type du miroir, vaut la **somme des soldes inversés
    de ses sources de sens inverse** (plusieurs sources possibles), plus le solde propre du miroir s'il en a une ligne
-   brute (état forgé seulement : 47-1 AC-8) ; numéro et libellé du miroir (Q7), attributs tirés de `MirrorLink`. Une
+   brute (état forgé seulement : 47-1 AC-8) ; numéro et libellé du miroir (Q7), `account_type` et `active` tirés de
+   `MirrorLink`, `role` à `None` (un miroir n'a pas de rôle). Une
    source de solde nul ou de sens normal reste à sa place, inchangée ; un miroir qui ne reçoit aucune source de sens
    inverse ne paraît pas (il n'a pas d'écriture). **Aucune compensation** : une source de sens normal n'est jamais
    additionnée à rien.
@@ -85,7 +86,8 @@ d'intégration de `kesh-api`. Aucun écran (47-4), aucun rendu PDF ou CSV propre
 11. **Aucune écriture** (NFR-47-1) : générer un rapport présenté ne crée ni ne modifie aucune ligne comptable ; balance
     et grand livre identiques avant et après.
 12. **Littéraux** : `AccountBalance` gagne `mirror_of` ; ses littéraux (recomptés à `fd04099f`, `git grep -c
-    "AccountBalance {"` : `balance_sheet.rs` 3, `csv.rs` 8, `pdf.rs` 8, `benches/export.rs` 2) prennent le champ vide
+    "AccountBalance {"` : `balance_sheet.rs` 3 dont la définition, soit 2 littéraux, `csv.rs` 8, `pdf.rs` 8,
+    `benches/export.rs` 2) prennent le champ vide
     (ou `..Default::default()` si `AccountBalance` dérive `Default`, au choix du développement). Les tests de `pdf.rs`
     et `csv.rs` sont réécrits par #1327 et #1346 : conflit de texte au second arrivé, résolu en gardant les deux.
 13. **Documentation** : `docs/api-external.md` — champ `mirrorOf` des lignes du bilan et du compte de résultat, règle
@@ -95,11 +97,13 @@ d'intégration de `kesh-api`. Aucun écran (47-4), aucun rendu PDF ou CSV propre
     de `GET /reports/income-statement` ») devient « … égalent ceux du compte de résultat quand aucun compte miroir ne
     s'y applique ; l'accueil reste sur les soldes réels ». Manuel d'administration (`docs/manual/fr/admin-manual.tex`,
     tableau des outils MCP `:3538`, troisième colonne seule) : une phrase pour `kesh_bilan` et
-    `kesh_compte_de_resultat`. ⚠️ G4-bis et G4-ter lisent `api-external.md`, le manuel d'administration et les
-    doc-comments Rust (`presentation.rs` compris) : exemples aux comptes de l'exemple seulement. `.tex` seulement ; **le
+    `kesh_compte_de_resultat`. ⚠️ G4-ter (`textes_coherents.rs`, forme libre « NNNN Mot ») lit `api-external.md`, le
+    manuel d'administration et les sources Rust hors `tests/` (`presentation.rs` compris) ; G4-bis, le manuel
+    utilisateur, le guide et les catalogues : exemples aux comptes de l'exemple seulement. Un sous-compte `6950.1 « … »`
+    passe les deux gardes (seul le parent, 6950, doit être livré ; la forme libre saute un numéro à décimales). `.tex` seulement ; **le
     prompt de chaque passe de revue nomme ces documents** et exige le contrôle du PDF compilé localement.
-14. **Inventaire** (47-1 AC-11) : les fichiers de cette story qui nomment `mirror_account_id` (s'il y en a) sont
-    ajoutés à la liste close.
+14. **Inventaire** (47-1 AC-11) : rien à ajouter — la 47-1 ne tient plus de liste close des fichiers qui nomment
+    `mirror_account_id` (validation P1 de la 47-1 et de la 47-3) ; la fonction de présentation ne lit que `MirrorLink`.
 
 ## Tâches / sous-tâches
 
@@ -127,8 +131,9 @@ d'intégration de `kesh-api`. Aucun écran (47-4), aucun rendu PDF ou CSV propre
 
 ### Algorithme
 
-1. Indexer les liens par source ; `links` ne contient que des liens valides (le lecteur de la 47-1 a écarté les cas
-   (a)–(e)) — la fonction ne revérifie rien.
+1. Indexer les liens par source ; `links` ne contient que des liens lisibles (le lecteur de la 47-1 a écarté les cas
+   (a)–(c) : cible absente, types qui ne sont pas de l'autre côté, chaîne) — la fonction ne revérifie rien. Une source
+   de rôle de fonds propres est dans `equity`, que la fonction ne lit pas : son lien reste sans effet.
 2. Pour chaque section modifiable, pour chaque ligne dont le compte est une source et dont le solde est < 0 : retirer
    la ligne, accumuler `−balance` sur le miroir, ajouter la source à son `mirror_of`.
 3. Pour chaque miroir qui a reçu au moins une source : ligne = solde propre (si une ligne brute existe, forgée) +
@@ -198,6 +203,21 @@ restent à `GET /reports/trial-balance`.
   brut et sa sonde négative, exemple rejoué par un test à marqueurs `//` (nouvel exemple du fichier d'epic, quatorze
   montants), recâblage de l'Epic 46, littéraux des tests de `pdf.rs` / `csv.rs`. Quatorze critères (quatorze avant).
   **Statut remis à `drafted`** en attendant la revalidation.
+
+- 2026-11-19 — validation P1 de la fiche refondue (Opus 5.5, avec la 47-1) : **0 C / 0 H / 0 M / 4 L, remédiés** (les
+  MEDIUM de la passe portent sur la 47-1, rapport commun). L1 : la ligne du miroir exige `active` (`AccountBalance`),
+  absent de `MirrorLink` → ajouté à la 47-1 AC-8, AC-2 ici. L2 : `balance_sheet.rs` porte 2 littéraux
+  `AccountBalance` (le troisième est la définition) (AC-12). L3 : G4-bis et G4-ter mal attribués (G4-bis ne lit ni
+  `api-external.md` ni le manuel d'administration) ; `6950.1 « … »` passe les deux (seul 6950 doit être livré ; la
+  forme libre saute les décimales) (AC-13). L4 : AC-14 et algorithme § 1 alignés sur la 47-1 (plus de liste close des
+  fichiers ; lecteur à trois cas). Exemple chiffré refait au centime : 2800 = 14 000 − 5 800 = 8 200 ; actif brut
+  11 700, passif 1 800, fonds propres 8 200 + 1 700 = 9 900, équation vraie ; présenté 13 700 = 3 800 + 9 900 ;
+  produits 1 750 → 2 000, charges 50 → 300, résultat 1 700 dans les deux ; comptes et types relus à `pme.json`
+  (1040, 2100, 2270, 2800 `EquityCapital`, 6900, 6950). Vérifié : appelants de `generate` (`services/rapports.rs:619`,
+  `:634`, `balance_sheet.rs:263`) ; exports et MCP par le service (`routes/reports.rs:393`, `:524`, `mcp/outils/
+  rapports.rs:305`, `:357`) ; le MCP projette ses propres lignes (`lignes()`) : `mirrorOf` n'y paraît pas, conforme à
+  l'AC-8 ; `api-external.md` (accueil) et `admin-manual.tex:3538-3539`. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-3-miroir-presentation-rapports-P1.md`.
 
 ### Historique — Change Log de la 47-2a (avant la refonte, laissé tel quel)
 
