@@ -45,8 +45,20 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    colonnes s'ajoutent à la liste que pose et retire `common::colonnes_multi_devises`
    (`crates/kesh-db/tests/common/mod.rs:86-161`, `COLONNES_MULTI_DEVISES`, `COLONNES_LIGNES_EN_DEVISE` ; appelants :
    `migrations_upgrade_path.rs:1397, 2197, 2423, 2529`, `lettering_documents_backfill.rs:246`), retrait **avant**
-   `MIGRATOR.run()` (pas d'`IF NOT EXISTS`) ; chaque autre site `apply_migrations_up_to` + dépôt est inspecté (liste
-   au Change Log du développement).
+   `MIGRATOR.run()` (pas d'`IF NOT EXISTS`). ⚠️ **Deux familles de bases partielles** : celles d'*avant la 37-1* (les
+   appelants ci-dessus : la liste posée porte aussi les colonnes de la 37-1, d'où une seule constante
+   `COLONNES_LIENS_DE_PRESENTATION` chaînée à `colonnes_multi_devises`) et celles **entre la 37-1 et cette migration**,
+   qui ont déjà les colonnes de la 37-1 — `grouped_settlements.rs:1301`
+   (`the_upgrade_keeps_unit_settlements_and_allows_a_group`, base d'avant la 43-1a, peuplée par `monter` →
+   `accounts::create`…, donc rouge en `Unknown column` sans traitement) : une fonction séparée
+   `common::colonnes_liens_de_presentation(pool, poser)` (la même constante, sans les colonnes de la 37-1 — un
+   `ADD COLUMN` redoublé échouerait) y pose les deux colonnes après `migrations_before` et les retire avant
+   `MIGRATOR.run()`. Les sites qui ne passent que par du SQL brut (`journal_entry_number_sequences_bootstrap.rs`, les
+   tests `n` / `n + 1` de `migrations_upgrade_path.rs`, `kesh-api/src/pre_upgrade_backup/tests.rs`,
+   `kesh-api/tests/sauvegarde_avant_migration.rs`) n'en ont pas besoin ; chaque autre site est inspecté (liste au
+   Change Log du développement). **Fenêtre positionnelle** : la migration s'y ajoute — `total - 61` devient `total - 62`
+   (frontière à 34 inchangée, comme aux stories précédentes) et `assert_eq!(total, N)` suit (96 avec la 49-1a fusionnée,
+   97 avec cette story).
 3. **Entité** : `Account` porte `mirror_account_id: Option<i64>` et `offset_account_id: Option<i64>` ; toutes les
    lectures `SELECT` d'`Account` (`FIND_BY_ID_SQL`, `FIND_BY_ID_FOR_UPDATE_SQL`, listes) les décodent ;
    `account_snapshot_json` les écrit (`mirrorAccountId`, `offsetAccountId`) : l'audit avant/après les montre.
@@ -112,14 +124,25 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    `tracing::warn!` nommant les comptes, la **liste close** suivante — et la 47-2a ne reçoit que des liens valides
    (son test de propriété les suppose) : (a) cible absente (**orphelin**) ; (b) cible d'une autre société ; (c) lien
    vers soi-même ; (d) paire **non réciproque** (`A.offset = B` sans `B.offset = A`), les deux côtés écartés ;
-   (e) **chaîne** : miroir dont la cible porte elle-même un lien, ou vise un membre de paire — le miroir est écarté ;
+   (e) **chaîne** : miroir dont la cible porte elle-même un lien, ou vise un membre de paire — le miroir est écarté ; (d) et
+   (e) se jugent sur les liens **tels que lus**, avant tout écartement (résultat indépendant de l'ordre : un miroir vers
+   un compte dont la paire est écartée reste écarté comme chaîne) ;
    (f) lien d'un compte ou vers un compte de rôle de fonds propres ; (g) types qui ne sont plus de l'autre côté du
    même rapport. Un compte archivé (source ou cible) n'est **pas** écarté. Aucune panique, aucune boucle (la règle (e)
    suffit à rendre la relation acyclique). Un test par cas, posé par SQL direct.
+   **Forme rendue (AC-9)** : un lien écarté n'est **jamais** rendu ; le compte qui le portait **reste dans le vecteur**,
+   ses colonnes de lien concernées à `None` (un compte qui ne fait que recevoir un lien écarté y reste aussi, sans lien
+   entrant), et chaque écart est tracé par un `tracing::warn!` nommant les comptes et le cas (a)–(g). Le tri se fait
+   dans une fonction **pure** `retain_valid_links(rows) -> (Vec<PresentationLinkAccount>, Vec<DiscardedLink { account_id,
+   field, case }>)`, testée sans base (un test par cas, sur des lignes construites) et par SQL direct via
+   `presentation_links` (le vecteur n'a aucun lien invalide ; le cas se lit au `DiscardedLink`, que la fonction
+   publique n'expose pas). Conséquence pour la 47-2a et la 47-4 : « le vecteur ne contient que des liens valides » est
+   vrai par construction ; un compte sans lien dans le vecteur est un compte dont le lien a été écarté ou qui n'en
+   a plus d'entrant : ils l'ignorent.
 9. **Lecteur des liens pour les rapports** : `accounts::presentation_links(executor, company_id) ->
    Vec<PresentationLinkAccount>` rend, en **une requête**, chaque compte de la société qui a ou reçoit un lien —
    `id`, `number`, `name`, `account_type`, `role`, `currency`, `active`, `mirror_account_id`, `offset_account_id` ;
-   consommé par la 47-2a. Test : une société sans lien → vecteur vide ; une autre société n'y paraît jamais.
+   consommé par la 47-2a et la 47-4 ; ne rend que des liens valides (forme de l'AC-8). Test : une société sans lien → vecteur vide ; une autre société n'y paraît jamais.
 10. **Concurrence** : deux poses croisées (A→B et B→A en paire ; liaison de T pendant l'archivage de T) ne laissent
     jamais un état qui viole l'AC-5 ou l'AC-7 : l'un passe, l'autre est refusé (409 de version ou refus nommé) ;
     test de dépôt à deux transactions.
@@ -147,8 +170,9 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
     `fmt_opt_i64`, en-tête figé de `serialize_accounts_csv_includes_role_and_postable` mis à jour, un test d'une ligne
     liée). **Pourquoi ici** : `csv_tables::tests::chaque_colonne_du_schema_est_exportee_ou_ecartee` confronte chaque
     en-tête au squash `test-schema/0001_schema_squash.sql` que l'AC-2 met à jour ; sans ces deux colonnes, le gate
-    complet de cette story rougit. Les sites qui construisent un `Account` à la main (`sample_account`, tests de
-    `exports/`, `journal_entry_reversal_e2e.rs`…) gagnent les deux champs à `None` (compilation).
+    complet de cette story rougit. Le seul site qui construit un `Account` littéral à `origin/main` est `sample_account`
+    (`csv_tables.rs:1871`) ; il gagne les deux champs à `None` (compilation ; `journal_entry_reversal_e2e.rs` construit
+    un `AccountUpdate`, compté à l'AC-15).
 15. **Erreurs mappées à l'API dans cette story** (déplacé de la 47-1b à la validation P1 de celle-ci) :
     `crates/kesh-api/src/errors.rs` tient un **sous-match exhaustif** sur `DbError`, sans `_ =>` (commentaire
     `:4229-4231`, match `:4380`, à `fd04099f`) : ajouter `PresentationLinkInvalid` et `AccountPresentationLinked`
@@ -317,6 +341,16 @@ ou 0.20.0 s'importe ; la version précédente refuse la base migrée et les sauv
   noms des contraintes, SQL qui défait la migration), AC-2 (squash régénéré, compte en dur de
   `migrations_upgrade_path.rs`), ordre des verrous (lecture hors verrou sur le pool ; parent de `fix/api-parent-compte`)
   et recette de montée aux Risques. Rapport : `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P1.md`.
+
+- 2026-11-19 — validation P2 (Sonnet 5.5) : **0 C / 0 H / 2 M / 2 L, remédiés**. M1 : seconde famille de bases
+  partielles (entre la 37-1 et la migration), `grouped_settlements.rs:1301` rouge en `Unknown column`, et
+  `colonnes_multi_devises` ne peut y servir (ADD COLUMN redoublé) → AC-2, fonction séparée. M2 : forme du vecteur du
+  lecteur pour un lien écarté non fixée (relevé de la P3 de la 47-4, K10) → AC-8 « Forme rendue », AC-9, fonction pure
+  `retain_valid_links` et ses tests. L1 : fenêtre `total - 61` → 62 écrite (AC-2) ; (d)/(e) jugés sur les liens
+  tels que lus (AC-8) ; L2 : un seul littéral `Account` (AC-15). Axes exercés : code de `origin/main` (migrations 95,
+  epic 49 : 96, horodatage libre après `20261118000002`), sites positionnels, `Account` littéraux, sous-match
+  d'`errors.rs`, écrivains de `accounts`, D1–D10. Non exercés : acceptation du `CHECK` sur `id` par MariaDB (T0, pas de
+  base), manuels. Rapport : `kesh-gate-logs/epic-47-validation/47-1a-liens-modele-et-depot-P2.md`.
 
 ## Dev Agent Record
 
