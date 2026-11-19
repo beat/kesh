@@ -1,6 +1,6 @@
 # Story 47-3 : compte miroir — présentation au bilan et au compte de résultat
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R5 à R8 ; D4, D5, D7, D8 ; Q2, Q4, Q5, Q7, Q11 ; FR-47-3, FR-47-4 ; NFR-47-1, NFR-47-2, NFR-47-4. **Refonte du

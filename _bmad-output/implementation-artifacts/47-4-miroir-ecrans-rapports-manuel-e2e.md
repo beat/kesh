@@ -1,6 +1,6 @@
 # Story 47-4 : compte miroir — écrans des rapports, parcours E2E, manuel utilisateur
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R5 à R7 ; D4 ; FR-47-3 (écran), FR-47-4, FR-47-5 (manuel utilisateur) ; NFR-47-4. **Refonte du 2026-11-19

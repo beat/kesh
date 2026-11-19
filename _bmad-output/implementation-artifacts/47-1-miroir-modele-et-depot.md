@@ -1,6 +1,6 @@
 # Story 47-1 : compte miroir — modèle et dépôt (migration)
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R1 à R4 ; D4, D7, D8, D10 (adaptée) ; Q1, Q10. **Refonte du 2026-11-19 (miroir seul, KISS)** de l'ancienne

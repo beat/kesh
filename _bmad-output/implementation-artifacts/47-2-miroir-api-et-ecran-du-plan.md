@@ -1,6 +1,6 @@
 # Story 47-2 : compte miroir — API des comptes et écran du plan comptable
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R2 à R4, R7 ; Q10 ; FR-47-1, FR-47-2, FR-47-5 (manuels). **Refonte du 2026-11-19 (miroir seul, KISS)** : fusion
