@@ -53,13 +53,18 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
    de `textes_coherents.rs` rougit sur un numéro inconnu ou un nom faux (l'exemple « 1179 Créances sociales » /
    « 2270 Dettes sociales » de la rédaction d'origine aurait rougi). Les messages des catalogues portent des
    **variables** (`{ $number }`, `{ $name }`), non des exemples.
-   **Messages** (une clé par ligne, quatre locales, repli Rust **égal à la valeur fr-CH** — garde G9) : un message par
-   raison de `PRESENTATION_LINK_INVALID` (`self`, `unknown`, `archived`, `equity`, `accountType` — variante miroir et
-   variante paire —, `chain` — avec `{ $number }` du compte qui occupe le rôle —, `bothLinks`, `onCreate`) et un par
-   raison de `ACCOUNT_PRESENTATION_LINKED` (`archive` — variantes cible de miroir et membre de paire —,
-   `accountType`, `equityRole`), plus l'avertissement de l'AC-4 ; la liste des clés est écrite au Dev Agent Record
-   et un test lit chaque raison de `PresentationLinkReason::ALL` + `bothLinks` + `onCreate` et exige un message non
-   vide par locale.
+   **Messages — contrat que réalise la 47-1a** (AC-15 de la 47-1a ; une clé par ligne, quatre locales, repli Rust
+   **égal à la valeur fr-CH** — garde G9) : un message par raison de `PRESENTATION_LINK_INVALID` (`self`, `unknown`,
+   `archived`, `equity`, `accountType` — variante miroir et variante paire —, `chain` — avec `{ $number }` du compte
+   qui occupe le rôle —, **`bothLinks` et `onCreate` compris** : ils appartiennent à `PresentationLinkReason` (47-1a
+   AC-5) et la fonction de réponse de la 47-1a, sur le patron de `fx_account_invalid_response` (`errors.rs:1881`),
+   fait un `match` exhaustif sur la raison — leurs bras, donc leurs clés, naissent avec elle) et un par raison de
+   `ACCOUNT_PRESENTATION_LINKED` (`archive` — variantes cible de miroir et membre de paire —, `accountType`,
+   `equityRole`) ; la liste des clés est écrite au Dev Agent Record **de la 47-1a**, avec le test qui lit chaque
+   raison de `PresentationLinkReason::ALL` (`bothLinks` et `onCreate` y sont déjà : les ajouter en plus les
+   compterait deux fois) et exige un message non vide par locale. **Ici** : seule la clé de l'avertissement de l'AC-4
+   s'ajoute ; T0 constate que la 47-1a a bien posé les clés de `bothLinks` et `onCreate` (sinon, elles s'écrivent ici,
+   constat au Change Log), et T5 exerce chaque message par les routes.
 3. **`AccountResponse`** rend `mirrorAccountId` et `offsetAccountId` (absents quand `null`, comme
    `fxGainAccountId` — le JSON d'un plan sans lien reste identique) ; `GET /api/v1/accounts` aussi.
 4. **Avertissement de la paire (Q9)** : la réponse d'un `PUT` qui **crée** une paire (le compte n'en avait pas, ou
@@ -68,16 +73,26 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
    comptes annuels ; la présentation brute reste disponible pour les comptes officiels. Absent (`skip`) sinon.
    **Mécanisme** (aucun précédent `warnings` dans l'API des comptes) : `AccountResponse` gagne
    `warnings: Vec<AccountWarning { code, message }>` avec `skip_serializing_if = "Vec::is_empty"` ; `new(…)` le
-   laisse vide, un constructeur `with_warnings` n'est appelé que par `update_account` ; les quatre autres routes et la
-   liste ne le rendent donc jamais. La condition « crée une paire » compare le `offsetAccountId` du compte lu par
+   laisse vide, un constructeur `with_warnings` n'est appelé que par `update_account` ; les trois autres routes qui
+   rendent un compte (création, archivage, réactivation) et la liste ne le rendent donc jamais. La condition « crée une paire » compare le `offsetAccountId` du compte lu par
    `find_by_id_in_company` **avant** la mise à jour (déjà lu pour le contrôle IDOR) à celui du compte rendu :
    `après.is_some() && après != avant` ; lecture hors verrou, **assumée** (au pire un avertissement manquant ou en
    trop sur une concurrence : il ne bloque rien). Reposer la même paire, poser un miroir, retirer : aucun
    avertissement. Le message vient de `t(…)` (locale d'installation, comme tout message de l'API).
+   **Clé i18n unique** : `accounts-presentation-offset-warning`, **sans variable**, un seul texte pour la paire
+   charge/produit et la paire actif/passif (D3), quatre locales, repli Rust égal à la valeur fr-CH (G9). Texte fr-CH
+   proposé : « Une paire présente le net de deux comptes — une charge et un produit, ou un actif et un passif —, ce
+   que l'art. 958c al. 1 ch. 7 CO interdit dans les comptes annuels. Kesh présentera le net ; la présentation brute
+   reste disponible pour les comptes officiels. » **Le nom de la clé est un contrat** : l'écran de la 47-3a (AC-3)
+   affiche **cette clé même**, lue dans le catalogue servi par `GET /api/v1/i18n/messages` (`lib.rs:1282`), avant
+   d'enregistrer — il ne la lit pas dans la réponse `warnings`, et n'a pas de texte à lui ; le Dev Agent Record écrit
+   le nom livré, que la 47-3a relit à son T0. Préfixe `accounts-` comme `accounts-retype-warning`, l'autre
+   avertissement du plan comptable.
 5. **Audit** : chaque compte modifié a son entrée `account.updated` avant/après (47-1a AC-6) ; `details.before` et
    `details.after` portent `mirrorAccountId` et `offsetAccountId` — **test par `GET /api/v1/audit-log` en session**
    (la consultation du journal est fermée aux clés d'API) : une pose de paire donne deux entrées, une par compte ;
-   aucun libellé d'action neuf (`account.updated` est déjà à `audit_labels.rs:77`). L'attribution à la clé d'API
+   un déplacement de paire (A passe de D à B) en donne trois (A, B, D) ; aucun libellé d'action neuf
+   (`account.updated` est déjà à `audit_labels.rs:77`). L'attribution à la clé d'API
    reste celle des comptes aujourd'hui (`actor_type = 'user'`, #431 : dit au manuel d'administration, § Clés API) —
    **non traité ici**, constat écrit.
 6. **MCP `kesh_plan_comptable`** : chaque compte porte `compte_miroir_id` et `partenaire_id` (clés toujours
@@ -93,12 +108,22 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
    `LIMITE_MAX_MCP` (`plan_comptable.rs`) ; le littéral du schéma d'entrée (`maximum`, `default` de `schema_entree`) ;
    la table `mesurees` de `bornes_attendues` (`mcp_outils_e2e.rs:183`, `(68, 38)`) ; l'en-tête de module de
    `plan_comptable.rs` (mesure citée) ; la description de l'outil (ajouter « compte miroir, partenaire de paire ») ;
-   les tests de pagination qui comptent des pages (`kesh_plan_comptable_rend_la_devise`, `:2217`) ; le manuel
+   le témoin de refus au maximum `plafond_au_maximum` (fixture large : la page maximale doit encore dépasser, sinon
+   l'élargir) ; le manuel
    d'administration (la phrase « `kesh_plan_comptable` 38 comptes par défaut et 68 au plus » de la section « Passer à
    la 0.19.0 » est un relevé daté, **laissé tel quel** ; la section de cette release la corrige). **Contrat** : un
    client MCP qui envoie `limit` entre le nouveau et l'ancien maximum reçoit désormais `arguments invalides` (un
    `limit` au-delà du maximum est refusé, `arguments_inconnus_refuses`) : à écrire aux Notes de version et au manuel
-   (même précédent que la 37-1).
+   (même précédent que la 37-1). **Valeurs** : un test sur le patron de `kesh_plan_comptable_rend_la_devise`
+   (`mcp_outils_e2e.rs:2217`, pages parcourues par `LIMITE_MAX_MCP`, constante qui suit d'elle-même) pose un miroir
+   et une paire, et exige `compte_miroir_id` = id de la cible sur la source (`null` sur la cible), `partenaire_id` =
+   l'id de l'autre membre **sur chacun des deux**, `null` ailleurs, clés présentes sur chaque compte — sans lui,
+   inverser les deux clés ne rougirait pas (`mcp_contrat` ne contrôle que la forme). ⚠️ `fixture_tailles` est
+   partagée avec la 47-2a (qui mesure `kesh_bilan` avec un miroir à plusieurs sources) : le second arrivé
+   **re-mesure** les outils touchés après la fusion. **Documentation du MCP** : au manuel d'administration — tableau
+   des outils (`admin-manual.tex:3533`, « le plan comptable, par tranches, avec la devise de chaque compte » : y
+   ajouter le compte miroir et le partenaire) et « Pour les intégrations » de la section de la release (AC-9) ;
+   `docs/api-external.md` ne documente pas le MCP (aucune occurrence de `kesh_plan_comptable`).
 7. **Export CSV des tables** : les colonnes `mirror_account_id` et `offset_account_id` de `accounts.csv` sont posées
    **par la 47-1a** (AC-14 de la 47-1a : la garde `chaque_colonne_du_schema_est_exportee_ou_ecartee` de
    `csv_tables.rs`, qui lit le squash, rougirait sinon au gate complet de la 47-1a), **à la fin de la ligne, après
@@ -111,16 +136,18 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
    l'activer rendrait un refus à tout client qui envoie un champ qu'il croit utile — rejeté. Un lien posé à la
    création serait sinon **ignoré en silence**, et l'intégrateur le croirait posé : la requête déclare donc
    `mirrorAccountId` et `offsetAccountId` (`present_or_null`, sur le patron de `UpdateAccountRequest`), et un
-   **entier** → **400 `PRESENTATION_LINK_INVALID`**, `reason: "onCreate"`, `field` du champ en cause, avant la
-   transaction ; `null` ou absent : accepté, sans effet. Test : `POST` avec un lien → 400, aucun compte créé.
+   **entier** → **400 `PRESENTATION_LINK_INVALID`**, `reason: "onCreate"`, `field` du champ en cause
+   (`mirrorAccountId` si les deux sont entiers), avant la transaction ; `null` ou absent : accepté, sans effet. Test : `POST` avec un lien → 400, aucun compte créé.
 9. **Documentation (exigence de Guy, 2026-11-19)** :
    - `docs/api-external.md` : nouvelle sous-section après « Comptabilité multi-devises » (`:1060`), sur son patron :
      champs `mirrorAccountId`, `offsetAccountId` (trois états, **table de l'AC-1**, no-op d'un lien reposé,
      **version des partenaires incrémentée : relire**), règles de validité, codes `PRESENTATION_LINK_INVALID` (liste
      close des raisons : celles de la 47-1a **plus `bothLinks` et `onCreate`**, et le `field`) et
      `ACCOUNT_PRESENTATION_LINKED`, `warnings` de la paire (code, message, quand), effet sur les rapports renvoyé à la
-     47-2a, **colonnes de `accounts.csv` en fin de ligne**, `kesh_plan_comptable` (deux clés, **nouveaux plafonds**) ;
-     le sens inverse (« qui pointe vers ce compte ») n'est **pas** rendu : il se déduit de `GET /accounts` (sources
+     47-2a, **colonnes de `accounts.csv` en fin de ligne** ; un lien **hors règle** (posé par l'import d'une
+     sauvegarde ou par SQL, 47-1a AC-8) est **rendu tel quel** par `GET /accounts` et l'export (colonnes brutes), mais
+     **ignoré par les rapports** (lecteur de la 47-1a) : le retirer par `PUT` (`null`) le corrige ; le MCP n'est pas
+     dans ce guide (AC-6) ; le sens inverse (« qui pointe vers ce compte ») n'est **pas** rendu : il se déduit de `GET /accounts` (sources
      archivées comprises : `includeArchived=true`, les sources archivées étant admises) ; ligne et note de bas de
      tableau du plan comptable (`:226`) ;
    - manuel d'administration `docs/manual/fr/admin-manual.tex`. ⚠️ **Les emplacements de la rédaction d'origine
@@ -132,7 +159,8 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
      l'intégration), qui dit **en tête la sauvegarde complète** (base, `.keshbackup`, dossier des documents), la
      migration (**total recompté** depuis `ls … | wc -l`), le **retour à la release précédente** (refus de la base
      migrée, retour par la sauvegarde d'avant la mise à jour), puis, dans « Pour les intégrations », les champs de
-     l'API, les **colonnes de `accounts.csv` en fin de ligne** et la **révision des plafonds du MCP** ; et, dans
+     l'API, les **colonnes de `accounts.csv` en fin de ligne** et la **révision des plafonds du MCP** (deux clés,
+     nouveaux plafonds, `limit` au-delà refusé) ; le **tableau des outils MCP** (`:3533`, AC-6) ; et, dans
      *Compatibilité* de la sauvegarde (`:2302`), une phrase : une sauvegarde de la release précédente s'importe,
      liens vides. Le texte est écrit **en respectant `textes_coherents.rs`** (G4-bis/ter : numéros et noms de comptes
      d'un plan livré ; G19 : URL au tag ; G25 : jamais « projet » pour l'axe analytique) — exécuter ce fichier de
@@ -152,9 +180,10 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
 - [ ] **T1 — route** (AC 1, 3, 4, 8) : champs, `presentation_link_for_update` (comme `own_fx_for_update` ; table de
   l'AC-1, `bothLinks` jugé avant le dépôt), `presentation_link_for_create` (`onCreate`), réponse, `warnings`
   (`with_warnings`).
-- [ ] **T2 — erreurs** (AC 2, 10) : mapping et messages des deux refus déjà posés par la 47-1a (AC-15) ; ici, les
-  messages propres à l'API (`bothLinks`, `onCreate`, avertissement de la paire) et leurs clés i18n.
-- [ ] **T3 — MCP** (AC 6) : `Compte`, mesure des tailles.
+- [ ] **T2 — erreurs et i18n** (AC 2, 4, 10) : mapping et messages des deux refus posés par la 47-1a (AC-15), clés
+  de `bothLinks` et `onCreate` comprises (constat de T0) ; ici, la seule clé
+  `accounts-presentation-offset-warning` (quatre locales, repli égal à fr-CH), nom écrit au Dev Agent Record.
+- [ ] **T3 — MCP** (AC 6) : `Compte`, mesure des tailles, test des valeurs des deux clés, `plafond_au_maximum`.
 - [ ] **T4 — export** (AC 7) : test du ZIP global ; les colonnes elles-mêmes sont de la 47-1a.
 - [ ] **T5 — tests** : `crates/kesh-api/tests/accounts_e2e.rs` (chaque refus, trois états, `warnings`, audit, RBAC
   comme `update_account`), `accounts_designated_archive_e2e.rs` (archivage refusé nommant le compte lié),
@@ -170,27 +199,32 @@ afin de gérer les liens comme tout autre attribut d'un compte, avec des refus q
 - Route : `crates/kesh-api/src/routes/accounts.rs:147` (`present_or_null`), `:164-216` (`UpdateAccountRequest`,
   `fxGainAccountId` à trois états), `:244-305` (`AccountResponse`, `skip_serializing_if`), `:433-523`
   (`update_account`, `own_fx_for_update`), `:524` (`archive_account`) ; routage `crates/kesh-api/src/lib.rs:580-595`.
-- Erreurs : `crates/kesh-api/src/errors.rs:4428` (`AccountDesignatedInSettings` → 409, `details`), `:4882`
+- Erreurs : `crates/kesh-api/src/errors.rs:1881` (`fx_account_invalid_response`, `match` exhaustif sur la raison),
+  `:4428` (`AccountDesignatedInSettings` → 409, `details`), `:4882`
   (`FxAccountInvalid` → `fx_account_invalid_response`, patron à reprendre).
 - MCP : `crates/kesh-api/src/mcp/outils/plan_comptable.rs:1-58` (budget de tailles, `LIMITE_DEFAUT` 38,
   `LIMITE_MAX_MCP` 68, `Compte`).
 - Export : `crates/kesh-api/src/exports/csv_tables.rs:287-330` (`serialize_accounts_csv`, en-tête `:306`).
 - Documentation : `docs/api-external.md:1060` (section multi-devises, patron d'un attribut de compte à trois états) ;
-  `docs/manual/fr/admin-manual.tex:2230`, `:2497`, `:3262`.
+  `docs/manual/fr/admin-manual.tex:2302` (*Compatibilité*), `:2497` (*Mise à jour de Kesh*), `:2550` (« Passer à la
+  0.19.0 », patron), `:2569` (« Pour les intégrations », relevé daté des plafonds), `:3533` (tableau des outils MCP).
+  (`:2230` et `:3262`, cités par la rédaction d'origine, ne sont pas des foyers : AC-9.)
 
 ### Points d'attention
 
 - **Contrat additif, et ses deux exceptions déclarées** : un client qui ignore les champs n'efface rien (absent =
   inchangé) ; un plan sans lien rend le même JSON qu'aujourd'hui (champs omis) ; `accounts.csv` gagne deux colonnes
-  **en fin de ligne** (aucun décalage). **Exceptions** : (1) les plafonds du MCP baissent (AC-6) — un `limit` entre
-  l'ancien et le nouveau maximum est refusé ; (2) un `PUT` qui renvoie le corps lu par `GET` reste sans effet (no-op
-  d'un lien reposé). `POST` ignore toujours les champs inconnus, **sauf** un lien entier (400 `onCreate`).
+  **en fin de ligne** (aucun décalage) ; un `PUT` qui renvoie le corps lu par `GET` reste sans effet (no-op d'un lien
+  reposé). **Exceptions** : (1) les plafonds du MCP baissent (AC-6) — un `limit` entre le nouveau et l'ancien maximum
+  est refusé ; (2) `POST` ignore toujours les champs inconnus, **sauf** un lien entier (400 `onCreate`, là où il était
+  ignoré) ; (3) poser ou retirer une paire incrémente la `version` du partenaire : une copie détenue rend 409.
 - Les raisons `bothLinks` et `onCreate` sont **posées par la route**, mais **portées par la même énumération** que
   celles du dépôt (`PresentationLinkReason`, 47-1a AC-5) — seul moyen de construire la réponse par
   `AppError::Database(DbError::PresentationLinkInvalid { … })`, comme `own_fx_missing` pour `FX_ACCOUNT_INVALID` ; le
   dépôt, lui, ne les produit jamais (test). La liste close documentée est donc celle de l'énumération entière.
-- L'écran (47-3a) montre l'avertissement **avant** d'enregistrer, depuis ses propres textes ; la réponse `warnings`
-  sert les intégrations et le contrôle E2E.
+- L'écran (47-3a AC-3) montre l'avertissement **avant** d'enregistrer, par **la clé même** du message `warnings`
+  (`accounts-presentation-offset-warning`, AC-4), lue dans le catalogue — il n'a pas de texte à lui et n'affiche pas
+  la réponse `warnings`, qui sert les intégrations et le contrôle E2E.
 
 ### Stratégie de tests
 
@@ -199,7 +233,8 @@ API de bout en bout (Rust, `reqwest`), MCP (`mcp_outils_e2e`, `mcp_contrat`, tai
 
 ### Risques
 
-Conflit avec `fix/api-parent-compte` (même corps de requête, mêmes mappings) ; dépassement du budget MCP.
+Conflit avec `fix/api-parent-compte` (même corps de requête, mêmes mappings) ; dépassement du budget MCP ;
+`fixture_tailles` et `bornes_des_schemas` partagés avec la 47-2a (re-mesure par le second arrivé, AC-6).
 
 ### References
 
@@ -212,9 +247,32 @@ Conflit avec `fix/api-parent-compte` (même corps de requête, mêmes mappings) 
 Un compte peut désigner un **compte miroir** ou un **partenaire de paire** (présentation seulement, aucune écriture) :
 API des comptes (`mirrorAccountId`, `offsetAccountId`), plan comptable du MCP, export CSV. La création d'une paire
 s'accompagne d'un avertissement (CO 958c al. 1 ch. 7). Archiver un compte cible d'un miroir ou membre d'une paire est
-refusé, le compte lié nommé.
+refusé, le compte lié nommé. **Pour les intégrations** : `accounts.csv` gagne deux colonnes **en fin de ligne** ;
+poser ou retirer une paire incrémente la `version` du partenaire ; `POST /accounts` refuse un lien (400
+`PRESENTATION_LINK_INVALID`, `onCreate`) au lieu de l'ignorer ; ⚠️ le **serveur MCP réduit ses pages** —
+`kesh_plan_comptable` <défaut> comptes par défaut et <maximum> au plus (valeurs mesurées au développement, estimées
+34 / 61), un `limit` au-delà est refusé.
 
 ## Change Log
+
+- 2026-11-19 — validation P2 (Opus 5.5) : 0 C / 0 H / 4 M / 4 L, remédiés. M1 : doublon et trou avec la 47-1a sur
+  les messages — l'AC-2 listait comme travail de cette story les messages que la 47-1a AC-15 pose, T2 gardait ici
+  `bothLinks` et `onCreate` alors que la fonction de réponse exhaustive de la 47-1a les exige, et le test comptait
+  `bothLinks` et `onCreate` deux fois (déjà dans `ALL`) → AC-2 « contrat que réalise la 47-1a », T2, constat en T0.
+  M2 : clé de l'avertissement de paire non nommée alors que la 47-3a affiche cette clé, et Notes qui disaient
+  l'écran « depuis ses propres textes » (relevé de la P2 de la 47-3a, transmis par l'orchestrateur) → AC-4 (clé
+  `accounts-presentation-offset-warning`, texte générique charge/produit et actif/passif, sans variable), Points
+  d'attention. M3 : MCP documenté dans `api-external.md`, qui ne le décrit pas, et tableau des outils du manuel
+  d'administration (`:3533`) omis → AC-6, AC-9, Dev Notes. M4 : aucun test des **valeurs** de `compte_miroir_id` /
+  `partenaire_id` (deux clés inversées passaient), et Notes de version sans le changement de contrat que l'AC-6 dit
+  d'y écrire (CHANGELOG assemblé depuis elles) → AC-6, T3, Notes. L : « quatre autres routes » (trois : création,
+  archivage, réactivation ; pas de `GET` unitaire) ; `kesh_plan_comptable_rend_la_devise` donné pour un site à
+  réviser alors qu'il lit la constante, `plafond_au_maximum` omis ; lien hors règle rendu brut par l'API et l'export
+  mais ignoré des rapports, non dit ; « exception (2) » qui n'en était pas une, version du partenaire non déclarée,
+  audit d'un déplacement (trois entrées), `field` de `onCreate` à deux entiers, `fixture_tailles` partagée avec la
+  47-2a. Signalé, non modifié (autre agent) : la 47-1a AC-15 et ses *Project Structure Notes* devraient dire en
+  toutes lettres que les clés de `bothLinks` et `onCreate` y naissent et que seule la clé de l'avertissement reste à
+  la 47-1b. Rapport : `kesh-gate-logs/epic-47-validation/47-1b-liens-api-mcp-export-P2.md`.
 
 - 2026-11-19 — validation P1 de la **47-3a** (Opus 5.5), effet sur cette fiche : AC-2, `linkedAccounts[].active` et
   message d'une source archivée (remède de l'archivage refusé, 47-3a AC-5).
