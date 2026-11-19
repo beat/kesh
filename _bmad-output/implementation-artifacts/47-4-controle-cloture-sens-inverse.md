@@ -34,7 +34,8 @@ afin de poser le lien ou de vérifier l'écriture avant d'arrêter les comptes, 
    - **tout lien que le lecteur écarte** (47-1a AC-8 : cible absente ou d'une autre société, lien vers soi, paire non
      réciproque, chaîne, fonds propres, types qui ne sont plus de l'autre côté) ne couvre rien : le compte est jugé
      comme s'il n'avait pas de lien ; K10 ne relit jamais les colonnes de lien, seulement le vecteur du lecteur ;
-   - une cible de miroir dont la ligne présentée vaut **zéro** (propre + sources) n'est pas relevée (0 n'est pas `< 0`).
+   - une cible de miroir dont la ligne présentée vaut **zéro** (propre + sources) n'est pas relevée (0 n'est pas `< 0` ;
+     la présentation omet cette ligne, comme une paire à net nul, 47-2a algorithme).
    Soldes **en devise principale** (le solde en devise n'entre pas, comme les totaux du bilan, NFR-37-4-3) :
    actif et passif cumulés `entry_date <= end_date` de Y, tous exercices (`balance_sheet.rs:336-345`) ; produit et
    charge sur les écritures `fiscal_year_id = Y` **et** `entry_date BETWEEN start_date AND end_date`
@@ -98,7 +99,8 @@ afin de poser le lien ou de vérifier l'écriture avant d'arrêter les comptes, 
   débiteur, produit débiteur, charge créditrice ; compte sans rôle relevé, fonds propres exclus ; archivé relevé ;
   source de miroir exclue ; membre de paire exclu ; cible de miroir à solde propre inverse relevée sans source
   inverse, **non** relevée quand ses sources la compensent ni quand elles l'annulent à zéro ; liens écartés sans effet
-  (orphelin, chaîne, paire non réciproque, posés par SQL direct : un test par cas, le compte reste relevé) ; produit d'une écriture d'un
+  (orphelin, chaîne, paire non réciproque, posés par SQL direct : un test par cas, le compte reste relevé ; les sept
+  cas de la liste close sont testés au lecteur, 47-1a AC-8, que K10 consomme sans le recoder) ; produit d'une écriture d'un
   autre exercice datée dans Y non compté ; autre société jamais lue ; troncature à 20 avec `count` complet) ; sites
   de l'AC-10 côté dépôt.
 - [ ] **T3** : API (AC 4, 6) ; **test de cohérence avec la présentation** (dans la story, 47-2a ou 47-4, qui arrive
@@ -152,7 +154,7 @@ présentation en `kesh-report`) qui pourraient diverger — d'où le test de coh
 
 ### References
 
-- Fiche 47-1a (AC-8 lien orphelin, AC-9 lecteur) ; fiche 47-2a (AC-2, AC-3, algorithme) ; `CLAUDE.md`
+- Fiche 47-1a (AC-8 liens écartés par le lecteur, liste close (a)–(g) ; AC-9 lecteur) ; fiche 47-2a (AC-2, AC-3, algorithme) ; `CLAUDE.md`
   § *Priorités des défauts* (aucune).
 - Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
   tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
@@ -176,6 +178,16 @@ résultat faute de compte miroir ou de paire. ⚠️ **Changement de contrat de 
 
 ## Change Log
 
+- 2026-11-19 — validation P3 ciblée (Opus 5.5, une lentille sur la remédiation P2 `53bf7f00`) : 0 C / 0 H / 0 M /
+  3 L, remédiés dans la 47-4. L : référence restée « AC-8 lien orphelin » (résidu du symptôme de P2) → liste close
+  (a)–(g) ; L : T2 ne testait que trois des sept cas écartés sans dire que les sept le sont au lecteur (47-1a AC-8) ;
+  L : ligne présentée nulle — renvoi à l'omission de la 47-2a. Liste des sept cas identique dans la 47-4 AC-2, la
+  47-1a AC-8 et la 47-2a AC-1 ; écarts **signalés, non remédiés** (47-2a en validation P1 par un autre agent, fichier
+  modifié non commité ; 47-1a idem) : algorithme de la 47-2a (§ 1) qui omet « soi-même » dans sa liste ; omission
+  de la ligne nulle dite au seul § 5 (cas à tester), non à l'AC 2, et sans la règle de devise du brut (`HAVING balance
+  != 0 OR balance_currency != 0`) ; 47-1a AC-9 ne dit pas qu'un lien écarté est absent du vecteur (champ à `NULL` ou
+  compte omis), ce sur quoi K10 et la 47-2a reposent. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-4-controle-cloture-sens-inverse-P3.md`.
 - 2026-11-19 — validation P2 (Sonnet 5.5) : 0 C / 0 H / 1 M / 2 L, remédiés. M : K10 ne nommait que le lien orphelin parmi
   les liens que le lecteur écarte (47-1a AC-8 en compte sept cas) : un miroir en chaîne ou une paire non réciproque
   aurait été tenu pour couvrant alors que la présentation n'applique rien (faux négatif, même classe que le M2 de P1) ;
