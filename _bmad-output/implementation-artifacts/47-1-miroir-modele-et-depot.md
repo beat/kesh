@@ -318,6 +318,23 @@ compte de présentation sur lequel aucune écriture ne se passe.
   (`e1c1653c`), simplicité. Non exercés : acceptation du `CHECK` sur `id` par MariaDB (T0), manuels, i18n (rien de neuf
   vs P1). Rapport : `kesh-gate-logs/epic-47-validation/47-1-miroir-modele-et-depot-P2.md`.
 
+- 2026-11-20 — **T0 du développement : arrêt, question à Beat et Guy (AC-1, D10).** Reprise de `origin/main`
+  (`fd04099f`, trois commits : 0.20.0 kickoff, bilan 0.19.0, #1353) dans `epic/47-comptes-miroirs` par fusion
+  (`cc4b48d3`) ; seul conflit, `sprint-status.yaml`, résolu en gardant les deux côtés (bloc de main entier, puis le
+  bloc de l'Epic 47 ; aucune clé en double). Migrations à la reprise : 95, dernière `20261118000001` ; la 49-1a
+  (`20261118000002`) n'est pas sur `main` → horodatage retenu `20261119000001`, fenêtre `total - 62` / 96 si rien
+  n'entre d'ici là. **Contrôle du `CHECK` sur `id`**, MariaDB `10.11.19-MariaDB-ubu2204` (conteneur de dev
+  `kesh-mariadb-dev2`, base jetable `kesh_s471_t0`, supprimée après) : `ALTER TABLE t ADD CONSTRAINT chk_self CHECK
+  (m IS NULL OR m <> id)` sur une table `id BIGINT AUTO_INCREMENT PRIMARY KEY` → **`ERROR 1901 (HY000): Function or
+  expression 'AUTO_INCREMENT' cannot be used in the CHECK clause of `id``** ; même refus pour la contrainte déclarée
+  dans le `CREATE TABLE`. **`chk_accounts_mirror_not_self` n'est donc pas posable** tel que l'AC-1 l'écrit. Comme
+  l'exige l'AC-1, l'écart à D10 n'est pas tranché ici : aucune migration ni ligne de code écrite. Options relevées
+  pour la décision : (a) renoncer au `CHECK` — le contrôle `self` de `check_mirror` (AC-4) reste, et
+  `retain_valid_links` écarte déjà un lien vers soi-même (types égaux, AC-8 (b)) ; (b) un trigger `BEFORE INSERT/
+  UPDATE` qui refuse `mirror_account_id = id` — aucune migration du dépôt n'emploie de trigger à ce jour, et sur un
+  `INSERT` l'`id` auto-incrémenté n'est pas encore connu dans `NEW.id` (le cas ne se présente qu'à la modification).
+  Inventaire des bases partielles non fait (après la décision).
+
 ### Historique — Change Log de la 47-1a (avant la refonte, laissé tel quel)
 
 - 2026-11-19 — validation P1 de la **47-1b** (Sonnet 5.5), effets sur cette fiche : AC-4 (variantes `Clear*`,
