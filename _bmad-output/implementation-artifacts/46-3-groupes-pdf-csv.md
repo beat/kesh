@@ -2,6 +2,8 @@
 
 Status: draft
 
+*Revue de Beat (2026-11-19) : approuvée, avec les exigences ajoutées ci-dessous ; approbation de Guy attendue.*
+
 *Esquisse du 2026-11-18. Epic 46, D8. Suit 46-1 ; commence après la fusion de `fix/pdf-montants-alignes`. Aucune
 migration.*
 
@@ -19,7 +21,12 @@ de remettre un bilan par groupes à ma fiduciaire ou de le retravailler dans un 
    `format_amount_iso`.
 4. **AC-4 — Sans paramètre.** CSV identique octet pour octet, PDF aux mêmes lignes de texte (NFR-46-1), comparés à des
    fixtures du commit de base.
-5. **AC-5 — Tests et manuel.** Tests de rendu (texte extrait du PDF), E2E d'export ; manuel FR (`.tex`).
+5. **AC-5 — PDF fidèle à l'écran (Beat).** Le PDF reproduit **ce que montre l'écran** : même niveau, même position des
+   sous-totaux (sur la ligne du titre, ou ligne de sous-total au-dessous, 46-2 AC-6), même règle des groupes non
+   affichés (Q2) et de la devise (Q3). Un test compare les lignes du PDF aux `groupedRows` de l'écran.
+6. **AC-6 — Pilotage par l'API et le MCP (Beat).** Niveau et position des sous-totaux se passent par paramètres de
+   l'export, donc pilotables sans écran (API, MCP 46-4).
+7. **AC-7 — Tests et manuel.** Tests de rendu (texte extrait du PDF), E2E d'export ; manuel FR (`.tex`).
 
 ## Tâches principales
 

@@ -2,6 +2,8 @@
 
 Status: draft
 
+*Revue de Beat (2026-11-19) : approuvée, avec les exigences ajoutées ci-dessous ; approbation de Guy attendue.*
+
 *Esquisse du 2026-11-18, branche `epic/46-rapports-groupes`. Epic 46, D1–D8, D10. Aucune migration attendue. À
 valider en boucle après la revue de Beat. Part de `main` après la fusion de `fix/bilan-resultat-reporte`.*
 
@@ -21,14 +23,21 @@ un sous-total par groupe et un niveau de détail choisi, afin de présenter mes 
 4. **AC-4 — Sections.** Le bilan garde Actifs, Dettes, Fonds propres et les deux lignes calculées ; un groupe à cheval
    sur deux sections n'est pas affiché, ses enfants remontent (D4, sous réserve de Q4). Même règle au compte de
    résultat (produits / charges).
-5. **AC-5 — Vides et devise.** Groupe nul masqué (D6) ; solde en devise d'un groupe seulement si une devise étrangère
-   unique (D7).
+5. **AC-5 — Vides et devise.** Groupe nul masqué (D6) ; **un groupe non affiché laisse son total à son parent** : le
+   total n'est jamais perdu (Q2, Beat). Solde en devise d'un groupe : si une **seule devise**, devise + CHF, sinon
+   **CHF seul**, sans ligne supplémentaire (Q3, Beat).
 6. **AC-6 — API.** `detailLevel` (`1`…`n` | `all`) sur `GET /reports/balance-sheet` et `/income-statement` ; valeur
    invalide → `400 VALIDATION_ERROR` ; la réponse gagne `groupedRows` par section. Sans paramètre : JSON identique
    (NFR-46-1).
 7. **AC-7 — Arbre défensif.** Cycle ou parent d'une autre société posé par SQL : compte traité en racine,
    `tracing::warn!`, ni boucle ni panique (NFR-46-4).
-8. **AC-8 — Tests.** Unitaires de `regrouper` (plan PME, groupe à solde propre, types mixtes, cycle, devise unique et
+8. **AC-8 — Position des sous-totaux (Beat).** Chaque groupe porte son sous-total ; la position choisie à l'affichage
+   (sur la ligne du titre, au-dessus des comptes, ou ligne de sous-total au-dessous, 46-2) se pilote par un paramètre
+   de l'API (nom fixé à la validation), lu par écran, PDF et MCP.
+9. **AC-9 — Art. 959a CO (Q7, Beat).** La présentation par groupes respecte les rubriques minimales de l'art. 959a CO
+   (squelette légal conservé, groupe à cheval dissous, Q4) ; un test compare les sections du bilan aux rubriques
+   minimales.
+10. **AC-10 — Tests.** Unitaires de `regrouper` (plan PME, groupe à solde propre, types mixtes, cycle, devise unique et
    mêlée, niveaux 1 à `all`) ; E2E API sur deux exercices ; `docs/api-external.md` à jour.
 
 ## Tâches principales
@@ -37,6 +46,7 @@ un sous-total par groupe et un niveau de détail choisi, afin de présenter mes 
 - [ ] Lecture de l'arbre des comptes de la société (une requête) ; branchement dans `balance_sheet::generate` et
       `income_statement::generate` derrière un paramètre optionnel
 - [ ] `ReportQuery` / `ExportQuery` : `detail_level` ; validation (AC-6)
+- [ ] Fonction pure indépendante du bilan : réutilisée par la balance (46-6)
 - [ ] Tests E2E `reports_e2e.rs` ; documentation API
 
 ## Fichiers

@@ -2,6 +2,8 @@
 
 Status: draft
 
+*Revue de Beat (2026-11-19) : approuvée ; **proposition d'interface (maquette) avant de décider** de la story (Q9) ; approbation de Guy attendue.*
+
 *Esquisse du 2026-11-18. Epic 46, D12. **Conditionnelle** (Q9). Part de `main` après la fusion de
 `fix/api-parent-compte`. Aucune migration attendue.*
 
@@ -11,6 +13,10 @@ En tant que comptable qui range un plan existant, je veux que Kesh me propose de
 de mes comptes, afin de structurer mon plan (une banque = un groupe, puis les liquidités) sans tout créer à la main.
 
 ## Critères d'acceptation (esquisse)
+
+0. **AC-0 — Maquette avant décision (Q9, Beat).** Une maquette de l'interface (sélection, proposition, aperçu de
+   l'arbre) est présentée à Beat et à Guy ; **la story n'est décidée, ni développée, qu'après cette maquette**. La règle
+   « numéro sans son dernier chiffre » y est confirmée ou changée.
 
 1. **AC-1 — Proposition.** Pour une sélection de comptes, Kesh propose un groupe = « numéro sans son dernier chiffre »
    (règle à confirmer, Q9), avec nom à saisir et parent éventuel ; aperçu de l'arbre résultant.

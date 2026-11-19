@@ -1,8 +1,8 @@
-# Story 46-6 : solde de la dette de l'epic
+# Story 46-7 : solde de la dette de l'epic
 
 Status: draft
 
-*Esquisse du 2026-11-18. Story de solde (`CLAUDE.md` § *Priorités des défauts*, « Tarir la source, puis solder »).
+*Esquisse du 2026-11-18 (renumérotée 46-7 le 2026-11-19 : la balance prend le 46-6). Revue de Beat : approuvée. Story de solde (`CLAUDE.md` § *Priorités des défauts*, « Tarir la source, puis solder »).
 Plafond proposé : **2 issues**, à confirmer au kickoff.*
 
 ## Story
