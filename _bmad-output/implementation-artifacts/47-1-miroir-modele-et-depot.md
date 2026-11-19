@@ -108,7 +108,8 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
    et par celles des appelants ; une pose commitée pendant l'attente du verrou sur la cible n'y serait pas vue, et la
    ligne passerait. La lecture verrouillante lit la dernière version commitée et pose ses verrous d'intervalle sur
    l'index, qui font aussi attendre une pose concurrente. L'ordre des refus devient : absent ou archivé → non
-   imputable (si `enforce_postable`) **ou miroir** (toujours). Tests : saisie manuelle et un flux automatique
+   imputable (si `enforce_postable`) **ou miroir** (toujours), les deux familles réunies dans **une seule** erreur
+   `AccountsNotPostable` (la liste `found` sert aux deux : ne pas la consommer avant la seconde lecture). Tests : saisie manuelle et un flux automatique
    (`create_in_tx` avec `enforce_postable = false`) refusés sur un compte miroir, nommé ; acceptés une fois le lien
    retiré (et le compte rendu imputable pour la saisie manuelle).
 7. **Concurrence** : à la modification, A est **déjà** sous `FOR UPDATE` (`FIND_BY_ID_FOR_UPDATE_SQL`, première
@@ -122,11 +123,14 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
    avec « passer une écriture sur T » (`validate_lines_accounts_in_tx` lit T en `LOCK IN SHARE MODE`), « archiver T »,
    « rendre T imputable », et avec « désigner A comme miroir d'un tiers » (qui verrouille A). Un **interblocage**
    (`1213`) reste possible quand une écriture porte à la fois sur A et sur T (elle prend A et T en partage dans l'ordre
-   de l'index, la pose tient A puis attend T) : InnoDB annule l'une, ce qui est un refus, non un état faux. Test de
+   de l'index, la pose tient A puis attend T) : InnoDB annule l'une, ce qui est un refus, non un état faux. Même cas pour « poser A → T » contre « archiver T »
+   (la pose tient A et attend T ; l'archivage tient T et attend, par sa lecture verrouillante de « qui désigne T », la
+   ligne de A) : interblocage `1213` **admis comme refus**, que la 47-2 fait rejouer côté route pour `archive_account`
+   (`create_account` et `update_account` le sont déjà) ; le dépôt, lui, le rend tel quel. Test de
    dépôt à deux transactions pour deux de ces couples (pose contre écriture, l'écriture ayant fait une lecture non
    verrouillante **avant** d'attendre — c'est ce qui rend la mutation « `EXISTS` d'instantané » rouge ; pose contre
-   archivage) : l'un passe, l'autre est refusé (409 de version, refus nommé ou interblocage), jamais un état qui viole
-   l'AC-4, l'AC-5 ou l'AC-6.
+   archivage, dont l'issue admise comprend l'interblocage) : l'un passe, l'autre est refusé (409 de version, refus nommé
+   ou interblocage), jamais un état qui viole l'AC-4, l'AC-5 ou l'AC-6.
 8. **Lecteur des liens pour les rapports** : `accounts::mirror_links(executor, company_id) -> Vec<MirrorLink>` rend,
    en **une requête**, chaque lien valide de la société — `source_id` et, pour la cible, `id`, `number`, `name`,
    `account_type`, `active` (la cible n'a aucune écriture : les rapports n'en ont pas la ligne et la construisent de là,
@@ -149,7 +153,8 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
    archivée, disent de la réactiver d'abord. Une clé par raison, la fonction de réponse traitant chaque raison par un
    `match` **sans cas par défaut** (patron `fx_account_invalid_response`, `errors.rs:1881`), et un test qui parcourt
    la liste close des raisons et exige une clé dans les quatre catalogues. Le Dev Agent Record **liste les noms de clés
-   livrés** (la 47-2 les reprend). Aucun numéro de compte en dur dans un catalogue (G4-bis) : variables Fluent.
+   livrés** (information de relecture : l'écran de la 47-2 ne les reprend pas, il affiche le `message` traduit que rend
+   le serveur). Aucun numéro de compte en dur dans un catalogue (G4-bis) : variables Fluent.
 10. **Sauvegarde** : une sauvegarde **0.19.0** ou **0.20.0** (sans la colonne) s'importe, miroirs vides (règle
     générique de `check_schema_compat`, colonne facultative ; `import.rs:597-640`) ; test sur le patron de
     `full_import_of_a_0_17_6_backup_takes_the_multi_currency_defaults` (`crates/kesh-api/tests/admin_full_import_e2e.rs:5946`) :
@@ -296,6 +301,22 @@ compte de présentation sur lequel aucune écriture ne se passe.
   (`insert_lines`) ; `check_schema_compat` (`import.rs:597-640`) ; `serialize_accounts_csv` (`csv_tables.rs:287`) ;
   `fx_account_invalid_response` (`errors.rs:1881`) ; `full_import_of_a_0_17_6_…` (`:5946`) ; `scripts/regen-test-schema.sh`.
   Rapport : `kesh-gate-logs/epic-47-validation/47-1-miroir-modele-et-depot-P1.md`.
+
+- 2026-11-19 — validation P2 (Sonnet 5.5, complète, contexte frais) : **0 C / 0 H / 0 M / 3 L, remédiés**. Remédiation P1
+  relue au code de `origin/main` `fd04099f` : seconde lecture verrouillante de l'AC-6 juste (la première lecture des
+  comptes prend T en partage, la pose attend T `FOR UPDATE` ; une pose commitée avant est vue par la lecture
+  verrouillante, qui lit la dernière version validée sous REPEATABLE READ ; `create_in_tx_inner` `:530` et `update_in_tx`
+  `:1797` lisent `books_locked_through` sans verrou avant `validate_lines_accounts_in_tx` `:638`/`:1852`) ; ordre A puis
+  T de `update` (`accounts.rs:968`, `FOR UPDATE` en première lecture) et lectures verrouillantes de l'AC-5 cohérents,
+  `archive_guarded` prend sa ligne puis lit « qui désigne T » ; AC-4/AC-5 sans contradiction ; `retain_valid_links` à
+  trois cas conforme à la 47-3 (qui ne lit que `MirrorLink`). L1 : AC-9, « la 47-2 reprend » les clés, périmé (l'écran
+  affiche `message`, 47-2 AC-3) → retiré (relevé de la P1 de la 47-2). L2 : AC-7, interblocage pose A → T / archivage de T
+  non décrit alors que la 47-2 rejoue `archive_account` → écrit, issue admise du test à deux transactions « pose contre
+  archivage » (déjà au programme). L3 : AC-6, les refus « non imputable » et « miroir » réunis dans une seule
+  `AccountsNotPostable` (la liste `found` ne doit pas être consommée avant la seconde lecture). Axes exercés : code
+  d'`origin/main` (lectures, verrous, appelants), sémantique InnoDB, AC-5, AC-8, concordance 47-2 et 47-3 à HEAD
+  (`e1c1653c`), simplicité. Non exercés : acceptation du `CHECK` sur `id` par MariaDB (T0), manuels, i18n (rien de neuf
+  vs P1). Rapport : `kesh-gate-logs/epic-47-validation/47-1-miroir-modele-et-depot-P2.md`.
 
 ### Historique — Change Log de la 47-1a (avant la refonte, laissé tel quel)
 
