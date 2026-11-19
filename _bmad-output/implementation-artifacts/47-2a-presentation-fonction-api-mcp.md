@@ -122,7 +122,13 @@ afin de retrouver la présentation de mon ancien logiciel sans écriture de recl
     côtés +2 000.00, fonds propres et `equityResult` inchangés, `equationHolds` vrai dans les deux ; compte de
     résultat : 6950 Produits financiers 1 020.00, 6900 Charges financières 450.00 en paire → 6950 à 570.00, 6900
     absent, `compensated` vrai, résultat net 570.00 identique ; la balance (`trial-balance`) montre toujours 1020 à
-    −800.00 et 2270 à −1 200.00 en `closingBalance` (côté naturel positif, `trial_balance.rs:87-88`). *(Remplace, à la validation P1 de la 47-3b, un jeu aux numéros de la comptabilité
+    −800.00 et 2270 à −1 200.00 en `closingBalance` (côté naturel positif, `trial_balance.rs:87-88`). Comptes et noms du plan **PME** (1040 n'existe
+    qu'à ce plan ; 2800 s'appelle « Capital de l'exploitant » au plan indépendant) : le manuel le dit. **Liste des
+    montants de l'exemple** (validation P2 de la 47-3b) — le test d'intégration la porte en constante
+    `EXEMPLE_PRESENTATION` (chaînes sans signe ni apostrophe) entre `// exemple-presentation:debut` et
+    `// exemple-presentation:fin`, et affirme chacun de ces montants sur les rapports qu'il rejoue ; la garde de la
+    47-3b (AC-10) les retrouve dans le bloc marqué du manuel : `13700.00`, `11700.00`, `3800.00`, `1800.00`,
+    `1200.00`, `800.00`, `570.00`, `1020.00`, `450.00`. *(Remplace, à la validation P1 de la 47-3b, un jeu aux numéros de la comptabilité
     de Beat — 1021, 1179, 2120, 6960, 6961 — que le manuel n'aurait pu citer sans rougir G4-bis.)*
 12. **Aucune écriture** (NFR-47-1) : générer un rapport présenté ne crée ni ne modifie aucune ligne comptable ;
     balance et grand livre identiques avant et après.

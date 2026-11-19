@@ -4,7 +4,12 @@ Status: drafted
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — D4, D6, D9 ; Q9 ; FR-47-3 (écran), FR-47-4,
 FR-47-6, FR-47-8 (manuel utilisateur) ; NFR-47-4. Née du découpage de l'esquisse 47-3 (2026-11-19). Dépend des
-**47-2a**, **47-2b** et **47-3a**. Maquettes : § M4 et M5 du formulaire d'approbation.
+**47-2a**, **47-2b** et **47-3a**. Maquettes : § M4 et M5 du formulaire d'approbation — **pour la disposition
+seulement** : leurs nombres et comptes (1179, 1021, 2120, 6960, 6961, « Fournisseurs », capital 9 000.00, résultat
+900.00), la place de la bascule (« dans la barre de commandes ») et le texte de la note du PDF (« net de … ») sont
+antérieurs à la validation ; font foi les critères ci-dessous (bascule sous `ReportSelector`, AC-1), la 47-2b (note
+« comprend … ») et l'exemple de la 47-2a AC-11. Les captures et le manuel ne reprennent **aucun** nombre des
+maquettes (G4-bis rougirait sur 1179, 1021, 2120, 6960, 6961).
 
 ## Story
 
@@ -25,8 +30,8 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
    a. invalide **les deux** rapports en mémoire (`balanceSheet`, `incomeStatement` à `null`) et toute génération en vol
       (`genSeq++`), comme le changement d'exercice (`+page.svelte` effet `lastFyId`) — sans quoi l'onglet quitté
       garderait un rapport dans l'ancien mode sous un réglage qui dit l'inverse ;
-   b. **regénère** le rapport de l'onglet actif **s'il en affichait un** (rien n'est lancé sinon : la page ne génère
-      qu'au clic sur *Générer*) ;
+   b. **regénère** le rapport de l'onglet actif **s'il en affichait un** — fait lu **avant** l'invalidation du point a,
+      qui le remet à `null` (rien n'est lancé sinon : la page ne génère qu'au clic sur *Générer*) ;
    c. passe `presentation` à `getBalanceSheet`, `getIncomeStatement` **et** à `getReportExportUrl` (PDF et CSV), valeur
       lue **au clic** de l'export comme `query` l'est déjà ; **jamais** envoyé aux autres rapports (trial-balance, TVA,
       journaux, projets, grand livre) ni aux exports de ceux-ci.
@@ -38,7 +43,9 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
    ne change pas). Une ligne avec `sources` porte une pastille après le libellé : **« compensé »** si une source est de
    `kind: offset`, **« miroir »** sinon ; un bouton (chevron, `aria-expanded`, `aria-controls`) **déplie** ses sources
    dans une ligne de tableau sous la ligne : numéro (lien vers le grand livre, `ledgerHref`, sur les deux rapports),
-   libellé, solde brut signé (`formatReportAmount`), et le genre (`own` « solde propre », `mirror`, `offset`). Accessible
+   libellé, solde brut signé (`formatReportAmount`), et le genre, **aux libellés de la note du PDF** (47-2b AC-1 et
+   AC-5, mêmes mots à l'écran et au PDF) : « comprend » (`mirror`), « solde propre » (`own`, et le membre d'une paire
+   qui porte la ligne, premier des `sources`), « déduit » (l'autre membre de la paire). Accessible
    au clavier ; `title` de la pastille résumant les sources. Une ligne **sans** `sources` est rendue exactement comme
    aujourd'hui.
 3. **Bandeau « Présentation compensée »** (Q9) : quand le rapport porte `compensated`, un avis (style d'information,
@@ -81,10 +88,20 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
    montant négative**, 1040 à `1’200.00` (actif), 2100 à `800.00` (passif), total actif `13’700.00` → dépliage des
    sources de 1040 (2270 à `-1’200.00`, genre miroir) → bascule **Brute** : la requête partie porte `presentation=brute`
    (`page.waitForRequest`), le bilan montre 2270 à `-1’200.00` et 1020 à `-800.00`, le bandeau brut paraît, aucune
-   pastille → compte de résultat : présenté, 6950 à `570.00`, 6900 absent, bandeau compensé ; brut, deux lignes ;
-   **exports** déclenchés par les boutons : en présenté, le PDF contient « Présentation compensée » (paire posée) et le
-   CSV porte la colonne `Presentation` ; en brut, le **PDF ne la contient pas** et le CSV n'a pas la colonne (c'est la
-   transmission de la bascule à l'export, vérifiée dans les deux sens). ⚠️ Formes à l'écran : apostrophe U+2019 des
+   pastille → compte de résultat : présenté, 6950 à `570.00`, 6900 absent, bandeau compensé, résultat net `570.00` ;
+   brut, deux lignes, même résultat net ; total passif présenté du bilan `3’800.00`. L'assertion « aucune cellule de
+   montant négative » porte sur les lignes du rapport **avant tout dépliage** (les lignes `presented-sources-*`
+   montrent, à dessein, le solde brut signé de leurs sources). **Exports** déclenchés par les boutons, **rapport par
+   rapport** (la mention n'est pas la même aux deux, 47-2b AC-2) :
+   - **compte de résultat** (paire posée) : en présenté, le PDF contient « Présentation compensée » et le CSV porte la
+     colonne `Presentation` (valeur `compense` sur la ligne 6950) ; en brut, le PDF **ne la contient pas** et le CSV
+     n'a pas la colonne ;
+   - **bilan** (miroirs seuls) : en présenté, le PDF **ne contient pas** « Présentation compensée » (un miroir ne
+     compense rien) mais contient la note des sources (libellé « comprend » de la 47-2b AC-1, suivi de 2270), et le
+     CSV porte la colonne `Presentation` (valeur `miroir` sur la ligne 1040, `Sources` `2270:-1200.00`) ; en brut, ni
+     note ni colonne.
+   C'est la transmission de la bascule à l'export, vérifiée dans les deux sens et sur les deux rapports : un contrôle
+   de la mention sur le seul bilan serait faux en présenté et vide en brut. ⚠️ Formes à l'écran : apostrophe U+2019 des
    milliers et signe `-` ASCII (`formatSwissAmount`), non « 1 200.00 » ni « − ». ⚠️ Le PDF n'est pas du texte brut :
    flux Flate, `Tj` hexadécimal en Latin-1 — **extraire** (précédent `contenuDuPdf` et `hexWinAnsi` de
    `invoice-qr-caracteres.spec.ts`, à **déplacer** dans `helpers/` plutôt que recopier) ; une recherche d'octets
@@ -100,14 +117,24 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
     (47-3a) ; les phrases d'ouverture à **corriger** (« les comptes d'actif et de passif à solde non nul, triés par
     numéro », `:3914`, et son pendant du compte de résultat, `:3945`) ; les sections des rapports en devise (`:4051`)
     disent la règle Q3. **L'exemple chiffré est celui de la 47-2a AC-11, sans autre jeu** : un tableau avant/après aux
-    **comptes des plans livrés**, nombres au format du manuel (apostrophe : `1'200.00`, jamais un montant de quatre
+    **comptes des plans livrés** (plan **PME**, qu'il nomme : 1040 n'existe qu'au plan PME, et 2800 s'y appelle
+    « Capital social »), nombres au format du manuel (apostrophe : `1'200.00`, jamais un montant de quatre
     chiffres sans apostrophe, que G4-bis lirait comme un compte). ⚠️ **G4-bis et G4-ter (`textes_coherents.rs`) lisent
     ce manuel** : tout numéro de quatre chiffres doit être un compte d'un plan livré, et, nommé, sous le nom du plan
     (2000 « Créanciers », 2270 « AVS/AI/APG », 6900 « Charges financières », 6950 « Produits financiers »…) ; un compte
     d'un autre jeu — 1179, 2120, 6960… — fait rougir le gate backend. **Le lien entre l'exemple et le test** (NFR-47-4)
-    est contrôlé par une garde ajoutée à `textes_coherents.rs` : chaque nombre de l'exemple (liste fixée à la 47-2a
-    AC-11 : `13'700.00`, `11'700.00`, `3'800.00`, `1'800.00`, `1'200.00`, `800.00`, `570.00`, `1'020.00`, `450.00`) figure
-    au manuel, et le test de la 47-2a affirme les mêmes. `.tex` seulement ; **le prompt de chaque passe de revue nomme
+    est contrôlé par une garde ajoutée à `textes_coherents.rs`, décidable et non vide : l'exemple du manuel est écrit
+    entre `% exemple-presentation:debut` et `% exemple-presentation:fin` (lu par `bloc_marque`, la fonction de G23) ;
+    le test d'intégration de la 47-2a (`crates/kesh-api/tests/reports_e2e.rs`, sa T5) porte la liste
+    `EXEMPLE_PRESENTATION` entre `// exemple-presentation:debut` et
+    `// exemple-presentation:fin` (47-2a AC-11, qui fixe la liste) ; la garde extrait des deux blocs les montants
+    **comme jetons entiers** (`-?\d+(?:['’]\d{3})*\.\d{2}` en `find_iter`, la correspondance la plus à gauche
+    prenant le montant entier ; apostrophes retirées ensuite, si bien que `1'200.00` au manuel et `1200.00` au test
+    sont le même jeton ; le signe est ignoré, le manuel pouvant écrire `$-$` ; jamais une recherche de sous-chaîne,
+    que `800.00` satisferait dans `3'800.00`) et exige que **chaque montant de la liste figure dans le bloc
+    du manuel** ; témoins : un bloc absent ou non fermé est une erreur, la liste lue compte au moins neuf montants,
+    et un montant retiré du manuel fait rougir la garde (test de la fonction pure sur un texte fabriqué, comme
+    `g23_les_fonctions_pures`). `.tex` seulement ; **le prompt de chaque passe de revue nomme
     le manuel** et exige le contrôle du PDF compilé localement (aplati : `pdftotext … | tr '\n' ' ' | tr -s ' '`).
 11. **i18n** : quatre locales ; `sitesTotal` recompté ; `lint-i18n-ownership` et `i18n-libelle-en-dur` verts. Aucun
     numéro de compte écrit en dur dans un catalogue ou un repli (G4-bis lit les quatre catalogues) : les numéros passent
@@ -121,7 +148,7 @@ afin de lire mes rapports comme dans mon ancien logiciel sans perdre la vue des 
 - [ ] **T1** : types et API (AC 5). **T2** : bascule, persistance, invalidation (AC 1). **T3** : `PresentedRow`, marque,
   dépliage, bandeaux (AC 2–4, 7).
 - [ ] **T4** : Vitest, E2E (assistant `contenuDuPdf` déplacé dans `helpers/`), captures (AC 6, 8, 9).
-- [ ] **T5** : manuel (exemple, garde `textes_coherents.rs`), i18n (AC 10, 11).
+- [ ] **T5** : manuel (exemple entre marqueurs, garde `textes_coherents.rs` et son témoin), i18n (AC 10, 11).
 - [ ] **T6** : gates frontend, **backend** (`textes_coherents`) et E2E complets au dernier commit de code.
 
 ## Dev Notes
@@ -160,7 +187,8 @@ mise en page de la 47-2b : la mention doit tenir sur une ligne de texte).
 
 ### References
 
-- Fiches 47-2a (AC-11, source de l'exemple), 47-2b, 47-3a ; maquettes M4, M5 ; `CLAUDE.md` § *Recette visuelle*, §
+- Fiches 47-2a (AC-11, source de l'exemple et de la liste `EXEMPLE_PRESENTATION`), 47-2b, 47-3a ; maquettes M4, M5
+  (disposition seulement, voir l'en-tête) ; `CLAUDE.md` § *Recette visuelle*, §
   *Le prompt d'une passe doit NOMMER le manuel*.
 - Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
   tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
@@ -191,3 +219,21 @@ Le bilan et le compte de résultat marquent les lignes présentées et en montre
   vérifiée dans les deux sens ; composant unique de ligne (DRY) et sélecteurs fixés ; lien manuel/test tenu par une
   garde. L : renvoi à `ReportSelector`, bascule visible pour toute société, valeur `localStorage` illisible, figures du
   manuel. Rapport : `kesh-gate-logs/epic-47-validation/47-3b-P1.md`.
+- **2026-11-19 — validation P2 (Opus 5.5) : 0 C / 0 H / 3 M / 6 L, remédiés.** Passe braquée sur la remédiation P1
+  et sa propagation. M : (1) contrôle des exports de l'E2E ambigu — « Présentation compensée » n'est écrite qu'au
+  PDF du compte de résultat (paire) ; au bilan (miroirs seuls, 47-2b AC-2) elle est absente, si bien que le contrôle
+  aurait été faux en présenté et vide en brut : exports vérifiés rapport par rapport (mention, note « comprend »,
+  colonnes `Presentation`/`Sources`) ; (2) garde NFR-47-4 indécidable et en partie vide — « figure au manuel » par
+  sous-chaîne (`800.00` dans `3'800.00`), « le test affirme les mêmes » sans fichier ni forme, liste « fixée à la
+  47-2a AC-11 » que celle-ci ne fixait pas : blocs marqués au manuel (`bloc_marque`) et au test
+  (`EXEMPLE_PRESENTATION`, `reports_e2e.rs`), jetons entiers, témoins ; liste écrite à la 47-2a AC-11 (propagé) ;
+  (3) les maquettes M4/M5, citées en référence, portent encore l'ancien jeu (1179, 1021, 2120, 6960, 6961, capital
+  9 000.00) et une autre place de la bascule : réduites à la disposition, critères et 47-2a AC-11 font foi (le
+  formulaire n'est pas modifié). L : plan PME à nommer (1040, « Capital social » ; propagé à la 47-2a AC-11) ;
+  « aucune cellule négative » avant dépliage des sources ; regénération décidée avant l'invalidation ; libellés des
+  genres de sources alignés sur la note du PDF de la 47-2b (« comprend », « solde propre », « déduit ») ; total passif
+  et résultat net affirmés à l'E2E ; résidu « Créances sociales * » de la 47-2b AC-1 (propagé). Vérifié au code :
+  G4-bis/G4-ter (`textes_coherents.rs:414`, `:582`, `nombres_isoles`), plans livrés (types et noms des dix comptes du
+  jeu, paires et miroirs de types opposés, D2/D3), arithmétique du jeu, seed `with-company`, rôle à la création
+  (`CreateAccountRequest.role`), `formatSwissAmount`, `isReportEmpty`, #1351 et #1327 (PR ouvertes).
+  Rapport : `kesh-gate-logs/epic-47-validation/47-3b-P2.md`.
