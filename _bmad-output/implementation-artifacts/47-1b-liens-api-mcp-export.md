@@ -1,6 +1,8 @@
 # Story 47-1b : liens de présentation — API, MCP, export et documentation
 
-Status: ready-for-dev
+Status: superseded
+
+> ⚠️ **Superseded le 2026-11-19 — refonte « miroir seul, KISS »** (fichier d'epic, § *Décision du 2026-11-19 : miroir seul*) : la partie « API des comptes » passe à la **47-2** (`47-2-miroir-api-et-ecran-du-plan.md`) ; le reste — paire, avertissement CO 958c, `offsetAccountId`, raisons `bothLinks` / `onCreate`, MCP `kesh_plan_comptable` et ses plafonds — est retiré de l'epic (choix C-47-2-3 : MCP du plan inchangé). Fiche laissée telle quelle pour l'historique ; ne pas développer.
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — D1, D9 ; Q9, Q10 ; FR-47-1 (API), FR-47-2,
 FR-47-6 (avertissement à la création), FR-47-7, FR-47-8 (`api-external.md`, manuel d'administration). Née du
@@ -302,6 +304,8 @@ poser ou retirer une paire incrémente la `version` du partenaire ; `POST /accou
   `api-external.md` `:226` et sens inverse déduit de la liste ; gardes `textes_coherents.rs` nommées. Non exercés :
   #1346 et #1351 (aucune issue lisible sans `gh`). Rapport :
   `kesh-gate-logs/epic-47-validation/47-1b-liens-api-mcp-export-P1.md`.
+
+- 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : fiche `superseded` (voir l'avertissement en tête) ; clé du registre de sprint passée à `superseded`.
 
 ## Dev Agent Record
 

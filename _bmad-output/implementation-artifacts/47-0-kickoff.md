@@ -29,6 +29,9 @@ Ouvrir l'epic sur des décomptes relevés et un fichier d'epic approuvé.
 - 2026-11-19 — réponses de Guy reportées ; approbation de Beat telle quelle ; `epic-47: in-progress`,
   `47-0-kickoff: done` ; fiches complètes 47-1a à 47-5 écrites (`drafted`), 47-1, 47-2, 47-3 découpées (splitting
   préventif), huit stories hors kickoff — dérogation à la borne de six dite au kickoff, à confirmer par Guy.
+- 2026-11-19 — refonte « miroir seul, KISS » (décision de Beat et Guy, fichier d'epic § *Décision du 2026-11-19*) :
+  fiches refondues en 47-1 à 47-5 (`drafted`), 47-1b, 47-2b et 47-4 (K10) `superseded` ; cinq stories hors kickoff,
+  dans la borne de six — la dérogation ci-dessus tombe. Cette fiche reste `done`.
 
 ## Fichiers
 

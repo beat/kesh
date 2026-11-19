@@ -1,10 +1,10 @@
 # Story 47-5 : solde de la dette de l'Epic 47
 
-Status: ready-for-dev
+Status: drafted
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — règle « une story de solde à la fin de chaque
 epic » (`CLAUDE.md` § *Priorités des défauts*, puce « Une story de solde à la fin de chaque epic »). Fin d'epic, avant
-le tag. **Dépend de** la clôture des stories 47-1a à 47-4 ; part du **registre de la dette** du fichier d'epic
+le tag. **Dépend de** la clôture des stories 47-1 à 47-4 ; part du **registre de la dette** du fichier d'epic
 (§ *Registre de la dette de l'epic*). Dans l'ordre des coupures, elle sort la première.
 
 ## Story
@@ -16,7 +16,7 @@ afin que l'epic ne fasse pas monter le compte d'issues plus que nécessaire.
 
 ## Critères d'acceptation
 
-0. **Entrée** : le registre de la dette du fichier d'epic porte, pour chaque story 47-1a à 47-4, les findings non
+0. **Entrée** : le registre de la dette du fichier d'epic porte, pour chaque story 47-1 à 47-4, les findings non
    remédiés de ses revues (chaque fiche sœur l'alimente à la clôture de sa boucle, § *References*), et le Project
    Lead ouvre les issues d'après lui (l'agent de Beat n'en ouvre pas) ; la liste des lignes (story d'origine, passe,
    sévérité, objet, numéro d'issue s'il existe, priorité, étiquettes) est copiée au Change Log. **Le registre, non
@@ -90,3 +90,7 @@ Selon les issues retenues (une ligne par correctif visible).
   qu'il revient au Project Lead ; le quatrième porte sur la règle de coupure du fichier d'epic (qui coupe un epic de contributeur,
   sort d'une 47-5 sortie, epic qui attend entier plutôt que de sortir amputé).
 - 2026-11-19 — validation P3 (Sonnet 5.5, ciblée sur la remédiation P2) : 0 C / 0 H / 0 M / 3 L, remédiés (rapport `kesh-gate-logs/epic-47-validation/47-5-solde-dette-epic-P3.md`).
+- 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : l'epic passe à quatre stories avant le solde (47-1
+  modèle et dépôt, 47-2 API et écran du plan, 47-3 présentation, 47-4 écrans des rapports, manuel et E2E ; K10 retiré) ;
+  renvois « 47-1a à 47-4 » devenus « 47-1 à 47-4 » ; plafond inchangé (deux issues). Six critères (inchangés).
+  **Statut remis à `drafted`** en attendant la revalidation.

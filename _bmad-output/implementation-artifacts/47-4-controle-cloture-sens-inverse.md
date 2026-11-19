@@ -1,6 +1,8 @@
 # Story 47-4 : contrôle de clôture — solde de sens inverse sans miroir ni paire
 
-Status: ready-for-dev
+Status: superseded
+
+> ⚠️ **Superseded le 2026-11-19 — refonte « miroir seul, KISS »** (fichier d'epic, § *Décision du 2026-11-19 : miroir seul*) : le contrôle de clôture K10 est retiré de l'epic : un solde de sens inverse sans miroir se voit déjà, négatif, au bilan et au compte de résultat ; K10 aurait ajouté un code de contrôle, des clés i18n, une ligne d'écran et la mise à dix de neuf sites pour signaler ce que le rapport montre. À rouvrir en issue (`enhancement`) si Guy ou Beat le veulent — Guy avait répondu « avertissement non bloquant » à Q6 avant la décision du 2026-11-19. Fiche laissée telle quelle pour l'historique ; ne pas développer.
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — FR-47-5 ; Q6 (avertissement **non bloquant**,
 Guy, 2026-11-19), D8. Dépend de la **47-1a** (colonnes de lien). Maquette : § M6 du formulaire d'approbation.
@@ -206,3 +208,5 @@ résultat faute de compte miroir ou de paire. ⚠️ **Changement de contrat de 
   (catalogue `:1092-1201`, composant, patron K9) ; interaction avec K9 écrite ; jugement par compte, non par groupe
   (Epic 46). Propagé à la 47-2a (algorithme, cas du miroir à solde propre inverse). Rapport :
   `kesh-gate-logs/epic-47-validation/47-4-controle-cloture-sens-inverse-P1.md`.
+
+- 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : fiche `superseded` (voir l'avertissement en tête) ; clé du registre de sprint passée à `superseded`.

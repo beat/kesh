@@ -1,4 +1,133 @@
-# Epic 47 — Comptes miroirs et paires compensées
+# Epic 47 — Comptes miroirs
+
+*(Titre jusqu'au 2026-11-19 : « Comptes miroirs et paires compensées » ; les paires sont retirées par la décision
+ci-dessous.)*
+
+## Décision du 2026-11-19 : miroir seul
+
+**Beat et Guy, après étude de l'art. 959a CO** (et de l'interdiction de compenser, CO 958c al. 1 ch. 7) : l'epic ne
+garde **que la fonction miroir**. Un compte peut avoir un **compte miroir**, qui **ne porte aucune écriture** et ne sert
+qu'à la présentation — bilan, compte de résultat, total de l'actif et du passif, résultat. Le solde du compte source,
+s'il est de sens inverse de sa nature, se présente sous le miroir, de l'autre côté : c'est la présentation que veut le
+CO, **sans aucune compensation**. Consigne de Beat : implémentation et interface **aussi simples que possible (KISS)**.
+
+Cas d'usage : « Gains de change » seul porte les écritures de change, « Pertes de change » est son miroir (un gain net
+négatif paraît en charge) ; une dette sociale à solde débiteur paraît à l'actif ; une banque à découvert, au passif.
+
+### Règles retenues
+
+- **R1 — Modèle** : une seule colonne nullable `accounts.mirror_account_id`, sans clé étrangère (comme
+  `fx_gain_account_id`), un index `(company_id, mirror_account_id)`, un `CHECK` « pas soi-même ». Le lien s'écrit sur
+  la source seulement.
+- **R2 — Le miroir est un compte de présentation** : même société, non archivé, **non imputable, sans rôle, sans
+  écriture** ; de l'autre côté du même rapport (actif ↔ passif, produit ↔ charge). La source ne porte pas de rôle de
+  fonds propres (D8).
+- **R3 — Pas de chaîne** : un compte miroir n'a pas lui-même de miroir ; un compte source n'est le miroir de personne.
+  **Plusieurs sources peuvent partager un miroir** (l'admettre coûte une somme, l'interdire une règle et un refus de
+  plus ; le cas des dettes sociales le demande).
+- **R4 — Garde** : tant qu'un compte est le miroir d'un autre (source archivée comprise), le rendre imputable, le
+  retyper, lui poser un rôle ou l'archiver est refusé (409, nommant les sources) ; **aucune écriture** ne s'y passe,
+  saisie manuelle **et** flux automatiques — refus `ACCOUNTS_NOT_POSTABLE` au seul point de passage des lignes
+  (`validate_lines_accounts_in_tx`), les flux automatiques ne contrôlant pas `postable` (`enforce_postable = false`).
+- **R5 — Présentation** : bilan et compte de résultat, à toute date d'arrêté (D4) ; une source dont le solde est de sens
+  inverse quitte sa section ; la ligne du miroir, de l'autre côté, vaut la somme des soldes inversés de ses sources ;
+  une source de sens normal reste à sa place ; rien n'est compensé. Fonds propres et lignes calculées inchangés (D8) ;
+  équation du bilan et résultat net identiques au brut. Une fonction pure, avant les groupes de l'Epic 46 (D5, Q5).
+- **R6 — Pas de présentation brute** : ni paramètre d'API, ni bascule, ni argument MCP. La balance de vérification et le
+  grand livre montrent les soldes réels (D7) ; un rapport sans miroir est identique à celui d'aujourd'hui ; l'accueil
+  reste sur les soldes réels (Q11).
+- **R7 — Traçabilité minimale** : la ligne du miroir porte à l'API `mirrorOf` (comptes sources et soldes bruts) ;
+  l'écran écrit « Solde de 2270 AVS/AI/APG » sous la ligne ; au PDF, au CSV et au MCP, le miroir paraît comme un
+  compte ordinaire, avec son solde présenté, sans colonne, note ni champ neufs.
+- **R8 — Devise** : la ligne du miroir se présente en devise principale seulement.
+
+### Retiré de l'epic et des fonctions
+
+Les paires compensées (`offset_account_id`) et tout ce qui s'y attache : l'avertissement CO 958c, la mention
+« Présentation compensée », la marque ‡, le drapeau `compensated`, la « paire appliquée », les transitions paire ↔
+miroir, les colonnes et notes de paire des CSV et PDF, les cas de lecture (paire non réciproque) et de K10 propres aux
+paires. Par la consigne KISS, en plus : la présentation brute (D6), la règle de devise Q3, les `sources` à genres, les
+marques et notes de présentation des PDF et CSV (ancienne 47-2b), les pastilles du plan comptable, la clé MCP du plan
+comptable et la révision de ses plafonds, le contrôle de clôture K10 (ancienne 47-4, Q6).
+
+### Choix KISS et alternatives écartées
+
+| Choix retenu | Alternative écartée | Pourquoi |
+|---|---|---|
+| un `<select>` « Compte miroir » au dialogue, création et modification | section à trois boutons radio et quatre états ; refus du lien à la création (`onCreate`) | un seul champ, un seul contrôle |
+| miroir non imputable, sans rôle ni écriture, une raison de refus `notPresentationAccount` | miroir qui porte ses propres écritures (D2) ; une raison par condition | rien à additionner ni à expliquer ; un remède |
+| garde des lignes au point de passage, par l'erreur existante | se fier à `postable` seul ; code d'erreur neuf | les flux automatiques ignorent `postable` |
+| plusieurs sources par miroir | une source par miroir | une somme plutôt qu'un refus de plus |
+| présentation toujours appliquée | `presentation=brute` partout (D6) | conforme au CO sans compensation ; la balance donne les soldes réels ; évite route, service, audit, MCP et bascule |
+| `mirrorOf` sur la ligne, mention à l'écran | `sources` à genres, pastille, dépliage, note du PDF, colonnes CSV | le minimum qui dit d'où vient le solde |
+| PDF, CSV, MCP inchangés | marque, note, champs neufs, tailles MCP remesurées | le miroir est un compte ordinaire pour le lecteur |
+| pas de K10 | contrôle de clôture non bloquant (Q6) | le solde négatif se voit déjà au rapport ; à rouvrir en issue si voulu |
+| test de propriété maison | dépendance `proptest` | aucune dépendance neuve |
+
+### Exigences (remplacent celles du kickoff, § *Exigences* ci-dessous)
+
+- **FR-47-1** Désigner, changer, retirer le compte miroir d'un compte (API, écran ; création comprise), audité.
+- **FR-47-2** Refuser un miroir invalide (R2, R3) par `MIRROR_ACCOUNT_INVALID` à raison nommée, et les gestes interdits
+  sur un compte miroir (R4) par `ACCOUNT_IS_MIRROR` nommant les sources ; refuser toute écriture sur un compte miroir.
+- **FR-47-3** Bilan et compte de résultat présentés selon R5, à l'écran, à l'API, au PDF, au CSV et au MCP.
+- **FR-47-4** `mirrorOf` à l'API et mention à l'écran (R7).
+- **FR-47-5** Documentation (exigence de Guy) : manuel utilisateur, manuel d'administration, `docs/api-external.md`.
+- **NFR-47-1** Aucune écriture comptable produite ; balance et grand livre identiques avant/après.
+- **NFR-47-2** Équation du bilan et résultat net identiques en brut et en présenté (test de propriété).
+- **NFR-47-3** Sauvegarde 0.19.0 et 0.20.0 importable ; aucun relèvement de version minimale.
+- **NFR-47-4** Exemple chiffré ci-dessous rejoué par un test d'intégration et tenu égal au manuel par une garde (G26).
+
+### Exemple chiffré (source unique ; le test de la 47-3, l'E2E et le manuel de la 47-4 le reprennent)
+
+Société au plan **PME** livré (`crates/kesh-core/assets/charts/pme.json`), un exercice. Le plan livré n'a aucun compte
+de change : les comptes de présentation et de change **se créent**, en sous-comptes **sans compte parent** (6900 et
+6950 restent imputables ; forme `NNNN.N` admise par G4-bis, qui ne contrôle que le numéro de base).
+
+| Compte | Création | Type | Imputable | Miroir |
+|---|---|---|---|---|
+| 6950.1 « Gains de change » | à créer | produit | oui | 6900.1 |
+| 6900.1 « Pertes de change » | à créer | charge | **non** | — |
+| 1040.1 « Créances AVS/AI/APG » | à créer | actif | **non** | — |
+| 2100.1 « Découvert bancaire » | à créer | passif | **non** | — |
+| 1020 « Banque » | livré | actif | oui | 2100.1 |
+| 2270 « AVS/AI/APG » | livré | passif | oui | 1040.1 |
+
+Écritures, chacune contre 2800 « Capital social » (rôle capital) : 1000 « Caisse » débit 500.00 ; 1010 « Poste » débit
+12 000.00 ; 1020 crédit 800.00 ; 2000 « Créanciers » crédit 3 000.00 ; 2270 débit 1 200.00 ; 3200 « Prestations de
+services » crédit 2 000.00 ; 6900 « Charges financières » débit 50.00 ; 6950.1 débit 250.00. Solde de 2800 : crédit
+8 200.00 (14 000.00 − 5 800.00).
+
+| | Brut (aujourd'hui) | Présenté |
+|---|---|---|
+| Actif | 1000 : 500.00 ; 1010 : 12 000.00 ; 1020 : **−800.00** | 1000 : 500.00 ; 1010 : 12 000.00 ; **1040.1 : 1 200.00** (solde de 2270) |
+| Total de l'actif | 11 700.00 | **13 700.00** |
+| Passif (hors fonds propres) | 2000 : 3 000.00 ; 2270 : **−1 200.00** | 2000 : 3 000.00 ; **2100.1 : 800.00** (solde de 1020) |
+| Total du passif | 1 800.00 | **3 800.00** |
+| Fonds propres | 2800 : 8 200.00 ; résultat 1 700.00 ; total 9 900.00 | identiques |
+| Équation | 11 700.00 = 1 800.00 + 9 900.00 | 13 700.00 = 3 800.00 + 9 900.00 |
+| Produits | 3200 : 2 000.00 ; 6950.1 : **−250.00** ; total 1 750.00 | 3200 : 2 000.00 ; total **2 000.00** |
+| Charges | 6900 : 50.00 ; total 50.00 | 6900 : 50.00 ; **6900.1 : 250.00** (solde de 6950.1) ; total **300.00** |
+| Résultat de l'exercice | 1 700.00 | 1 700.00 |
+
+Les deux côtés du bilan augmentent de 2 000.00 ; produits et charges du compte de résultat de 250.00 chacun ; le
+résultat ne bouge pas. La balance de vérification montre toujours 1020 à −800.00, 2270 à −1 200.00 et 6950.1 à
+−250.00. `mirrorOf` : 1040.1 ← 2270 (−1 200.00), 2100.1 ← 1020 (−800.00), 6900.1 ← 6950.1 (−250.00). Liste des
+montants que portent le test (`EXEMPLE_PRESENTATION`) et le manuel : 13700.00, 11700.00, 3800.00, 1800.00, 9900.00,
+8200.00, 1200.00, 800.00, 2000.00, 1750.00, 300.00, 250.00, 50.00, 1700.00. *(Recalculé le 2026-11-19 ; remplace
+l'exemple de l'ancienne 47-2a AC-11, qui posait une paire 6900/6950 et des miroirs imputables 1040 et 2100.)*
+
+En multi-devises (Epic 37), 6950.1 se désigne compte des gains **et** des pertes de change (le même compte est admis ;
+un compte non imputable ne peut pas l'être, `FxAccountReason::NotPostable`) : la réévaluation de fin d'exercice n'écrit
+que sur 6950.1, et 6900.1 en présente le solde débiteur.
+
+### Ce qui suit de la décision
+
+Les décisions D1 à D10 et les questions Q1 à Q11 ci-dessous restent comme historique, **non réécrites** ; celles que la
+décision rend caduques portent la mention « remplacé par la décision du 2026-11-19 ». Les fiches sont refondues (§
+*Stories*), **remises à `drafted`** et à revalider en boucle (`CLAUDE.md` § *Review Iteration Rule*) ; la validation du
+2026-11-19 (§ *Validation des fiches*) ne vaut plus pour elles.
+
+## Kickoff du 2026-11-18 et orientation du 2026-11-19 (historique)
 
 **Kickoff : 2026-11-18** (esquisse) ; **orientation approuvée par Guy le 2026-11-19** (§ *Revue de Guy*) **et par Beat le même jour, telle quelle** (§ *Revue de Beat*) : **kickoff accompli le 2026-11-19**. Numéro réservé à Beat (contributeur) par Guy ; responsable : Beat.
 Branche `epic/47-comptes-miroirs`, partie de `main` = `773df80d` (v0.19.0). **Passe après l'Epic 46** (rapports par
@@ -9,6 +138,8 @@ Règles des fichiers communs (`CLAUDE.md` § *Travailler à plusieurs développe
 recomptés après chaque reprise de `main`. Pas d'issue ni de PR à ce stade (Beat : lecture seule sur le dépôt de Guy).
 
 ## Intention
+
+*(La « paire compensée » ci-dessous est **remplacée par la décision du 2026-11-19** : retirée de l'epic. Le compte miroir, lui, ne porte plus d'écriture.)*
 
 **Aucun montant négatif dans le bilan ni dans le compte de résultat**, sans écriture de reclassement.
 
@@ -42,15 +173,18 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
   sauvegarde 0.19.0 inimportable (ou exige une liste d'absences admises) ; deux colonnes facultatives passent la règle
   générique. Un compte n'a pas les deux (`CHECK`). Pas de chaîne : un compte miroir n'a lui-même ni miroir ni paire.
   *Guy, 2026-11-19 :* d'accord, deux colonnes facultatives, compatibles avec l'import des sauvegardes 0.19.0 ; une table l'empêcherait. → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ **remplacé par la décision du 2026-11-19** en partie : une seule colonne, `mirror_account_id` (R1) ; `offset_account_id` et le `CHECK` « pas les deux » disparaissent avec la paire. Le choix des colonnes plutôt qu'une table (sauvegardes) tient.
 - **D2 — Miroir** : de l'autre côté du même rapport (actif ↔ passif hors fonds propres ; produit ↔ charge), même
   société. Le compte miroir peut être non imputable (compte de présentation créé pour l'usage) ou porter ses propres
   écritures ; sa ligne = son solde + le solde inversé de ses sources. Un compte dont le solde est dans son sens normal
   reste à sa place.
   *Guy, 2026-11-19 :* d'accord ; pas de chaîne : un miroir ne pointe jamais vers un compte qui a lui-même un miroir — **refus nommé** (47-1 AC3). → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ **remplacé par la décision du 2026-11-19** : le miroir ne porte **aucune** écriture (non imputable, sans rôle, R2, R4) ; sa ligne vaut la somme des soldes inversés de ses sources (R5). « Pas de chaîne » et « plusieurs sources » tiennent (R3).
 - **D3 — Paire** : deux comptes de **types opposés** du même rapport (produit/charge ; actif/passif). Le net paraît
   sur le compte du sens du net, sous son numéro et son libellé ; net nul → aucune ligne. Deux comptes de même type ne
   forment pas de paire : leur somme est un groupe (Epic 46).
   *Guy, 2026-11-19 :* approuvé, sous réserve de Q9 : la paire compense une charge et un produit (CO 958c al. 1 ch. 7) → avertissement à sa création, mention « présentation compensée » au PDF. → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ **remplacé par la décision du 2026-11-19** : paires retirées de l'epic.
 - **D4 — Bascule à la date d'arrêté de tout rapport** (bilan à toute date, compte de résultat sur toute période), pas
   seulement à la clôture : Kesh calcule les soldes en direct et ne passe aucune écriture de clôture.
   *Guy, 2026-11-19 :* d'accord, un rapport intermédiaire se présente comme celui de clôture. → **décidé (Guy et Beat, 2026-11-19).**
@@ -58,9 +192,11 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
   les totaux et avant les groupes de l'Epic 46. Bilan et compte de résultat seulement ; écran, PDF, CSV, API, MCP.
   L'équation du bilan tient (les deux côtés bougent du même montant) ; le résultat net ne change pas.
   *Guy, 2026-11-19 :* approuvé ; présentation d'abord, puis regroupement (Q5). → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ tient (R5) ; « écran, PDF, CSV, API, MCP » : présentation appliquée partout, sans rendu propre au PDF, au CSV ni au MCP (R7).
 - **D6 — Présentation brute toujours disponible** : paramètre `presentation=brute` à l'API (et bascule à l'écran)
   rend le rapport d'aujourd'hui, compte par compte, signé. Défaut : présentée. L'accueil reste sur les totaux bruts.
   *Guy, 2026-11-19 :* essentiel : la présentation brute reste disponible **partout** (écran, PDF, CSV, API), notamment pour les comptes annuels officiels si une paire est utilisée (Q9). → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ **remplacé par la décision du 2026-11-19** : pas de présentation brute (R6) ; le motif (comptes officiels avec une paire) tombe avec la paire, et la balance donne les soldes réels.
 - **D7 — Balance de vérification, grand livre, journal, TVA, projets : inchangés.** Le détail par compte y reste.
   *Guy, 2026-11-19 :* confirmé (Q4) : balance, grand livre et journal montrent les soldes réels. → **décidé (Guy et Beat, 2026-11-19).**
 - **D8 — Fonds propres et lignes calculées exclus** : un compte de rôle de fonds propres ne prend ni miroir ni paire ;
@@ -69,6 +205,7 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
 - **D9 — Traçabilité** : chaque ligne présentée porte à l'API ses `sources` (compte, solde brut) ; l'écran les montre
   au survol ou au dépliage ; le PDF et le CSV, une marque et une note.
   *Guy, 2026-11-19 :* d'accord ; la marque du PDF dit en clair **« présentation compensée »** quand une paire est appliquée (Q9). → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ **remplacé par la décision du 2026-11-19** : `mirrorOf` à l'API, mention à l'écran ; ni marque ni note au PDF et au CSV, ni mention « présentation compensée » (R7).
 - **D10 — Migration de la 47-1, non breaking** : `2026112?000001_account_presentation_links.sql` (horodatage au
   développement), DDL seul : deux `ADD COLUMN … BIGINT NULL`, deux index, `CHECK` (pas soi-même, pas les deux). Ne
   relève pas `kesh_version_min_required` (0.17.6). P5 : ligne à l'audit, compteurs recomptés depuis la source à la reprise de `main` (95 à `773df80d`, plus la 47-1 et les migrations fusionnées avant elle, dont `20261118000002` de l'Epic 49) ; P6 : grep des
@@ -76,8 +213,11 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
   0.19.0 s'importe (colonnes facultatives) ; la version précédente refuse la base migrée et les sauvegardes neuves :
   retour par la sauvegarde d'avant la mise à jour. **Annoncée au projet au kickoff** (tableau des fichiers communs).
   *Guy, 2026-11-19 :* d'accord sur le principe. **Ordre : cette migration passe après celle de l'Epic 49 (`20261118000002`, release 0.20.0 du 2026-11-27)**, dans une release ultérieure à la 0.20.0 ; l'Epic 47 dépend de l'Epic 46. Annoncée au projet GitHub au kickoff, avec **la sauvegarde complète avant mise à jour en tête des notes**. → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ adapté par la décision du 2026-11-19 : `<horodatage>_account_mirror.sql`, une colonne, un index, le `CHECK` « pas soi-même » ; tout le reste (non breaking, après `20261118000002`, P5–P8, squash, sauvegarde) tient (fiche 47-1).
 
 ## Exigences
+
+*(Remplacées par celles du § *Décision du 2026-11-19 : miroir seul* ; liste du kickoff laissée telle quelle.)*
 
 - **FR-47-1** Désigner, retirer, modifier un miroir ou une paire sur un compte (API, écran), audité.
 - **FR-47-2** Refuser un lien invalide (autre société, même côté, fonds propres, chaîne, soi-même, compte archivé
@@ -95,44 +235,53 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
 
 ## Stories
 
-| Story | Objet | Migration | Dépend de |
-|---|---|---|---|
-| 47-0 | kickoff : décomptes, validation du fichier, annonce de la migration — **done** (2026-11-19) | non | — |
-| 47-1a | modèle : migration, entité, dépôt, validation, archivage, retypage, lecteur des liens, sauvegarde, colonnes de l'export CSV, mapping HTTP des deux refus (sous-match exhaustif de `DbError`) | **oui**, non breaking | — |
-| 47-1b | API des comptes, avertissement de la paire, MCP `kesh_plan_comptable` (plafonds révisés), test de l'export global, `api-external.md`, manuel d'administration (colonnes de l'export CSV : en 47-1a) | non | 47-1a |
-| 47-2a | fonction de présentation, rapports JSON (`presentation=brute`, `sources`), MCP `kesh_bilan` / `kesh_compte_de_resultat` | non | 47-1a ; **avant** le regroupement de l'Epic 46 (recâblage à sa fusion) |
-| 47-2b | PDF et CSV présentés : marque, note, « présentation compensée », brut | non | 47-2a ; #1327 et `fix/bilan-resultat-reporte` fusionnés ; 48-11 et 46-3 si fusionnées |
-| 47-3a | écran du plan comptable : section *Présentation*, avertissement CO 958c, refus nommés, marque | non | 47-1b |
-| 47-3b | écrans des rapports : marque, sources, bascule brute, exports, E2E du parcours, manuel utilisateur | non | 47-2a, 47-2b, 47-3a |
-| 47-4 | contrôle de clôture K10 « sens inverse sans miroir ni paire », non bloquant | non | 47-1a |
-| 47-5 | solde de la dette de l'epic (**plafond : 2 issues**, fixé au kickoff) | non | 47-1a à 47-4 closes (fin d'epic, avant le tag) |
+*(Refondues le 2026-11-19, décision « miroir seul, KISS ». Fiches remises à `drafted`, à revalider.)*
 
-**Dérogation à la borne de six stories** — **décision de Beat (2026-11-19)** : l'Epic 47 reste **un seul epic** de huit stories (47-1a, 47-1b, 47-2a, 47-2b, 47-3a, 47-3b, 47-4, 47-5) ; la 47-4 n'en sort pas. Dérogation assumée pour un epic de **fonctionnalité nouvelle**, dite au kickoff (`CLAUDE.md` § *Numérotation des versions*), aucune story n'étant trop longue ; **à signaler à Guy** (Beat pense qu'il sera d'accord).
+| Story | Objet | Modules | Critères | Migration | Dépend de |
+|---|---|---|---|---|---|
+| 47-0 | kickoff — **done** (2026-11-19) | — | 4 | non | — |
+| 47-1 `47-1-miroir-modele-et-depot` | migration (une colonne), entité, règles R2–R4, garde des lignes au point de passage, lecteur tolérant, sauvegarde, colonne de `accounts.csv`, erreurs mappées et messages (sous-match exhaustif de `DbError`) | 5 | 13 | **oui**, non breaking | — |
+| 47-2 `47-2-miroir-api-et-ecran-du-plan` | API des comptes (`mirrorAccountId`), un `<select>` au dialogue, refus à l'écran, archivage refusé, manuel utilisateur (plan comptable), manuel d'administration (mise à jour), `api-external.md` (comptes), E2E | 5 | 12 | non | 47-1 |
+| 47-3 `47-3-miroir-presentation-rapports` | fonction pure de présentation, service toujours présenté, `mirrorOf`, MCP (descriptions), accueil brut, exemple rejoué, `api-external.md` (rapports) | 5 | 14 | non | 47-1 ; **avant** le regroupement de l'Epic 46 (recâblage à sa fusion) |
+| 47-4 `47-4-miroir-ecrans-rapports-manuel-e2e` | mention « Solde de … » aux écrans des rapports, E2E du parcours, manuel utilisateur (rapports, exemple), garde G26 | 5 | 10 | non | 47-2, 47-3 |
+| 47-5 `47-5-solde-dette-epic` | solde de la dette de l'epic (**plafond : 2 issues**, fixé au kickoff) | selon les issues | 6 | non | 47-1 à 47-4 closes (fin d'epic, avant le tag) |
 
-**Découpage du 2026-11-19 (splitting préventif, `CLAUDE.md` § *Règle de splitting préventif*)** : à l'écriture des
-fiches complètes, 47-1, 47-2 et 47-3 touchaient chacune plus de cinq modules au grain retenu par la release 0.20.0
-(49-1 « neuf modules ») ; chacune est découpée en deux (clés `47-1`, `47-2`, `47-3` passées à `split`). L'epic compte
-donc **huit stories hors kickoff**, solde comprise : il dépasse la borne de six (`CLAUDE.md` § *Numérotation des
-versions*), ce qu'admet un epic de **fonctionnalité nouvelle** à condition de le dire au kickoff — **dit ici** (décision de Beat du 2026-11-19, à signaler à Guy ; 47-4 reste dans l'epic). 47-1a, 47-1b et 47-4 peuvent avancer pendant
-l'Epic 46 ; 47-2a se développe sans lui (fonction pure appliquée avant tout regroupement) et se recâble à sa fusion ;
-47-2b attend #1327 et `fix/bilan-resultat-reporte`.
+**Dans la borne de six** (`CLAUDE.md` § *Numérotation des versions* : au plus six stories, solde comprise) : cinq
+stories hors kickoff. La dérogation dite au kickoff (huit stories) **tombe** ; elle n'a plus à être signalée à Guy.
+Chaque story compte au plus cinq modules (règle de splitting préventif), déclarés en tête de sa fiche.
+
+*Historique — stories du kickoff (2026-11-19), remplacées par la décision du 2026-11-19* : 47-1a (modèle) → 47-1 ;
+47-1b (API, avertissement de la paire, MCP du plan) → API reprise par 47-2, le reste retiré (`superseded`) ; 47-2a
+(présentation, `presentation=brute`, `sources`) → 47-3 ; 47-2b (PDF et CSV présentés) → retirée (`superseded`) ;
+47-3a (écran du plan) → 47-2 ; 47-3b (écrans des rapports, bascule brute, E2E, manuel) → 47-4 ; 47-4 (K10) → retirée
+(`superseded`) ; 47-5 inchangée. Les clés `47-1`, `47-2`, `47-3` d'origine (`split`) sont passées à `superseded`.
 
 ## Ordre de développement
 
-1. **47-1a** d'abord : elle porte la migration, **ne sort jamais** (une story sortie emporte sa migration ; sans elle, rien ne se présente), et son horodatage se contrôle à la reprise de `main` (D10) ; `fix/api-parent-compte` (même `update`, mêmes erreurs : fiche 47-1a) repris s'il est fusionné, sinon le second arrivé résout.
-2. **En parallèle, après la 47-1a** : 47-1b (API, MCP, export), 47-2a (fonction de présentation, JSON, MCP) et 47-4 (K10). Fichiers partagés entre elles : catalogues i18n, manuels, `docs/api-external.md` (les trois) et `crates/kesh-api/tests/mcp_outils_e2e.rs` (47-1b, 47-2a) ; chacune y écrit son bloc, la seconde fusionnée dans la branche d'epic résout en gardant les deux.
-3. **47-3a** après la 47-1b.
-4. **Reprise de `main`** (Epic 46, #1327, #1346, 48-11 de la 0.20.0 si fusionnés) **avant** la 47-2b et avant le recâblage de la 47-2a ; puis **47-2b** (après 47-2a et les correctifs de `pdf.rs` / `csv.rs`).
-5. **47-3b** après 47-2a, 47-2b et 47-3a (E2E du parcours complet, manuel utilisateur).
-6. **47-5** en dernier, une fois 47-1a à 47-4 closes : elle ne prend que la dette de ces stories.
+1. **47-1** d'abord : elle porte la migration et **ne sort jamais** (une story sortie emporte sa migration) ; son
+   horodatage se contrôle à la reprise de `main` (D10) ; `fix/api-parent-compte` (#1351 : même `update`, mêmes erreurs)
+   repris s'il est fusionné, sinon le second arrivé résout.
+2. **En parallèle, après la 47-1** : 47-2 (API et écran du plan) et 47-3 (présentation). Fichiers partagés entre elles :
+   catalogues i18n, `docs/api-external.md`, manuel d'administration ; chacune y écrit son bloc, la seconde fusionnée
+   dans la branche d'epic résout en gardant les deux.
+3. **Reprise de `main`** (Epic 46, #1327, #1346, 48-11 si fusionnés) avant le recâblage de la 47-3 et avant la 47-4.
+4. **47-4** après 47-2 et 47-3 (E2E du parcours complet, manuel utilisateur, garde G26).
+5. **47-5** en dernier, une fois 47-1 à 47-4 closes.
 
-**Si le temps manque** (coupure du jeudi soir : n'entrent que les stories closes ; `CLAUDE.md` § *Cadence*) : epic de contributeur, **l'orchestrateur n'y touche pas** (`CLAUDE.md` § *Cadence*) ; la coupure se décide par **Beat**, responsable de l'epic, et **le Project Lead garde le dernier mot**. Ordre : la **47-5** sort la première (ses lignes du registre restent ouvertes en issues, au milestone que décide le Project Lead, et l'absence de solde s'écrit à la PR de release et à la rétrospective), puis, si la coupure l'impose (la 47-4 reste dans l'epic par décision de Beat), la **47-4** ; la 47-3b ne sort pas sans la 47-2b ; la 47-1a ne sort jamais. L'epic ne se publie pas amputé de sa présentation (47-2a à 47-3b) : sans elle, les liens n'ont aucun effet visible ; si elle n'est pas close, **l'epic entier attend une release suivante** (la date de la release ne bouge pas : elle part sans lui) ; écart assumé avec « un epic qui n'aboutit pas se réduit » (`CLAUDE.md` § *Cadence*) : réduit à ses liens seuls, l'epic n'aurait aucun effet visible, et le Project Lead a le dernier mot).
+**Si le temps manque** (coupure du jeudi soir : n'entrent que les stories closes ; `CLAUDE.md` § *Cadence*) : epic de
+contributeur, l'orchestrateur n'y touche pas ; la coupure se décide par **Beat**, et **le Project Lead garde le dernier
+mot**. La **47-5** sort la première (ses lignes du registre restent ouvertes en issues, et l'absence de solde s'écrit à
+la PR de release et à la rétrospective) ; la 47-1 ne sort jamais ; l'epic ne se publie pas amputé de sa présentation
+(47-3) ni de son écran de pose (47-2) : sans elles, le miroir n'a aucun effet visible, et **l'epic entier attend une
+release suivante** (la date de la release ne bouge pas). La 47-4 peut sortir seule si la 47-3 et la 47-2 sont closes
+(la présentation se voit alors sans mention ; le manuel et l'E2E suivent à la release d'après), décision du Project
+Lead.
 
-Hors epic : la story de correction de bugs que chaque release planifiée porte (`CLAUDE.md` § *Cadence*) est celle de la **release**, non de l'epic ; elle compte dans la borne de six de l'epic qui la porte (un epic interne du Project Lead, comme l'Epic 48 à la 0.20.0), non dans les huit stories ici.
+Hors epic : la story de correction de bugs de la release (`CLAUDE.md` § *Cadence*) n'est pas comptée ici.
 
 ## Registre de la dette de l'epic
 
-Les revues de chaque story consignent ici, à la clôture de leur boucle (chaque fiche 47-1a à 47-4 le rappelle en § *References*), une ligne par finding **non remédié** qui devrait s'ouvrir en issue (« on trace toujours ») : story, passe, sévérité, objet, issue (numéro reporté quand le Project Lead l'ouvre), sort (ouverte, retenue en 47-5, corrigée en 47-5, reportée). L'agent de Beat n'ouvre pas d'issue (lecture seule sur le dépôt de Guy) : le Project Lead ouvre les issues d'après ce registre, et la 47-5 en part. Une ligne par problème, sans regroupement ; l'étiquette `bug` seulement pour un comportement faux visible (`CLAUDE.md` § *Priorités des défauts*).
+Les revues de chaque story consignent ici, à la clôture de leur boucle (chaque fiche 47-1 à 47-4 le rappelle en § *References*), une ligne par finding **non remédié** qui devrait s'ouvrir en issue (« on trace toujours ») : story, passe, sévérité, objet, issue (numéro reporté quand le Project Lead l'ouvre), sort (ouverte, retenue en 47-5, corrigée en 47-5, reportée). L'agent de Beat n'ouvre pas d'issue (lecture seule sur le dépôt de Guy) : le Project Lead ouvre les issues d'après ce registre, et la 47-5 en part. Une ligne par problème, sans regroupement ; l'étiquette `bug` seulement pour un comportement faux visible (`CLAUDE.md` § *Priorités des défauts*).
 
 | Story | Passe | Sévérité | Objet | Issue | Sort |
 |---|---|---|---|---|---|
@@ -140,35 +289,45 @@ Les revues de chaque story consignent ici, à la clôture de leur boucle (chaque
 
 ## Dépendance à l'Epic 46
 
-Les groupes de l'Epic 46 additionnent des lignes de compte en sous-totaux. Règle proposée : **la présentation
-précède le regroupement** — une ligne présentée entre dans le groupe du compte qui la porte (le miroir, ou le compte
-du sens du net), jamais dans celui du compte d'origine. Il faut donc, dans l'Epic 46, un point d'entrée unique où
-les lignes passent avant d'être groupées (à demander à son auteur ; Q5).
+Les groupes de l'Epic 46 additionnent des lignes de compte en sous-totaux. Règle (Q5) : **la présentation précède le
+regroupement** — la ligne d'un miroir entre dans le groupe du **miroir**, jamais dans celui de la source. Il faut donc,
+dans l'Epic 46, un point d'entrée unique où les lignes passent avant d'être groupées (fiche 47-3, § *Recâblage*).
+*(Rédaction du kickoff : « le miroir, ou le compte du sens du net » — le second cas est remplacé par la décision du
+2026-11-19.)*
 
 ## Fichiers communs
 
-| Fichier | 47 | Epic 46 | `fix/pdf-montants-alignes` | `fix/bilan-resultat-reporte` | `fix/api-parent-compte` |
+*(Mis à jour le 2026-11-19, refonte « miroir seul, KISS ».)*
+
+| Fichier | 47 | Epic 46 | `fix/pdf-montants-alignes` (#1327) | `fix/bilan-resultat-reporte` (#1346) | `fix/api-parent-compte` (#1351) |
 |---|---|---|---|---|---|
-| `kesh-report/src/balance_sheet.rs` | 47-2a | probable | — | oui | — |
-| `kesh-report/src/income_statement.rs` | 47-2a | probable | — | — | — |
-| `kesh-report/src/pdf.rs` | 47-2b ; 47-2a (littéraux des tests : champs `sources`, `compensated`) | probable | **oui (+1100 lignes)** | oui | — |
-| `kesh-report/src/csv.rs` | 47-2b ; 47-2a (littéraux des tests) | probable | — | oui | — |
-| `frontend/…/reports/` (vues, `reports.types.ts`, `reports.api.ts`) | 47-3b | probable | — | oui | — |
-| `kesh-db/src/entities/account.rs`, `repositories/accounts.rs` | 47-1a | possible | — | — | oui |
-| `kesh-api/src/routes/accounts.rs`, `errors.rs` (db, api) | 47-1a, 47-1b | possible | — | — | oui |
-| `frontend/…/accounts/`, `routes/(app)/accounts/+page.svelte` | 47-3a | — | — | — | oui |
-| catalogues i18n (4 locales), `sitesTotal` | 47-1a (messages des deux refus) à 47-4 | oui | oui | — | oui |
-| `docs/manual/fr/user-manual.tex`, `docs/api-external.md` | 47-1b à 47-4 | oui | oui | oui | oui |
-| `kesh-db/migrations/`, audit, `test-schema/`, `migrations_upgrade_path.rs`, `account_columns_inventory.rs` | 47-1a | si migration | — | — | — |
-| `kesh-db/src/repositories/closing_checks.rs`, `FiscalYearChecks.svelte` | 47-4 | — | — | — | — |
-| MCP (`kesh_plan_comptable`, `kesh_bilan`, `kesh_compte_de_resultat`) | 47-1b, 47-2a | probable | — | — | — |
-| `kesh-api/tests/services_motif.rs` (détails d'audit en dur), `tests/homepage_summary_e2e.rs` | 47-2a | possible | — | — | — |
-| `kesh-api/src/exports/csv_tables.rs` | 47-1a (colonnes), 47-1b (test du ZIP) | — | — | — | — |
+| `kesh-report/src/balance_sheet.rs`, `income_statement.rs` (champ `mirror_of`) ; `presentation.rs` (neuf) | 47-3 | probable | — | oui (`balance_sheet.rs`) | — |
+| `kesh-report/src/pdf.rs`, `csv.rs`, `benches/export.rs` | 47-3 (**littéraux des tests seulement**) | probable | **oui (+1100 lignes)** | oui | — |
+| `frontend/…/reports/` (deux vues, `reports.types.ts`, composant de la mention) | 47-4 | probable | — | oui | — |
+| `kesh-db/src/entities/account.rs`, `repositories/accounts.rs` | 47-1 | possible | — | — | oui |
+| `kesh-db/src/repositories/journal_entries.rs` (`validate_lines_accounts_in_tx`) | 47-1 | — | — | — | — |
+| `kesh-db/src/errors.rs`, `kesh-api/src/errors.rs` | 47-1 | possible | — | — | oui |
+| `kesh-api/src/routes/accounts.rs` | 47-2 | — | — | — | oui |
+| `kesh-api/src/services/rapports.rs`, `mcp/outils/rapports.rs` (descriptions) | 47-3 | probable | — | — | — |
+| `frontend/…/accounts/`, `routes/(app)/accounts/+page.svelte` | 47-2 | — | — | — | oui |
+| catalogues i18n (4 locales), `sitesTotal` | 47-1 (refus), 47-2 (dialogue), 47-4 (mention) | oui | oui | — | oui |
+| `docs/manual/fr/user-manual.tex` | 47-2 (plan comptable), 47-4 (rapports) | oui | oui | oui | oui |
+| `docs/manual/fr/admin-manual.tex`, `docs/api-external.md` | 47-2 (comptes, mise à jour), 47-3 (rapports, MCP) | oui | oui | oui | oui |
+| `kesh-db/migrations/`, audit, `test-schema/`, `migrations_upgrade_path.rs`, `account_columns_inventory.rs` | 47-1 | si migration | — | — | — |
+| `kesh-api/src/exports/csv_tables.rs` | 47-1 (colonne) | — | — | — | — |
+| `kesh-api/tests/textes_coherents.rs` (G26) | 47-4 | — | — | — | — |
+| `kesh-api/tests/homepage_summary_e2e.rs`, `reports_e2e.rs` | 47-3 | possible | — | — | — |
 
-**Hors tableau (0.20.0)** : la story **48-11** (arrondi au centime des rapports CSV et PDF, après #1327) touche `kesh-report/src/pdf.rs` et `csv.rs`, comme 47-2b ; elle part avant : le second arrivé (47-2b) reprend et résout. Les stories de l'Epic 49 changent les catalogues i18n et la migration (horodatage de la 47-1a postérieur).
+**Plus touchés par l'epic depuis la refonte** : `kesh-api/tests/services_motif.rs` (aucune clé d'audit neuve),
+`kesh-db/src/repositories/closing_checks.rs` et `FiscalYearChecks.svelte` (K10 retiré), le MCP `kesh_plan_comptable`
+(inchangé), le code de rendu de `pdf.rs` et `csv.rs`.
 
-Geste : reprendre `main` (avec l'Epic 46 et les trois correctifs) dans la branche **avant** 47-2b et avant le recâblage de 47-2a ; ordre des
-migrations contrôlé à cette reprise si l'Epic 46 en porte une.
+**Hors tableau (0.20.0)** : la story **48-11** (arrondi au centime des rapports CSV et PDF, après #1327) touche les
+tests de `pdf.rs` et `csv.rs`, comme les littéraux de la 47-3 : le second arrivé résout. Les stories de l'Epic 49
+changent les catalogues i18n et la migration (horodatage de la 47-1 postérieur à `20261118000002`).
+
+Geste : reprendre `main` (avec l'Epic 46 et les trois correctifs) dans la branche avant le recâblage de la 47-3 et
+avant la 47-4 ; ordre des migrations contrôlé à cette reprise si l'Epic 46 en porte une.
 
 ## Décomptes d'issues
 
@@ -198,12 +357,14 @@ de release et à sa rétrospective, avec l'écart et sa cause.
 - **Q3** — Comptes en devise : lien admis entre devises différentes ? Proposé : admis ; le solde en devise de la
   ligne présentée n'est montré que si toutes ses sources ont la même devise.
   *Guy, 2026-11-19 :* oui, avec la règle proposée (solde en devise seulement si les sources ont la même devise). → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ **remplacé par la décision du 2026-11-19** : la ligne du miroir est en devise principale seulement (R8) ; un miroir en devise est admis.
 - **Q4** — Balance et grand livre hors périmètre (D7) : confirmé ?
   *Guy, 2026-11-19 :* confirmé : balance, grand livre et journal montrent les soldes réels, sans présentation. → **décidé (Guy et Beat, 2026-11-19).**
 - **Q5** — Epic 46 : présentation avant regroupement (§ *Dépendance*) ; point d'entrée à convenir avec son auteur.
   *Guy, 2026-11-19 :* oui : présentation d'abord, puis regroupement ; la ligne va au groupe du compte qui la porte. → **décidé (Guy et Beat, 2026-11-19).**
 - **Q6** — Contrôle de clôture (47-4) : avertissement non bloquant, ou rien ?
   *Guy, 2026-11-19 :* **avertissement non bloquant**, qui signale les comptes à solde inverse sans miroir ni paire, sans empêcher de clore. → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ **remplacé par la décision du 2026-11-19** : K10 retiré de l'epic (le solde négatif se voit au rapport) ; à rouvrir en issue si Guy ou Beat le veulent.
 - **Q7** — Libellé de la ligne présentée : celui du compte qui la porte (proposé), ou un libellé de présentation
   propre au lien (colonne de plus) ?
   *Guy, 2026-11-19 :* le libellé du compte qui porte la ligne. → **décidé (Guy et Beat, 2026-11-19).**
@@ -213,10 +374,13 @@ de release et à sa rétrospective, avec l'écart et sa cause.
 - **Q9** — Compensation et CO 958c al. 1 ch. 7 (interdiction de compenser) : la paire est un choix de l'utilisateur ;
   Kesh l'admet sans restriction, ou avec un avertissement au plan comptable ?
   *Guy, 2026-11-19 :* **avec un avertissement.** Le miroir ne compense rien (un découvert au passif est la présentation correcte) ; la paire compense une charge et un produit, ce que CO 958c al. 1 ch. 7 interdit dans les comptes annuels. Donc : **avertissement à la création de la paire**, mention **« présentation compensée »** au PDF du rapport, **présentation brute toujours disponible** (D6) pour les comptes officiels. → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ **remplacé par la décision du 2026-11-19** : sans paire, rien n'est compensé ; ni avertissement ni mention.
 - **Q10** — Archiver un compte cible d'un miroir ou partenaire d'une paire : refuser, ou retirer le lien ?
   *Guy, 2026-11-19 :* **refuser l'archivage** tant qu'un compte pointe vers la cible, avec un message qui **nomme le compte lié**. → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ tient pour le miroir (R4 : archivage du miroir refusé, sources nommées) ; « partenaire d'une paire » caduc.
 - **Q11** — Accueil (D6) : reste brut ? (Ses totaux ne recoupent alors que le compte de résultat brut.)
   *Guy, 2026-11-19 :* oui, l'accueil reste sur les totaux bruts. → **décidé (Guy et Beat, 2026-11-19).**
+  ⇒ tient (R6) ; la phrase de `api-external.md` sur l'égalité des totaux de l'accueil et du compte de résultat est corrigée par la 47-3.
 
 ## Revue de Guy (2026-11-19)
 
@@ -247,6 +411,8 @@ chaque Q porte ci-dessus la mention « décidé (Guy et Beat, 2026-11-19) ». Le
 `sprint-status.yaml` : `epic-47: in-progress`, `47-0-kickoff: done`.
 
 ## Validation des fiches (2026-11-19)
+
+*(Annoté le 2026-11-19 : **ne vaut plus** depuis la refonte « miroir seul, KISS » — les fiches refondues 47-1 à 47-5 sont `drafted` et à revalider ; les trois fiches retirées sont `superseded`. Relevé laissé tel quel. De « Reste à faire au développement », tiennent, adaptés : le contrôle du `CHECK` sur `id` et de l'horodatage (47-1 T0) ; la reprise de l'Epic 46, de #1327, #1346 et #1351 ; l'annonce de la migration par le Project Lead. Ne tiennent plus : la mesure des plafonds MCP (aucun champ MCP neuf) et l'attente de #1327 / #1346 pour un rendu PDF/CSV propre (seuls des littéraux de tests changent).)*
 
 Les huit fiches ont été validées en boucle (`CLAUDE.md` § *Review Iteration Rule*), en contexte frais, P1 par Sonnet
 ou Opus, rotation Sonnet ↔ Opus, passes ciblées sur la dernière remédiation en fin de boucle ; chaque boucle se clôt
@@ -291,6 +457,8 @@ fiches visées : 47-1a AC-15 et AC-9, 47-2a AC-1 et AC-2).
   dépôt de Guy).
 
 ## Avant le développement
+
+*(Annoté le 2026-11-19, refonte « miroir seul, KISS » : reste à faire — revalidation en boucle des fiches 47-1 à 47-5 (P1 par Sonnet ou Opus), `Status: ready-for-dev` à la clôture de chaque boucle ; la décision du 2026-11-19 est à reporter au projet GitHub par le Project Lead (titre de l'epic, annonce de la migration à une colonne).)*
 
 Fait le 2026-11-19 : réponses de Beat (approuvé tel quel), décomptes repris du kickoff de la 0.20.0, fiches complètes
 47-1a à 47-5 (`Status: drafted`), fichier de l'Epic 46 lu pour Q5 (`epic/46-rapports-groupes`, `4d23b3f9`).

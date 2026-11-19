@@ -1,6 +1,8 @@
 # Story 47-2b : présentation au bilan et au compte de résultat — PDF et CSV
 
-Status: ready-for-dev
+Status: superseded
+
+> ⚠️ **Superseded le 2026-11-19 — refonte « miroir seul, KISS »** (fichier d'epic, § *Décision du 2026-11-19 : miroir seul*) : PDF et CSV n'ont plus rien de propre au miroir : la ligne du miroir y paraît comme un compte ordinaire, avec son solde présenté, sans marque, note, mention « présentation compensée » ni colonnes `Presentation` / `Sources` (47-3, AC-7 et choix C-47-3-3). Fiche laissée telle quelle pour l'historique ; ne pas développer.
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — D6, D9 ; Q9 ; FR-47-4 (PDF, CSV), FR-47-6
 (mention « présentation compensée »), FR-47-8. Née du découpage de l'esquisse 47-2 (2026-11-19). Dépend de la
@@ -208,6 +210,8 @@ un rapport à nombreuses sources (saut de page, césure : AC 2) ; texte hors Win
   47-3b (`2270:-1200.00`). Rapport : `kesh-gate-logs/epic-47-validation/47-2b-presentation-pdf-csv-P3.md`.
 - Registre de la dette du fichier d'epic (§ *Registre de la dette de l'epic*) : à la clôture de la boucle de revue,
   tout finding non remédié y est consigné, une ligne par problème ; la 47-5 en part (« on trace toujours »).
+
+- 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : fiche `superseded` (voir l'avertissement en tête) ; clé du registre de sprint passée à `superseded`.
 
 ## Notes de version
 
