@@ -33,9 +33,12 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
    lectures `SELECT` d'`Account` (`FIND_BY_ID_SQL`, `FIND_BY_ID_FOR_UPDATE_SQL`, listes) les décodent ;
    `account_snapshot_json` les écrit (`mirrorAccountId`, `offsetAccountId`) : l'audit avant/après les montre.
 4. **Changement à trois états** : `AccountUpdate` gagne `presentation_link: PresentationLinkChange` —
-   `Unchanged` (défaut : un client qui ne connaît pas le champ n'efface rien), `None` (retirer), `Mirror(id)`,
-   `Offset(id)` — résolu **dans le dépôt**, sous le `FOR UPDATE` du compte, comme `CurrencyChange` et
-   `OwnFxAccountsChange` ; `is_no_op_change` le prend en compte.
+   `Unchanged` (défaut : un client qui ne connaît pas le champ n'efface rien), `ClearMirror`, `ClearOffset`,
+   `ClearAll` (retirer — **la nature est portée par la variante** : « retirer le miroir d'un compte qui tient une
+   paire » est un no-op, et ne peut se juger qu'**ici, sous verrou**, non dans la route sur une lecture préalable),
+   `Mirror(id)`, `Offset(id)` (poser une nature **remplace** le lien de l'autre nature que le compte tient, paire
+   comprise : le partenaire est libéré, AC-6) — résolu **dans le dépôt**, sous le `FOR UPDATE` du compte, comme `CurrencyChange` et
+   `OwnFxAccountsChange` ; `is_no_op_change` le prend en compte. Traduction depuis le corps de l'API : 47-1b AC-1.
 5. **Règles de validité** (jugées sur l'état résultant, une seule fonction pure `check_presentation_link` testée sans
    base, puis le dépôt pour les lectures) ; refus **`DbError::PresentationLinkInvalid { field, reason,
    linked_account_number }`** (HTTP 400 `PRESENTATION_LINK_INVALID` en 47-1b), raisons d'une **liste close**, dans
@@ -49,8 +52,14 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
      charge) ; paire : les deux comptes ne sont pas de types opposés du même rapport (D2, D3) ;
    - `chain` — le compte ou la cible joue déjà un autre rôle : **un compte joue au plus un rôle** — source d'un
      miroir, cible d'un ou de plusieurs miroirs, ou membre d'une paire (D2 : « pas de chaîne », Guy). Couvre la cible
-     qui a son propre lien, la cible déjà en paire avec un tiers, et le compte, cible d'un miroir, qui demande un
-     lien ; `linked_account_number` nomme le compte qui occupe le rôle.
+     qui a son propre lien, la cible déjà en paire avec un tiers, le compte, cible d'un miroir, qui demande un
+     lien ; `linked_account_number` nomme le compte qui occupe le rôle. ⚠️ **Reposer le même lien est un no-op, jamais un
+     `chain`** : la cible d'un miroir de ce compte-ci, ou le partenaire actuel de sa paire, ne « joue pas un autre
+     rôle » — un client qui renvoie à `PUT` le corps lu par `GET` n'a ni refus ni changement de version (test).
+   Deux raisons de plus appartiennent à la même énumération (`PresentationLinkReason`, `as_str`, `ALL`), **posées par
+   l'API** (47-1b) et **jamais produites par le dépôt** (test sur toutes les entrées de ce dernier) : `bothLinks`
+   (deux liens entiers dans une même requête) et `onCreate` (un lien à la création) ; elles suivent les six
+   ci-dessus dans `ALL`. Le détail `field` de `PresentationLinkField` dit `mirrorAccountId` ou `offsetAccountId`.
    Une cible **non imputable** est admise (compte de présentation) ; une cible **en devise étrangère** aussi, de
    devise quelconque (Q3).
 6. **Paire écrite des deux côtés, dans une transaction** : poser `Offset(B)` sur A écrit `A.offset = B` et
@@ -86,6 +95,13 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
     test qui établit qu'aucun chemin d'écriture ne lit ces colonnes (grep des requêtes d'écriture, inventaire clos).
 13. **Aucune écriture comptable** (NFR-47-1) : poser, déplacer, retirer un lien ne crée ni ne modifie aucune ligne
     de `journal_entries` / `journal_entry_lines` (assertion de comptage dans les tests de l'AC-6).
+14. **Export CSV des tables** (déplacé de la 47-1b à la validation P1 de celle-ci) : `serialize_accounts_csv` ajoute
+    `mirror_account_id` et `offset_account_id` **à la fin de la ligne, après `updated_at`** (en-tête, cellules
+    `fmt_opt_i64`, en-tête figé de `serialize_accounts_csv_includes_role_and_postable` mis à jour, un test d'une ligne
+    liée). **Pourquoi ici** : `csv_tables::tests::chaque_colonne_du_schema_est_exportee_ou_ecartee` confronte chaque
+    en-tête au squash `test-schema/0001_schema_squash.sql` que l'AC-2 met à jour ; sans ces deux colonnes, le gate
+    complet de cette story rougit. Les sites qui construisent un `Account` à la main (`sample_account`, tests de
+    `exports/`, `journal_entry_reversal_e2e.rs`…) gagnent les deux champs à `None` (compilation).
 
 ## Tâches / sous-tâches
 
@@ -93,8 +109,9 @@ afin que les rapports puissent présenter un solde de sens inverse ou un net san
   (49-1a et ses migrations comprises si fusionnées) ; lister `crates/kesh-db/migrations/` et choisir l'horodatage ;
   vérifier sur MariaDB de dev qu'un `CHECK` n'interdit rien d'attendu (AC 1).
 - [ ] **T1 — migration** (AC 1, 2) : fichier SQL, ligne d'audit et compteurs recomptés, squash, P6, upgrade path.
-- [ ] **T2 — entité et lectures** (AC 3, 4) : champs, SQL des lectures, snapshot d'audit, `PresentationLinkChange`,
-  `is_no_op_change`.
+- [ ] **T2 — entité et lectures** (AC 3, 4, 14) : champs, SQL des lectures, snapshot d'audit, `PresentationLinkChange`
+  (variantes `Clear*`), `is_no_op_change`, colonnes de `accounts.csv` et sites de construction
+  d'`Account`.
 - [ ] **T3 — validation** (AC 5) : `check_presentation_link` pure (table de vérité : 4 types × 2 liens × rôles) ;
   `DbError::PresentationLinkInvalid`, `PresentationLinkField`, `PresentationLinkReason` (`as_str`, `ALL`), à l'image
   de `FxAccountInvalid` ; `error_code()`.
@@ -167,7 +184,8 @@ sur la ligne de T.
 ### Stratégie de tests
 
 - **Unitaires** (sans base) : `check_presentation_link`, table de vérité complète ; `PresentationLinkReason::ALL`
-  dans l'ordre de jugement ; `PresentationLinkChange::resolve`.
+  dans l'ordre de jugement (`bothLinks` et `onCreate` en dernier, jamais produits par le dépôt) ;
+  `PresentationLinkChange::resolve` ; lien reposé = no-op.
 - **Intégration dépôt** (`#[sqlx::test]` sur le squash) : chaque refus de l'AC-5 et de l'AC-7 avec son détail ; pose,
   déplacement, retrait d'une paire (deux côtés, versions, deux entrées d'audit) ; source archivée admise ; lien
   orphelin ; lecteur ; concurrence (AC-10) ; comptage des écritures inchangé (AC-13).
@@ -203,6 +221,15 @@ documentation en 47-1b.
 des documents ; cette release porte une migration (`account_presentation_links`, non breaking : deux colonnes
 facultatives sur les comptes) et le retour à la version précédente passe par cette sauvegarde. Une sauvegarde 0.19.0
 ou 0.20.0 s'importe ; la version précédente refuse la base migrée et les sauvegardes neuves.
+
+## Change Log
+
+- 2026-11-19 — validation P1 de la **47-1b** (Sonnet 5.5), effets sur cette fiche : AC-4 (variantes `Clear*`,
+  la nature du retrait se juge sous verrou), AC-5 (lien reposé = no-op ; raisons `bothLinks` et
+  `onCreate` portées par l'énumération, posées par l'API), AC-14 neuve (colonnes de `accounts.csv`, déplacées de la
+  47-1b : la garde d'exhaustivité des colonnes lit le squash), T2 et stratégie de tests. Rapport :
+  `kesh-gate-logs/epic-47-validation/47-1b-liens-api-mcp-export-P1.md`. Cette fiche n'a pas subi sa propre passe
+  de validation ici.
 
 ## Dev Agent Record
 
