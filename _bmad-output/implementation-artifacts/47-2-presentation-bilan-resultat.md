@@ -18,15 +18,26 @@ Le bilan et le compte de résultat n'affichent plus de montant négatif dû à u
    lignes calculées inchangés.
 4. À toute date d'arrêté (D4) ; `presentation=brute` rend le rapport actuel (D6).
 5. JSON : chaque ligne présentée porte `sources: [{ accountId, accountNumber, balance }]` ; PDF et CSV : marque et
-   note ; MCP `kesh_bilan` et `kesh_compte_de_resultat` au même contrat.
+   note ; quand une paire s'applique, le PDF porte en clair **« présentation compensée »** (Guy, D9 et Q9) ;
+   `presentation=brute` disponible pour l'écran, le PDF, le CSV et l'API (D6) ; MCP `kesh_bilan` et `kesh_compte_de_resultat` au même contrat.
 6. Devise : solde en devise de la ligne présentée seulement si ses sources ont la même devise (Q3).
 7. L'exemple chiffré du fichier d'epic est rejoué par un test d'intégration.
+8. Libellé de la ligne : celui du compte qui la porte (Q7) ; l'accueil reste sur les totaux bruts (Q11).
+9. Documentation (§ ci-dessous) : `docs/api-external.md` (`presentation=brute`, `sources`) ; manuel d'administration
+   (paramètre à l'API et aux exports).
 
 ## Tâches
 
 - [ ] Fonction et tests unitaires ; branchement bilan et compte de résultat.
 - [ ] Route (`presentation`), PDF, CSV, MCP ; tests d'API.
-- [ ] `docs/api-external.md`.
+- [ ] `docs/api-external.md`, manuel d'administration.
+
+## Documentation (exigence de Guy, 2026-11-19)
+
+- `docs/api-external.md` : paramètre `presentation=brute`, champ `sources`, mention « présentation compensée ».
+- Manuel d'administration (`docs/manual/fr/admin-manual.tex`) : présentation brute à l'API et dans les exports.
+
+Manuels FR (`docs/manual/fr/`, `.tex` seulement, PDF régénérés à la release) ; s'ils sont traduits d'ici la livraison, le mécanisme y figure aussi. **Le prompt de chaque passe de revue de cette story nomme ces manuels** et exige le contrôle du PDF (`CLAUDE.md` § *Le prompt d'une passe doit NOMMER le manuel*).
 
 ## Fichiers
 

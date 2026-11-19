@@ -2,7 +2,7 @@
 
 Status: draft
 
-Epic : `epic-47-comptes-miroirs.md` (FR-47-5, Q6). Dépend de 47-1.
+Epic : `epic-47-comptes-miroirs.md` (FR-47-5, Q6 : avertissement non bloquant, Guy, 2026-11-19). Dépend de 47-1.
 
 ## Intention
 

@@ -1151,7 +1151,7 @@ development_status:
   44-2-solde-dette-epic: backlog  # sortie de la 0.19.0 à la coupure du 2026-11-18. — story de solde de l'Epic 44 (CLAUDE.md) : au plus 2 issues ouvertes par les stories 44-* ; en fin d'epic, avant le tag
 
   # 2026-11-18 — Epic 47 « Comptes miroirs et paires compensées » (Beat) ; branche epic/47-comptes-miroirs ; passe après l'Epic 46.
-  epic-47: backlog  # 2026-11-18 kickoff en esquisse (planning-artifacts/epic-47-comptes-miroirs.md) : D1–D10, Q1–Q11 à Beat ; migration non breaking en 47-1 ; décomptes d'issues à mesurer en 47-0
+  epic-47: backlog  # 2026-11-19 orientation approuvée par Guy (toutes sections ; Q9 paire avec avertissement, Q10, D10 migration après 20261118000002, release > 0.20.0, documentation des manuels exigée) ; réponses de Beat attendues. — 2026-11-18 kickoff en esquisse (planning-artifacts/epic-47-comptes-miroirs.md) : D1–D10, Q1–Q11 à Beat ; migration non breaking en 47-1 ; décomptes d'issues à mesurer en 47-0
   47-0-kickoff: backlog  # décomptes, réponses de Beat, annonce de la migration, validation du fichier d'epic
   47-1-liens-miroir-et-paire: backlog  # fiche en esquisse (draft) ; migration non breaking (deux colonnes sur accounts)
   47-2-presentation-bilan-resultat: backlog  # fiche en esquisse (draft) ; après la fusion de l'Epic 46
