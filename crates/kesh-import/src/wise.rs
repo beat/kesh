@@ -22,6 +22,8 @@
 //!
 //! Fonction pure, sans I/O, sans dépendance interne au workspace.
 
+use std::collections::HashMap;
+
 use chrono::{NaiveDate, NaiveDateTime};
 use rust_decimal::Decimal;
 
@@ -361,35 +363,44 @@ fn parse_date(raw: &str) -> Option<NaiveDate> {
         .filter(|date| crate::annee_recevable(*date))
 }
 
-/// `jj-mm-aaaa hh:mm:ss`, avec ou sans `.fff`, ou la même heure après une
-/// date `aaaa-mm-jj` ; sans conversion de fuseau.
+/// `jj-mm-aaaa hh:mm:ss`, avec ou sans `.fff` (exactement trois décimales,
+/// les millisecondes de Wise) ; sans conversion de fuseau. La seconde
+/// intercalaire (`:60`) et toute autre forme sont refusées (AC-4).
 fn parse_date_time(raw: &str) -> Option<NaiveDateTime> {
     let (date, time) = raw.split_once(' ')?;
+    // Seule la forme `jj-mm-aaaa` : le tiret en troisième position.
+    if date.as_bytes().get(2) != Some(&b'-') {
+        return None;
+    }
     let date = parse_date(date)?;
     let (hms, frac) = match time.split_once('.') {
         Some((h, f)) => (h, Some(f)),
         None => (time, None),
     };
-    if let Some(f) = frac
-        && !(1..=9).contains(&f.len()) | !f.bytes().all(|b| b.is_ascii_digit())
-    {
-        return None;
-    }
-    let parsed = chrono::NaiveTime::parse_from_str(hms, "%H:%M:%S").ok()?;
-    if hms.len() != 8 {
-        return None;
-    }
-    let nanos = match frac {
-        Some(f) => format!("{f:0<9}").parse::<u32>().ok()?,
+    let millis = match frac {
+        Some(f) if f.len() == 3 && f.bytes().all(|b| b.is_ascii_digit()) => {
+            f.parse::<u32>().ok()?
+        }
+        Some(_) => return None,
         None => 0,
     };
-    let time = chrono::NaiveTime::from_hms_nano_opt(
-        chrono::Timelike::hour(&parsed),
-        chrono::Timelike::minute(&parsed),
-        chrono::Timelike::second(&parsed),
-        nanos,
-    )?;
-    Some(date.and_time(time))
+    let b = hms.as_bytes();
+    let shaped = b.len() == 8
+        && b[2] == b':'
+        && b[5] == b':'
+        && [0, 1, 3, 4, 6, 7].iter().all(|&i| b[i].is_ascii_digit());
+    if !shaped {
+        return None;
+    }
+    let (h, m, s) = (
+        hms[0..2].parse::<u32>().ok()?,
+        hms[3..5].parse::<u32>().ok()?,
+        hms[6..8].parse::<u32>().ok()?,
+    );
+    if s > 59 {
+        return None;
+    }
+    Some(date.and_time(chrono::NaiveTime::from_hms_milli_opt(h, m, s, millis)?))
 }
 
 /// Cours : chiffres, puis au plus dix décimales au point.
@@ -509,8 +520,11 @@ fn check_single_currency(rows: &[WiseRow]) -> Result<(), WiseCsvError> {
 /// Aucun identifiant sur deux lignes ; le premier doublon dans l'ordre du
 /// fichier est cité avec toutes ses lignes.
 fn check_unique_ids(rows: &[WiseRow]) -> Result<(), WiseCsvError> {
-    for (i, row) in rows.iter().enumerate() {
-        if rows[..i].iter().any(|r| r.id == row.id) {
+    // Un passage : identifiant -> première ligne ; la liste complète des
+    // lignes du doublon n'est construite qu'une fois, à la sortie.
+    let mut seen: HashMap<&str, usize> = HashMap::with_capacity(rows.len());
+    for row in rows {
+        if seen.insert(row.id.as_str(), row.line).is_some() {
             let lines = rows
                 .iter()
                 .filter(|r| r.id == row.id)
@@ -702,4 +716,64 @@ fn read_row(
         details_type: details_type?,
         note: text(COL_NOTE),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use rust_decimal::Decimal;
+
+    use super::*;
+
+    fn row(line: usize, amount: Decimal, running_balance: Decimal) -> WiseRow {
+        WiseRow {
+            line,
+            id: format!("TRANSFER-{line}"),
+            id_prefix: "TRANSFER".into(),
+            is_fee: false,
+            fee_of: None,
+            date: NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+            date_time: None,
+            amount,
+            currency: "CHF".into(),
+            description: None,
+            payment_reference: None,
+            running_balance,
+            payer_name: None,
+            payee_name: None,
+            payee_account: None,
+            merchant: None,
+            exchange_from: None,
+            exchange_to: None,
+            exchange_rate: None,
+            exchange_to_amount: None,
+            total_fees: None,
+            direction: WiseDirection::Credit,
+            details_type: "DEPOSIT".into(),
+            note: None,
+        }
+    }
+
+    /// Depuis la borne de quinze chiffres des montants, le débordement d'un
+    /// `Decimal` n'est plus atteignable par un fichier : la défense se prouve
+    /// ici, sur des lignes construites à la main.
+    #[test]
+    fn running_balance_overflow_is_a_line_error() {
+        let rows = [
+            row(2, Decimal::ZERO, Decimal::MAX),
+            row(3, Decimal::ONE, Decimal::MAX),
+        ];
+        match check_running_balance(&rows).unwrap_err() {
+            WiseCsvError::Lines(l) => {
+                assert_eq!(l.len(), 1);
+                assert_eq!((l[0].line, l[0].code), (3, WiseLineErrorCode::Overflow));
+            }
+            other => panic!("attendu Lines, reçu {other:?}"),
+        }
+        // Sans débordement : continuité normale.
+        let ok = [
+            row(2, Decimal::ZERO, Decimal::ONE),
+            row(3, Decimal::ONE, Decimal::TWO),
+        ];
+        assert!(check_running_balance(&ok).is_ok());
+    }
 }

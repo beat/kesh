@@ -201,17 +201,9 @@ fn card_columns_never_reach_the_result() {
 }
 
 #[test]
-fn rows_with_unordered_text_dates_are_sorted_by_time() {
-    // JJ-MM-AAAA ne se trie pas en texte : 20-01-2020 précède 05-02-2020.
-    let s = parse_wise_csv(CHF).unwrap();
-    let pos = |id: &str| s.rows.iter().position(|r| r.id == id).unwrap();
-    assert!(pos("CARD-90000002") < pos("BALANCE-90000003"));
-    assert!("05-02-2020" < "20-01-2020");
-}
-
-#[test]
 fn rows_are_sorted_on_the_read_timestamp_not_on_file_order() {
-    // Deux lignes de données échangées dans le fichier : l'ordre inverse du
+    // JJ-MM-AAAA ne se trie pas en texte (20-01-2020 précède 05-02-2020) : le
+    // tri porte sur l'horodatage lu. Deux lignes de données échangées dans le fichier : l'ordre inverse du
     // fichier ne se suit plus, l'horodatage lu, si.
     let swapped = {
         let mut reader = csv::ReaderBuilder::new()
@@ -423,6 +415,15 @@ fn dates_are_strict() {
         "15-03-2020 25:00:00",
         "15-03-2020 08:00:00.",
         "15/03/2020 08:00:00",
+        // Hors AC-4 : heure sur un chiffre, décimales non chiffres ou en
+        // nombre différent de trois, seconde intercalaire, forme ISO.
+        "15-03-2020 8:00:00",
+        "15-03-2020 08:00:00.abc",
+        "15-03-2020 08:00:00.12",
+        "15-03-2020 08:00:00.1234",
+        "15-03-2020 23:59:60",
+        "15-03-2020 23:59:60.000",
+        "2020-03-15 08:00:00",
     ] {
         let f = set(CHF, 0, "Date Time", bad);
         assert_eq!(
@@ -432,6 +433,7 @@ fn dates_are_strict() {
         );
     }
     assert!(parse_wise_csv(&set(CHF, 0, "Date Time", "15-03-2020 08:00:00")).is_ok());
+    assert!(parse_wise_csv(&set(CHF, 0, "Date Time", "15-03-2020 23:59:59.999")).is_ok());
 }
 
 #[test]
@@ -474,6 +476,7 @@ fn ids_currency_and_direction_are_checked() {
         ("TransferWise ID", "", WiseLineErrorCode::Id),
         ("TransferWise ID", "TRANSFER 1", WiseLineErrorCode::Id),
         ("Currency", "CH", WiseLineErrorCode::Currency),
+        ("Currency", "C1F", WiseLineErrorCode::Currency),
         ("Transaction Type", "NEUTRAL", WiseLineErrorCode::Direction),
         ("Transaction Details Type", "", WiseLineErrorCode::Required),
     ] {
@@ -553,33 +556,125 @@ fn error_codes_are_stable() {
 #[test]
 #[ignore = "lit des relevés réels hors dépôt (KESH_WISE_REAL_DIR)"]
 fn real_statements_are_read() {
-    let Ok(dir) = std::env::var("KESH_WISE_REAL_DIR") else {
-        return;
-    };
+    let dir = std::env::var("KESH_WISE_REAL_DIR")
+        .expect("KESH_WISE_REAL_DIR doit désigner le dossier des relevés réels");
+    let mut files = 0;
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().is_some_and(|e| e == "csv") {
             let bytes = std::fs::read(&path).unwrap();
             let lines = String::from_utf8_lossy(&bytes).lines().count() - 1;
-            let s = parse_wise_csv(&bytes).unwrap_or_else(|e| panic!("{e}"));
+            // Le code seul : le message d'une erreur peut citer une valeur.
+            let s =
+                parse_wise_csv(&bytes).unwrap_or_else(|e| panic!("relevé refusé : {}", e.code()));
+            files += 1;
             assert_eq!(s.rows.len(), lines, "toutes les lignes sont lues");
             println!("{} : {} lignes lues", s.currency, s.rows.len());
         }
     }
+    println!("{files} fichier(s) lu(s)");
+    assert!(
+        files > 0,
+        "aucun fichier .csv dans le dossier : rien n'a été lu"
+    );
 }
 
 #[test]
 fn extreme_amounts_are_refused_without_panicking() {
+    // Le maximum d'un `Decimal` dépasse la forme fermée (quinze chiffres
+    // d'entier au plus) : refus de ligne `AMOUNT`, jamais de panique. Le
+    // chemin `OVERFLOW` du chaînage n'est donc plus atteignable par un
+    // fichier ; il garde sa preuve en test unitaire (`wise.rs`).
     let max = "79228162514264337593543950335";
-    // Montant et solde au maximum d'un `Decimal` : le chaînage déborde.
     let f = set(&set(CHF, 0, "Amount", max), 0, "Running Balance", max);
     let codes = line_codes(parse_wise_csv(&f).unwrap_err());
-    assert_eq!(codes, vec![(2, WiseLineErrorCode::Overflow)]);
-    // Trop de chiffres : refus de ligne, jamais de panique.
+    assert_eq!(codes, vec![(2, WiseLineErrorCode::Amount); 2]);
     let long = "9".repeat(5000);
     let f = set(CHF, 0, "Amount", &long);
     assert_eq!(
         line_codes(parse_wise_csv(&f).unwrap_err()),
         vec![(2, WiseLineErrorCode::Amount)]
     );
+}
+
+/// Fichier synthétique d'une devise : une ligne de données par identifiant,
+/// montants et soldes à 0 (continuité et signes sans objet), sans horodatage.
+fn synthetic(ids: impl IntoIterator<Item = String>) -> Vec<u8> {
+    let header = std::str::from_utf8(CHF).unwrap().lines().next().unwrap();
+    let mut out = String::from(header);
+    for id in ids {
+        out.push_str(&format!(
+            "\n{id},01-01-2020,,0,CHF,,,0,,,,,,,,,,,,,,CREDIT,DEPOSIT"
+        ));
+    }
+    out.into_bytes()
+}
+
+#[test]
+fn first_duplicate_in_file_order_is_cited_with_all_its_lines() {
+    // X(2) Y(3) Y(4) X(5) Z(6) Y(7) : Y est le premier identifiant revu dans
+    // l'ordre du fichier, avec toutes ses lignes ; X, doublon plus tard, non.
+    let ids = ["X", "Y", "Y", "X", "Z", "Y"].map(String::from);
+    assert_eq!(
+        parse_wise_csv(&synthetic(ids)).unwrap_err(),
+        WiseCsvError::DuplicateId {
+            id: "Y".into(),
+            lines: vec![3, 4, 7],
+        }
+    );
+}
+
+#[test]
+fn a_large_file_is_checked_in_linear_time() {
+    // 100 000 lignes, aucun doublon : la vérification quadratique d'origine
+    // (n²/2 comparaisons) dépasserait la minute ; la linéaire, la seconde.
+    let ids = (0..100_000).map(|i| format!("TRANSFER-{i}"));
+    let file = synthetic(ids);
+    let start = std::time::Instant::now();
+    let s = parse_wise_csv(&file).unwrap();
+    assert_eq!(s.rows.len(), 100_000);
+    assert!(
+        start.elapsed() < std::time::Duration::from_secs(20),
+        "lecture trop lente : {:?}",
+        start.elapsed()
+    );
+    // Le doublon en dernière ligne est trouvé aussi vite.
+    let ids = (0..100_000)
+        .map(|i| format!("TRANSFER-{i}"))
+        .chain(["TRANSFER-0".to_string()]);
+    let start = std::time::Instant::now();
+    assert!(matches!(
+        parse_wise_csv(&synthetic(ids)).unwrap_err(),
+        WiseCsvError::DuplicateId { .. }
+    ));
+    assert!(start.elapsed() < std::time::Duration::from_secs(20));
+}
+
+#[test]
+fn quoted_cells_and_a_comma_in_a_description_are_read() {
+    // Les relevés de Wise mettent chaque cellule entre guillemets ; une
+    // description peut porter une virgule.
+    let desc = "Frais, TVA incluse";
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(CHF);
+    let mut writer = csv::WriterBuilder::new()
+        .quote_style(csv::QuoteStyle::Always)
+        .from_writer(Vec::new());
+    let c = col("Description");
+    for (i, r) in reader.records().enumerate() {
+        let mut cells: Vec<String> = r.unwrap().iter().map(str::to_string).collect();
+        if i == 1 {
+            cells[c] = desc.to_string();
+        }
+        writer.write_record(&cells).unwrap();
+    }
+    let quoted = writer.into_inner().unwrap();
+    assert!(quoted.starts_with(b"\"TransferWise ID\",\"Date\""));
+    let s = parse_wise_csv(&quoted).unwrap();
+    let mut expected = parse_wise_csv(CHF).unwrap();
+    // Première ligne de données du fichier = dernière en ordre chronologique.
+    let last = expected.rows.len() - 1;
+    expected.rows[last].description = Some(desc.to_string());
+    assert_eq!(s, expected);
 }

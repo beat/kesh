@@ -32,7 +32,7 @@ pub enum HeaderByNameError {
 
 /// Les enregistrements d'un CSV lu par noms, avant tout contrôle de colonnes.
 #[derive(Debug, Default)]
-pub struct RawRecords {
+pub(crate) struct RawRecords {
     /// L'en-tête : le premier enregistrement non vide.
     pub header: Option<csv::StringRecord>,
     /// Les enregistrements de données `(numéro de ligne du fichier, cellules)`,
@@ -50,7 +50,7 @@ pub struct RawRecords {
 /// enregistrement avant de sauter les lignes vides qui le précèdent).
 /// `flexible(true)` : la largeur se contrôle ici, ce qui permet de sauter une
 /// ligne vide (fin de fichier) avant de la compter fausse.
-pub fn read_records(text: &str) -> RawRecords {
+pub(crate) fn read_records(text: &str) -> RawRecords {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
