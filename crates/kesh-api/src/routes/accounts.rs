@@ -595,12 +595,16 @@ pub async fn archive_account(
         .await?
         .ok_or(AppError::Database(DbError::NotFound))?;
 
-    // ⚠️ **Rejouée sur interblocage** (Story 47-2, AC-1 ; opération
-    // `accounts::archive`) : poser un miroir A → T tient A `FOR UPDATE` puis
-    // verrouille T ; archiver T prend sa ligne puis lit « qui désigne T » sous
-    // verrou — les deux gestes concurrents ferment un cycle. Le dépôt ouvre et
-    // conclut sa propre transaction à chaque tentative ; le rejeu relit l'état
-    // et rend le refus métier (`ACCOUNT_IS_MIRROR`) plutôt qu'un 500.
+    // **Rejouée sur interblocage, par précaution** (Story 47-2, AC-1 ;
+    // opération `accounts::archive`) : l'archivage de T prend sa ligne `FOR
+    // UPDATE`, puis lit « qui désigne T » sous verrou, pendant qu'une pose de
+    // miroir A → T tient A puis verrouille T. Lue au code, cette paire attend
+    // sans cycle (l'archivage ne prend jamais la ligne de A) : **aucun
+    // interblocage n'est établi ni provoqué par un test**. Un cycle reste
+    // possible par d'autres verrous (société, réglages) ; le rejeu est sans
+    // risque — le dépôt ouvre et conclut sa propre transaction à chaque
+    // tentative et refait tous ses contrôles — et rend alors le refus métier
+    // (`ACCOUNT_IS_MIRROR`) plutôt qu'un 500 (revue P1 de la 47-2, L4).
     let (version, user_id, confirm) = (req.version, current_user.user_id, req.confirm_designated);
     let account = crate::retry::retry_app_on_deadlock("accounts::archive", || {
         let pool = state.pool.clone();

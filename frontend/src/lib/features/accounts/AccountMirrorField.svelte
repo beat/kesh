@@ -37,6 +37,15 @@
 	let sources = $derived(account ? mirrorSourceNumbers(account.id, accounts) : []);
 	let candidates = $derived(mirrorCandidates(account, { accountType }, accounts));
 
+	// Un miroir choisi puis écarté par un changement de type du formulaire (le
+	// candidat sort de la liste) ne reste ni dans l'état ni dans le `PUT`/`POST` :
+	// sans cela, le `<select>` paraît vide (`selectedIndex = -1`) alors que
+	// l'ancien identifiant partirait au serveur (revue P1 de la 47-2, L3). Le
+	// miroir enregistré reste dans `candidates` (`withCurrentAccount`).
+	$effect(() => {
+		if (value !== '' && !candidates.some((a) => String(a.id) === value)) value = '';
+	});
+
 	const SELECT_CLASS = 'mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm';
 </script>
 

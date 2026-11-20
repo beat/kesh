@@ -443,7 +443,10 @@
 		} catch (err) {
 			retypeWarnOpen = false;
 			const fxErrors = fxFieldErrorOf(err);
-			// Story 47-2 (AC-3) : la raison `accountType` d'un retypage tombe ici.
+			// Story 47-2 (AC-3) : cas de concurrence seulement — `guard_mirror_update`
+			// juge le retypage d'un compte mouvementé avant `retype_impact`, donc un
+			// refus du miroir tombe dès le premier envoi (`submitEdit`) ; ici, c'est
+			// un lien posé par un tiers entre les deux envois.
 			const mirrorError = mirrorFieldErrorOf(err);
 			if (fxErrors) {
 				editFxErrors = fxErrors;

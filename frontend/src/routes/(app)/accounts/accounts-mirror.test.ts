@@ -158,7 +158,7 @@ describe('dialogue de modification — compte miroir', () => {
 		expect(await screen.findByTestId('account-edit-dialog-mirror-error')).toBeTruthy();
 	});
 
-	it('au rejeu de confirmRetype, le refus tombe aussi sous le champ', async () => {
+	it('cas de concurrence : le refus du rejeu de confirmRetype (lien posé entre les deux envois) tombe aussi sous le champ', async () => {
 		updateAccountMock
 			.mockRejectedValueOnce({
 				code: 'ACCOUNT_HAS_ENTRIES',
