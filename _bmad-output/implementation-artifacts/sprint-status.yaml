@@ -1201,12 +1201,14 @@ development_status:
   fix-cours-afc-bgn: review  # 2026-11-18 : branche fix/cours-afc-bgn, main v0.19.0 reprise ; cours AFC des monnaies retirées (BGN, HRK…) retenus, comptes toujours en monnaie active ; revue close (P1, P1-2, P2 ciblée) ; gate complet groupé vert (integ/fixes-0.19.0 à 5fc6fb1b) ; PR à ouvrir
 
   # 2026-11-18 — Epic 46 « Rapports par groupes de comptes » (Beat), branche epic/46-rapports-groupes ; numéro réservé par Guy.
-  epic-46: in-progress  # 2026-11-18 kickoff en esquisse (planning-artifacts/epic-46-rapports-groupes.md) ; sans migration ; 6 stories hors kickoff, solde comprise (46-5 conditionnelle, Q9) ; décomptes d'issues à mesurer au kickoff
-  46-0-kickoff: in-progress  # fichier d'epic écrit, revue de Beat à tenir, décomptes à mesurer
-  46-1-arbre-des-groupes-modele-api: backlog  # esquisse ; après la fusion de fix/bilan-resultat-reporte
-  46-2-groupes-ecrans: backlog  # esquisse ; suit 46-1
-  46-3-groupes-pdf-csv: backlog  # esquisse ; suit 46-1 et la fusion de fix/pdf-montants-alignes
-  46-4-groupes-mcp: backlog  # esquisse ; suit 46-1 ; sous réserve de Q5
-  46-5-aide-groupes-plan: backlog  # esquisse ; conditionnelle (Q9) ; après la fusion de fix/api-parent-compte
-  46-6-solde-dette-epic: backlog  # story de solde, plafond proposé 2 issues
+  epic-46: in-progress  # kickoff 2026-11-18 ; revue 1 approuvée par Beat et Guy le 2026-11-19 ; release visée 0.21.0 (prévision) ; sans migration ; epic de fonctionnalité nouvelle au-delà de la borne de six, annoncé au kickoff : huit fiches (46-6 découpée en 46-6a/46-6b par la règle de splitting) dont 46-5 conditionnelle ; décomptes d'issues à mesurer
+  46-0-kickoff: in-progress  # fichier d'epic : revue 1 et remarques de Guy versées, fichiers communs déclarés (2026-11-20) ; décomptes d'issues à mesurer
+  46-1-arbre-des-groupes-modele-api: drafted  # 2026-11-20 fiche écrite (le contrat : detailLevel, subtotalPosition, open, closed) ; validation en boucle à suivre
+  46-2-groupes-ecrans: drafted  # 2026-11-20 ; suit 46-1 ; export groupé après 46-3
+  46-3-groupes-pdf-csv: drafted  # 2026-11-20 ; suit 46-1 ; commence après la fusion de la 48-11 dans main (garde {:.2})
+  46-4-groupes-mcp: drafted  # 2026-11-20 ; suit 46-1
+  46-5-aide-groupes-plan: drafted  # conditionnelle (Q9) : maquette avant décision ; #1351 fusionnée
+  46-6a-balance-groupes-modele-api-mcp: drafted  # 2026-11-20 ; balance par groupes, modèle, API, MCP ; suit 46-1
+  46-6b-balance-groupes-ecran-pdf-csv: drafted  # 2026-11-20 ; balance par groupes, écran, PDF, CSV ; suit 46-6a, 46-2, 46-3
+  46-7-solde-dette-epic: drafted  # story de solde, plafond 2 issues ; en dernier
   epic-46-retrospective: optional

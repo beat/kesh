@@ -1,16 +1,20 @@
 # Epic 46 — Rapports par groupes de comptes
 
 **Kickoff : 2026-11-18** (branche `epic/46-rapports-groupes`, partie de `main` à `773df80d`, release v0.19.0).
-Numéro **46** réservé par Guy ; responsable **Beat** (contributeur). État : **réponses de Beat (2026-11-19) ; approbation de Guy attendue** (page `data-not-committed/epic-46-revue-pour-guy.html`), puis
-validation en boucle des fiches (`CLAUDE.md` § *Review Iteration Rule*). Aucun code écrit.
+Numéro **46** réservé par Guy ; responsable **Beat** (contributeur). État : **revue 1 approuvée par Beat et par Guy
+(2026-11-19)** ; `main` reprise le 2026-11-20 (`d29aa557` : #1346, #1327, #1351 fusionnées) ; **fiches écrites le
+2026-11-20, `drafted`**, validation en boucle à suivre (`CLAUDE.md` § *Review Iteration Rule*). Aucun code écrit.
 
-**Cible** : une release mineure (un epic = une release) ; numéro, CHANGELOG daté, macros des manuels et tag par Guy.
-**Aucune migration attendue** (D2) : l'epic peut entrer dans n'importe quelle release planifiée.
+**Cible** : release **0.21.0** (prévision ; un epic = une release) — hors de la 0.20.0, ce qui évite la collision
+avec la 48-11 dans `kesh-report/src/pdf.rs` (remarque 1 de Guy) ; numéro acquis au tag seulement, CHANGELOG daté,
+macros des manuels et tag par Guy. **Aucune migration attendue** (D2).
 
-**Taille** : **7** stories hors kickoff (46-1 à 46-7), story de solde comprise : la **balance par groupes** (Q6, Beat) est
-une story de plus (46-6 ; le solde devient 46-7) et dépasse la borne de six — **à confirmer par Guy** (au kickoff, un
-epic qui paraît trop grand se découpe). 46-5 est **conditionnelle** (Q9, maquette avant décision) ; si elle sort,
-l'epic en compte six.
+**Taille — epic de fonctionnalité nouvelle, au-delà de la borne de six, annoncé ici** (`CLAUDE.md` § *Numérotation
+des versions*) : **sept stories** à la revue 1 (46-1 à 46-7, solde compris), approuvées par Guy ; la balance par
+groupes (« 46-6 ») touche plus de cinq modules et se découpe, par la règle de splitting préventif, en **46-6a**
+(modèle, API, MCP) et **46-6b** (écran, PDF, CSV) — **huit fiches**, la balance restant au numéro 46-6 et le solde
+en dernier (remarque 2 de Guy). 46-5 est **conditionnelle** (Q9, maquette avant décision) ; si elle sort, l'epic en
+compte sept.
 
 **Règles des fichiers communs** (`CLAUDE.md` § *Travailler à plusieurs développeurs*) : aucune ligne au `CHANGELOG.md`
 en cours d'epic (chaque fiche a sa *Note de version*) ; aucun PDF de manuel commité (`.tex` seul) ; catalogues i18n et
@@ -103,12 +107,12 @@ légales imposées (Q7) ; le grand livre (Q6) ; **la balance est dans le périm�
 - FR-46-3 — PDF et CSV au niveau choisi, groupes en gras, retrait par profondeur. → 46-3
 - FR-46-4 — Outils MCP `kesh_bilan`, `kesh_compte_de_resultat` avec le niveau. → 46-4
 - FR-46-5 — Aide à la création des groupes d'un plan existant. → 46-5 (conditionnelle ; maquette avant décision)
-- FR-46-6 — Balance par groupes (Q6, Beat) : niveaux, sous-totaux, écran, PDF, CSV, API, MCP. → 46-6
+- FR-46-6 — Balance par groupes (Q6, Beat) : niveaux, sous-totaux, écran, PDF, CSV, API, MCP. → 46-6a, 46-6b
 - FR-46-7 — Un groupe non affiché laisse son total à son parent (Q2). → 46-1, 46-2
 - FR-46-8 — Solde en devise d'un groupe : devise + CHF si une seule devise, sinon CHF seul, aucune ligne supplémentaire (Q3). → 46-1, 46-2, 46-3
 - FR-46-9 — Position des sous-totaux au choix : sur la ligne du titre, au-dessus des comptes, ou en ligne de sous-total au-dessous ; PDF fidèle à l'écran. → 46-2, 46-3
-- FR-46-10 — Hiérarchie visible, accordéons ouverts par défaut ; « tout ouvrir / tout fermer » ; « hiérarchie masquée / montrée » (Q10). → 46-2, 46-6
-- FR-46-11 — Tout ce que l'écran et le PDF permettent se pilote par l'API et le MCP. → 46-1, 46-3, 46-4, 46-6
+- FR-46-10 — Hiérarchie visible, accordéons ouverts par défaut ; « tout ouvrir / tout fermer » ; « hiérarchie masquée / montrée » (Q10). → 46-2, 46-6b
+- FR-46-11 — Tout ce que l'écran et le PDF permettent se pilote par l'API et le MCP. → 46-1, 46-3, 46-4, 46-6a, 46-6b
 
 **Non fonctionnelles**
 
@@ -119,50 +123,89 @@ légales imposées (Q7) ; le grand livre (Q6) ; **la balance est dans le périm�
   fait ni boucle ni panique : le compte est traité en racine, avec `tracing::warn!`.
 - NFR-46-5 — Quatre locales ; `i18n-keys`, `i18n-libelle-en-dur` verts ; manuel utilisateur FR (`.tex`).
 - NFR-46-6 — MCP : `mcp_contrat`, `mcp_gardes_lexicales` verts, tailles re-mesurées.
-- NFR-46-7 — Respect de l'art. 959a CO (Q7, Beat) : la présentation par groupes conserve les rubriques minimales du bilan légal. → 46-1
+- NFR-46-7 — Respect de l'art. 959a CO (Q7, Beat), lecture (a) : la présentation par groupes conserve les sections
+  légales du bilan (Actifs, Dettes, Fonds propres, lignes calculées) ; aucun rattachement de compte à une rubrique. → 46-1
+
+## Remarques de Guy sur la revue 1 (2026-11-19) et décisions (2026-11-20)
+
+Guy a approuvé la revue 1 sans condition ; son agent a fait cinq remarques, traitées ainsi à l'écriture des fiches :
+
+1. **Release** : visée **0.21.0** (prévision) ; aucune collision avec la 48-11 (0.20.0), dont l'epic part une fois
+   fusionnée.
+2. **Balance** : décrite en entier, au numéro 46-6 (découpée en 46-6a et 46-6b, règle de splitting préventif) ; le
+   solde reste en dernier (46-7).
+3. **Art. 959a CO** : lecture (a) (cf. Q7) ; aucune migration.
+4. **Niveau et accordéons** : le niveau fixe l'état de départ ; les ouvertures et fermetures manuelles priment ensuite
+   (listes `open` / `closed` de l'API) ; le PDF « fidèle à l'écran » imprime le niveau et les groupes ouverts ou
+   fermés, passés à l'API ; critère exprès : 46-1 AC-3, 46-2 AC-3, 46-3 AC-3 et AC-4.
+5. **Sous-totaux** : par défaut sur la ligne du titre (`header`) ; sans paramètre, la réponse de l'API reste celle
+   d'aujourd'hui (46-1 AC-8, 46-3 AC-2, 46-4 AC-2, 46-6a AC-5).
+
+Contraintes de Guy reprises dans les fiches : la **48-11** met `round_for_display` et `format_two_decimals` dans
+`kesh-core` et une garde interdit tout `{:.2}` neuf dans `kesh-report` (46-1 AC-13, 46-3 AC-6, 46-6a AC-8, 46-6b
+AC-4 ; la 46-3 ne commence qu'après sa fusion) ; la **47-3** (présentation miroir) s'applique **avant** les groupes
+(46-1 AC-9).
 
 ## Stories
 
-| Clé | Titre | Dépend de | Taille |
-|---|---|---|---|
-| 46-0 | Kickoff (ce fichier ; pas de fiche) | — | — |
-| 46-1 | Arbre des groupes : modèle et API | `fix/bilan-resultat-reporte` fusionné | M |
-| 46-2 | Écrans du bilan et du compte de résultat par groupes | 46-1 | M |
-| 46-3 | PDF et CSV par groupes | 46-1, `fix/pdf-montants-alignes` fusionné | M |
-| 46-4 | Outils MCP par groupes | 46-1 | S |
-| 46-5 | Aide à la création des groupes d'un plan (conditionnelle, Q9 : maquette d'UI avant décision) | `fix/api-parent-compte` fusionné, maquette approuvée | M |
-| 46-6 | Balance par groupes (Q6, Beat ; ajoutée le 2026-11-19) | 46-1 | M |
-| 46-7 | Solde de la dette de l'epic (plafond : 2 issues, à confirmer au kickoff) ; ex-46-6 | toutes | S |
+| Clé | Titre | Dépend de | Taille | Fiche |
+|---|---|---|---|---|
+| 46-0 | Kickoff (ce fichier ; pas de fiche) | — | — | — |
+| 46-1 | Arbre des groupes : modèle et API (le contrat) | `main` reprise (fait) | M | `46-1-arbre-des-groupes-modele-api.md` |
+| 46-2 | Écrans du bilan et du compte de résultat par groupes | 46-1 ; export groupé : 46-3 | M | `46-2-groupes-ecrans.md` |
+| 46-3 | PDF et CSV par groupes | 46-1, **48-11 dans `main`** | M | `46-3-groupes-pdf-csv.md` |
+| 46-4 | Outils MCP par groupes | 46-1 | S | `46-4-groupes-mcp.md` |
+| 46-5 | Aide à la création des groupes d'un plan (conditionnelle, maquette avant décision) | maquette approuvée | M | `46-5-aide-groupes-plan.md` |
+| 46-6a | Balance par groupes : modèle, API, MCP | 46-1 | M | `46-6a-balance-groupes-modele-api-mcp.md` |
+| 46-6b | Balance par groupes : écran, PDF, CSV | 46-6a, 46-2, 46-3 | M | `46-6b-balance-groupes-ecran-pdf-csv.md` |
+| 46-7 | Solde de la dette de l'epic (plafond : **2 issues**) | toutes | S | `46-7-solde-dette-epic.md` |
 
-Ordre proposé : 46-1 → (46-2, 46-3, 46-4, 46-6 en parallèle) → 46-5 (si décidée après maquette) → 46-7.
+Ordre : 46-1 → (46-3 dès la 48-11 fusionnée, 46-4, 46-6a en parallèle) → 46-2 (après 46-3, pour l'export groupé) →
+46-6b → 46-5 (si décidée) → 46-7. **Ordre avec la 47-3** : miroir puis groupes ; le second arrivé recâble (fiche
+47-3, § *Recâblage*), avec revue du code d'intégration.
 
 ## Dépendances
 
-- **`fix/api-parent-compte`** (non fusionné, `review`) : nécessaire à Beat pour ranger un plan existant, et à 46-5.
-  Non nécessaire à 46-1–46-4 (l'arbre existe déjà). ⚠️ Il refuse un parent qui porte des écritures : un compte déjà
-  mouvementé (p. ex. `1020 Banque`) ne peut pas devenir le groupe d'une banque ; le groupe doit être un compte neuf.
-- **`fix/bilan-resultat-reporte`** (non fusionné) : touche `balance_sheet.rs`, `csv.rs`, `pdf.rs`,
-  `BalanceSheetView.svelte`, `reports.api.ts`. 46-1 part de `main` **après** sa fusion, ou le reprend.
-- **`fix/pdf-montants-alignes`** (non fusionné) : réécrit `pdf.rs` (+1117 lignes). 46-3 ne commence qu'après sa fusion.
-- **Epic 47 (comptes miroirs)** : s'appuiera sur ces générateurs. Proposé : 46 avant 47 (Q8).
+- **`fix/api-parent-compte`** : **fusionné** (#1351, `d29aa557`). ⚠️ Il refuse un parent qui porte des écritures :
+  un compte déjà mouvementé (p. ex. `1020 Banque`) ne peut pas devenir le groupe d'une banque ; le groupe doit être un
+  compte neuf.
+- **`fix/bilan-resultat-reporte`** : **fusionné** (#1346, `b5333177`).
+- **`fix/pdf-montants-alignes`** : **fusionné** (#1327, `0867f1fb`).
+- **48-11 (arrondi au centime, Epic 48, release 0.20.0)** : déplace `round_for_display` et `format_two_decimals` dans
+  `kesh-core`, interdit tout `{:.2}` neuf dans `kesh-report`. **46-3 et 46-6b ne commencent qu'après sa fusion.**
+- **Epic 47 (comptes miroirs)**, 47-3 (`story/47-3`) : présentation miroir dans le service, générateurs bruts ;
+  **miroir puis groupes** (décision de Guy) ; 46 et 47 se croisent dans `services/rapports.rs` et
+  `reports_e2e.rs`.
 
 ## Fichiers communs
 
-| Fichier ou module | Stories | Conflit possible avec |
-|---|---|---|
-| `crates/kesh-report/src/groupes.rs` (neuf), `lib.rs` | 46-1 | — |
-| `crates/kesh-report/src/balance_sheet.rs`, `income_statement.rs` | 46-1 | `fix/bilan-resultat-reporte`, Epic 47 |
-| `crates/kesh-report/src/pdf.rs` | 46-3 | `fix/pdf-montants-alignes` (fort), `fix/bilan-resultat-reporte`, Epic 47 |
-| `crates/kesh-report/src/csv.rs` | 46-3 | `fix/bilan-resultat-reporte`, Epic 47 |
-| `crates/kesh-api/src/routes/reports.rs`, `tests/reports_e2e.rs` | 46-1, 46-3 | `fix/bilan-resultat-reporte` (tests), Epic 47 |
-| `crates/kesh-api/src/mcp/outils/rapports.rs`, tests MCP (`mcp_contrat`, `mcp_gardes_lexicales`, `mcp_matrice_manuel`) | 46-4 | Epic 47 |
-| `crates/kesh-api/src/routes/accounts.rs`, `kesh-db/src/repositories/accounts.rs` | 46-5 | `fix/api-parent-compte` (fort) |
-| `crates/kesh-i18n/locales/*/messages.ftl` | 46-2, 46-3, 46-5 | tous (bloc propre) |
-| `frontend/src/lib/features/reports/{BalanceSheetView,IncomeStatementView}.svelte`, `reports.api.ts`, `reports.types.ts`, `routes/(app)/reports/+page.svelte` | 46-2 | `fix/bilan-resultat-reporte`, Epic 47 |
-| `frontend/src/routes/(app)/accounts/+page.svelte`, `features/accounts/` | 46-5 | `fix/api-parent-compte` |
-| `frontend/src/lib/shared/i18n-keys.test.ts` (`sitesTotal`) | 46-2, 46-5 | tous (recompté) |
-| `docs/api-external.md`, `docs/manual/fr/user-manual.tex` | toutes | les trois correctifs, Epic 47 |
-| `_bmad-output/implementation-artifacts/sprint-status.yaml` | toutes | tous (bloc propre) |
+Déclarés au kickoff (`CLAUDE.md` § *Travailler à plusieurs développeurs*, § *Fusions et fichiers communs*), relevés le
+2026-11-20 à `29b9ec27` contre la 0.20.0 en cours (Epics 48, 49) et l'Epic 47.
+
+| Fichier ou module | Stories de l'epic | Autres chantiers qui le touchent | Règle |
+|---|---|---|---|
+| `crates/kesh-report/src/groupes.rs` (neuf), `lib.rs` | 46-1, 46-6a | — | — |
+| `crates/kesh-report/src/balance_sheet.rs`, `income_statement.rs` (champs de structure seulement) | 46-1 | 47-3 (`mirror_of` d'`AccountBalance`) | blocs distincts ; littéraux des tests au second arrivé |
+| `crates/kesh-report/src/trial_balance.rs` | 46-6a | — | — |
+| `crates/kesh-report/src/pdf.rs` | 46-3, 46-6b | **48-11** (fort : formateurs, garde `{:.2}`), 47-3 (littéraux de tests), 49-1b (PDF des factures, autre région) | 46-3 part de `main` **après** la 48-11 |
+| `crates/kesh-report/src/csv.rs` | 46-3, 46-6b | **48-11**, 47-3 (littéraux) | idem |
+| `crates/kesh-report/benches/export.rs` | 46-1 (littéraux) | 47-3 | le second arrivé garde les deux champs |
+| `crates/kesh-api/src/services/rapports.rs` | 46-1, 46-6a | **47-3** (`bilan`, `compte_de_resultat` : présentation miroir) | miroir puis groupes (46-1 AC-9) ; recâblage par le second arrivé |
+| `crates/kesh-api/src/routes/reports.rs` | 46-1, 46-3, 46-6a, 46-6b | — | — |
+| `crates/kesh-api/tests/reports_e2e.rs`, `reports_export_e2e.rs` | 46-1, 46-3, 46-6a, 46-6b | 47-3 (exemple chiffré) | blocs de tests distincts |
+| `crates/kesh-api/src/mcp/outils/rapports.rs`, `tests/mcp_*.rs` | 46-4, 46-6a | 47-3 (descriptions de `kesh_bilan`, `kesh_compte_de_resultat`) | garder les deux phrases ; longueurs par `mcp_gardes_lexicales` |
+| `crates/kesh-api/src/routes/accounts.rs`, `kesh-db/src/repositories/accounts.rs` | 46-5 (si décidée) | 47-1/47-2 (miroir), 48-x | blocs distincts |
+| `crates/kesh-i18n/locales/*/messages.ftl` | 46-2, 46-6b, 46-5 | tous | bloc propre `reports-groups-*` ; conflit : garder les deux côtés |
+| `frontend/src/lib/features/reports/*` (vues, `reports.api.ts`, `reports.types.ts`, `GroupedReportRows.svelte` neuf) | 46-2, 46-6b | 47-4 (écrans du miroir) | le second arrivé résout |
+| `frontend/src/routes/(app)/reports/+page.svelte` | 46-2, 46-6b | 47-4 | idem |
+| `frontend/src/routes/(app)/accounts/+page.svelte`, `features/accounts/` | 46-5 | 47-2 (écran du plan) | idem |
+| `frontend/src/lib/shared/i18n-keys.test.ts` (`sitesTotal`) | 46-2, 46-6b, 46-5 | tous | **recompté** par la garde après fusion |
+| `frontend/tests/e2e/reports*.spec.ts` | 46-2, 46-6b | 47-4 | 46-2 change l'écran par défaut (Q10) : specs adaptées sans perdre d'assertion |
+| `docs/api-external.md` | 46-1, 46-3, 46-6a | 47-3, Epic 48, 49 | paragraphes distincts |
+| `docs/manual/fr/user-manual.tex` | 46-2, 46-3, 46-6b, 46-5 | 47-4, 49-1c, v0200-menu-sous-groupes | `.tex` seul, PDF régénérés à la release |
+| `docs/manual/fr/admin-manual.tex` (tableau MCP) | 46-4, 46-6a | 47-3 | troisième colonne : garder les deux phrases |
+| `_bmad-output/implementation-artifacts/sprint-status.yaml` | toutes | tous | bloc propre de l'epic |
+| `CHANGELOG.md` | — | — | jamais en cours d'epic (*Note de version* de chaque fiche) |
 
 ## Migrations
 
@@ -193,6 +236,9 @@ défauts*) ; objectif au tag de la release de l'epic : moins qu'au tag v0.19.0 (
 - **Q7 — Rubriques légales du bilan suisse (art. 959a CO)** : imposer ou contrôler la correspondance des groupes aux
   rubriques minimales ? Proposé : non (le plan PME y correspond déjà). *(Guy)*
   *Beat, 2026-11-19 :* respecter l'art. 959a CO (NFR-46-7).
+  *Décision du 2026-11-20 (remarque 3 de Guy) :* **lecture (a)** — le bilan garde ses sections légales et les groupes
+  s'y rangent (D4) ; aucune donnée neuve, aucune migration ; une présentation repliée (niveau 1 en particulier) est
+  **un affichage de travail, non des comptes annuels** (écrit à l'API, 46-1, et au manuel, 46-2 et 46-3).
 - **Q8 — Ordre avec l'Epic 47** (comptes miroirs, qui s'appuiera sur ces générateurs) : 46 d'abord ? *(Guy, Beat)*
   *Beat, 2026-11-19 :* approuvé tel que proposé : 46 avant 47 (déjà noté par Guy).
 - **Q9 — Outil d'aide (46-5)** : utile, ou l'écran du plan suffit-il après `fix/api-parent-compte` ? Règle de
@@ -214,6 +260,7 @@ La page pour Guy (`data-not-committed/epic-46-revue-pour-guy.html`) porte ces r�
 
 ## Avant le développement
 
-1. Revue de Beat (page `data-not-committed/epic-46-revue.html`) : réponses versées ici ; **approbation de Guy attendue**.
-2. Décomptes d'issues mesurés (46-0) ; fiches complétées et validées en boucle.
-3. Fusion de `fix/bilan-resultat-reporte` (46-1), `fix/pdf-montants-alignes` (46-3), `fix/api-parent-compte` (46-5).
+1. ~~Revue de Beat et approbation de Guy~~ : faites (2026-11-19).
+2. Décomptes d'issues mesurés (46-0) ; **fiches écrites (2026-11-20), validation en boucle à mener**.
+3. ~~Fusion des trois correctifs~~ : faite (`main` `d29aa557`, reprise le 2026-11-20). Reste : la **48-11** dans `main`
+   avant la 46-3 ; la maquette de la 46-5 avant sa décision.
