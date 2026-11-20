@@ -590,8 +590,16 @@ async fn devis_option_balance_juste_et_virement_sans_frais() {
         .quote_fee(&profil(), "00000000-0000-4000-8000-000000000002")
         .await
         .unwrap();
-    assert_eq!(f0.currency, "EUR");
+    // La devise des frais est celle du devis (CHF), non celle de l'option (EUR).
+    assert_eq!(f0.currency, "CHF");
     assert!(f0.total.is_zero());
+    // Cas inverse : le devis sans devise source, l'option fait foi.
+    b.sim.repondre(|_| {
+        Rep::Json(json!({"payOut": "BANK_TRANSFER", "paymentOptions": [
+            {"payIn": "BALANCE", "payOut": "BANK_TRANSFER", "sourceCurrency": "EUR", "fee": {"total": 0.5}}]}))
+    });
+    let repli = b.client.quote_fee(&profil(), "q").await.unwrap();
+    assert_eq!(repli.currency, "EUR");
     b.controles_communs();
 }
 
@@ -909,6 +917,33 @@ async fn frais_du_devis_au_texte_brut_du_corps_sans_perte() {
     });
     let f = b.client.quote_fee(&profil(), "q").await.unwrap();
     assert_eq!(f.total.to_string(), "123456789012345.67");
+}
+
+#[tokio::test]
+async fn montants_ou_frais_null_refuses() {
+    let b = banc().await;
+    b.sim.repondre(|_| {
+        Rep::Json(
+            json!([{"id": 11, "currency": "CHF", "amount": {"value": null, "currency": "CHF"}}]),
+        )
+    });
+    match b.client.balances(&profil()).await {
+        Err(AppError::ProviderResponseInvalid { details, .. }) => {
+            assert_eq!(details["step"], "balances");
+        }
+        autre => panic!("{autre:?}"),
+    }
+    b.sim.repondre(|_| {
+        Rep::Json(devis(json!([
+            {"payIn": "BALANCE", "payOut": "BANK_TRANSFER", "sourceCurrency": "CHF", "fee": {"total": null}}
+        ])))
+    });
+    match b.client.quote_fee(&profil(), "q").await {
+        Err(AppError::ProviderResponseInvalid { details, .. }) => {
+            assert_eq!(details["reason"], "quote_fee");
+        }
+        autre => panic!("{autre:?}"),
+    }
 }
 
 #[tokio::test]

@@ -264,17 +264,38 @@ fn text_of(v: &Value) -> Option<String> {
 }
 
 /// Un montant lu en [`Decimal`] par le **texte exact reçu** (`RawValue`) :
-/// aucun passage par `f64`, qui altère dès seize chiffres significatifs. Un
-/// nombre (`1234.50`, forme à exposant admise) ou une chaîne de chiffres.
+/// aucun passage par `f64`, qui altère dès seize chiffres significatifs.
+///
+/// Deux formes seulement : un nombre JSON (`1234.50`, exposant admis), ou une
+/// chaîne de forme stricte `-?chiffres(.chiffres)?` (ni `_`, ni `+`, ni espace,
+/// ni exposant). Le résultat tient jusqu'à 28 décimales (limite de
+/// [`Decimal`]) ; au-delà, ou hors de ces formes, `None`.
 fn decimal_of_raw(raw: &RawValue) -> Option<Decimal> {
     let text = raw.get().trim();
-    let text = text
-        .strip_prefix('"')
-        .and_then(|t| t.strip_suffix('"'))
-        .map_or(text, str::trim);
-    text.parse::<Decimal>()
-        .ok()
-        .or_else(|| Decimal::from_scientific(text).ok())
+    match text.strip_prefix('"').and_then(|t| t.strip_suffix('"')) {
+        Some(chaine) => {
+            let digits = chaine.strip_prefix('-').unwrap_or(chaine);
+            let (entier, frac) = digits
+                .split_once('.')
+                .map_or((digits, None), |(e, f)| (e, Some(f)));
+            let chiffres = |t: &str| !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit());
+            if !chiffres(entier) || frac.is_some_and(|f| !chiffres(f) || f.len() > 28) {
+                return None;
+            }
+            chaine.parse::<Decimal>().ok()
+        }
+        // Nombre JSON : au-delà de 28 décimales `Decimal` arrondirait en silence.
+        None if text
+            .split_once('.')
+            .is_some_and(|(_, f)| f.bytes().take_while(u8::is_ascii_digit).count() > 28) =>
+        {
+            None
+        }
+        None => text
+            .parse::<Decimal>()
+            .ok()
+            .or_else(|| Decimal::from_scientific(text).ok()),
+    }
 }
 
 /// Encode un composant de requête : tout octet hors `A-Za-z0-9-._~` en `%XX`.
@@ -757,7 +778,9 @@ fn pick_quote_fee(body: &[u8]) -> Option<WiseQuoteFee> {
     if chosen.next().is_some() {
         return None;
     }
-    let currency = option.source_currency.or(quote.source_currency)?;
+    // La devise des frais est celle du devis (devise source) ; l'option ne
+    // sert qu'en repli.
+    let currency = quote.source_currency.or(option.source_currency)?;
     Some(WiseQuoteFee {
         currency,
         total: decimal_of_raw(option.fee?.total?.as_ref())?,
@@ -954,6 +977,29 @@ mod tests {
         );
         assert_eq!(lire("null"), None);
         assert_eq!(lire("\"abc\""), None);
+        // Chaînes hors de la forme `-?chiffres(.chiffres)?` (revue P2, L4).
+        assert_eq!(lire("\"-3.50\"").as_deref(), Some("-3.50"));
+        for refus in [
+            "\"1_000\"",
+            "\"+5\"",
+            "\" 5\"",
+            "\"5 \"",
+            "\"1e3\"",
+            "\"\"",
+            "\"-\"",
+            "\".5\"",
+            "\"5.\"",
+            "\"1.2.3\"",
+            "\"--1\"",
+        ] {
+            assert_eq!(lire(refus), None, "{refus}");
+        }
+        // Au-delà de 28 décimales : refusé, jamais arrondi en silence.
+        let trente = format!("0.{}", "1".repeat(30));
+        assert_eq!(lire(&trente), None);
+        assert_eq!(lire(&format!("\"{trente}\"")), None);
+        let vingt_huit = format!("0.{}", "1".repeat(28));
+        assert_eq!(lire(&vingt_huit).as_deref(), Some(vingt_huit.as_str()));
     }
 
     #[test]
@@ -1072,8 +1118,13 @@ mod tests {
             {"payIn":"BANK_TRANSFER","payOut":"BANK_TRANSFER","sourceCurrency":"EUR","fee":{"total":9.0}},
             {"payIn":"BALANCE","payOut":"SWIFT","sourceCurrency":"EUR","fee":{"total":7.0}}]});
         let f = pick_quote_fee(&octets(&q)).unwrap();
-        assert_eq!(f.currency, "EUR");
+        // Devise source du devis d'abord, même si l'option en porte une autre.
+        assert_eq!(f.currency, "CHF");
         assert_eq!(f.total, "1.25".parse::<Decimal>().unwrap());
+        // Repli : le devis sans devise source, l'option fait foi.
+        let repli = json!({"payOut":"BANK_TRANSFER","paymentOptions":[
+            {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"EUR","fee":{"total":1.25}}]});
+        assert_eq!(pick_quote_fee(&octets(&repli)).unwrap().currency, "EUR");
         // Frais nuls : l'option est présente, le total vaut zéro.
         let q0 = json!({"payOut":"BANK_TRANSFER","paymentOptions":[
             {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"CHF","fee":{"total":0.0}}]});
