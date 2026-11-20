@@ -50,9 +50,7 @@ afin que chaque ligne attende son rapprochement (39-11c).
    relevé saisi, au règlement d'une facture client et au paiement d'une facture fournisseur) est **paramétrée par le
    prestataire** ; chaque garde lit `provider IS NOT NULL` (ou le prestataire passé), jamais `= 'paypal'` en dur —
    chaque site de 38-11b qui le ferait est généralisé, relevé par `grep -n "paypal" crates/kesh-api/src/routes/` au
-   Change Log. **Codes d'erreur** : ceux de 38-11b, s'ils sont génériques (`PROVIDER_*`, demande Q-39-10 à l'Epic 38) ;
-   s'ils restent `PAYPAL_*`, la même fonction rend les codes `WISE_*` correspondants (le préfixe est un paramètre, la
-   logique une seule), messages aux quatre locales (`crates/kesh-i18n/locales/*`), choix au Change Log.
+   Change Log. **Codes d'erreur** : ceux de 38-11b, **génériques** (`PROVIDER_ACCOUNT_NOT_FOUND`, `PROVIDER_ACCOUNT_IN_USE`, `PROVIDER_CURRENCY_DUPLICATE`, `PROVIDER_FEE_ACCOUNT_INVALID`, `PROVIDER_LEDGER_REQUIRED`, `PROVIDER_CURRENCY_ACCOUNT_MISSING`, servis par 38-11b/38-11c2 ; Q-39-10 satisfaite), réutilisés tels quels ; seuls les codes propres au format Wise sont `WISE_*`. Messages aux quatre locales (`crates/kesh-i18n/locales/*`), choix au Change Log.
 3. **AC-3 — Route d'import** `POST /api/v1/wise-imports` (multipart : un ou plusieurs `file`, `account` = libellé),
    Comptable et plus, clés d'API `read-write` admises (comme `POST /api/v1/bank-imports`, `lib.rs:946`), limite du
    corps entier = `bank_import_max_mib` (même `DefaultBodyLimit` que `lib.rs:946-950`). Inscrite à `LIB_ROUTES`
@@ -62,7 +60,7 @@ afin que chaque ligne attende son rapprochement (39-11c).
    manuel d'administration (`docs/manual/fr/admin-manual.tex`, lue par `le_manuel_dit_le_compte_du_registre`)
    **recomptée** — `.tex` seul, PDF à la release. Si 38-11b a été développée avec une route d'import prestataire
    générique, Wise s'y branche au lieu d'une route neuve (G10), choix au Change Log. Handlers `wise_imports::create` (clé du registre). Ordre des refus, rien d'écrit à
-   aucun (codes `WISE_*` nommés ci-dessous, ou leurs équivalents génériques de 38-11b selon la règle de l'AC-2) : 400 `VALIDATION_ERROR` (champ manquant, aucun fichier) → 404 compte Wise introuvable (aucun compte bancaire
+   aucun (codes `WISE_*` nommés ci-dessous, ou les `PROVIDER_*` génériques de 38-11b selon la règle de l'AC-2) : 400 `VALIDATION_ERROR` (champ manquant, aucun fichier) → 404 compte Wise introuvable (aucun compte bancaire
    non archivé `provider = 'wise'` de ce libellé ; code de l'AC-2) → 422 `WISE_CSV_INVALID` (erreur de 39-11a,
    `details` : nom du fichier et code fermé de 39-11a, puis colonnes manquantes ou erreurs de ligne, forme de
    `CsvLineErrorPayload`, `crates/kesh-api/src/errors.rs:1541`) → 422 `WISE_DUPLICATE_CURRENCY_FILE` (deux fichiers de
@@ -151,8 +149,8 @@ bancaire ni règlement de facture.
 ## Notes de développement
 
 - Ancienne 39-1 (client Wise, connexion et coffre, `superseded`) : remplacée par les réglages de 38-11b.
-- ⚠️ 38-11b est `drafted` (validée P1) au 2026-11-20 : ses noms (objet `paypal`, codes `PAYPAL_*`) peuvent changer
-  avant son développement ; relire au T0.
+- ⚠️ 38-11b est `drafted` (validée P1) au 2026-11-20 : ses noms (objet `paypal`) peuvent changer
+  avant son développement ; relire au T0 (codes génériques `PROVIDER_*` acquis, phase 1 validée P3, `28623871`).
 
 ## Change Log
 
@@ -179,3 +177,4 @@ bancaire ni règlement de facture.
   jamais jugé → chevauchement du **premier jour** seul (`overlapping_statements(…, first_date, first_date)`, l'import jugé
   exclu à la revue), complémentaire de `previous_statement_closing` (`period_to < first_date`) ; test ajouté.
 - 2026-11-20 — Validation P5 ciblée (Claude Sonnet 5.5, passe ciblée, contexte frais, rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P5-ciblee.md`) : 0 C/H/M, 2 LOW remédiés — G4, 39-11b AC-5 et 39-11c AC-6 disent la même chose (l'import juge à son instant, la revue relit la même règle sur l'état présent) ; 39-11c AC-3 : 40-7c n'écrit le texte qu'en dernier recours.
+- 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : codes d'erreur de 38-11b génériques `PROVIDER_*` (liste nommée), plus de branche `PAYPAL_*` ; note finale sur les noms de 38-11b mise à jour. Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.

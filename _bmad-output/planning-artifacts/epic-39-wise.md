@@ -8,8 +8,7 @@ cadrage du 2026-11-15 (connexions, coffre des secrets, SCA par clé RSA, relevé
 historique, **remplacé (2026-11-20)** ; ce qui en survit est cité nommément.
 
 Branche `epic/39-wise` (fusion de `origin/main` au commit `9c8bc452`). Socle : la **phase 1 KISS de l'Epic 38**
-(fiches 38-11a à 38-11d sur `epic/38-paypal` au 2026-11-20 : 38-11a, 38-11b et 38-11d validées P1, 38-11c non encore
-validée — lues dans le worktree de l'Epic 38 à la validation P1 des fiches 39). L'Epic 39 se développe **après** la phase 1
+(fiches 38-11a à 38-11d sur `epic/38-paypal` au 2026-11-20 : 38-11c scindée en 38-11c1 et 38-11c2 ; phase 1 de l'Epic 38 validée P3, `28623871` — lues dans le worktree de l'Epic 38 à la validation P1 des fiches 39). L'Epic 39 se développe **après** la phase 1
 de l'Epic 38. Stories `drafted` ; validation P1 des fiches de la phase 1 le 2026-11-20 (décisions (1) à (4) de
 l'orchestrateur appliquées, § *Décisions*), la boucle (`CLAUDE.md` § *Review Iteration Rule*) se poursuit.
 
@@ -76,7 +75,7 @@ versement, aucune règle.
   Kesh refuse deux devises étrangères dans une écriture (`FX_MULTIPLE_CURRENCIES`,
   `crates/kesh-db/src/repositories/journal_entry_conversions.rs:1-9`), d'où **deux écritures par le compte de
   conversion** de la société (`companies.fx_transit_account_id`, `crates/kesh-db/src/entities/company.rs:205`), par
-  `create_conversion_in_tx` (`journal_entry_conversions.rs:261`, publique par 38-11c) — même CHF des deux côtés, CHF =
+  `create_conversion_in_tx` (`journal_entry_conversions.rs:261`, publique par 38-11c2) — même CHF des deux côtés, CHF =
   côté source au cours habituel de Kesh (cours mensuel retenu de la société). Les frais de conversion sont leur propre
   ligne `FEE-BALANCE-…` (G3), au compte de frais.
 - **G7 — Virements entre ses comptes : fonction existante, sans heuristique propre.** Une écriture de virement porte
@@ -114,16 +113,14 @@ Règles : refus `RECONCILIATION_CURRENCY_MISMATCH` si la transaction n'est pas e
 (`crates/kesh-reconciliation/src/manual.rs:116-118`, « la réconciliation n'écrit qu'en CHF ») ; rattachement à une
 écriture réservé au CHF (`reconciliation_link.rs:535-537`, `transaction_can_be_linked_to_entry`) ; un compte bancaire
 ne se lie pas à un compte du plan en devise (C-37-9, `crates/kesh-api/src/routes/bank_accounts.rs:435`). PayPal
-(EUR, USD) a besoin de lever tout cela ; **38-11b** lève C-37-9 pour le compte prestataire ; **38-11c** rend le
-rattachement à une écriture valable en devise (sa AC-1) et écrit en devise **par ses propres routes** (`/paypal/review`,
+(EUR, USD) a besoin de lever tout cela ; **38-11b** lève C-37-9 pour le compte prestataire ; **38-11c1** rend le
+rattachement à une écriture valable en devise (sa AC-1) et porte le prédicat de l'autre côté (AC-1b) ; **38-11c2** et écrit en devise **par ses propres routes** (`/paypal/review`,
 `/paypal/accept`), en laissant `get_proposals` et `accept_one_rule` en CHF. La phase 1 de l'Epic 39 **ne développe
-pas sa propre version** de ces levées : elle branche des routes `wise` minces sur le moteur de 38-11c. Si 38-11c le
-borne à PayPal, 39-11c le généralise (G10).
+pas sa propre version** de ces levées : elle branche des routes `wise` minces sur le moteur de 38-11c2. Servi générique ; 39-11c ne le généralise (G10) que si le développement de 38-11c2 s'en écarte.
 
-**Demandes à l'Epic 38** (validation P1 du 2026-11-20, à porter aux fiches 38) : codes d'erreur génériques
+**Demandes à l'Epic 38** (validation P1 du 2026-11-20 ; **servies** par la phase 1 de l'Epic 38, validée P3 le 2026-11-20) : codes d'erreur génériques
 (`PROVIDER_*`, et non `PAYPAL_*`) pour les gardes, l'import et la proposition périmée ; conversion à **une** écriture
-quand un côté est en CHF, avec l'alternative du prédicat de l'autre côté (décision (1) ; 38-11c AC-8 dit encore deux
-écritures) ; proposition de rattachement générique (`link_entry`, le `link_sale` de 38-11c) ; moteur de revue et
+quand un côté est en CHF, avec l'alternative du prédicat de l'autre côté (décision (1) ; servi par 38-11c1 AC-1b et 38-11c2 AC-8) ; proposition de rattachement générique (`link_entry`, qui remplace le `link_sale`) ; moteur de revue et
 d'acceptation paramétré par le prestataire ; gardes qui lisent `provider IS NOT NULL`, jamais `= 'paypal'`.
 
 ### Stories de la phase 1
@@ -132,7 +129,7 @@ d'acceptation paramétré par le prestataire ; gardes qui lisent `provider IS NO
 |---|---|---|---|---|
 | 39-11a | lecteur du CSV Wise | `kesh-import` | 38-11a | aucune |
 | 39-11b | réglages du compte Wise et import ventilé par devise | `kesh-api`, `kesh-reconciliation` (appel), `kesh-import` (lecture), `kesh-i18n` | 39-11a, 38-11b | aucune |
-| 39-11c | rapprochement et propositions Wise, écarts | `kesh-reconciliation`, `kesh-api`, `kesh-db` (prédicat de l'autre côté, si 38-11c ne le porte pas), `kesh-i18n` | 39-11b, 38-11c | aucune |
+| 39-11c | rapprochement et propositions Wise, écarts | `kesh-reconciliation`, `kesh-api`, `kesh-db` (prédicat de l'autre côté, si 38-11c1 ne le porte pas), `kesh-i18n` | 39-11b, 38-11c1, 38-11c2 | aucune |
 | 39-11d | écrans, manuel, E2E | `frontend`, `kesh-i18n`, `docs/manual` (`.tex`), E2E | 39-11a à 39-11c, 38-11d | aucune |
 
 **Ordre** : 39-11a → 39-11b → 39-11c → 39-11d. 39-11a peut s'écrire dès que 38-11a est fixée.
@@ -236,6 +233,7 @@ documentée) ; la profondeur d'historique servie ; le mécanisme de signature du
   propose plus de réception depuis sa P2, écart `payout_without_receipt`).
 
 ---
+- 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : 38-11c scindée en 38-11c1 et 38-11c2 (dépendances, tableau des stories, repli du prédicat, `link_sale` → `link_entry`, demandes à l'Epic 38 déclarées servies). Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.
 
 ## Historique — cadrage du 2026-11-15, remplacé (2026-11-20)
 

@@ -29,14 +29,14 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
    +page.svelte`, `submitCreate`, `submitUpdateFull`) remplace la case « Compte PayPal » par un **choix de
    prestataire** (« Aucun », « PayPal », « Wise »), mêmes champs et mêmes règles d'affichage (IBAN facultatif,
    QR-IBAN et « principal » masqués, compte du plan en devise offert, compte de frais filtré comme au serveur) ; charge
-   `paypal: {…}` ou `wise: {…}` (39-11b AC-2), `null` pour retirer. `paypal.ts` devient `provider.ts` : `providerOf(a)`,
-   `isProvider(a)`, `withoutProviders(accounts)`, appliqués aux **quatre sites** de `withoutPaypal` (38-11d AC-1 :
-   `BankImportUpload.svelte`, `ManualStatementForm.svelte`, `SettleInvoiceDialog.svelte`, page
-   `reconciliation/+page.svelte`) ; `BankAccountSummary` gagne `wise` ; la liste dit « Wise · <libellé> · <devise> ».
+   `paypal: {…}` ou `wise: {…}` (39-11b AC-2), `null` pour retirer. `frontend/src/lib/features/bank-accounts/provider.ts` est **déjà livré par 38-11d AC-1** (`isPaypal`, `isProvider`,
+   `withoutProviders`, génériques : `provider !== null`), appliqué à **cinq sites** (`BankImportUpload.svelte`,
+   `ManualStatementForm.svelte`, `SettleInvoiceDialog.svelte`, page `reconciliation/+page.svelte`, paiement d'une facture
+   fournisseur `supplier-invoices/[id]/+page.svelte`) : **réutilisé, non regénéralisé** — cette story n'ajoute qu'un `isWise(a)` si l'écran en a besoin ; `BankAccountSummary` (qui porte déjà `provider`, 38-11d) gagne `wise` ; la liste dit « Wise · <libellé> · <devise> ».
    Le filtre « Type PayPal (exact) » de `RuleFormModal.svelte` devient « Type (prestataire) », aide : types PayPal
    (`Website Payment`…) et préfixes Wise (`TRANSFER`, `CARD`, `BALANCE`, `CONVERSION_ORDER`, `FEE-TRANSFER`…). Refus du
    serveur affichés par leur code (`errorMessageOf`). Vitest : choix du prestataire (charges, champs masqués), les
-   quatre sites, mappage `wise`.
+   cinq sites (déjà couverts par 38-11d, un compte Wise y est ajouté aux fixtures), mappage `wise`.
 2. **AC-2 — Page Wise** `frontend/src/routes/(app)/reconciliation/wise/+page.svelte`, sur le **composant de la page
    PayPal généralisé** (38-11d AC-3 à AC-5 : sélecteurs compte et exercice, bouton d'import, revue rechargée après import
    et acceptation, garde de génération, propositions par paquets de `MAX_IN_CLAUSE_IDS`, écarts, « à examiner »,
@@ -107,3 +107,4 @@ manuel utilisateur.
   `kesh-gate-logs/epic-39-40-kiss/validation/39-11d-ecrans-manuel-e2e-wise-P2.md`). MEDIUM : le manuel ne reprenait pas les limites
   de la phase 1 de 38-11b (facture fournisseur, angle mort de la réconciliation générale, plus lourd pour un solde Wise en francs
   qui reçoit conversions et frais). LOW : « écart Stripe » est un motif « à examiner », non un écart.
+- 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : `provider.ts` / `withoutProviders` déjà livrés par 38-11d sur cinq sites (paiement de facture fournisseur compris) : réutilisés, plus de `paypal.ts` à généraliser ni de « quatre sites » ; `providerOf` retiré. Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.
