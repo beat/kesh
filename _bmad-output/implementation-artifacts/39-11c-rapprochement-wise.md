@@ -124,8 +124,10 @@ ce qu'il ne sait pas rapprocher, afin de tenir mon compte Wise sans saisie et sa
    au-delà d'une seconde, lecture par page sur le patron de `count_already_booked_for_page` (`:959`) ; plusieurs → « à examiner », motif `ambiguous_link` (candidates nommées, choix à l'écran par `POST …/link-entry`,
    `lib.rs:1046`). Cas couverts sans code propre : le virement passé depuis la banque (relevé CAMT rapproché) et
    l'écriture du versement de l'Epic 40 (rapprochée de la transaction du compte Stripe, C-40-K5) — la transaction Wise
-   en devient l'autre côté, jamais une seconde écriture. 40-7c propose le même rattachement depuis l'autre côté : le
-   premier accepté rend l'autre périmé (la transaction n'est plus `pending`). Sans candidate : `StripePayout` →
+   en devient l'autre côté, jamais une seconde écriture. **Cette story seule** propose le rattachement de la
+   réception Wise à l'écriture du versement : 40-7c ne propose aucune réception (depuis sa P2, elle liste l'écart
+   `payout_without_receipt` tant que la réception n'est pas rattachée, et l'écart disparaît quand ce rattachement est
+   accepté). Sans candidate : `StripePayout` →
    « à examiner », motif `stripe_payout_unmatched` (**jamais** de règle ni d'écriture de vente, écrit au manuel par
    39-11d) ; `Other` → AC-5.
 5. **AC-5 — Règles et reste.** `first_matching_rule` (`crates/kesh-reconciliation/src/rules.rs:85-95`, `rule_matches`
@@ -229,14 +231,19 @@ depuis votre banque, versement Stripe), le reste par vos règles ; ce qui ne se 
   transaction) → seulement `StripePayout` et `TRANSFER`, coût mesuré. LOW : constructeur de conversion nommé (`plan_conversion`,
   `create_provider_conversion_in_tx`) au lieu de `create_conversion_in_tx` « rendue publique ».
 - 2026-11-20 — validation P3 ciblée (Claude Opus 5.5, contexte frais, commit `02ed58c6` seul) : 0 CRITICAL, 0 HIGH, 3 MEDIUM,
-  1 LOW, remédiés (rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P3-ciblee.md`). MEDIUM : (1) `balance_gap`
+  1 LOW, remédiés (rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P3-ciblee.md` ; rectifié le même jour : 2 MEDIUM,
+  3 LOW, voir ci-dessous). MEDIUM : (1) `balance_gap`
   jugé sur le chevauchement de toute la période, dont la réponse à la revue diffère de celle de l'import (un relevé
   postérieur chevauchant la fin masque l'écart du début) → premier jour seul, comme 39-11b AC-5 ; (2) « le test refuse
   tout autre appel » à `retry_with` est faux pour un handler nommé `post_accept` (exemption par le seul nom, angle mort (d)
-  de `audit_route_registry.rs:376-378`) → clé `wise::accept_proposals`, jamais `post_accept` ; (3) `days_apart` cité comme
-  un filtre alors que c'est le champ d'`EntryCandidate` qui trie sans filtrer → seuil de 5 jours appliqué en Rust, nommé.
+  de `audit_route_registry.rs:376-378`) → clé `wise::accept_proposals`, jamais `post_accept` ; (3) `days_apart` cité sans dire
+  que c'est le champ d'`EntryCandidate` (`reconciliation_link.rs:552`), qui trie sans filtrer → seuil de 5 jours appliqué en
+  Rust, nommé — **reclassé LOW** au rectificatif (le champ existe, la citation était juste, seule la nature du filtre manquait).
   LOW : phrase périmée « 40-7c AC-1 ajoute `AND bt.currency = …` » (40-7c écrit le texte à deux branches depuis `c8924cfd`)
   → texte porté par 38-11c, réutilisé ici, écrit seulement à défaut. Vérifié sans finding : enveloppe `retry_app_on_deadlock`
   (`retry.rs:40`), prédicat à deux branches (existant CHF inerte, plafond inerte : deux liens de signes opposés, une
   troisième ne peut être l'autre côté des deux ; annulation d'un côté), `find_matched_elsewhere` limité à `StripePayout` et
   `TRANSFER` (les dépôts Wise portent aussi le préfixe `TRANSFER`, relevés 2024 en agrégats).
+  Rectificatif P3 (même passe) : LOW de plus — AC-4 disait « 40-7c propose le même rattachement depuis l'autre côté, le
+  premier accepté rend l'autre périmé », faux depuis la P2 de la 40-7c (aucune réception proposée, écart
+  `payout_without_receipt`) → la 39-11c seule propose le rattachement de la réception Wise à l'écriture du versement.
