@@ -8,10 +8,10 @@ cadrage du 2026-11-15 (connexions, coffre des secrets, SCA par clé RSA, relevé
 historique, **remplacé (2026-11-20)** ; ce qui en survit est cité nommément.
 
 Branche `epic/39-wise` (fusion de `origin/main` au commit `9c8bc452`). Socle : la **phase 1 KISS de l'Epic 38**
-(fiches 38-11a à 38-11d, en rédaction sur `epic/38-paypal` au 2026-11-20 : 38-11a et 38-11b lues dans le worktree de
-l'Epic 38, non encore commitées ; 38-11c et 38-11d pas encore écrites). L'Epic 39 se développe **après** la phase 1
-de l'Epic 38. Stories `drafted`, non validées : la validation en boucle (`CLAUDE.md` § *Review Iteration Rule*) reste
-à faire, fiche par fiche.
+(fiches 38-11a à 38-11d sur `epic/38-paypal` au 2026-11-20 : 38-11a, 38-11b et 38-11d validées P1, 38-11c non encore
+validée — lues dans le worktree de l'Epic 38 à la validation P1 des fiches 39). L'Epic 39 se développe **après** la phase 1
+de l'Epic 38. Stories `drafted` ; validation P1 des fiches de la phase 1 le 2026-11-20 (décisions (1) à (4) de
+l'orchestrateur appliquées, § *Décisions*), la boucle (`CLAUDE.md` § *Review Iteration Rule*) se poursuit.
 
 ## Phase 1 KISS
 
@@ -23,14 +23,14 @@ d'un geste. Kesh range chaque ligne au compte bancaire Kesh de ce solde, ignore 
 | Ligne Wise | Reconnue par | Proposition |
 |---|---|---|
 | Frais (`FEE-…`, « Wise Charges for : … ») | préfixe de l'identifiant | débit compte de frais du compte Wise, crédit compte Wise de la devise |
-| Conversion (`BALANCE-…`, `CONVERSION_ORDER-…`) | même identifiant sur deux soldes du même compte Wise | **une** écriture, même CHF des deux côtés, **au cours de Wise** (jamais celui de l'AFC) ; EUR↔USD : deux écritures par le compte de conversion de la société (une écriture ne porte qu'une devise étrangère dans Kesh, voir G6) |
-| Virement depuis ou vers un compte bancaire de la société | IBAN du bénéficiaire = IBAN d'un compte bancaire Kesh, ou nom du payeur / bénéficiaire = nom de la société | virement entre vos comptes (fonction existante, Story 34-11b) |
-| « Argent reçu de Stripe » | crédit, payeur contenant « Stripe » | **rattaché** à l'écriture du versement de l'Epic 40, jamais compté deux fois ; sans Epic 40 ou sans versement trouvé : « à examiner » |
-| Achat par carte, paiement, salaire | règles d'affectation (bénéficiaire ou payeur, marchand, IBAN, type ou préfixe d'identifiant) | écriture de la règle, sans code TVA |
+| Conversion (`BALANCE-…`, `CONVERSION_ORDER-…`) | même identifiant sur deux soldes du même compte Wise | un côté en CHF : **une** écriture, ligne CHF au montant de Wise, ligne en devise (jamais un cours de l'AFC) ; EUR↔USD : deux écritures par le compte de conversion de la société, au même CHF (une écriture ne porte qu'une devise étrangère dans Kesh, voir G6) |
+| Ligne dont l'autre côté est déjà passé : virement depuis ou vers un compte bancaire de la société, « Argent reçu de Stripe » | écriture déjà rapprochée d'une transaction d'un autre compte bancaire, de mouvement égal (`find_matched_elsewhere`) | **rattachée** à cette écriture (virement entre vos comptes, Story 34-11b ; versement de l'Epic 40), jamais comptée deux fois ; versement Stripe sans écriture de versement : « à examiner » |
+| Achat par carte, paiement, salaire, virement vers sa banque dont l'autre côté n'est pas encore passé | règles d'affectation (bénéficiaire ou payeur, marchand, IBAN, filtre de type ou préfixe d'identifiant, sens) | écriture de la règle, sans code TVA |
 | Tout le reste | — | « à examiner » |
 
-Les **écarts** sont listés : moitié de conversion manquante, frais sans sa ligne, virement interne sans l'autre
-côté, versement Stripe sans versement, trou dans le solde courant entre deux imports.
+Les **écarts** sont listés : moitié de conversion manquante, frais sans sa ligne d'origine, trou dans le solde
+courant entre deux imports ; « à examiner » : compte de frais absent, rattachement ambigu, versement Stripe sans
+versement, aucune règle.
 
 ### Décisions (G1…)
 
@@ -47,7 +47,8 @@ côté, versement Stripe sans versement, trou dans le solde courant entre deux i
   en phase 1 (Q-39-11).
 - **G2 — Un compte bancaire Kesh par compte Wise et par devise** (Epic 37, devise du compte du plan), sans IBAN
   obligatoire, réglé comme un compte PayPal de 38-11b : **libellé du compte Wise** et **compte de frais**. Réutilise
-  les colonnes `provider`, `provider_account`, `fee_account_id` de 38-11b, `provider = 'wise'`.
+  les colonnes `provider`, `provider_account`, `fee_account_id` de 38-11b, `provider = 'wise'` ; objet `wise` du
+  corps de l'API, de même forme que `paypal`, servi par la même fonction de gardes (Comptable et plus).
 - **G3 — Une ligne = une transaction.** Les frais étant déjà à part, le découpage brut / frais de 38-11b (suffixe
   `:FEE`) ne sert pas à Wise. `transaction_id` = `TransferWise ID` ; doublon = même identifiant sur le même compte
   bancaire, **ignoré** et compté (une conversion porte le même identifiant sur deux soldes : deux comptes, deux
@@ -55,62 +56,82 @@ côté, versement Stripe sans versement, trou dans le solde courant entre deux i
 - **G4 — Le solde courant est une somme de contrôle.** Chaque fichier doit être continu (`Running Balance` =
   précédent + `Amount`, dans l'ordre chronologique), sinon il est refusé ; l'import pose solde d'ouverture et de
   clôture (premier solde − premier montant ; dernier solde). Un import qui ne prolonge pas le précédent du même
-  compte est **accepté** et signalé en écart (trou ou chevauchement).
-- **G5 — Critères des règles : ceux de 38-11b, rien de neuf pour Wise.** Contrepartie = `Merchant` pour une carte,
-  `Payee Name` pour un débit, `Payer Name` pour un crédit (`counterparty_contains`, `counterparty_exact`) ; IBAN du
-  bénéficiaire (`iban_exact`, colonne `counterparty_iban` existante) ; **préfixe de l'identifiant** (`TRANSFER`,
-  `CARD`, `BALANCE`, `CONVERSION_ORDER`, `FEE-TRANSFER`…) dans `provider_type` (colonne et critère `provider_type`
-  de 38-11b) ; sens (`direction`, 38-11b). Aucun `match_type` neuf.
-- **G6 — Conversions : une écriture, au cours de Wise.** CHF↔devise : une écriture, ligne CHF au montant CHF de Wise,
-  ligne en devise au montant en devise, les deux transactions rattachées à cette écriture. EUR↔USD : Kesh refuse
-  deux devises étrangères dans une écriture (`FX_MULTIPLE_CURRENCIES`, `crates/kesh-db/src/repositories/journal_entry_conversions.rs:1-9`),
-  d'où **deux écritures par le compte de conversion** de la société (`companies.fx_transit_account_id`,
-  `crates/kesh-db/src/entities/company.rs:205`), par la fonction existante `create_conversion`
-  (`journal_entry_conversions.rs:226`, route `POST /api/v1/journal-entries/conversions`,
-  `crates/kesh-api/src/lib.rs:626`) — même CHF des deux côtés ; le CHF d'une paire EUR↔USD n'est pas donné par Wise
-  (Q-39-12). Les frais de conversion sont leur propre ligne `FEE-BALANCE-…` (G3), au compte de frais.
-- **G7 — Virements entre ses comptes : fonction existante.** Une écriture de virement porte deux transactions, une
-  de chaque compte bancaire (`reconciliation_link.rs:21-35`, `transfer_other_side` `:773`) ; la transaction Wise se
-  rattache à l'écriture passée depuis l'autre côté (`POST …/link-entry`, `lib.rs:1046`,
-  `reconciliation_link::link_entry_in_tx` `:1156`), ou l'écriture se propose depuis Wise et l'autre côté s'y
-  rattache. Reconnaissance : IBAN normalisé du bénéficiaire égal à l'IBAN d'un compte bancaire de la société, ou nom
-  du payeur / bénéficiaire égal au nom de la société (`companies.name`, après `trim` et sans casse) — une
-  **proposition**, jamais une écriture d'office (§ *Un appariement automatique propose*).
-- **G8 — Versements Stripe : rattachés, jamais comptés.** Crédit dont le payeur contient « stripe » (sans casse) :
-  proposé au rattachement à l'écriture du versement de l'Epic 40 (même devise, même montant, date à ± 5 jours) par
-  `link-entry` ; aucune écriture de vente ; sans candidat, « à examiner » (motif `stripe_payout_unmatched`).
+  compte est **accepté** et signalé en écart (`gap`), par la fonction existante `previous_statement_closing`
+  (`crates/kesh-db/src/repositories/bank_imports.rs:358`) ; un fichier qui chevauche le précédent (lignes en
+  doublon) ne l'est pas.
+- **G5 — Règles : critères existants, filtres de 38-11b, rien de neuf pour Wise** (décision (3) de l'orchestrateur).
+  Contrepartie = `Merchant` pour une carte, `Payee Name` pour un débit, `Payer Name` pour un crédit
+  (`counterparty_contains`, `counterparty_exact`) ; IBAN du bénéficiaire (`iban_exact`, colonne `counterparty_iban`
+  existante) ; **préfixe de l'identifiant** (`TRANSFER`, `CARD`, `BALANCE`, `CONVERSION_ORDER`, `FEE-TRANSFER`…)
+  dans `bank_transactions.provider_type`, lu par le **filtre facultatif** `provider_type` d'une règle (colonnes de
+  38-11b, servies par 38-11c), avec le filtre `direction` ; `counterparty_email` sans objet pour Wise. Aucun type de
+  critère neuf, aucun `match_type` neuf.
+- **G6 — Conversions : règle commune aux trois prestataires** (décision (1) de l'orchestrateur, Q-39-12 tranchée ;
+  code partagé avec 38-11c). **Un côté en CHF** → **une** écriture : ligne CHF au montant réel (celui de Wise), ligne
+  en devise au montant en devise, cours déduit du CHF (`rate_from_chf`, `crates/kesh-core/src/accounting/fx.rs:266`),
+  les deux transactions rattachées à cette écriture — ce qui étend « l'autre côté d'un virement »
+  (`other_side_predicate`, `reconciliation_link.rs:698-709`) aux deux transactions de devises différentes d'une
+  conversion, pour que l'annulation d'un côté ne retire que son lien (39-11c AC-3). **Deux devises étrangères** :
+  Kesh refuse deux devises étrangères dans une écriture (`FX_MULTIPLE_CURRENCIES`,
+  `crates/kesh-db/src/repositories/journal_entry_conversions.rs:1-9`), d'où **deux écritures par le compte de
+  conversion** de la société (`companies.fx_transit_account_id`, `crates/kesh-db/src/entities/company.rs:205`), par
+  `create_conversion_in_tx` (`journal_entry_conversions.rs:261`, publique par 38-11c) — même CHF des deux côtés, CHF =
+  côté source au cours habituel de Kesh (cours mensuel retenu de la société). Les frais de conversion sont leur propre
+  ligne `FEE-BALANCE-…` (G3), au compte de frais.
+- **G7 — Virements entre ses comptes : fonction existante, sans heuristique propre.** Une écriture de virement porte
+  deux transactions, une de chaque compte bancaire (`reconciliation_link.rs:21-35`, `transfer_other_side` `:773`). Si
+  l'autre côté est déjà passé, la transaction Wise se **propose** au rattachement à cette écriture
+  (`find_matched_elsewhere` `:896`, candidate unique à 5 jours au plus ; `link_entry_in_tx` `:1156`, route `POST
+  …/link-entry`, `lib.rs:1046`) ; sinon elle s'affecte par une **règle** (IBAN ou nom → compte du plan de la banque)
+  et l'autre côté s'y rattachera à son import. Une **proposition**, jamais une écriture d'office (§ *Un appariement
+  automatique propose*). Q-39-15 tranchée ainsi.
+- **G8 — Versements Stripe : rattachés comme un virement entre deux comptes propres, jamais comptés** (décision (4)
+  de l'orchestrateur). L'écriture du versement de l'Epic 40 porte la transaction du compte Stripe ; le crédit Wise dont
+  le payeur contient « stripe » (sans casse) en est **l'autre côté** (`transfer_other_side`), par le même chemin que
+  G7 ; aucune écriture de vente, **jamais de règle** sur ces lignes ; sans écriture de versement, « à examiner »
+  (motif `stripe_payout_unmatched`). 40-7c propose le même rattachement depuis le côté Stripe : le premier accepté
+  rend l'autre périmé.
 - **G9 — Aucun code TVA en phase 1**, comme PayPal (38-11c).
 - **G10 — Factorisation avec l'Epic 38 (DRY).** Ce qui est commun aux deux prestataires vit **une fois** : lecture
-  d'un en-tête CSV par noms et montant à point décimal (`kesh-import`), réglages prestataire d'un compte bancaire et
-  leurs gardes, cœur de l'import ventilé par devise (verrous, doublons par identifiant, compte rendu), propositions
-  en devise et liste des écarts. Les fiches 39 nomment chaque point de partage ; si la fiche 38 correspondante est
+  d'un en-tête CSV par noms et forme fermée des montants (`kesh-import`, `csv/by_name.rs`), réglages prestataire d'un
+  compte bancaire et leurs gardes, cœur de l'import ventilé par devise (`with_account_locks`, doublons par
+  identifiant, empreinte, compte rendu), moteur de revue et d'acceptation de 38-11c (écritures de frais, de règle et
+  de conversion, rattachement, *Pattern batch*), écrans de 38-11d. Les fiches 39 nomment chaque point de partage ; si la fiche 38 correspondante est
   développée sous une forme propre à PayPal (`paypal` dans les noms), la fiche 39 la **généralise** au lieu de la
   recopier, sans changer le comportement de PayPal (ses tests verts sans retouche de leurs attentes).
-- **G11 — Migration : aucune si 38-11b admet `'wise'`.** Demande à l'Epic 38, avant le développement de 38-11b :
-  `chk_bank_accounts_provider` admet `BINARY provider IN ('paypal', 'wise', 'stripe')` (trois prestataires connus,
-  aucun coût), et le corps de l'API porte un objet générique `provider: { kind, account, feeAccountId }` plutôt
-  que `paypal`. **Repli** si 38-11b est déjà développée ou publiée telle quelle : 39-11b porte **une** migration
-  non breaking, DDL seul, qui retire et repose la contrainte sous le même nom (voir la fiche).
+- **G11 — Aucune migration** (décision (2) de l'orchestrateur, Q-39-10 tranchée) : la migration de 38-11b pose
+  `chk_bank_accounts_provider` avec `BINARY provider IN ('paypal', 'wise', 'stripe')` (fiche 38-11b validée P1). Le
+  repli (migration propre à Wise) est **retiré** : si 38-11b n'admettait pas `'wise'`, l'Epic 38 corrige sa migration
+  avant toute publication (P8).
 
 ### Ce que la phase 1 attend de l'Epic 38 (contrat)
 
-Vérifié au code de `origin/main` (commit `fd04099f`) : **la réconciliation de Kesh n'écrit aujourd'hui qu'en CHF.**
+Vérifié au code de `origin/main` (commit `fd04099f`, revérifié à la validation P1) : **la réconciliation de Kesh
+n'écrit aujourd'hui qu'en CHF.**
 Règles : refus `RECONCILIATION_CURRENCY_MISMATCH` si la transaction n'est pas en CHF
 (`crates/kesh-api/src/routes/reconciliation.rs:4385-4396`) ; écriture manuelle à lignes sans devise
 (`crates/kesh-reconciliation/src/manual.rs:116-118`, « la réconciliation n'écrit qu'en CHF ») ; rattachement à une
 écriture réservé au CHF (`reconciliation_link.rs:535-537`, `transaction_can_be_linked_to_entry`) ; un compte bancaire
 ne se lie pas à un compte du plan en devise (C-37-9, `crates/kesh-api/src/routes/bank_accounts.rs:435`). PayPal
-(EUR, USD) a besoin de lever tout cela ; **38-11b** lève C-37-9 pour le compte PayPal, **38-11c** doit lever le reste
-(règles, écriture manuelle et rattachement en devise). La phase 1 de l'Epic 39 **ne développe pas sa propre version**
-de ces levées : elle les étend à `provider = 'wise'`. Si 38-11c les borne à PayPal, 39-11c les généralise (G10).
+(EUR, USD) a besoin de lever tout cela ; **38-11b** lève C-37-9 pour le compte prestataire ; **38-11c** rend le
+rattachement à une écriture valable en devise (sa AC-1) et écrit en devise **par ses propres routes** (`/paypal/review`,
+`/paypal/accept`), en laissant `get_proposals` et `accept_one_rule` en CHF. La phase 1 de l'Epic 39 **ne développe
+pas sa propre version** de ces levées : elle branche des routes `wise` minces sur le moteur de 38-11c. Si 38-11c le
+borne à PayPal, 39-11c le généralise (G10).
+
+**Demandes à l'Epic 38** (validation P1 du 2026-11-20, à porter aux fiches 38) : codes d'erreur génériques
+(`PROVIDER_*`, et non `PAYPAL_*`) pour les gardes, l'import et la proposition périmée ; conversion à **une** écriture
+quand un côté est en CHF, avec l'alternative du prédicat de l'autre côté (décision (1) ; 38-11c AC-8 dit encore deux
+écritures) ; proposition de rattachement générique (`link_entry`, le `link_sale` de 38-11c) ; moteur de revue et
+d'acceptation paramétré par le prestataire ; gardes qui lisent `provider IS NOT NULL`, jamais `= 'paypal'`.
 
 ### Stories de la phase 1
 
 | Story | Objet | Modules (≤ 5) | Dépend de | Migration |
 |---|---|---|---|---|
 | 39-11a | lecteur du CSV Wise | `kesh-import` | 38-11a | aucune |
-| 39-11b | réglages du compte Wise et import ventilé par devise | `kesh-db` (seulement au repli G11), `kesh-api`, `kesh-import` (lecture), `kesh-i18n` | 39-11a, 38-11b | aucune, ou une au repli G11 |
-| 39-11c | rapprochement et propositions Wise, écarts | `kesh-reconciliation`, `kesh-api`, `kesh-db` (rattachement d'une conversion), `kesh-i18n` | 39-11b, 38-11c | aucune |
+| 39-11b | réglages du compte Wise et import ventilé par devise | `kesh-api`, `kesh-reconciliation` (appel), `kesh-import` (lecture), `kesh-i18n` | 39-11a, 38-11b | aucune |
+| 39-11c | rapprochement et propositions Wise, écarts | `kesh-reconciliation`, `kesh-api`, `kesh-db` (prédicat de l'autre côté, si 38-11c ne le porte pas), `kesh-i18n` | 39-11b, 38-11c | aucune |
 | 39-11d | écrans, manuel, E2E | `frontend`, `kesh-i18n`, `docs/manual` (`.tex`), E2E | 39-11a à 39-11c, 38-11d | aucune |
 
 **Ordre** : 39-11a → 39-11b → 39-11c → 39-11d. 39-11a peut s'écrire dès que 38-11a est fixée.
@@ -178,21 +199,23 @@ documentée) ; la profondeur d'historique servie ; le mécanisme de signature du
 | `39-4-classement-des-types-wise` | superseded | remplacée par 39-11c (préfixes d'identifiant, règles) |
 | `39-5-releve-pdf` | deferred | hors des phases 1 et 2 |
 | `39-6-ecrans-et-manuels` | superseded | remplacée par 39-11d et 39-12b |
-| `39-11a` à `39-11d`, `39-12a`, `39-12b` | drafted | fiches du 2026-11-20, non validées |
+| `39-11a` à `39-11d`, `39-12a`, `39-12b` | drafted | fiches du 2026-11-20 ; validation P1 des 39-11a à 39-11d le 2026-11-20 |
 
 ## Questions ouvertes (2026-11-20)
 
-- **Q-39-10 — Contrat avec l'Epic 38 (Beat, agent de l'Epic 38)** : `'wise'` et `'stripe'` admis dès la contrainte de
-  38-11b, objet `provider` générique dans l'API (G11) ; levées en devise de 38-11c écrites pour tout prestataire.
+- **Q-39-10 — Contrat avec l'Epic 38** : `'wise'` et `'stripe'` admis dès la contrainte de 38-11b — **tranché** (décision
+  (2), fiche 38-11b validée P1). Reste demandé (§ *Ce que la phase 1 attend de l'Epic 38*) : codes `PROVIDER_*`,
+  conversion à une écriture, rattachement et moteur génériques. L'API porte un objet `wise` de même forme que `paypal`
+  (plus simple qu'un objet `provider` générique, PayPal inchangé).
 - **Q-39-11 — Zip** : lire aussi le zip des trois relevés qu'exporte Wise ? (non en phase 1 ; trois fichiers d'un
   coup suffisent.)
-- **Q-39-12 — CHF d'une conversion EUR↔USD** : Wise ne donne pas de CHF ; cours de l'AFC du mois de la devise payée
-  (défaut proposé, celui de l'Epic 37) appliqué aux deux écritures, ou autre ?
+- **Q-39-12 — CHF d'une conversion EUR↔USD** : **tranchée** (décision (1)) — CHF = côté source au cours habituel de
+  Kesh (cours mensuel retenu de la société), même CHF aux deux écritures.
 - **Q-39-13 — CSV de l'API** : mêmes colonnes que l'export du site ? (recette de 39-12a.)
 - **Q-39-14 — Relevés au jeton personnel suisse et SCA** (recette de Beat, bloquant pour la phase 2) : voir H4.
 - **Q-39-15 — Virement vers son propre compte reconnu par un numéro qui n'est pas un IBAN** (relevés 2024 : des
-  numéros de compte non IBAN) : faut-il un réglage « numéros de mes comptes » ou une règle suffit-elle ? (Défaut :
-  une règle d'affectation vers le compte bancaire, puis rattachement manuel de l'autre côté.)
+  numéros de compte non IBAN) : faut-il un réglage « numéros de mes comptes » ou une règle suffit-elle ? **Tranchée
+  par G7** : une règle d'affectation vers le compte du plan de la banque ; l'autre côté s'y rattache à son import.
 
 ## Change Log (refonte)
 
@@ -200,6 +223,11 @@ documentée) ; la profondeur d'historique servie ; le mécanisme de signature du
   39-11d, 39-12a, 39-12b) ; anciennes clés 39-1, 39-3, 39-4, 39-6 `superseded`, 39-2 et 39-5 `deferred` ; fusion de
   `origin/main` (arbre de `main` repris, fiches et blocs des Epics 38 et 39 gardés). Cadrage du 2026-11-15 conservé
   ci-dessous, remplacé.
+- 2026-11-20 — Validation P1 des fiches 39-11a à 39-11d (Claude Opus 5.5, contexte frais ; rapports
+  `kesh-gate-logs/epic-39-40-kiss/validation/39-11x-…-P1.md`) : décisions (1) à (4) de l'orchestrateur appliquées
+  (G5, G6, G7, G8, G11 ; Q-39-10, Q-39-12, Q-39-15) ; migration de repli retirée ; propositions par les routes de
+  38-11c, non par le rapprochement CHF ; virements internes et versements Stripe par l'autre côté déjà passé
+  (`find_matched_elsewhere`) puis les règles ; continuité par `previous_statement_closing` ; demandes à l'Epic 38.
 
 ---
 
