@@ -1,6 +1,6 @@
 # Story 47-2 : compte miroir — API des comptes et écran du plan comptable
 
-Status: ready-for-dev
+Status: review
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R2 à R4, R7 ; Q10 ; FR-47-1, FR-47-2, FR-47-5 (manuels). **Refonte du 2026-11-19 (miroir seul, KISS)** : fusion
@@ -155,14 +155,14 @@ catalogues i18n, la documentation (`docs/api-external.md`, manuels utilisateur e
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** : reprise de `main` ; relire au code livré par la 47-1 les codes d'erreur et les raisons (les messages sont
+- [x] **T0** : reprise de `main` ; relire au code livré par la 47-1 les codes d'erreur et les raisons (les messages sont
   ceux du serveur : aucune clé de refus à reprendre) ; `fix/api-parent-compte`
   (#1351) — s'il est fusionné, le champ *Compte parent* précède le `<select>` ; sinon le second arrivé résout.
-- [ ] **T1 — route** (AC 1, 12) : champs, réponse, rejeu de l'archivage sur interblocage ; tests `accounts_e2e.rs`.
-- [ ] **T2 — front** (AC 2–5) : types, `mirror.ts`, `<select>`, phrase, refus, archivage.
-- [ ] **T3** : Vitest, E2E, captures (AC 6–8).
-- [ ] **T4** : manuels, `api-external.md`, i18n (AC 9–11).
-- [ ] **T5** : gates backend, frontend et E2E complets au dernier commit de code.
+- [x] **T1 — route** (AC 1, 12) : champs, réponse, rejeu de l'archivage sur interblocage ; tests `accounts_e2e.rs`.
+- [x] **T2 — front** (AC 2–5) : types, `mirror.ts`, `<select>`, phrase, refus, archivage.
+- [x] **T3** : Vitest, E2E, captures (AC 6–8).
+- [x] **T4** : manuels, `api-external.md`, i18n (AC 9–11).
+- [x] **T5** : gates backend, frontend et E2E complets au dernier commit de code.
 
 ## Dev Notes
 
@@ -210,6 +210,11 @@ sens inverse du compte paraîtra dans le bilan ou le compte de résultat. API : 
 colonne `mirror_account_id` en fin de ligne de `accounts.csv`.
 
 ## Change Log
+
+- 2026-11-20 — développement (Opus 5.5, `bmad-dev-story`) : reprise de `origin/main` (`aef10456`, #1351 fusionné : champ
+  *Compte parent* au dialogue, `ParentChange` à côté de `MirrorChange`), route, écran, Vitest, E2E, captures, manuels,
+  `api-external.md`, i18n ; gates complets au dernier commit de code `90c4b5aa`, sur la cible propre. Détail au Dev Agent
+  Record. Statut `review`.
 
 - 2026-11-19 — validation P3 (Sonnet 5.5, ciblée sur la remédiation P2) : **0 C / 0 H / 1 M / 0 L, remédié**. Relu au
   code d'`origin/main` `fd04099f` : règle 14-3a (`accounts::create` passe le parent à non imputable, `repositories/accounts.rs:308-317`),
@@ -389,8 +394,77 @@ colonne `mirror_account_id` en fin de ligne de `accounts.csv`.
 
 ### Agent Model Used
 
+Opus 5.5 (Claude Code, `bmad-dev-story`), 2026-11-20.
+
 ### Debug Log References
+
+Journaux hors dépôt, `kesh-gate-logs/s47-2/` : `pipeline-1.log` (première série, invalidée par la base pleine),
+`pipeline2.log` (reprise), `gate-backend.log`, `front-*.log`, `e2e.log`, `gate-ci.log`, `mutations.log`,
+`mutations-back-1.log`, `mutations-back.log`, `captures/`.
 
 ### Completion Notes List
 
+- **T0 — reprise de `main`** (`aef10456`) : #1351 (`fix-api-parent-compte`) fusionné ; conflits résolus en gardant les
+  deux intentions : `AccountUpdate` porte `mirror` **et** `parent` ; `accounts::update` juge la garde du miroir puis celle
+  du parent, `UPDATE … mirror_account_id = ?, parent_id = ?` ; `entities::account` garde `MirrorChange`, `ParentChange`,
+  `MirrorLink` ; initialisations de test complétées (dont `account_parent_change.rs`, `account_mirror.rs`, qui ne
+  conflictaient pas mais ne compilaient plus). Aucune migration venue de `main` : 96, `docs/migrations-idempotence-audit.md`
+  inchangé (96 lignes, recompté). Le champ *Compte parent* précède le `<select>` du miroir. Interaction relevée, non
+  traitée (déjà possible à la création avant la reprise) : un compte miroir peut être pris comme parent.
+- **T1 — route** : `CreateAccountRequest.mirror_account_id`, `UpdateAccountRequest.mirror_account_id`
+  (`present_or_null`) traduit par `mirror_for_update` ; `AccountResponse.mirror_account_id` (absent si `None`) ;
+  `archive_account` rejouée sur interblocage (`"accounts::archive"`). Quatre tests neufs dans `accounts_e2e.rs` (22 → 26
+  `#[sqlx::test]`, de `aef10456` à `HEAD`) et la boucle RBAC étendue à `PUT /accounts/{id}`. **Aucun test ne force
+  l'interblocage pose / archivage** (rejeu non exercé).
+- **T2 — écran** : `mirror.ts` (`mirrorCandidates`, `mirrorSourceNumbers`, `mirrorFieldForCreate`, `mirrorFieldForUpdate`,
+  `mirrorFieldErrorOf`), composant `AccountMirrorField.svelte` (`<select>` natif, exemption `fx-filtre-comptes`, phrase pour
+  un compte miroir), page : champ en dernier, refus aux trois `catch`, `archiveMirrorMessage`, dialogues défilants ; types.
+- **T3** : Vitest `mirror.test.ts` (13 sites `it`, 19 tests) et `accounts-mirror.test.ts` (11) ; E2E
+  `accounts-mirror.spec.ts` (2 parcours) ; sept captures (`kesh-gate-logs/s47-2/captures/`, 1280 × 720 et une 390 × 844 ;
+  le seed `with-company` n'a pas de 1020 : le script le crée).
+- **T4** : quatre clés `accounts-mirror-*` × quatre locales ; `sitesTotal` 3499 → 3504 (relevé par la garde) ;
+  `user-manual.tex` (sous-section `sec:compte-miroir`, listes d'*Ajout* et de *Modification*, *Archiver un compte miroir*),
+  `admin-manual.tex` (`sec:maj-epic-47`, phrase de *Compatibilité*), `api-external.md` (sous-section, note ¹⁴, deux rangées
+  du § 10, `ACCOUNT_NOT_POSTABLE`). PDF compilés dans une copie temporaire (`make user admin`, aucune référence indéfinie),
+  contrôlés par `pdftotext` ; non commités. ⚠️ La phrase « une sauvegarde de cette release est refusée par la précédente »
+  est **lue au code** (`check_schema_compat`, colonne inconnue), non constatée : à confirmer par la recette de montée
+  (commentaire LaTeX en tête de la sous-section).
+- **Sondes négatives** : Vitest M1–M4 (candidat postable, champ envoyé inchangé, phrase absente, `<select>` caché pour un
+  rôle de fonds propres) — toutes rouges (`mutations.log`) ; backend B2–B4 (réponse sans champ, `POST` et `PUT` qui
+  l'ignorent) rouges (`mutations-back-1.log`, ⚠️ lancées alors que B1 était resté appliqué par un essai interrompu par
+  `timeout` — fichier restauré avant les commits, vérifié par `git diff`) ; B1 (`null` traduit en inchangé) rejouée seule,
+  rouge (`mutations-back.log`).
+- **T5 — gates au dernier commit de code `90c4b5aa`**, cible propre `/home/beat/claude/kesh-targets/kesh-wt47`,
+  `CARGO_INCREMENTAL=0`, par `heavy.sh` :
+  - **incidents** : (1) la cible partagée `kesh-target` rendait le binaire `accounts_e2e` d'une autre worktree (tests
+    absents de cette branche) — les nextest ciblés joués dessus sont **sans valeur** et ont été rejoués sur la cible
+    propre (749 passés) ; (2) `kesh-mariadb-dev2` plein (errno 135) pendant la première série : backend et mutation B1
+    invalidés, rejoués après sa recréation (17:50) ;
+  - backend `scripts/test-fast.sh --ci` : **6193 exécutés, 6193 passés** (3 lents, 3 instables au premier essai), 14 ignorés
+    (`gate-backend.log`) ;
+  - frontend : `check`, `lint-i18n-ownership`, `test:unit`, `build` verts (`front-*.log`, première série, sans base) ;
+  - E2E complet : **478 passés, 12 échecs, 18 ignorés** ; les dix attendus (sept KF-029, `backup-restore-new-install:262`,
+    `:381`, `opening-balances:156`) et deux de plus, `invoice-qr-caracteres:90` et `invoices:645`, tous deux à la
+    connexion (`toHaveURL('/')` dépassé, la page reste sur `/login`, station chargée) — sans lien avec le plan comptable ;
+    les deux parcours `accounts-mirror` verts ;
+  - `scripts/gate-ci.sh` (copie `git archive`, base recréée) : **6212 passés, 0 échec, 18 ignorés** (`gate-ci.log`) ; sa
+    cible supprimée.
+
 ### File List
+
+- `crates/kesh-api/src/routes/accounts.rs`
+- `crates/kesh-api/tests/accounts_e2e.rs`
+- `crates/kesh-i18n/locales/{fr-CH,de-CH,it-CH,en-CH}/messages.ftl`
+- `frontend/src/lib/features/accounts/AccountMirrorField.svelte` (neuf)
+- `frontend/src/lib/features/accounts/mirror.ts` (neuf)
+- `frontend/src/lib/features/accounts/mirror.test.ts` (neuf)
+- `frontend/src/lib/features/accounts/accounts.types.ts`
+- `frontend/src/routes/(app)/accounts/+page.svelte`
+- `frontend/src/routes/(app)/accounts/accounts-mirror.test.ts` (neuf)
+- `frontend/tests/e2e/accounts-mirror.spec.ts` (neuf)
+- `frontend/src/lib/shared/i18n-keys.test.ts`
+- `docs/api-external.md`, `docs/manual/fr/user-manual.tex`, `docs/manual/fr/admin-manual.tex`
+- `_bmad-output/implementation-artifacts/47-2-miroir-api-et-ecran-du-plan.md`, `sprint-status.yaml`
+- Reprise de `main` (`aef10456`) : `crates/kesh-db/src/entities/{account,mod}.rs`, `crates/kesh-db/src/repositories/accounts.rs`,
+  `crates/kesh-api/src/routes/accounts.rs`, `crates/kesh-db/tests/{account_mirror,account_parent_change,account_currency_repository,credit_card_repository,invoice_write_off,invoices_validate_vat,letterings,supplier_invoices_repository}.rs`,
+  `crates/kesh-api/tests/journal_entry_reversal_e2e.rs`
