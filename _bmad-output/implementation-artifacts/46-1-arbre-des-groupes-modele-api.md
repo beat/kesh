@@ -19,9 +19,11 @@ la balance (46-6a). Aucun écran, aucun rendu PDF ou CSV.
 
 ## Modules touchés (règle de splitting préventif)
 
-Cinq : `kesh-report/groupes` (module neuf), `kesh-report/{balance_sheet,income_statement}` (champs de structure
-seulement), `kesh-api/services/rapports`, `kesh-api/routes/reports`, la documentation (`docs/api-external.md`).
-Tests : `kesh-report` (unitaires), `kesh-api/tests/reports_e2e.rs`. Aucun changement de `kesh-db` : l'arbre se lit
+Quatre : `kesh-report/groupes` (module neuf, avec l'enveloppe `AvecGroupes<T>`), `kesh-api/services/rapports`,
+`kesh-api/routes/reports`, la documentation (`docs/api-external.md`). **`BalanceSheet` et `IncomeStatement` ne changent
+pas** (C-46-1-4) : ni `balance_sheet.rs`, ni `income_statement.rs`, ni les littéraux des tests de `pdf.rs`, `csv.rs`
+et de `benches/export.rs` (zones de la 48-11 et de la 47-3). Tests : `kesh-report` (unitaires),
+`kesh-api/tests/reports_e2e.rs`. Aucun changement de `kesh-db` : l'arbre se lit
 par `accounts::list_by_company(pool, company_id, true)` (`crates/kesh-db/src/repositories/accounts.rs:688`).
 
 ## Le contrat (source unique pour les stories 46-2 à 46-6b)
@@ -39,8 +41,10 @@ Refus `400 VALIDATION_ERROR` (message qui nomme le paramètre) : `detailLevel` h
 (`0`, `-1`, `2.5`, `ALL`, vide) ; `subtotalPosition`, `open` ou `closed` **sans** `detailLevel` ; `subtotalPosition`
 autre que `header`/`footer` ; un élément non entier dans `open` ou `closed` ; un même identifiant dans `open` **et**
 `closed` ; plus de 500 identifiants dans l'une des listes. Un identifiant inconnu, d'une autre société, ou d'un compte
-qui n'est pas un groupe affiché est **ignoré** sans erreur (l'écran peut garder un état d'avant une modification du
-plan) — et n'est pas renvoyé dans l'écho.
+qui n'est pas un groupe de l'arbre affiché (groupe présent dans une section après dissolution, AC-4 — qu'il soit
+visible ou caché sous un ancêtre fermé) est **ignoré** sans erreur (l'écran peut garder un état d'avant une
+modification du plan) — et n'est pas renvoyé dans l'écho. `GET /reports/trial-balance` partage `ReportQuery` : jusqu'à
+la 46-6a, ces paramètres y sont ignorés comme tout paramètre inconnu aujourd'hui.
 
 **Règle d'ouverture** (décision 4 de l'orchestrateur sur la remarque 4 de Guy) : le niveau fixe l'état de départ, les
 ouvertures et fermetures manuelles priment ensuite. Un groupe affiché de profondeur `p` est **ouvert** si et seulement
@@ -52,11 +56,14 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
 **Réponse** (seulement quand `detailLevel` est donné) — champs ajoutés au niveau racine, ceux d'aujourd'hui inchangés :
 
 - `grouping` : `{ detailLevel: 1…20 | "all", subtotalPosition, maxDepth, open: [ids], closed: [ids] }` — l'écho des
-  choix **retenus** (identifiants ignorés retirés, listes triées), et `maxDepth`, la plus grande profondeur d'une ligne
-  `group` ou `account` sur toutes les sections, qui borne le sélecteur de niveau (46-2).
+  choix **retenus** (identifiants ignorés retirés, listes triées), et `maxDepth`, la plus grande profondeur d'un groupe
+  ou d'un compte **de l'arbre affiché**, sur toutes les sections, **indépendamment de l'ouverture** (au niveau 1, il
+  vaut la même chose qu'à `all` : le sélecteur de niveau de la 46-2 ne se replie pas sur lui-même) ; `0` pour un
+  rapport vide, `1` pour un plan sans groupe.
 - `groupedRows` : un objet par section — `{ assets, liabilities, equity }` au bilan, `{ revenues, expenses }` au
   compte de résultat. *(D8 parlait d'un champ « par section » : les sections étant des tableaux JSON, le champ se
-  porte à la racine, une clé par section.)*
+  porte à la racine, une clé par section.)* Les deux champs viennent de l'enveloppe `AvecGroupes<T>` (C-46-1-4),
+  sérialisée **après** les champs du rapport (`#[serde(flatten)]`), absents (non `null`) sans `detailLevel`.
 - Chaque ligne : `{ kind, depth, accountId, accountNumber, accountName, balance, currency?, balanceCurrency?, open?,
   active? }`, déjà **dans l'ordre d'affichage** :
   - `group` — un compte de groupe affiché ; `balance` = son sous-total ; `open` (booléen) toujours présent ;
@@ -83,7 +90,8 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
    descendance présente dans la section, solde propre compris (D5). Dans chaque section, **à tout niveau et pour tout
    état d'ouverture**, la somme des `balance` des lignes de profondeur 1 égale le total de la section (NFR-46-2), et
    chaque ligne d'entrée est comptée **une fois et une seule** : soit en ligne `account`/`own` visible, soit dans le
-   sous-total d'exactement un ancêtre visible fermé.
+   sous-total d'exactement un ancêtre visible fermé, soit dans un groupe fermé masqué parce que nul (AC-5), dont le
+   zéro reste dans le sous-total de son parent.
 3. **AC-3 — Niveau et ouverture.** Profondeur 1 = racines **de l'arbre affiché de la section** (après l'AC-4). Règle
    d'ouverture du contrat ; `all` ouvre tout groupe que `closed` ne ferme pas. Un compte sans parent s'affiche à tout
    niveau (D3). Un niveau supérieur à la profondeur réelle se comporte comme `all`.
@@ -97,22 +105,30 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
    n'apparaît dans deux sections, et que les sections et lignes calculées sont celles du rapport sans paramètre, à
    chaque niveau de 1 à `all`. **La dissolution lit une clé de partition fournie par l'appelant**, distincte de la liste
    de sortie : la section pour le bilan et le compte de résultat ; la **nature** (débitrice ou créditrice) pour la
-   balance (46-6a), qui n'a qu'une liste mais ne peut additionner des soldes de signes contraires.
+   balance (46-6a), qui n'a qu'une liste mais ne peut additionner des soldes de signes contraires. Le **solde propre**
+   d'un groupe dissous devient une ligne `account` de la section de son propre compte, au rang de son numéro parmi les
+   enfants remontés. La dissolution dépend des **lignes présentes** : un groupe peut être dissous à une date d'arrêté
+   et non à une autre (p. ex. `2 Passifs` quand aucun compte de fonds propres n'a de solde) ; c'est voulu (règle sur
+   les données du rapport, non sur la structure du plan, qui dissoudrait toujours `6`, à cause de `6950 Produits
+   financiers`).
 5. **AC-5 — Groupes non affichés (D6 modifiée, Q2).** Un groupe sans descendance dans la section n'y paraît pas. Un
-   groupe **fermé** dont le sous-total est nul en CHF **et** en devise n'est pas affiché ; son zéro reste dans le
-   sous-total de son parent. Un groupe **ouvert** à sous-total nul mais à descendance non nulle (+100 / −100) reste
+   groupe **fermé par le niveau** dont le sous-total est nul en CHF **et** en devise n'est pas affiché ; son zéro reste
+   dans le sous-total de son parent. Un groupe **fermé à la main** (`closed`) reste affiché, même nul : sinon la ligne
+   disparaîtrait sous le clic qui la ferme, et l'écran (46-2) ne pourrait plus la rouvrir. Un groupe **ouvert** à sous-total nul mais à descendance non nulle (+100 / −100) reste
    affiché, avec sa descendance : aucun solde non nul ne disparaît. Aucun total n'est jamais perdu (FR-46-7).
 6. **AC-6 — Devise d'un groupe (D7 modifiée, Q3).** `currency` et `balanceCurrency` d'une ligne `group` ou `subtotal`
    sont présents si et seulement si **toutes** les lignes d'entrée de sa descendance (solde propre compris) portent la
    **même** devise étrangère ; `balanceCurrency` en est la somme exacte. Sinon la ligne est en CHF seul, **sans ligne
-   supplémentaire** (FR-46-8). Les totaux de section restent en CHF (NFR-37-4-3).
+   supplémentaire** (FR-46-8). Les totaux de section restent en CHF (NFR-37-4-3). *Ici et dans les fiches de l'epic,
+« CHF » désigne la devise principale de la société ; « devise étrangère » un compte dont `currency` est renseigné.*
 7. **AC-7 — Arbre défensif (NFR-46-4).** Un cycle de `parent_id`, un parent d'une autre société ou inconnu (possibles
    par SQL seulement) : le compte est traité en **racine**, `tracing::warn!` une fois par compte (numéro et motif),
    ni boucle ni panique ; la recherche d'ancêtres est bornée (profondeur ≤ nombre de comptes).
 8. **AC-8 — Contrat de l'API.** Les quatre paramètres, leurs refus et la réponse du § *Le contrat* sur
    `GET /reports/balance-sheet` et `GET /reports/income-statement`. Sans `detailLevel` : JSON **identique à l'octet**
-   à celui de `main` pour le même jeu de données (NFR-46-1), prouvé par un test qui compare le corps avec et sans la
-   story sur le plan PME (champs `grouping` et `groupedRows` absents, non `null`). Avec `detailLevel`, les champs
+   à celui de `main` pour le même jeu de données (NFR-46-1), prouvé par un test qui compare le corps à une **fixture
+   écrite au commit de base** (T0, avant toute modification ; plan PME, un compte en devise, deux exercices) — champs
+   `grouping` et `groupedRows` absents, non `null`. Avec `detailLevel`, les champs
    d'aujourd'hui restent identiques (les sections plates sont toujours rendues).
 9. **AC-9 — Ordre miroir puis groupes.** Le regroupement s'applique dans `services/rapports.rs` (`bilan`,
    `compte_de_resultat`), **après** la présentation miroir de la 47-3 si elle est fusionnée (`present_balance_sheet`,
@@ -125,7 +141,9 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
     reste un groupe) ; sans `detailLevel`, **aucune** requête de plus. Agrégation O(n) en mémoire.
 11. **AC-11 — Trace d'audit inchangée.** Le niveau et l'ouverture sont des choix de présentation : `DetailsTrace`
     (`services/rapports.rs:266`) ne change pas ; `crates/kesh-api/tests/services_motif.rs` et
-    `audit_route_registry.rs` restent verts sans modification.
+    `audit_route_registry.rs` restent verts sans modification. Conséquence assumée : chaque demande écrit sa trace
+    `report.generated` comme aujourd'hui (`emit_report_audit`, `:1059`), donc chaque redemande de l'écran (clic
+    d'accordéon, changement de niveau, 46-2) en écrit une, comme un changement de période aujourd'hui.
 12. **AC-12 — Art. 959a CO, lecture (a) (Q7, NFR-46-7).** La conformité tient au squelette de l'AC-4 ; aucune donnée
     neuve, aucun rattachement de compte à une rubrique, aucune migration. `docs/api-external.md` le dit, et dit qu'une
     présentation à un niveau qui replie les comptes (niveau 1 en particulier) est **un affichage de travail, non des
@@ -135,7 +153,8 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
 14. **AC-14 — Tests.** Unitaires de `regrouper` sans base : plan PME complet ; groupe à solde propre ; groupe à cheval
     (dissous) ; cycle et parent étranger ; devise unique, devises mêlées, CHF mêlé à une devise ; niveaux 1, 2, 3 et
     `all` ; `open` et `closed` (dont un groupe ouvert sous un ancêtre fermé) ; `header` et `footer` ; groupe ouvert à
-    sous-total nul ; et **un test de propriété maison** (graine fixe, sans dépendance neuve : arbres et soldes générés)
+    sous-total nul ; groupe nul fermé par le niveau (masqué) et fermé à la main (affiché) ; `maxDepth` égal au niveau 1
+    et à `all` ; solde propre d'un groupe dissous ; et **un test de propriété maison** (graine fixe, sans dépendance neuve : arbres et soldes générés)
     qui vérifie l'AC-2 pour tous les niveaux et des états d'ouverture tirés. Intégration (`reports_e2e.rs`) sur deux
     exercices : chaque refus de l'AC-8 ; un bilan et un compte de résultat au niveau 2 et à `all` ; l'égalité à l'octet
     sans paramètre ; une sonde négative (la mutation « ne pas dissoudre le groupe à cheval » rougit l'AC-4).
@@ -146,16 +165,20 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
 ## Tâches / sous-tâches
 
 - [ ] **T0** — Reprise de `main` ; relire la 48-11 (fusionnée ou non) et la 47-3 (fusionnée ou non) ; noter au Change
-      Log l'état trouvé (ligne lue citée).
+      Log l'état trouvé (ligne lue citée). **Avant toute modification**, écrire les fixtures JSON de l'AC-8 (bilan et
+      compte de résultat sans paramètre).
 - [ ] **T1 — `groupes.rs`** (AC 1 à 7, 13) : `ArbreComptes`, `LigneAgregeable`, `OptionsGroupes`
       (`NiveauDetail::{Niveau(u8), Tous}`, `PositionSousTotal::{Titre, Pied}`, ensembles `ouverts`, `fermes`),
       `LigneGroupee` (`Serialize`, camelCase, champs optionnels `skip_serializing_if`), `regrouper` ; tests unitaires et
       de propriété. Déclarer le module dans `crates/kesh-report/src/lib.rs`.
-- [ ] **T2 — structures** (AC 8) : `BalanceSheet` et `IncomeStatement` gagnent `grouping: Option<Grouping>` et
-      `grouped_rows: Option<…>`, `#[serde(skip_serializing_if = "Option::is_none")]`, à `None` dans `generate`.
-      Littéraux de ces structures dans les tests et `benches/export.rs` (`git grep -n "BalanceSheet {\|IncomeStatement {"`).
+- [ ] **T2 — enveloppe** (AC 8, C-46-1-4) : dans `groupes.rs`, `AvecGroupes<T>` (`Serialize`, camelCase) —
+      `#[serde(flatten)] rapport: T`, puis `grouping: Option<Grouping>` et `grouped_rows: Option<S>` (`S` : les sections
+      du rapport), `#[serde(skip_serializing_if = "Option::is_none")]`. `BalanceSheet`, `IncomeStatement` et leurs
+      littéraux ne changent pas.
 - [ ] **T3 — service et route** (AC 8 à 11) : `DemandePeriode` reste ; une `DemandeGroupes` optionnelle passée à
-      `bilan` / `compte_de_resultat` ; validation dans le service (un seul endroit, réutilisé par l'export de la 46-3 et
+      `bilan` / `compte_de_resultat`, qui rendent `Rapport<AvecGroupes<…>, U>` (appelants : `routes/reports.rs:241`,
+      `:253`, `:393`, `:524`, `mcp/outils/rapports.rs:305`, `:357` — l'export et le MCP lisent `.rapport` jusqu'aux
+      46-3 et 46-4) ; validation dans le service (un seul endroit, réutilisé par l'export de la 46-3 et
       le MCP de la 46-4) ; `ReportQuery` gagne `detail_level`, `subtotal_position`, `open`, `closed`
       (`Option<String>`, validés à la main comme `validate_format`, pour un 400 et non un 422 Axum).
 - [ ] **T4 — tests d'intégration** (AC 14) dans `crates/kesh-api/tests/reports_e2e.rs`.
@@ -185,8 +208,8 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
 
 ### Ce qui doit rester
 
-Les générateurs (`generate`) et leur appel croisé (le bilan lit le compte de résultat), le JSON sans
-paramètre, les sections plates même en mode groupé, l'équation du bilan, la trace d'audit, les rendus PDF et CSV (46-3).
+Les générateurs (`generate`) et leur appel croisé (le bilan lit le compte de résultat), les structures `BalanceSheet`
+et `IncomeStatement`, le JSON sans paramètre, les sections plates même en mode groupé, l'équation du bilan, la trace d'audit, les rendus PDF et CSV (46-3).
 
 ### Algorithme (indicatif)
 
@@ -202,8 +225,11 @@ paramètre, les sections plates même en mode groupé, l'équation du bilan, la 
 
 ### Arrondi au centime — contrainte de la 48-11 (Epic 48, release 0.20.0)
 
-La 48-11 (#1245) déplace `round_for_display` (aujourd'hui `crates/kesh-report/src/pdf.rs:349`, `pub(crate)`) et une
-`format_two_decimals` dans `kesh-core`, et pose une garde qui interdit tout `{:.2}` neuf dans `kesh-report`. Cette
+La 48-11 (#1245) doit déplacer `round_for_display` (aujourd'hui `crates/kesh-report/src/pdf.rs:349`, `pub(crate)`)
+et une `format_two_decimals` dans `kesh-core`, et poser une garde (annoncée `arrondi_centime_garde.rs`) qui interdit
+tout `{:.2}` neuf dans `kesh-report`. ⚠️ **Noms annoncés, non relevés** : au 2026-11-20, la fiche 48-11 est « à
+écrire » (`epic-48-corrections-0-20-0.md` sur `origin/epic/48-corrections-0-20-0`, qui dit « fonction commune,
+probable » dans `kesh-core/src/types/money.rs`) et aucune branche ne la porte ; les noms exacts se relèvent au T0. Cette
 story ne formate rien ; si une valeur arrondie est nécessaire (tests compris), elle passe par les fonctions de
 `kesh-core`. Si la 48-11 n'est pas fusionnée au T0, ne rien recopier : le dire au Change Log.
 
@@ -222,6 +248,14 @@ invariants NFR-46-2 se vérifient sur les sections présentées.
   MCP lisent la même liste (D8, FR-46-9).
 - **C-46-1-3** : « tout ouvrir / tout fermer » ne passe pas par l'API : c'est `detailLevel=all` ou `1` sans liste
   (46-2) ; les listes ne portent que les écarts manuels, bornées à 500.
+- **C-46-1-4** (validation P1, KISS) : une **enveloppe** `AvecGroupes<T>` (`#[serde(flatten)]`) plutôt que deux
+  champs ajoutés à `BalanceSheet` et `IncomeStatement`. *Pourquoi* : ces structures ont une vingtaine de littéraux dans
+  les tests de `pdf.rs` et `csv.rs` (`git grep -n "BalanceSheet {\|IncomeStatement {"`, 22 sites à `d29aa557`), là où
+  la 48-11 et la 47-3 écrivent ; les y toucher créait une collision non déclarée, la 46-1 pouvant partir avant la
+  48-11. Sans `detailLevel`, la sérialisation est celle du rapport seul (`rust_decimal` en `serde-str`, sans
+  `arbitrary_precision` : le `flatten` ne change aucun octet ; l'AC-8 le prouve). Les générateurs restent inchangés,
+  et la présentation miroir (47-3) s'applique au rapport avant l'enveloppe. *Écarté* : les champs dans les
+  structures (plus direct pour les rendus, mais 22 littéraux et deux fichiers de plus).
 
 ### References
 
@@ -250,3 +284,13 @@ facultatifs ; sans eux, la réponse ne change pas.
 - 2026-11-20 — Fiche écrite depuis l'esquisse du 2026-11-18 : contrat complet (paramètres, refus, règle d'ouverture,
   règle de rendu, `grouping`, `groupedRows`), remarques 3 (lecture (a)), 4 (ouverture) et 5 (`header` par défaut, sans
   paramètre réponse inchangée) de Guy, ordre miroir puis groupes, contrainte de la 48-11. Quinze critères. `drafted`.
+- 2026-11-20 — Validation P1 (Claude Opus 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 4 M
+  / 4 L, remédiés. M : collision non déclarée des champs ajoutés à `BalanceSheet`/`IncomeStatement` (22 littéraux dans
+  les tests de `pdf.rs`/`csv.rs`, zones de la 48-11 et de la 47-3) → enveloppe `AvecGroupes<T>` (C-46-1-4, T2, T3,
+  modules : quatre) ; `maxDepth` ambigu (lignes émises ou arbre : le sélecteur se repliait au niveau 1) → arbre
+  affiché, indépendant de l'ouverture ; groupe fermé **à la main** à sous-total nul masqué (ligne impossible à
+  rouvrir) et invariant de l'AC-2 contredit par les groupes nuls masqués → AC-5 (masqué seulement s'il est fermé par
+  le niveau), AC-2 ; égalité « avec et sans la story » non exécutable → fixture au commit de base (AC-8, T0). L :
+  solde propre d'un groupe dissous et dissolution selon les lignes présentes (AC-4) ; « groupe affiché » de l'écho
+  précisé, `trial-balance` qui partage `ReportQuery` ; trace d'audit à chaque redemande dite (AC-11) ; noms de la
+  48-11 annoncés et non relevés (*Dev Notes*). Rapport : `kesh-gate-logs/epic-46/validation/46-1-P1.md`.

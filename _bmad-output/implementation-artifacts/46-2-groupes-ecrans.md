@@ -4,7 +4,7 @@ Status: drafted
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D3, D4, D9 (étendue), Q2, Q3, Q10 ; FR-46-2,
 FR-46-7 à FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1,
-2026-11-19) ; fiche écrite le 2026-11-20, à valider en boucle. **Suit la 46-1** (contrat de l'API). Aucune migration.
+2026-11-19) ; fiche écrite le 2026-11-20, à valider en boucle. **Suit la 46-1** (contrat de l'API) **et la 46-3** (export groupé). Aucune migration.
 
 ## Story
 
@@ -17,23 +17,28 @@ afin de lire mes comptes d'un coup d'œil au niveau qui m'intéresse, et d'expor
 
 Cinq : `frontend/src/lib/features/reports` (vues, types, appels, composant neuf), `frontend/src/routes/(app)/reports`
 (barre de contrôles, export), `kesh-i18n` (quatre locales), `docs/manual/fr/user-manual.tex`, `frontend/tests/e2e`.
-Aucun code Rust : la 46-1 rend déjà `groupedRows` ; l'export groupé est la 46-3 (cette story y passe les paramètres,
-qui sont refusés en `400` tant que la 46-3 n'est pas fusionnée — d'où l'ordre 46-1 → 46-3 → 46-2 recommandé, ou
-l'export groupé masqué derrière la fusion de la 46-3).
+Aucun code Rust : la 46-1 rend déjà `groupedRows` ; l'export groupé est la 46-3, que cette story **suppose fusionnée**
+(ordre fixé : 46-1 → 46-3 → 46-2, fichier d'epic ; aucun export groupé masqué derrière un drapeau). Avant la 46-3,
+l'export recevrait les paramètres **sans les lire** — `ExportQuery` (`routes/reports.rs:174`) ignore les paramètres
+inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écran groupé, sans rien signaler.
 
 ## Critères d'acceptation
 
 1. **AC-1 — Hiérarchie montrée par défaut (Q10).** À la première visite, le bilan et le compte de résultat s'affichent
    **groupés**, niveau « Tous les comptes » (`detailLevel=all` : tous les groupes ouverts), sous-totaux sur la ligne du
    titre (`header`, décision 5). C'est un changement de l'écran d'aujourd'hui, voulu par Beat ; les E2E existants qui
-   lisent l'écran à plat (`frontend/tests/e2e/reports.spec.ts`, `reports-currency.spec.ts`) passent en
-   « hiérarchie masquée » ou sont adaptés, sans perdre aucune assertion.
+   lisent le bilan ou le compte de résultat (`frontend/tests/e2e/reports.spec.ts` — dont les deux tests axe, « empty
+   state » et « populated state », qui contrôlent désormais l'écran groupé et ses accordéons —,
+   `reports-currency.spec.ts`, `reports-export-pdf.spec.ts`, dont l'export d'un bilan vide part avec
+   `detailLevel=all` et doit rendre le message « rapport vide ») passent en « hiérarchie masquée » ou sont adaptés,
+   sans perdre aucune assertion ; les tests axe restent sur l'écran par défaut (groupé), à zéro violation.
 2. **AC-2 — Contrôles.** Au-dessus du bilan et du compte de résultat (pas des autres rapports) :
    - **« Hiérarchie montrée / masquée »** : masquée = l'écran **à plat d'aujourd'hui**, requête **sans** `detailLevel`,
      sous-titres de rôle des fonds propres compris (D4) ; montrée = l'écran groupé. *(Ce contrôle tient lieu de l'entrée
      « À plat » du sélecteur de D9.)* Niveau, position et ouvertures sont gardés pendant que la hiérarchie est masquée ;
    - **sélecteur de niveau** « Niveau 1 · … · Niveau n−1 · Tous les comptes », `n` = `grouping.maxDepth` de la dernière
-     réponse ; désactivé quand la hiérarchie est masquée ;
+     réponse (profondeur de l'arbre, indépendante de l'ouverture, 46-1), niveaux bornés à 20 ; désactivé quand la
+     hiérarchie est masquée, et quand `maxDepth` ≤ 1 (plan sans groupe, rapport vide : seul « Tous les comptes ») ;
    - **« Tout ouvrir »** = niveau « Tous les comptes » et listes manuelles vidées ; **« Tout fermer »** = niveau 1 et
      listes vidées ;
    - **« Sous-totaux : sur le titre / en pied »** (`header` / `footer`).
@@ -43,7 +48,9 @@ l'export groupé masqué derrière la fusion de la 46-3).
    retire de `closed`), fermer un groupe ouvert l'ajoute à `closed` (et le retire de `open`). Changer de niveau vide
    les deux listes. L'écran **redemande** le rapport à l'API avec `detailLevel`, `subtotalPosition`, `open`, `closed`
    (une seule source de la règle : la 46-1 ; aucun repli calculé dans le navigateur). Requêtes concurrentes : seule la
-   réponse de la dernière demande s'affiche.
+   réponse de la dernière demande s'affiche ; pendant le chargement, l'écran garde l'affichage précédent (sans
+   clignotement, `aria-busy`). Chaque redemande écrit une trace `report.generated` au journal d'audit, comme un
+   changement de période aujourd'hui (46-1 AC-11) : assumé (C-46-2-1).
 4. **AC-4 — Rendu (D5, Q2, Q3).** Lignes rendues dans l'ordre de `groupedRows` : retrait par `depth` ; `group` en gras,
    son montant **selon la règle de rendu de la 46-1** (sur le titre en `header` ou si fermé ; sinon sur la ligne
    `subtotal`, en gras, libellé « Total <nom du groupe> ») ; `own` libellée « <numéro> <nom> (solde propre) » ; solde en
@@ -76,7 +83,8 @@ l'export groupé masqué derrière la fusion de la 46-3).
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** — Reprise de `main` / de la branche d'epic ; vérifier le contrat de la 46-1 tel que fusionné.
+- [ ] **T0** — Reprise de `main` / de la branche d'epic ; vérifier le contrat de la 46-1 et l'export de la 46-3 tels
+      que fusionnés (sinon arrêt, le dire au Change Log).
 - [ ] **T1 — maquette** (AC-8).
 - [ ] **T2 — types et appels** (AC 3, 6) : `reports.types.ts` (`Grouping`, `GroupedRow`, champs facultatifs des DTO),
       `reports.api.ts` (`getBalanceSheet`, `getIncomeStatement`, `downloadReport`, `getReportExportUrl` avec options).
@@ -110,8 +118,12 @@ garde « rapport vide » ; les autres onglets ; l'export sans paramètre.
 
 - **C-46-2-1** : l'écran redemande à chaque changement plutôt que de replier localement — la règle d'ouverture n'existe
   qu'en Rust (DRY), et l'export reprend les paramètres de la dernière requête, ce qui garantit la fidélité (46-3).
-- **C-46-2-2** : « hiérarchie masquée » = vue à plat (point à confirmer par Beat à la validation : le contrôle et
-  l'entrée « À plat » de D9 feraient sinon double emploi).
+  *Coût accepté* (validation P1) : un aller-retour par clic, et une trace d'audit par redemande. *Écarté* : replier
+  dans le navigateur une réponse `all` — il faudrait y recopier la règle d'ouverture, celle du montant (titre ou pied
+  selon l'ouverture) et celle des groupes nuls masqués (46-1 AC-5), et l'export ne serait plus fidèle que si les deux
+  copies s'accordent.
+- **C-46-2-2** : « hiérarchie masquée » = vue à plat d'aujourd'hui (décidé à la validation P1 : c'est la lecture qui
+  ne double pas l'entrée « À plat » de D9, et le contrôle de Beat la remplace).
 - **C-46-2-3** : « tout ouvrir / tout fermer » passe par le niveau, non par la liste de tous les groupes (URL courte).
 
 ### References
@@ -140,3 +152,11 @@ l'affichage d'avant.
 - 2026-11-20 — Fiche écrite depuis l'esquisse : hiérarchie montrée par défaut (Q10), contrôles, règle d'ouverture
   (remarque 4 de Guy), `header` par défaut (remarque 5), export aux mêmes paramètres, phrase « affichage de travail »
   (remarque 3). Neuf critères. `drafted`.
+- 2026-11-20 — Validation P1 (Claude Opus 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 3 M
+  / 3 L, remédiés. M : E2E existants incomplètement inventoriés (`reports-export-pdf.spec.ts`, tests axe de
+  `reports.spec.ts`, qui contrôlent désormais l'écran groupé) → AC-1 ; redemande à chaque clic sans dire son coût (une
+  trace `report.generated` par demande, `services/rapports.rs:1059`) → AC-3, C-46-2-1 (assumé, repli local écarté) ;
+  prémisse fausse « paramètres refusés en `400` avant la 46-3 » (`ExportQuery` les ignore : PDF à plat d'un écran
+  groupé, en silence) → ordre 46-1 → 46-3 → 46-2 fixé, drapeau écarté. L : sélecteur désactivé si `maxDepth` ≤ 1,
+  borné à 20 ; affichage gardé pendant le chargement ; « hiérarchie masquée » = vue à plat décidée (C-46-2-2).
+  Rapport : `kesh-gate-logs/epic-46/validation/46-2-P1.md`.

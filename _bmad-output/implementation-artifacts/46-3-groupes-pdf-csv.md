@@ -20,7 +20,8 @@ afin de remettre un bilan par groupes à ma fiduciaire ou de le retravailler dan
 Cinq : `kesh-report/pdf`, `kesh-report/csv`, `kesh-api/routes/reports` (paramètres des deux exports),
 la documentation (`docs/api-external.md`, `docs/manual/fr/user-manual.tex`), les tests d'intégration
 (`crates/kesh-api/tests/reports_export_e2e.rs`). Pas de `kesh-i18n` : les libellés du PDF sont ceux de
-`PdfContext::fr_ch_default` (`crates/kesh-report/src/pdf.rs`, ~`:200`, FR-CH en dur, i18n des PDF différée).
+`PdfContext::fr_ch_default` (`crates/kesh-report/src/pdf.rs:294`, et `SectionLabels::fr_ch_defaults` `:204`, FR-CH en
+dur, i18n des PDF différée).
 
 ## Critères d'acceptation
 
@@ -38,13 +39,14 @@ la documentation (`docs/api-external.md`, `docs/manual/fr/user-manual.tex`), les
    fermé, sinon sur sa ligne `subtotal` (« Total <nom du groupe> », gras) ; `own` « <nom> (solde propre) » ; devise et
    solde en devise d'une ligne de groupe à la place prévue par 37-4 (colonnes en devise si une ligne en porte) ;
    **garder-avec-la-suite** : un titre de groupe ouvert ne reste pas seul en bas de page
-   (`ensure_space_for_rows(2.0)`, comme les sous-titres de rôle). En-tête : une ligne sous la période dit le niveau
-   (« Niveau 2 » ou « Tous les comptes ») et, s'il y a des écarts manuels, « groupes ouverts : 1020, … ; fermés : … »
-   (numéros des comptes de groupe, tronqués à une ligne avec « … »). Totaux de section, lignes calculées et équation :
-   inchangés.
+   (`ensure_space_for_rows(2.0)`, comme les sous-titres de rôle, `pdf.rs:877`). En-tête : une ligne sous la période
+   dit le niveau (« Niveau 2 » ou « Tous les comptes ») et, si `grouping.open` ou `grouping.closed` n'est pas vide,
+   ajoute « , détail ajusté à la main » — sans liste de numéros (C-46-3-1). Totaux de section, lignes calculées et
+   équation : inchangés.
 4. **AC-4 — Fidélité prouvée.** Un test d'intégration demande le JSON (46-1) et le PDF avec **les mêmes paramètres**
-   (niveau 2, un groupe ouvert à la main, un fermé, `footer`), et affirme que la suite des lignes de texte du PDF entre
-   l'en-tête et les totaux est exactement celle des `groupedRows` (numéro, nom, montant formaté) — sonde négative :
+   (niveau 2, un groupe ouvert à la main, un fermé, `footer`), et affirme que, **section par section**, la suite des
+   lignes de texte du PDF entre le titre de la section et sa ligne de total est exactement celle des
+   `groupedRows.<section>` (numéro, nom, montant formaté selon la règle de rendu) — sonde négative :
    ignorer `open` dans le PDF rougit le test.
 5. **AC-5 — CSV groupé.** En mode groupé seulement, deux colonnes après `Section` : `Niveau` (la `depth`) et
    `TypeLigne` (`groupe`, `compte`, `propre`, `soustotal`) ; une ligne par élément de `groupedRows`, montant dans
@@ -68,15 +70,21 @@ la documentation (`docs/api-external.md`, `docs/manual/fr/user-manual.tex`), les
 ## Tâches / sous-tâches
 
 - [ ] **T0** — Reprise de `main` : la 48-11 doit y être (sinon **arrêt**, le dire au Change Log) ; relever ses noms de
-      fonctions exacts.
+      fonctions exacts (annoncés `round_for_display`, `format_two_decimals`, garde `arrondi_centime_garde.rs` ; non
+      relevés à l'écriture de la fiche : la fiche 48-11 était « à écrire » au 2026-11-20 et aucune branche ne la
+      portait). Si la 48-11 sort de la 0.20.0 (ordre de sortie de `epic-48-corrections-0-20-0.md`), la 46-3 attend
+      quand même sa fusion dans `main` — Beat et Guy décident alors de l'ordre.
 - [ ] **T1 — fixtures** (AC-2) au commit de base, avant toute modification.
 - [ ] **T2 — route** (AC-1) : `ExportQuery` (`routes/reports.rs`) gagne les quatre champs ; validation par la fonction
       du service de la 46-1.
-- [ ] **T3 — PDF** (AC 3, 4, 6) : `render_balance_sheet_pdf` (`pdf.rs:816`), `render_income_statement_pdf`
-      (`:954`) — branche groupée, branche à plat inchangée ; libellés neufs dans `SectionLabels` et
-      `fr_ch_default` ; une fonction de rendu de ligne groupée partagée par les deux rapports **et** par la balance
-      (46-6b).
-- [ ] **T4 — CSV** (AC 5, 6) : `render_balance_sheet_csv` (`csv.rs:143`), `render_income_statement_csv` (`:277`).
+- [ ] **T3 — PDF** (AC 3, 4, 6) : deux fonctions **neuves** de rendu groupé, qui reçoivent l'enveloppe
+      `AvecGroupes<BalanceSheet>` / `AvecGroupes<IncomeStatement>` de la 46-1 (C-46-1-4) ; `render_balance_sheet_pdf`
+      (`pdf.rs:816`) et `render_income_statement_pdf` (`:954`) restent **inchangées**, avec leurs appelants et leurs
+      tests : la route choisit l'une ou l'autre selon que `grouping` est présent (AC-2 tenu par construction, et
+      prouvé par les fixtures). Libellés neufs dans `SectionLabels` et `fr_ch_defaults` ; une fonction de rendu de
+      ligne groupée partagée par les deux rapports **et** par la balance (46-6b).
+- [ ] **T4 — CSV** (AC 5, 6) : de même, deux fonctions neuves à côté de `render_balance_sheet_csv` (`csv.rs:143`) et
+      `render_income_statement_csv` (`:277`), inchangées.
 - [ ] **T5 — tests, documentation** (AC 8).
 - [ ] **T6 — gate complet** ; E2E complet au dernier commit de code.
 
@@ -87,7 +95,8 @@ la documentation (`docs/api-external.md`, `docs/manual/fr/user-manual.tex`), les
 - `pdf.rs:84-97` `PdfContext`, `:102` `SectionLabels` (libellés FR-CH en dur), `:316` `format_swiss_amount`
   (contient aujourd'hui un `{amount:.2}`, `:318` — c'est le site que la 48-11 corrige), `:349` `round_for_display`
   (`pub(crate)`, déplacé par la 48-11), `:739` `any_foreign`, `:744` `draw_account_row` (nom tronqué si devise),
-  `:816-950` bilan (sous-titres de rôle avec garder-avec-la-suite `:855-870`, lignes calculées, équation en pied),
+  `:816-950` bilan (sous-titres de rôle avec garder-avec-la-suite `:870-893`, `ensure_space_for_rows(2.0)` à `:877`,
+lignes calculées, équation en pied),
   `:954` compte de résultat. Montants alignés à droite (`AMOUNT_RIGHT_MM`, `FX_AMOUNT_RIGHT_MM`, #1327).
 - `csv.rs:42` `make_writer` (`;`, CRLF, BOM), `:50` `format_amount_iso` (`{amount:.2}` — site de la 48-11), `:101`
   `write_account_balance`, `:143-270` bilan (garde par section, `Total actifs;;;…`), `:277` compte de résultat.
@@ -101,8 +110,11 @@ zéro (#1346), l'alignement (#1327).
 
 ### Choix et écarts
 
-- **C-46-3-1** : le PDF imprime l'état d'ouverture (niveau et écarts manuels) pour qu'un lecteur sache ce qui est
-  replié — décision 4 de l'orchestrateur, « le PDF imprime le niveau et la liste des groupes ouverts/fermés ».
+- **C-46-3-1** : le PDF imprime le **niveau**, et signale seulement qu'il y a des écarts manuels ; les groupes ouverts
+  ou fermés se voient dans le corps (un groupe fermé porte son sous-total sans ses comptes). Simplifié à la validation
+  P1 (KISS) : la liste des numéros, tronquée à une ligne, n'apprenait rien que le corps ne montre, et coûtait une
+  troncature et un test de plus. Lecture retenue de la remarque 4 de Guy (« le PDF imprime le niveau et les groupes
+  ouverts ou fermés ») : il imprime les groupes **dans l'état** ouvert ou fermé de l'écran.
 - **C-46-3-2** : sous-total arrondi une fois, sur la somme exacte (AC-6), comme les totaux de section aujourd'hui.
 
 ### References
@@ -131,3 +143,10 @@ l'export ne change pas.
 - 2026-11-20 — Fiche écrite depuis l'esquisse : fidélité à l'écran prouvée par test (remarque 4 de Guy), niveau et
   écarts imprimés, règle de rendu de la 46-1, dépendance à la 48-11 et interdiction du `{:.2}` (contrainte de Guy).
   Huit critères. `drafted`.
+- 2026-11-20 — Validation P1 (Claude Opus 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 1 M
+  / 4 L, remédiés. M : les rendus groupés greffés dans `render_*_pdf`/`render_*_csv` lisaient des champs de
+  `BalanceSheet` que la 46-1 n'ajoute plus (enveloppe `AvecGroupes<T>`, C-46-1-4) → fonctions neuves, rendus à plat
+  inchangés avec leurs tests (T3, T4). L : en-tête du PDF simplifié (niveau et « détail ajusté à la main », sans liste
+  tronquée, C-46-3-1, AC-3) ; fidélité de l'AC-4 vérifiée section par section ; noms de la 48-11 annoncés, non
+  relevés, et cas d'une 48-11 sortie de la 0.20.0 (T0) ; lignes citées corrigées (`fr_ch_default` `:294`,
+  garder-avec-la-suite `:877`). Rapport : `kesh-gate-logs/epic-46/validation/46-3-P1.md`.

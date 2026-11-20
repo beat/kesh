@@ -50,7 +50,7 @@ légales imposées (Q7) ; le grand livre (Q6) ; **la balance est dans le périm�
 | Écrans | `BalanceSheetView.svelte` (groupes de rôle), `IncomeStatementView.svelte`, `reports.api.ts`, `reports.types.ts` | `frontend/src/lib/features/reports/` |
 | Lecture de `parent_id` | **aucun rapport** ne la lit (relevé de la fiche `fix-api-parent-compte`, AC-7) | — |
 
-## Décisions proposées (à approuver par Beat ; D1, D4, D6, D7 dépendent de questions ouvertes)
+## Décisions (proposées au kickoff, approuvées par Beat et par Guy le 2026-11-19 ; annotations de Beat sous chacune)
 
 - **D1 — Les groupes viennent de `parent_id` seul**, jamais du numéro (comme la règle « jamais par numéro » de 14-1).
   Un groupe = tout compte qui a au moins un sous-compte. Le préfixe de numéro ne sert qu'à l'outil d'aide (46-5). *(Q1)*
@@ -142,7 +142,8 @@ Guy a approuvé la revue 1 sans condition ; son agent a fait cinq remarques, tra
    d'aujourd'hui (46-1 AC-8, 46-3 AC-2, 46-4 AC-2, 46-6a AC-5).
 
 Contraintes de Guy reprises dans les fiches : la **48-11** met `round_for_display` et `format_two_decimals` dans
-`kesh-core` et une garde interdit tout `{:.2}` neuf dans `kesh-report` (46-1 AC-13, 46-3 AC-6, 46-6a AC-8, 46-6b
+`kesh-core` (noms annoncés ; au 2026-11-20 la fiche 48-11 est « à écrire » et aucune branche ne la porte : noms relevés
+au T0 de la 46-3) et une garde interdit tout `{:.2}` neuf dans `kesh-report` (46-1 AC-13, 46-3 AC-6, 46-6a AC-8, 46-6b
 AC-4 ; la 46-3 ne commence qu'après sa fusion) ; la **47-3** (présentation miroir) s'applique **avant** les groupes
 (46-1 AC-9).
 
@@ -152,15 +153,16 @@ AC-4 ; la 46-3 ne commence qu'après sa fusion) ; la **47-3** (présentation mir
 |---|---|---|---|---|
 | 46-0 | Kickoff (ce fichier ; pas de fiche) | — | — | — |
 | 46-1 | Arbre des groupes : modèle et API (le contrat) | `main` reprise (fait) | M | `46-1-arbre-des-groupes-modele-api.md` |
-| 46-2 | Écrans du bilan et du compte de résultat par groupes | 46-1 ; export groupé : 46-3 | M | `46-2-groupes-ecrans.md` |
+| 46-2 | Écrans du bilan et du compte de résultat par groupes | 46-1, **46-3** (export groupé) | M | `46-2-groupes-ecrans.md` |
 | 46-3 | PDF et CSV par groupes | 46-1, **48-11 dans `main`** | M | `46-3-groupes-pdf-csv.md` |
 | 46-4 | Outils MCP par groupes | 46-1 | S | `46-4-groupes-mcp.md` |
 | 46-5 | Aide à la création des groupes d'un plan (conditionnelle, maquette avant décision) | maquette approuvée | M | `46-5-aide-groupes-plan.md` |
-| 46-6a | Balance par groupes : modèle, API, MCP | 46-1 | M | `46-6a-balance-groupes-modele-api-mcp.md` |
+| 46-6a | Balance par groupes : modèle, API, MCP | 46-1 ; MCP : 46-4 | M | `46-6a-balance-groupes-modele-api-mcp.md` |
 | 46-6b | Balance par groupes : écran, PDF, CSV | 46-6a, 46-2, 46-3 | M | `46-6b-balance-groupes-ecran-pdf-csv.md` |
 | 46-7 | Solde de la dette de l'epic (plafond : **2 issues**) | toutes | S | `46-7-solde-dette-epic.md` |
 
-Ordre : 46-1 → (46-3 dès la 48-11 fusionnée, 46-4, 46-6a en parallèle) → 46-2 (après 46-3, pour l'export groupé) →
+Ordre : 46-1 → (46-3 dès la 48-11 fusionnée, 46-4, 46-6a hors MCP en parallèle ; le MCP de la 46-6a après la 46-4) → 46-2 (après 46-3, pour l'export groupé :
+avant elle, `ExportQuery` ignorerait les paramètres et rendrait un PDF à plat d'un écran groupé, sans rien signaler) →
 46-6b → 46-5 (si décidée) → 46-7. **Ordre avec la 47-3** : miroir puis groupes ; le second arrivé recâble (fiche
 47-3, § *Recâblage*), avec revue du code d'intégration.
 
@@ -184,12 +186,12 @@ Déclarés au kickoff (`CLAUDE.md` § *Travailler à plusieurs développeurs*, �
 
 | Fichier ou module | Stories de l'epic | Autres chantiers qui le touchent | Règle |
 |---|---|---|---|
-| `crates/kesh-report/src/groupes.rs` (neuf), `lib.rs` | 46-1, 46-6a | — | — |
-| `crates/kesh-report/src/balance_sheet.rs`, `income_statement.rs` (champs de structure seulement) | 46-1 | 47-3 (`mirror_of` d'`AccountBalance`) | blocs distincts ; littéraux des tests au second arrivé |
+| `crates/kesh-report/src/groupes.rs` (neuf, enveloppe `AvecGroupes<T>`), `lib.rs` | 46-1, 46-6a | — | — |
+| `crates/kesh-report/src/balance_sheet.rs`, `income_statement.rs` | **aucune** (validation P1 de la 46-1, C-46-1-4 : enveloppe, structures et littéraux inchangés) | 47-3 (`mirror_of` d'`AccountBalance`) | — |
 | `crates/kesh-report/src/trial_balance.rs` | 46-6a | — | — |
 | `crates/kesh-report/src/pdf.rs` | 46-3, 46-6b | **48-11** (fort : formateurs, garde `{:.2}`), 47-3 (littéraux de tests), 49-1b (PDF des factures, autre région) | 46-3 part de `main` **après** la 48-11 |
 | `crates/kesh-report/src/csv.rs` | 46-3, 46-6b | **48-11**, 47-3 (littéraux) | idem |
-| `crates/kesh-report/benches/export.rs` | 46-1 (littéraux) | 47-3 | le second arrivé garde les deux champs |
+| `crates/kesh-report/benches/export.rs` | aucune (C-46-1-4) | 47-3 | — |
 | `crates/kesh-api/src/services/rapports.rs` | 46-1, 46-6a | **47-3** (`bilan`, `compte_de_resultat` : présentation miroir) | miroir puis groupes (46-1 AC-9) ; recâblage par le second arrivé |
 | `crates/kesh-api/src/routes/reports.rs` | 46-1, 46-3, 46-6a, 46-6b | — | — |
 | `crates/kesh-api/tests/reports_e2e.rs`, `reports_export_e2e.rs` | 46-1, 46-3, 46-6a, 46-6b | 47-3 (exemple chiffré) | blocs de tests distincts |
@@ -264,3 +266,14 @@ La page pour Guy (`data-not-committed/epic-46-revue-pour-guy.html`) porte ces r�
 2. Décomptes d'issues mesurés (46-0) ; **fiches écrites (2026-11-20), validation en boucle à mener**.
 3. ~~Fusion des trois correctifs~~ : faite (`main` `d29aa557`, reprise le 2026-11-20). Reste : la **48-11** dans `main`
    avant la 46-3 ; la maquette de la 46-5 avant sa décision.
+
+## Validation des fiches
+
+- 2026-11-20 — **P1** des fiches 46-1, 46-2, 46-3 (Claude Opus 5.5, contexte frais ; rapports
+  `kesh-gate-logs/epic-46/validation/46-{1,2,3}-P1.md`) : 46-1 0/0/4/4, 46-2 0/0/3/3, 46-3 0/0/1/4 (C/H/M/L),
+  remédiés. Décisions prises : enveloppe `AvecGroupes<T>` au lieu de champs ajoutés aux structures (C-46-1-4 ; plus
+  de collision de la 46-1 avec la 48-11 et la 47-3 dans les littéraux de `pdf.rs`/`csv.rs`) ; un groupe fermé à la main
+  reste affiché même nul (46-1 AC-5) ; « hiérarchie masquée » = vue à plat (46-2 C-46-2-2) ; redemande à chaque clic,
+  une trace d'audit par demande, assumée (46-2 C-46-2-1) ; ordre 46-3 → 46-2 fixé ; en-tête du PDF sans liste de
+  numéros (46-3 C-46-3-1). **À propager à la 46-6a** (en validation par un autre agent au même moment, non touchée
+  ici) : T1 par l'enveloppe, et l'AC-3 sur la règle des groupes nuls fermés à la main.
