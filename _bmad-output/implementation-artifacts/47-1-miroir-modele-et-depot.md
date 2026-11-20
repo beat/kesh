@@ -1,6 +1,6 @@
 # Story 47-1 : compte miroir — modèle et dépôt (migration)
 
-Status: review
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R1 à R4 ; D4, D7, D8, D10 (adaptée) ; Q1, Q10. **Refonte du 2026-11-19 (miroir seul, KISS)** de l'ancienne
@@ -587,3 +587,10 @@ Fiches (T0 et décision du CHECK, `50718010`, `e66750a1`) :
 
 - _bmad-output/implementation-artifacts/47-1-miroir-modele-et-depot.md
 - _bmad-output/planning-artifacts/epic-47-comptes-miroirs.md
+
+- 2026-11-20 — revue de code P1 (Claude Sonnet 5.5, contexte frais) : 0 CRITICAL / 0 HIGH / 0 MEDIUM / 9 LOW ; boucle close
+  (rien au-dessus de LOW). LOW versés à la story de solde 47-5 : L1 course « pose contre archivage » à deux témoins
+  (`account_mirror.rs:681`), L2 doc-comments d'ordre des refus, L3 commentaire de `Set(miroir actuel)`, L4 verrous
+  d'intervalle de la garde des lignes (non mesuré), L5 pluriel de « réactivez-le », L6 test du chemin `update_in_tx` de
+  la garde AC-6, L7 deux échecs E2E `backup-restore-new-install.spec.ts:262/:381` à rejouer contre `main`, L8 sauvegarde
+  0.20.0 non testée, L9 table G9. Rapport : `kesh-gate-logs/s47-1/revue-p1-rapport.md`.
