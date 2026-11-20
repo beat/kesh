@@ -1,6 +1,6 @@
 # Story 39-11a : lecteur du CSV « relevé » de Wise (`kesh-import`)
 
-Status: ready-for-dev
+Status: review
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, numéros de ligne relevés au code de `origin/main` (`fd04099f`,
 fusionné dans `epic/39-wise` au commit `9c8bc452`), revérifiés à la validation P1. Epic 39, **phase 1 KISS**
@@ -105,11 +105,11 @@ Wise, afin que l'import (39-11b) n'ait plus qu'à ranger ces lignes au compte ba
 
 ## Tâches
 
-- [ ] T1 — Aide « en-tête par noms » et forme fermée des montants, déplacées de `paypal.rs` dans `csv/by_name.rs`,
+- [x] T1 — Aide « en-tête par noms » et forme fermée des montants, déplacées de `paypal.rs` dans `csv/by_name.rs`,
   appelées des deux côtés (AC-2, AC-4, G10).
-- [ ] T2 — `wise.rs` : types, erreurs fermées, lecture, préfixes (AC-1, AC-3).
-- [ ] T3 — Dates et horodatages, montants, signes ; tri et continuité (AC-4, AC-5).
-- [ ] T4 — Fixtures fictives, tests, `cargo publish --dry-run -p kesh-import` (AC-6, AC-7).
+- [x] T2 — `wise.rs` : types, erreurs fermées, lecture, préfixes (AC-1, AC-3).
+- [x] T3 — Dates et horodatages, montants, signes ; tri et continuité (AC-4, AC-5).
+- [x] T4 — Fixtures fictives, tests, `cargo publish --dry-run -p kesh-import` (AC-6, AC-7).
 
 ## Stratégie de tests
 
@@ -154,3 +154,58 @@ nommant les colonnes qui manquent, et un relevé dont le solde courant ne se sui
   `[A-Z0-9_-]`, aucun doublon d'identifiant par fichier, `Date` = date de `Date Time`, solde courant continu dans l'ordre des
   horodatages, aucun horodatage double) : rien à reprendre. LOW : tri sur `Date Time` quand une seule ligne en manque,
   règle écrite (ordre inverse du fichier seul).
+
+## Dev Agent Record
+
+### Implementation Plan
+
+- Fusion de `epic/38-paypal` (commit `303bbc2c`) : conflits sur `sprint-status.yaml` (les deux blocs gardés : bloc 38 de
+  la branche 38, bloc 39 de la nôtre), fichiers générés (`migrations.sha384`, schéma de test, 96 migrations recomptées
+  par `ls`), `migrations_upgrade_path.rs`, `audit_route_registry.rs`, `api-external.md`, manuel d'administration,
+  `migrations-idempotence-audit.md` : pris côté 38 (aucune migration ici, aucune de ces pièces touchée par la 39-11a).
+- `csv/by_name.rs` : aides de 38-11a réutilisées telles quelles (`ColumnsByName`, `parse_dot_decimal_amount`) ; **extraits**
+  de `paypal.rs` pour être partagés : `read_records` (boucle de lecture des enregistrements) et, dans `error.rs`,
+  `truncate_line_error_value` ; `paypal.rs` les appelle (assertions de ses tests inchangées).
+- `wise.rs` : `parse_wise_csv`, erreurs fermées, tri chronologique, continuité du solde ; tous les calculs de contrôle
+  en `checked_*` (débordement : erreur de ligne `OVERFLOW`, consigne de l'orchestrateur du 2026-11-20).
+
+### Debug Log
+
+- Premier gate complet : « unresolved import kesh_import::wise » à `cargo clippy --workspace` : cible cargo partagée
+  entre worktrees (artefact d'une autre branche pris pour frais). Rejoué sur `kesh-targets/kesh-wt39`.
+- Deux sondes négatives survivaient (signe d'un crédit, tri sur l'horodatage lu) : deux tests ajoutés, elles rougissent.
+- Le crate `csv` date un enregistrement qui suit une ligne vide **au milieu** du fichier du numéro de cette ligne vide
+  (limite documentée à `read_records`, partagée avec PayPal ; sans effet sur une ligne vide finale) : à tracer en issue.
+- Gate complet sur la cible propre : 163 échecs, **tous** « failed to apply migrations » (`No more room in record file`) :
+  le tmpfs de `kesh-mariadb-dev2` est plein (8,0 Go, 171 bases `_sqlx_test_*` laissées). Le nettoyage a été refusé par le
+  classificateur d'autorisations ; aucun conteneur ni base touché.
+
+### Completion Notes
+
+- Tests ajoutés, de `303bbc2c` à `HEAD` (recomptés par `grep -c '#\[test\]'`) : `tests/wise_csv.rs` 28 (dont 1 `#[ignore]`,
+  lecture des relevés réels), `csv/by_name.rs` +2 ; ciblé `cargo test -p kesh-import` sur la cible propre : 138 + 28 passés
+  (27 + 1 ignoré pour `wise_csv`), 0 échec.
+- Relevés réels 2024 de Beat lus en local (`KESH_WISE_REAL_DIR`, test ignoré) : trois fichiers lus entièrement
+  (64 + 68 + 129 lignes, nombre de lignes lues = nombre de lignes de données), solde courant continu ; aucune valeur copiée.
+- Sondes négatives (mutations temporaires, `git checkout` après) : continuité du solde, signe d'un crédit, tri, une seule
+  devise, identifiant unique : chacune rougit un test (journal `kesh-gate-logs/s39-11a/gate-1.console`/`gate.console`).
+  La sonde du débordement n'a pas été rejouée.
+- `cargo publish --dry-run -p kesh-import` vert (avant le correctif `checked_*`, non rejoué).
+- **Gate backend complet : NON obtenu au dernier commit de code.** Essai sur la cible partagée (avant `checked_*`) :
+  6247/6248, l'échec étant un test mal écrit de la story (corrigé) et une instabilité d'environnement
+  (`admin_auto_backup_e2e::disque_sature_pendant_l_ecriture`, passée au second essai). Essai sur la cible propre au dernier
+  commit : disque du MariaDB plein, 163 échecs de création de base, aucun autre. À rejouer après nettoyage des bases
+  `_sqlx_test_*` de `kesh-mariadb-dev2` (journaux `gate-backend*.log`).
+- Non exécutés : frontend, E2E complet, `scripts/gate-ci.sh` (la story ne touche que `kesh-import`).
+- Point ouvert : `detect_encoding` n'examine que 1024 octets (cf. 38-11a) ; la limite des lignes vides ci-dessus.
+- Prompt de la revue P1 : `kesh-gate-logs/s39-11a/revue-p1-prompt.md`.
+
+### File List
+
+- `crates/kesh-import/src/wise.rs` (neuf), `src/csv/by_name.rs`, `src/csv/mod.rs`, `src/error.rs`, `src/paypal.rs`, `src/lib.rs`
+- `crates/kesh-import/tests/wise_csv.rs` (neuf), `tests/fixtures/wise-releve-{chf,eur,usd}-fictif.csv` (neufs), `tests/fixtures/README.md`
+- `_bmad-output/implementation-artifacts/39-11a-lecteur-csv-wise.md`, `sprint-status.yaml`
+
+## Change Log (développement)
+
+- 2026-11-20 — développement : lecteur Wise, extraction de `read_records` et de la troncature, fixtures fictives, 28 tests.
