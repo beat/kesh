@@ -574,7 +574,7 @@ async fn devis_option_balance_juste_et_virement_sans_frais() {
             ])))
         } else {
             Rep::Json(devis(json!([
-                {"payIn": "BALANCE", "payOut": "BANK_TRANSFER", "sourceCurrency": "EUR", "fee": {"total": 0.0}},
+                {"payIn": "BALANCE", "payOut": "BANK_TRANSFER", "sourceCurrency": "CHF", "fee": {"total": 0.0}},
             ])))
         }
     });
@@ -590,7 +590,7 @@ async fn devis_option_balance_juste_et_virement_sans_frais() {
         .quote_fee(&profil(), "00000000-0000-4000-8000-000000000002")
         .await
         .unwrap();
-    // La devise des frais est celle du devis (CHF), non celle de l'option (EUR).
+    // Devis et option portent la même devise source (CHF).
     assert_eq!(f0.currency, "CHF");
     assert!(f0.total.is_zero());
     // Cas inverse : le devis sans devise source, l'option fait foi.
@@ -936,6 +936,55 @@ async fn montants_ou_frais_null_refuses() {
     b.sim.repondre(|_| {
         Rep::Json(devis(json!([
             {"payIn": "BALANCE", "payOut": "BANK_TRANSFER", "sourceCurrency": "CHF", "fee": {"total": null}}
+        ])))
+    });
+    match b.client.quote_fee(&profil(), "q").await {
+        Err(AppError::ProviderResponseInvalid { details, .. }) => {
+            assert_eq!(details["reason"], "quote_fee");
+        }
+        autre => panic!("{autre:?}"),
+    }
+}
+
+/// Un montant à exposant, écrit en texte brut dans le corps (jamais par
+/// `json!`), est refusé, solde comme frais (revue P3, M1).
+#[tokio::test]
+async fn montants_a_exposant_refuses_en_texte_brut() {
+    let b = banc().await;
+    for montant in ["1.5e-28", "1e-29", "1e-7", "1E3", "1.0E+2"] {
+        let corps = format!(
+            r#"[{{"id":11,"currency":"CHF","amount":{{"value":{montant},"currency":"CHF"}}}}]"#
+        );
+        b.sim
+            .repondre(move |_| Rep::Statut(200, None, false, corps.clone()));
+        match b.client.balances(&profil()).await {
+            Err(AppError::ProviderResponseInvalid { details, .. }) => {
+                assert_eq!(details["step"], "balances", "{montant}");
+            }
+            autre => panic!("{montant} : {autre:?}"),
+        }
+        let corps = format!(
+            r#"{{"id":"q","sourceCurrency":"CHF","payOut":"BANK_TRANSFER","paymentOptions":[{{"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"CHF","fee":{{"total":{montant}}}}}]}}"#
+        );
+        b.sim
+            .repondre(move |_| Rep::Statut(200, None, false, corps.clone()));
+        match b.client.quote_fee(&profil(), "q").await {
+            Err(AppError::ProviderResponseInvalid { details, .. }) => {
+                assert_eq!(details["reason"], "quote_fee", "{montant}");
+            }
+            autre => panic!("{montant} : {autre:?}"),
+        }
+    }
+}
+
+/// Devise source du devis et de l'option `BALANCE` présentes et différentes :
+/// refus, pas de choix silencieux (revue P3, L2).
+#[tokio::test]
+async fn devises_du_devis_et_de_l_option_qui_different_refusees() {
+    let b = banc().await;
+    b.sim.repondre(|_| {
+        Rep::Json(devis(json!([
+            {"payIn": "BALANCE", "payOut": "BANK_TRANSFER", "sourceCurrency": "EUR", "fee": {"total": 1.5}}
         ])))
     });
     match b.client.quote_fee(&profil(), "q").await {

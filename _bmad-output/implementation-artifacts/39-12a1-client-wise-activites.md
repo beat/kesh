@@ -245,7 +245,7 @@ par Wise en deçà l'arrêterait silencieusement à la première page). (d) Aucu
   passage rouge, `cible-2.log`, corrigé).
 - **Après les remédiations P1 et P2** (copie hors dépôt `lows-3912a1`, socle de `story/38-12a` fusionné, `ALL_PROVIDERS = &[PAYPAL,
   crate::wise::WISE]`, journaux `lows-*.log`) : `cargo test -p kesh-api --lib -- wise::` **19** tests ; `--test wise_client_e2e`
-  **36** tests ; `--test configuration_transmise` **32** tests ; `cargo fmt --all -- --check` et `cargo clippy --workspace
+  **36** tests (**38** après la remédiation P3) ; `--test configuration_transmise` **32** tests (comptés à l'exécution : un `grep -c '#[test]'` en rend 33, dont une ligne de doc-comment et une chaîne de code qui ne sont pas des attributs) ; `cargo fmt --all -- --check` et `cargo clippy --workspace
   --all-targets -- -D warnings` verts. Premier passage rouge corrigé : un montant à 30 décimales, arrondi en silence par `Decimal`
   (désormais refusé), et le test de devise du devis.
 - Mutations (`mutation-1.log`) : curseur non encodé, 403 repris comme passager, en-tête `X-Signature` ajouté → **10 tests
@@ -313,6 +313,19 @@ laissées telles quelles :*
 - 2026-11-20 — validation P2, complément (Claude Opus 5.5) : corrections du socle relevées par la P2 de la 38-12 appliquées —
   valeur vide = absente, séries 1 à 3 transmises par les deux compose et `.env.example`, fichier de clé monté à la main.
 
+- 2026-11-20 — remédiation de la passe ciblée P3 (rapport `kesh-gate-logs/s39-12a1/revue-p3-rapport.md`, Haiku ; 0 C, 0 H, 1 M, 2 L) :
+  **M1 vérifiée avant d'être remédiée** — la prémisse était vraie : sur le code de `b7dd76fd`, le nombre JSON brut `1.5e-28`
+  rendait `Some(0.0000000000000000000000000002)` (arrondi en silence par `from_scientific_lossy`) ; `1e-29` rendait `None`.
+  Décision de l'orchestrateur : un montant Wise est toujours un décimal simple, **toute forme à exposant est refusée**, nombre
+  JSON comme chaîne, par la même forme stricte `-?chiffres(.chiffres)?` (au plus 28 décimales) appliquée à la littérale brute
+  (M1, L1, L3 ; `1e-7`, qui était accepté, est désormais refusé). **L2** : devise source du devis et de l'option `BALANCE`
+  présentes et différentes → `PROVIDER_RESPONSE_INVALID` (`reason = "quote_fee"`), plus de choix silencieux. Tests :
+  `nombres_lus_par_le_texte_recu` (exposants refusés, `-0`), `montants_a_exposant_refuses_en_texte_brut`,
+  `devises_du_devis_et_de_l_option_qui_different_refusees` ; deux tests existants, dont la devise d'option différait du devis,
+  alignés sur CHF. Gates (copie `lows-3912a1`) : fmt, clippy workspace `-D warnings` verts ; `wise::` **19**, `wise_client_e2e`
+  **38**, `configuration_transmise` **32** (le Dev Agent Record disait 32 : juste, le grep en rend 33 par deux lignes qui ne sont
+  pas des attributs). Mutation (refus de l'exposant retiré) : `nombres_lus_par_le_texte_recu` et
+  `montants_a_exposant_refuses_en_texte_brut` rougissent. Passe ciblée P4 à lancer (`kesh-gate-logs/s39-12a1/revue-p4-prompt.md`).
 - 2026-11-20 — **reportée** : recettes réelles 1 et 2 (11 appels) : le relevé de solde par jeton personnel est refusé
   pour le compte suisse (403 `x-2fa-approval` à chaque requête ; rejeu signé par clé publique, signature vérifiée en
   local, toujours `REJECTED` ; endpoint de statut du jeton à usage unique 404). La doc publique des jetons personnels le

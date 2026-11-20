@@ -266,36 +266,26 @@ fn text_of(v: &Value) -> Option<String> {
 /// Un montant lu en [`Decimal`] par le **texte exact reçu** (`RawValue`) :
 /// aucun passage par `f64`, qui altère dès seize chiffres significatifs.
 ///
-/// Deux formes seulement : un nombre JSON (`1234.50`, exposant admis), ou une
-/// chaîne de forme stricte `-?chiffres(.chiffres)?` (ni `_`, ni `+`, ni espace,
-/// ni exposant). Le résultat tient jusqu'à 28 décimales (limite de
-/// [`Decimal`]) ; au-delà, ou hors de ces formes, `None`.
+/// Un montant Wise est toujours un décimal simple : nombre JSON ou chaîne,
+/// la **littérale** doit être de forme stricte `-?chiffres(.chiffres)?` (ni
+/// `_`, ni `+`, ni espace, **ni exposant**, `e` ou `E`, positif ou négatif),
+/// avec au plus 28 décimales (limite de [`Decimal`]). Toute autre forme,
+/// `null` compris, donne `None` : rien n'est arrondi ni réinterprété.
 fn decimal_of_raw(raw: &RawValue) -> Option<Decimal> {
     let text = raw.get().trim();
-    match text.strip_prefix('"').and_then(|t| t.strip_suffix('"')) {
-        Some(chaine) => {
-            let digits = chaine.strip_prefix('-').unwrap_or(chaine);
-            let (entier, frac) = digits
-                .split_once('.')
-                .map_or((digits, None), |(e, f)| (e, Some(f)));
-            let chiffres = |t: &str| !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit());
-            if !chiffres(entier) || frac.is_some_and(|f| !chiffres(f) || f.len() > 28) {
-                return None;
-            }
-            chaine.parse::<Decimal>().ok()
-        }
-        // Nombre JSON : au-delà de 28 décimales `Decimal` arrondirait en silence.
-        None if text
-            .split_once('.')
-            .is_some_and(|(_, f)| f.bytes().take_while(u8::is_ascii_digit).count() > 28) =>
-        {
-            None
-        }
-        None => text
-            .parse::<Decimal>()
-            .ok()
-            .or_else(|| Decimal::from_scientific(text).ok()),
+    let litterale = text
+        .strip_prefix('"')
+        .and_then(|t| t.strip_suffix('"'))
+        .unwrap_or(text);
+    let digits = litterale.strip_prefix('-').unwrap_or(litterale);
+    let (entier, frac) = digits
+        .split_once('.')
+        .map_or((digits, None), |(e, f)| (e, Some(f)));
+    let chiffres = |t: &str| !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit());
+    if !chiffres(entier) || frac.is_some_and(|f| !chiffres(f) || f.len() > 28) {
+        return None;
     }
+    litterale.parse::<Decimal>().ok()
 }
 
 /// Encode un composant de requête : tout octet hors `A-Za-z0-9-._~` en `%XX`.
@@ -780,6 +770,12 @@ fn pick_quote_fee(body: &[u8]) -> Option<WiseQuoteFee> {
     }
     // La devise des frais est celle du devis (devise source) ; l'option ne
     // sert qu'en repli.
+    // Si les deux sont présentes et diffèrent, on ne choisit pas en silence.
+    if let (Some(q), Some(o)) = (&quote.source_currency, &option.source_currency)
+        && q != o
+    {
+        return None;
+    }
     let currency = quote.source_currency.or(option.source_currency)?;
     Some(WiseQuoteFee {
         currency,
@@ -961,7 +957,21 @@ mod tests {
         assert_eq!(lire("0").as_deref(), Some("0"));
         assert_eq!(lire("0.0").as_deref(), Some("0.0"));
         assert_eq!(lire("\"12.30\"").as_deref(), Some("12.30"));
-        assert_eq!(lire("1e-7").as_deref(), Some("0.0000001"));
+        // Aucune forme à exposant, nombre JSON ou chaîne (revue P3, M1, L1, L3).
+        for refus in [
+            "1e-7",
+            "1.5e-28",
+            "1e-29",
+            "1.5e-3",
+            "1E3",
+            "1.0E+2",
+            "1e3",
+            "\"1e-7\"",
+            "\"1.5E+2\"",
+        ] {
+            assert_eq!(lire(refus), None, "{refus}");
+        }
+        assert_eq!(lire("-0").as_deref(), Some("0"));
         // Les cas que `f64` altère (revue P1, M1).
         assert_eq!(
             lire("99999999999999.99").as_deref(),
@@ -1114,13 +1124,17 @@ mod tests {
     #[test]
     fn devis_une_option_balance() {
         let q = json!({"payOut":"BANK_TRANSFER","sourceCurrency":"CHF","paymentOptions":[
-            {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"EUR","fee":{"total":1.25}},
+            {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"CHF","fee":{"total":1.25}},
             {"payIn":"BANK_TRANSFER","payOut":"BANK_TRANSFER","sourceCurrency":"EUR","fee":{"total":9.0}},
             {"payIn":"BALANCE","payOut":"SWIFT","sourceCurrency":"EUR","fee":{"total":7.0}}]});
         let f = pick_quote_fee(&octets(&q)).unwrap();
-        // Devise source du devis d'abord, même si l'option en porte une autre.
         assert_eq!(f.currency, "CHF");
         assert_eq!(f.total, "1.25".parse::<Decimal>().unwrap());
+        // Devises du devis et de l'option présentes et différentes : refus,
+        // aucun choix silencieux (revue P3, L2).
+        let diff = json!({"payOut":"BANK_TRANSFER","sourceCurrency":"CHF","paymentOptions":[
+            {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"EUR","fee":{"total":1.25}}]});
+        assert!(pick_quote_fee(&octets(&diff)).is_none());
         // Repli : le devis sans devise source, l'option fait foi.
         let repli = json!({"payOut":"BANK_TRANSFER","paymentOptions":[
             {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"EUR","fee":{"total":1.25}}]});
