@@ -132,6 +132,20 @@ services:
       KESH_ADMIN_IMPORT_MAX_MB: ${KESH_ADMIN_IMPORT_MAX_MB:-}
       # Sauvegarde avant mise à jour (0.17.4) : échappatoire, version exacte
       KESH_SKIP_PRE_UPGRADE_BACKUP: ${KESH_SKIP_PRE_UPGRADE_BACKUP:-}
+      # Téléchargement Wise par l'API (Story 39-12a1) : une série par compte Wise,
+      # jeton personnel en lecture seule ; au-delà de trois comptes, ajouter les
+      # lignes KESH_WISE_4_…
+      KESH_WISE_1_ACCOUNT: ${KESH_WISE_1_ACCOUNT:-}
+      KESH_WISE_1_TOKEN: ${KESH_WISE_1_TOKEN:-}
+      KESH_WISE_1_PROFILE_ID: ${KESH_WISE_1_PROFILE_ID:-}
+      KESH_WISE_2_ACCOUNT: ${KESH_WISE_2_ACCOUNT:-}
+      KESH_WISE_2_TOKEN: ${KESH_WISE_2_TOKEN:-}
+      KESH_WISE_2_PROFILE_ID: ${KESH_WISE_2_PROFILE_ID:-}
+      KESH_WISE_3_ACCOUNT: ${KESH_WISE_3_ACCOUNT:-}
+      KESH_WISE_3_TOKEN: ${KESH_WISE_3_TOKEN:-}
+      KESH_WISE_3_PROFILE_ID: ${KESH_WISE_3_PROFILE_ID:-}
+      KESH_WISE_BASE_URL: ${KESH_WISE_BASE_URL:-}
+      KESH_WISE_PARALLEL: ${KESH_WISE_PARALLEL:-}
     ports:
       - "80:80"
     volumes:
