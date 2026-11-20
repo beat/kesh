@@ -164,8 +164,8 @@ métadonnées seulement) : la voie « relevé de solde + signature SCA » des re
   sortants** (ligne séparée `FEE-TRANSFER-<id>`, comme le CSV) ; `GET /v4/profiles/{p}/balances?types=STANDARD` pour le
   **solde actuel**. Identifiant stable = `<TYPE>-<resource.id>`, la partie numérique étant celle du « TransferWise ID » du
   CSV (`TRANSFER-`, `CARD-`, `BALANCE-` ; 176 des 177 identifiants 2024 retrouvés ; le `CONVERSION_ORDER-…` manquant
-  vient d'une activité `AUTO_CONVERSION`, identifiant provisoire `AUTO_CONVERSION-<id>` tant que la recette n'a pas trouvé
-  le numéro). Montants **en texte balisé** (`<positive>`, `<negative>`, `<strong>`, `+`, « 1,234.56 USD ») lus par une
+  vient d'une activité `AUTO_CONVERSION`, identifiant `AUTO_CONVERSION-<id>` définitif : la recette du 2026-11-20 n'a trouvé
+  le numéro nulle part dans l'API). Montants **en texte balisé** (`<positive>`, `<negative>`, `<strong>`, `+`, « 1,234.56 USD ») lus par une
   **forme fermée** ; frais de **conversion inclus** dans le montant débité (pas de ligne séparée, l'API ne les ventile
   pas) ; solde courant de chaque ligne **reconstruit** depuis le solde actuel, puis **contrôlé** contre la clôture des
   relevés déjà dans Kesh (un écart refuse tout). Les lignes produites sont des `WiseRow` dans des `WiseCsv` de 39-11a,
@@ -191,16 +191,18 @@ métadonnées seulement) : la voie « relevé de solde + signature SCA » des re
   avec les frais de conversion en lignes séparées. **Option future**, aucune fiche ; à reconsidérer seulement si Beat veut
   cette ventilation ou si l'API des activités se ferme.
 
-### Ce qui reste à confirmer (recette 39-12a1 AC-0)
+### Décisions de la recette réelle AC-0 (a) sur 2024 (2026-11-20)
 
-Confirmé par la recherche du 2026-11-20 : chemins et paramètres des activités, transferts, devis et soldes au jeton
-personnel, sans défi ; pagination ; identifiants ; frais des virements (22 sur 22) ; soldes 2024 au centime hors frais de
-conversion. **À confirmer sur 2024, dont le CSV du site est en local et a déjà été comparé par la recherche** (décision de l'orchestrateur, Q-39-17 ; un mois 2025 se compare plus tard, sans bloquer) : l'horodatage
-qui redonne la colonne `Date` du CSV (`createdOn` ou `updatedOn`, UTC ou Zurich) ; l'identifiant d'une conversion
-automatique ; le champ de solde (`amount` ou `cashAmount`) et l'effet des mouvements en cours ; la règle du sens des
-montants (cartes en devise étrangère, entrants) ; le type de détail du CSV par type d'activité ; la `reference` des
-transferts. Non confirmé et sans recette prévue : la forme d'un `429` (aucune limite vue) ; les types d'activité non
-rencontrés en 2024-2025 (intérêts, cashback, remboursements de frais : refus du téléchargement, H2).
+Recette réelle (34 appels, jeton personnel lecture seule, profil business) comparée au CSV 2024 du site (CHF, EUR, USD) :
+concordance exacte (176 identifiants sur 177, 22 frais de virement sur 22, soldes égaux en clôture, 12 fins de mois sur 12,
+163 fins de jour sur 163, 230 soldes courants sur 230). Décisions (détail : `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) :
+
+- **Date** d'une ligne = jour **de Zurich** de `createdOn` pour les débits et les conversions, de `updatedOn` pour les entrants ; jamais de comparaison ni de dédoublonnage sur l'heure (le CSV est en UTC+1 constant, même en été) ; ligne de frais à la date de son origine. Un débit terminé après un relevé arrive avec une date antérieure : le contrôle de 39-12a2 AC-5 le refuse, voulu (manuel 39-12b). Le filtre `since` de `/activities` porte sur `updatedOn` : la reprise à `readFrom` ne perd rien.
+- **Conversion automatique** : `AUTO_CONVERSION-<resource_id>` définitif (le numéro `CONVERSION_ORDER-…` n'est nulle part dans l'API) ; le doublon avec un CSV déjà importé se traite par la règle R3 de 39-12a3.
+- **Solde** : `amount.value` (égal à `cashAmount.value`). **Sens** : `+` sur `primary` pour les entrants ; devise débitée d'un virement = `sourceCurrency` du devis (22 sur 22). **Type de détail** et **`reference`** (= `Payment Reference`) : table de 39-12a2 AC-3. **Virement sans frais** : option `BALANCE` à `fee.total` 0, aucune ligne de frais.
+- **Virement remboursé** : non relevé (2024, 2025) ; suffixe provisoire de 39-12a2 maintenu. **Cartes en devise étrangère** : non relevées (règle inchangée).
+
+**Restes ouverts** : l'année **2025** (AC-0 (c), un mois comparé au CSV du site, non bloquant) ; l'effet des activités **non terminées** sur `amount` (couvert par le contrôle de 39-12a2 AC-5) ; le décalage **UTC+1** de l'heure du CSV, à revérifier avec un CSV 2025. Non confirmé et sans recette prévue : la forme d'un `429` ; les types d'activité non rencontrés (intérêts, cashback, remboursements de frais : refus du téléchargement, H2). Reste aussi la recette finale AC-0 (b), après 39-12a2.
 
 ## Socle commun de la phase 2 (Epics 38, 39, 40) — contrat S1 à S9
 
@@ -306,9 +308,11 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
   numéros de compte non IBAN) : faut-il un réglage « numéros de mes comptes » ou une règle suffit-elle ? **Tranchée
   par G7** : une règle d'affectation vers le compte du plan de la banque ; l'autre côté s'y rattache à son import.
 - **Q-39-16 — Délai du rejeu SCA** : **close** (2026-11-20) — sans objet, plus aucun rejeu signé (H5). (Le délai de 120 s du rejeu dans `appel-reel.sh` reste sans emploi pour Wise.)
-- **Q-39-17 — Recette sur 2024 (orchestrateur, 2026-11-20 ; elle n'attend pas Beat)** : avant toute ligne de la phase 2, comparer 2024 de l'API (≈ 45 appels, réponses brutes sauvées hors du dépôt) au CSV 2024 du site, en local, et trancher l'horodatage de la date, l'identifiant d'une conversion automatique, le champ de solde (`amount` ou `cashAmount`), la règle du sens, le type de détail par type d'activité, la `reference` des transferts et le devis d'un virement sans frais (39-12a1 AC-0 a) ; puis, après 39-12a2, rejouer la conversion de Kesh sur 2024 comme au 2024-12-31, ligne à ligne, solde courant compris (AC-0 b). **Un mois 2025** se compare plus tard, quand Beat aura son CSV 2025, avec les soldes réels (AC-0 c) : non bloquant. Constats (métadonnées) à écrire ici.
+- **Q-39-17 — Recette sur 2024 (orchestrateur, 2026-11-20 ; elle n'attend pas Beat)** : avant toute ligne de la phase 2, comparer 2024 de l'API (≈ 45 appels, réponses brutes sauvées hors du dépôt) au CSV 2024 du site, en local, et trancher l'horodatage de la date, l'identifiant d'une conversion automatique, le champ de solde (`amount` ou `cashAmount`), la règle du sens, le type de détail par type d'activité, la `reference` des transferts et le devis d'un virement sans frais (39-12a1 AC-0 a) ; puis, après 39-12a2, rejouer la conversion de Kesh sur 2024 comme au 2024-12-31, ligne à ligne, solde courant compris (AC-0 b). **Un mois 2025** se compare plus tard, quand Beat aura son CSV 2025, avec les soldes réels (AC-0 c) : non bloquant. Constats (métadonnées) à écrire ici. **Close (2026-11-20)** : AC-0 (a) faite, décisions au paragraphe « Décisions de la recette réelle AC-0 (a) » ; restent AC-0 (b), AC-0 (c) (2025), les activités non terminées sur `amount` et le décalage UTC+1 à revérifier avec un CSV 2025.
 
 ## Change Log (refonte)
+
+- 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : Q-39-17 close pour 2024 ; le paragraphe « Ce qui reste à confirmer » devient « Décisions de la recette réelle AC-0 (a) » avec les restes ouverts (2025, activités non terminées sur `amount`, décalage UTC+1) ; l'identifiant `AUTO_CONVERSION-<id>` passe de provisoire à définitif ; fiches 39-12a1, 39-12a2, 39-12a3 et 39-12b alignées.
 
 - 2026-11-20 — Validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié dans 39-12a1, 39-12a2 et 39-12b (virement remboursé : recette et suffixe d'identifiant). Socle S1 à S9 inchangé.
 - 2026-11-20 — Validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés dans 39-12a1, 39-12a2 et 39-12b. Socle S1 à S9 inchangé.

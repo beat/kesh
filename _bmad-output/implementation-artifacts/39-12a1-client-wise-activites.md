@@ -26,7 +26,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
 | `GET /v3/profiles/{p}/quotes/{quoteUuid}` | **constaté** (200), devis de 2024 lisibles en 2026 ; `paymentOptions[payIn=BALANCE].fee.total` = frais du CSV, 22 sur 22 |
 | borne de période de `activities` | **aucune** dans la doc (`docs.wise.com/api-reference/activity/activitylist`, relue le 2026-11-20 : « no maximum period », `size` 1 à 100, défaut 10) |
 | limite de débit, forme d'un 429 | **aucune vue** (ni `x-ratelimit-*` ni `Retry-After`) ; forme d'un 429 **non confirmée** |
-| comparaison à un CSV | **faite pour 2024** (176 identifiants sur 177, soldes au centime hors frais) ; les six points ouverts se tranchent sur **2024**, dont le CSV du site est en local : AC-0 ; **2025 non comparée** (pas de CSV 2025 local), comparaison plus tard, non bloquante (AC-0 c) |
+| comparaison à un CSV | **faite pour 2024** (176 identifiants sur 177, soldes au centime hors frais) ; les points ouverts ont été tranchés sur **2024**, dont le CSV du site est en local : AC-0 (a), faite le 2026-11-20 ; **2025 non comparée** (pas de CSV 2025 local), comparaison plus tard, non bloquante (AC-0 c) |
 
 ## Exigences
 
@@ -77,7 +77,8 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      ce que rend le devis (`fee.total` = 0, option absente) : les cinq virements sans frais le disent ; (8) un **virement remboursé** (s'il s'en trouve en 2024, sinon noté « non relevé », la règle de suffixe de 39-12a2 AC-3 valant alors) : comment l'API le rend — seconde activité de même `resource_id`, autre `activity_type`, ou statut du virement d'origine —, sous quel identifiant et quel `Payment Reference` le CSV porte la ligne de remboursement, et que le solde reconstruit reste juste ; **sans cette ligne relevée, un téléchargement qui couvre un remboursement reste possible** (suffixe provisoire), mais le manuel avertit de ne pas mélanger CSV et téléchargement sur ce virement. Une règle
      **contredite** par 2024 se corrige dans la fiche concernée avant le développement ; un écart qui ne se règle pas va
      à Beat, et la phase 2 attend.
-   - **(b) Recette finale, après 39-12a2, avant que Beat s'y fie** : les réponses brutes sauvées en (a) passent par
+   - **Statut de (a) : faite le 2026-11-20** (profil business, jeton personnel lecture seule, 34 appels sur 80 permis, activités 2024 rejouées sans appel ; décisions : `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`, détail hors dépôt dans `data-not-committed/wise-recette-ac0-activites.md`). Concordance exacte sur 2024 : 176 identifiants sur 177 (le 177e est la conversion automatique, absente sous son numéro), 22 frais de virement sur 22 par le devis, soldes reconstruits égaux à ceux du CSV en clôture dans les trois devises, 12 fins de mois sur 12, 163 fins de jour sur 163, 230 soldes courants sur 230. Les huit points sont tranchés et reportés dans 39-12a2 (règles définitives), 39-12a3 et l'epic (Q-39-17). **Restent AC-0 (b) (après 39-12a2) et AC-0 (c) (un mois 2025, non bloquant).**
+- **(b) Recette finale, après 39-12a2, avant que Beat s'y fie** : les réponses brutes sauvées en (a) passent par
      `rows_from_activities` (39-12a2), **dans un test local non versionné**, **comme si l'on était le 2024-12-31** :
      `period` = 2024, soldes actuels = clôtures 2024-12-31 du CSV de chaque devise, activités de 2024
      seules, `transfer_fees` = les devis sauvés en (a) pour les 27 virements qu'ils couvrent et, **pour les autres
@@ -123,7 +124,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      ignorée) ; zéro ou plusieurs → `WISE_PROFILE_AMBIGUOUS` (`details: { count }`) ; avec l'identifiant, il doit figurer
      dans la liste.
    - **Soldes** : `GET /v4/profiles/{p}/balances?types=STANDARD` ; un solde = `id`, `currency` et le **champ de solde**
-     tranché par AC-0 (a)(3) (`amount.value` ou `cashAmount.value`), lu comme nombre décimal JSON (jamais `f64` : texte du
+     `amount.value` (AC-0 (a)(3), égal à `cashAmount.value`), lu comme nombre décimal JSON (jamais `f64` : texte du
      nombre lu en `Decimal`).
 3. **AC-3 — Activités, transferts, devis.**
    - **Activités** : `GET /v1/profiles/{p}/activities?since=…&until=…&size=100`, puis `&nextCursor=<cursor>` tant que
@@ -170,7 +171,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
 
 ## Tâches
 
-- [ ] T0 — Recette préalable constatée sur 2024 (AC-0 a), réponses brutes sauvées, avant tout le reste ; règles corrigées s'il le faut.
+- [x] T0 — Recette préalable constatée sur 2024 (AC-0 a), faite le 2026-11-20 (34 appels), réponses brutes sauvées ; décisions reportées dans 39-12a2, 39-12a3 et l'epic.
 - [ ] T1 — Configuration par le lecteur du socle, transmission, garde (AC-1).
 - [ ] T2 — Client : profil, soldes, activités paginées, transferts, devis, erreurs (AC-2 à AC-4).
 - [ ] T3 — Serveur simulé et tests (AC-5).
@@ -209,6 +210,7 @@ l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la sauv
 
 ## Change Log
 
+- 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (recette réelle sur 2024, 34 appels ; source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : AC-0 (a) marquée faite et T0 cochée ; concordance exacte (176/177 identifiants, 22/22 frais, soldes égaux en clôture, 12/12 fins de mois, 163/163 fins de jour, 230/230 soldes courants). Règles tranchées, reportées dans 39-12a2 : date = jour de Zurich de `createdOn` (débits, conversions) ou de `updatedOn` (entrants), jamais d'heure comme clé ; heure du CSV en UTC+1 constant ; `AUTO_CONVERSION-<resource_id>` définitif ; solde `amount.value` ; sens et devise débitée confirmés ; table des types de détail ; `reference` = `Payment Reference` ; virement sans frais = option `BALANCE` à 0 ; virement remboursé non relevé (suffixe provisoire maintenu) ; cartes en devise étrangère non relevées. Restent AC-0 (b) et (c). Les mentions « à trancher à la recette » de la fiche sont devenues caduques ; aucun code touché.
 - 2026-11-20 — validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié. Ici : le virement remboursé entre dans la recette AC-0 (a), point (8) ; le message et le manuel du refus de solde, `MissingTransferFee` et `fee_currency` relus, cohérents.
 - 2026-11-20 — validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3, 39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici (AC-0 b, L) : la devise `fee_currency` des frais pris au CSV est celle du fichier qui porte le débit, puisqu'elle départage désormais le montant.
 - 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a2, 39-12a3, 39-12b ;

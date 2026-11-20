@@ -5,7 +5,7 @@ Status: ready-for-dev
 *Fiche rédigée le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement). Le numéro 39-12a2 désignait jusqu'à ce jour la route et l'import, renumérotés **39-12a3**
 (même contenu, adapté). Branche `epic/39-wise`. Epic 39, **phase 2** (H2 du fichier d'epic). **Dépend de** : 39-11a
-(`WiseRow`, `WiseCsv`, contrôle des identifiants), la **recette préalable 39-12a1 AC-0 (a)** (règles qu'elle tranche).
+(`WiseRow`, `WiseCsv`, contrôle des identifiants), la **recette préalable 39-12a1 AC-0 (a)** (faite le 2026-11-20 : règles de l'AC-3 devenues définitives).
 **Suivie par** : 39-12a3 (qui l'appelle), la recette finale 39-12a1 AC-0 (b). Indépendante du client HTTP de 39-12a1 :
 elle ne lit que des structures neutres.*
 
@@ -35,7 +35,7 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    appelée des deux côtés — sans changement de comportement ni d'assertion. Fonction `rows_from_activities(input: &WiseApiInput) ->
    Result<WiseApiOutput, WiseApiError>`. **Entrée neutre** (types propres au module, aucun type de `kesh-api`) :
    `activities: Vec<WiseApiActivity { id, activity_type, resource_type, resource_id, title, description, primary_amount,
-   secondary_amount, status, created_on: NaiveDateTime, updated_on: NaiveDateTime }>` (**instants déjà ramenés au fuseau que la recette 39-12a1 AC-0 (a)(1) a retenu — UTC ou Zurich — par 39-12a3, qui a `kesh_core::horloge::heure_suisse` : `kesh-import` n'a aucune dépendance interne et ne connaît aucun fuseau**) ; `transfer_fees:
+   secondary_amount, status, created_on: NaiveDateTime, updated_on: NaiveDateTime }>` (**instants déjà ramenés à l'heure de Zurich — choix de la recette 39-12a1 AC-0 (a)(1) — par 39-12a3, qui a `kesh_core::horloge::heure_suisse` : `kesh-import` n'a aucune dépendance interne et ne connaît aucun fuseau**) ; `transfer_fees:
    Vec<WiseApiTransferFee { transfer_id, fee_currency, fee_total: Decimal, reference: Option<String> }>` (un par virement
    sortant de la période lue, rempli par 39-12a3 depuis les transferts et devis de 39-12a1) ; `balances: Vec<(currency,
    Decimal)>` (soldes actuels, lus **avant** les activités, 39-12a3) ; `period: (from: NaiveDate,
@@ -56,8 +56,7 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    Montant rendu en `Decimal`, positif au crédit, négatif au débit. `secondary_amount` vide (après `trim`) → absent. Toute
    forme autre → `AmountFormat { activity_id, field }` (**jamais** la valeur dans l'erreur : donnée réelle) ; une seule
    erreur refuse l'ensemble (rien n'est importé, 39-12a3).
-3. **AC-3 — Types, sens, identifiants** (règles validées sur 2024 par la recherche, **à reconfirmer** par 39-12a1 AC-0 (a),
-   points (2), (4), (5)). Seules les activités `status = COMPLETED` deviennent des lignes ; `CANCELLED`, `IN_PROGRESS`,
+3. **AC-3 — Types, sens, identifiants** (règles **confirmées** sur 2024 par la recette 39-12a1 AC-0 (a) du 2026-11-20 : 176 mouvements sur 176 au montant, à la devise et au sens, soldes reconstruits égaux au CSV). Seules les activités `status = COMPLETED` deviennent des lignes ; `CANCELLED`, `IN_PROGRESS`,
    `UPCOMING`, `REQUIRES_ATTENTION` sont comptées dans `ignored.not_completed` (et reprises au prochain téléchargement).
    | `activity_type` | Lignes | Identifiant |
    |---|---|---|
@@ -65,22 +64,21 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    | `TRANSFER` sinon | un débit (montant hors frais) ; plus la ligne de frais de l'AC-4 | `TRANSFER-<resource_id>` |
    | `CARD_PAYMENT` | un débit (un crédit si `+` : remboursement) | `CARD-<resource_id>` |
    | `INTERBALANCE` | crédit `primary` dans sa devise, débit `secondary` dans la sienne (**frais de conversion inclus**) | `BALANCE-<resource_id>` sur les **deux** lignes |
-   | `AUTO_CONVERSION` | comme `INTERBALANCE` | **provisoire** `AUTO_CONVERSION-<resource_id>` ; `CONVERSION_ORDER-<n>` si AC-0 (a)(2) trouve le numéro du CSV dans l'API |
+   | `AUTO_CONVERSION` | comme `INTERBALANCE` | `AUTO_CONVERSION-<resource_id>`, **définitif** : le numéro `CONVERSION_ORDER-<n>` du CSV n'est nulle part dans l'API (AC-0 (a)(2)) ; le doublon avec un CSV déjà importé ne se détecte pas par identifiant (39-12a3 R3) |
    | `CARD_CHECK` | aucune (vérification de carte, sans mouvement) ; comptée dans `ignored.card_checks` | — |
    | tout autre type `COMPLETED` (`BALANCE_INTEREST`, `BALANCE_CASHBACK`, `FEE_REFUND`, `DIRECT_DEBIT_TRANSACTION`, `CASH_WITHDRAWAL`, …) | **refus de l'ensemble** : `UnsupportedActivity { activity_type, date }` (`activity_type` rendu tel quel s'il a la forme `^[A-Z_]{1,40}$`,
    sinon `UNKNOWN` : c'est un texte de Wise, borné avant d'entrer dans une erreur), **même si son `date` est hors de `period`** (postérieure à `to` ou antérieure à `from`) : le solde se reconstruit depuis aujourd'hui, un mouvement inconnu n'importe où entre `readFrom` et maintenant fausse tous les soldes ; le refus dit donc la date du mouvement et que **tout** téléchargement qui remonte avant cette date est refusé tant que le type n'est pas pris en charge (le manuel, 39-12b : importer le CSV) | — |
    **Montant d'un débit simple** : `primary` si `secondary` est absent ; sinon celui des deux dont la devise est un solde du
    profil (`balances`) ; si les deux le sont et que l'activité est un **débit `TRANSFER`**, celui qui est dans la devise `fee_currency` de son entrée `transfer_fees` (la devise source du devis, donc la devise débitée : un virement du solde CHF vers un bénéficiaire en EUR, alors que le profil porte aussi un solde EUR, est le cas courant ; cette entrée est exigée, AC-4 : absente, c'est `MissingTransferFee`, jamais `AmbiguousAmount`) ; sinon, les deux ou aucun → `AmbiguousAmount { activity_id }`. Une ligne dans une devise sans solde au
    profil → `UnknownCurrency { currency }` (limite assumée : un solde **fermé** chez Wise, absent de `balances`, fait
-   refuser tout téléchargement qui remonte à ses mouvements ; importer alors le CSV). Un même identifiant deux fois dans une devise → `DuplicateId { id, currency }`, **sauf** deux activités **distinctes** (`id` d'activité différent) qui partagent un `resource_id` — un **virement remboursé** peut revenir en seconde activité `TRANSFER` de même `resource_id` : elles donnent **une ligne chacune**, la première (tri par `created_on`, puis `id` d'activité) gardant l'identifiant `<PREFIX>-<resource_id>`, les suivantes `<PREFIX>-<resource_id>-<n>` (n = 2, 3, … dans cet ordre, stable d'un téléchargement à l'autre) ; la forme exacte, et l'identifiant que le CSV donne au remboursement, sont relevés par l'AC-0 (a)(8) de 39-12a1 et **remplacent** ce suffixe provisoire s'ils diffèrent (comme `AUTO_CONVERSION`) ; un même `id` d'activité deux fois dans la réponse reste `DuplicateId`. Aucune ligne de frais pour le crédit de remboursement (AC-4 ne vise que le débit).
+   refuser tout téléchargement qui remonte à ses mouvements ; importer alors le CSV). Un même identifiant deux fois dans une devise → `DuplicateId { id, currency }`, **sauf** deux activités **distinctes** (`id` d'activité différent) qui partagent un `resource_id` — un **virement remboursé** peut revenir en seconde activité `TRANSFER` de même `resource_id` : elles donnent **une ligne chacune**, la première (tri par `created_on`, puis `id` d'activité) gardant l'identifiant `<PREFIX>-<resource_id>`, les suivantes `<PREFIX>-<resource_id>-<n>` (n = 2, 3, … dans cet ordre, stable d'un téléchargement à l'autre) ; la forme exacte, et l'identifiant que le CSV donne au remboursement, sont ce que l'AC-0 (a)(8) de 39-12a1 devait relever : **non relevé** (aucun remboursement en 2024 ni en 2025), le suffixe **provisoire** est maintenu et le manuel avertit de ne pas mélanger CSV et téléchargement sur un virement remboursé ; un même `id` d'activité deux fois dans la réponse reste `DuplicateId`. Aucune ligne de frais pour le crédit de remboursement (AC-4 ne vise que le débit).
    Les identifiants passent le contrôle de 39-11a (ASCII `[A-Z0-9_-]`, ≤ 64) ; `id_prefix`, `is_fee`, `fee_of` sont calculés
-   par les mêmes aides (AC-1). **Autres champs** de `WiseRow` : `date` et `date_time` = l'horodatage tranché par AC-0 (a)(1)
-   (`created_on` ou `updated_on`, en UTC ou à Zurich), le même pour toutes les lignes ; `description` = `title` sans
+   par les mêmes aides (AC-1). **Autres champs** de `WiseRow` : `date` = le **jour de Zurich** de `created_on` pour les débits (`TRANSFER` sortant, `CARD_PAYMENT`) et les conversions (`INTERBALANCE`, `AUTO_CONVERSION`), de `updated_on` pour les entrants (`TRANSFER` avec `+`) : règle tranchée par AC-0 (a)(1), qui redonne la colonne `Date` du CSV pour 206 lignes sur 206 ; la ligne de frais prend la `date` de son origine. `date_time` = le même instant retenu (`created_on` ou `updated_on`), converti à l'heure de Zurich, choix de Kesh : le CSV est en **UTC+1 toute l'année**, même en été, et donne aux entrants l'instant d'achèvement, que l'API n'expose pas ; **jamais** de comparaison ni de dédoublonnage sur l'heure, le jour et l'ordre (débits par `created_on`, entrants par `updated_on`, frais une milliseconde avant leur origine) suffisent aux soldes ; `description` = `title` sans
    balises ; la contrepartie = le texte du premier `<strong>…</strong>` de `title`, en `payer_name` (crédit), `merchant`
-   (`CARD_PAYMENT`) ou `payee_name` (débit `TRANSFER`) ; `payment_reference` = `reference` du transfert (AC-0 (a)(6)) ;
+   (`CARD_PAYMENT`) ou `payee_name` (débit `TRANSFER`) ; `payment_reference` = `reference` du transfert, égale à la colonne `Payment Reference` du CSV (AC-0 (a)(6), 123 sur 123) ; aucune pour cartes et conversions ;
    conversions : `exchange_from` = devise du débit, `exchange_to` = devise du crédit, sur les deux lignes,
    `exchange_to_amount` = montant crédité sur la ligne de débit seule, `exchange_rate` = `None` ; `details_type` = la valeur
-   du CSV pour ce type, tranchée par AC-0 (a)(5) ; `payee_account`, `note` = `None` ; `direction` du signe.
+   du CSV pour ce type (AC-0 (a)(5)) : `TRANSFER` entrant → `DEPOSIT` / `CREDIT` ; `TRANSFER` sortant → `TRANSFER` / `DEBIT` ; `CARD_PAYMENT` → `CARD` / `DEBIT` ; `INTERBALANCE` et `AUTO_CONVERSION` → `CONVERSION` (`CREDIT`, `DEBIT`) ; ligne de frais d'un virement → `TRANSFER` / `DEBIT`, d'une conversion → `CONVERSION` / `DEBIT` ; `payee_account`, `note` = `None` ; `direction` du signe.
 4. **AC-4 — Frais.** **Virement sortant** : pour chaque débit `TRANSFER-<id>`, l'entrée `transfer_fees` de même
    `transfer_id` est **exigée** (sinon `MissingTransferFee { transfer_id }`) ; `fee_total` > 0 → une ligne
    `FEE-TRANSFER-<id>` (`is_fee`, `fee_of = TRANSFER-<id>`), débit de `fee_total`, devise = `fee_currency`, qui doit égaler
@@ -159,7 +157,7 @@ importés.
 - Recherche du 2026-11-20 (2024 entière comparée au CSV du site) : 176 des 177 identifiants hors frais retrouvés ; mouvement
   net de chaque devise égal au CSV au centime, à l'exception exacte des frais de virement (retrouvés 22 sur 22 par les
   devis) ; frais de conversion inclus dans le débit ; le seul identifiant absent est un `CONVERSION_ORDER-…` (activité
-  `AUTO_CONVERSION`). 2025 non comparée : recette 39-12a1 AC-0 (c), non bloquante ; la recette (a)/(b) se fait sur 2024 (CSV local).
+  `AUTO_CONVERSION`). 2025 non comparée : recette 39-12a1 AC-0 (c), non bloquante ; la recette (a) est faite (2026-11-20, concordance exacte), (b) se fait sur 2024 (CSV local).
 - Les règles de l'AC-3 sont des **hypothèses validées sur 2024** ; un type d'activité nouveau refuse le téléchargement
   plutôt que de deviner (fermé par construction), et le contrôle de l'AC-5 attrape un montant mal lu.
 - Limite assumée : la ventilation conversion / frais n'est pas donnée par l'API (voie Open Banking, H6, hors périmètre). Les frais
@@ -173,6 +171,7 @@ importés.
 
 ## Change Log
 
+- 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : règles de l'AC-3 devenues définitives. Date : jour de Zurich de `createdOn` pour débits et conversions, de `updatedOn` pour les entrants (UTC : 7 débits faux ; `createdOn` seul pour les entrants : 1 faux ; `updatedOn` seul pour les débits : 15 faux) ; heure : le CSV est en UTC+1 constant, jamais comparer ni dédoublonner sur l'heure ; ligne de frais à la date de son origine ; `AUTO_CONVERSION-<resource_id>` définitif ; solde `amount.value` (égal à `cashAmount.value`) ; sens : `+` sur `primary` pour les entrants, devise débitée = `sourceCurrency` du devis (22 sur 22) ; table des types de détail ; `reference` = `Payment Reference` ; virement sans frais = option `BALANCE` à `fee.total` 0, aucune ligne de frais ; virement remboursé non relevé, suffixe provisoire maintenu ; cartes en devise étrangère non relevées (règle inchangée). Les mentions « à reconfirmer / tranché par la recette » sont retirées ; les tests de l'AC-6 (date des entrants et des débits proches de minuit, frais à la date de l'origine, sans frais, remboursé) restent cohérents, avec ces règles pour attendus. Aucun code touché.
 - 2026-11-20 — validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié. Ici : deux activités distinctes de même `resource_id` (virement remboursé) donnent deux lignes, identifiants suffixés `-<n>`, au lieu d'un `DuplicateId` durable (AC-3) ; cas ajouté au test de l'AC-7. Limite sur le mouvement en cours, `MissingTransferFee` (AC-3, AC-4, AC-7) relus, cohérents.
 - 2026-11-20 — validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3, 39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici : **M** — un mouvement en cours porté au solde, avec un point de contrôle, fait refuser jusqu'à sa fin sans que le relevé soit en cause (limite complétée : attendre, ne rien supprimer) ; **L** — une entrée `transfer_fees` absente rend `MissingTransferFee` et non `AmbiguousAmount` quand les deux montants sont dans des soldes du profil (AC-3, test AC-7).
 - 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a3, 39-12b ;
