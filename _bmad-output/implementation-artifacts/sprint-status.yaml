@@ -1168,10 +1168,10 @@ development_status:
   39-4-classement-des-types-wise: superseded  # 2026-11-20 : remplacée par 39-11c (préfixes d'identifiant, règles)
   39-5-releve-pdf: deferred  # 2026-11-20 : hors des phases 1 et 2
   39-6-ecrans-et-manuels: superseded  # 2026-11-20 : remplacée par 39-11d et 39-12b
-  39-11a-lecteur-csv-wise: drafted  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20
-  39-11b-compte-wise-et-import: drafted  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; aucune migration (38-11b admet 'wise', G11)
-  39-11c-rapprochement-wise: drafted  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; dépend de 38-11c
-  39-11d-ecrans-manuel-e2e-wise: drafted  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20
+  39-11a-lecteur-csv-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20
+  39-11b-compte-wise-et-import: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; aucune migration (38-11b admet 'wise', G11)
+  39-11c-rapprochement-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; dépend de 38-11c
+  39-11d-ecrans-manuel-e2e-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20
   39-12a-telechargement-api-wise: drafted  # 2026-11-20, phase 2, non validée ; bloquée par la recette de Beat (AC-0)
   39-12b-parallelisme-ecran-api-wise: drafted  # 2026-11-20, phase 2, non validée
 
