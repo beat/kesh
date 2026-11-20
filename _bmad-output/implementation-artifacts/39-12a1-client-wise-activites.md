@@ -140,7 +140,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      `WiseActivity { id, activity_type, resource_type, resource_id, title, description, primary_amount, secondary_amount,
      status, created_on, updated_on }` (textes tels quels ; l'analyse est celle de 39-12a2). Plafond de garde : 200 pages
      par fenêtre, sinon `PROVIDER_RESPONSE_INVALID` (`details.reason = "too_many_pages"`).
-   - **Transferts** : `GET /v1/transfers?profile={p}&createdDateStart=…&createdDateEnd=…&limit=200&offset=…` (pages par
+   - **Transferts** : `GET /v1/transfers?profile={p}&createdDateStart=…&createdDateEnd=…&limit=200&offset=…` (**`limit=100`**, non 200 : les relevés réels de l'AC-0 ont été faits à 100, et une page plus courte que `limit` terminant la lecture, une limite plafonnée par Wise en deçà de 200 l'arrêterait silencieusement à la première page ; pages par
      `offset` jusqu'à une page de moins de `limit` éléments) sur la période de lecture **élargie de 31 jours avant son
      début** (un transfert se crée avant de se terminer) ; rendu `WiseTransfer { id, quote_uuid, source_currency,
      reference }`. Un transfert sortant d'une activité absent de la liste se lit seul par `GET /v1/transfers/{id}`.
@@ -211,11 +211,11 @@ l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la sauv
 ## Dev Agent Record
 
 *Développée le 2026-11-20 (Claude Sonnet 5.5). Commits de code : `51ae9874` (client, tests, transmission), `84940f05`
-(ordre des modules, `cargo fmt`). Aucun appel réseau réel ; données de test fictives écrites à la main.*
+(ordre des modules, `cargo fmt`), `53cec570` (remédiation P1), `b7dd76fd` (remédiation P2). Aucun appel réseau réel ; données de test fictives écrites à la main.*
 
 **Ce qui est livré** : `crates/kesh-api/src/wise/mod.rs` (spécification `WISE`, `WiseClient` : `profiles`,
 `resolve_profile`, `balances`, `activities_window`, `activities`, `transfers`, `transfer`, `quote_fee`, `dedup_activities`) ;
-`crates/kesh-api/tests/wise_client_e2e.rs` (serveur Wise simulé, 25 tests) ; une ligne à `lib.rs` ; séries 1 à 3,
+`crates/kesh-api/tests/wise_client_e2e.rs` (serveur Wise simulé, 36 tests après les remédiations P1 et P2) ; une ligne à `lib.rs` ; séries 1 à 3,
 `KESH_WISE_BASE_URL` et `KESH_WISE_PARALLEL` à `docker-compose.yml`, `docker-compose.prod.yml` et `.env.example`.
 Aucune migration, aucun paquet neuf (`Cargo.lock` inchangé).
 
@@ -240,18 +240,21 @@ par Wise en deçà l'arrêterait silencieusement à la première page). (d) Aucu
 39-12a3 compose `activities_window` fenêtre par fenêtre.
 
 **Gates réellement exécutés** (bac d'essai, cible `kesh-targets/kesh-wt3912a1`, journaux `kesh-gate-logs/s39-12a1/`) :
-- `cargo test -p kesh-api --lib --test wise_client_e2e` : **15** tests unitaires `wise::` (`cible-1.log`) et **25** tests du
-  serveur simulé, verts au rejeu (`cible-3.log`). Les trois pauses arrondies : `Notee` compare en secondes arrondies (la pause
-  restante, relue un instant plus tard, perd des microsecondes ; premier passage rouge, `cible-2.log`, corrigé).
+- Gates du dev (bac d'essai, avant remédiation) : **15** tests unitaires `wise::` (`cible-1.log`), **25** tests du serveur
+  simulé, verts au rejeu (`cible-3.log`) ; les trois pauses arrondies : `Notee` compare en secondes arrondies (premier
+  passage rouge, `cible-2.log`, corrigé).
+- **Après les remédiations P1 et P2** (copie hors dépôt `lows-3912a1`, socle de `story/38-12a` fusionné, `ALL_PROVIDERS = &[PAYPAL,
+  crate::wise::WISE]`, journaux `lows-*.log`) : `cargo test -p kesh-api --lib -- wise::` **19** tests ; `--test wise_client_e2e`
+  **36** tests ; `--test configuration_transmise` **32** tests ; `cargo fmt --all -- --check` et `cargo clippy --workspace
+  --all-targets -- -D warnings` verts. Premier passage rouge corrigé : un montant à 30 décimales, arrondi en silence par `Decimal`
+  (désormais refusé), et le test de devise du devis.
 - Mutations (`mutation-1.log`) : curseur non encodé, 403 repris comme passager, en-tête `X-Signature` ajouté → **10 tests
-  rouges** sur 25, dont `activites_sur_trois_pages_par_curseur`, `refus_403_avec_defi_…` et
-  `aucune_requete_ne_porte_de_signature_…` ; restauré, 25 verts.
+  rouges** sur 25 (mutations jouées avant les remédiations ; non rejouées depuis), dont `activites_sur_trois_pages_par_curseur`, `refus_403_avec_defi_…` et
+  `aucune_requete_ne_porte_de_signature_…` ; restauré, 25 verts. Aucune mutation n'a été jouée sur les remédiations P1 et P2.
 - `cargo fmt --all -- --check` vert (après `84940f05`) ; `cargo clippy --workspace --all-targets -- -D warnings` vert, 0
   avertissement (`clippy.log`).
-- **Non fait au moment d'écrire** : `scripts/test-fast.sh --ci` (gate complet) — en file d'attente de `heavy.sh`
-  (`gate-backend.sh`, journal `gate-backend.log`, vide tant qu'il n'a pas pris sa place) ; `scripts/gate-ci.sh` ; E2E
-  Playwright (**sans objet** : aucun écran, route ni texte touché) ; Vitest (sans objet). **Ne rien en déduire tant que
-  `gate-backend.log` n'est pas lu.**
+- **Non fait** : `scripts/test-fast.sh --ci` (gate complet) — **il se jouera après la fusion de 38-12a dans `epic/39-wise`**, la branche ne compile pas seule ; `scripts/gate-ci.sh` ; E2E
+  Playwright (**sans objet** : aucun écran, route ni texte touché) ; Vitest (sans objet). **Ne rien en déduire pour ce qui n'a pas tourné.**
 
 **Recette AC-0** : (a) faite avant la story ; (b) recette finale **après 39-12a2** (T4) ; (c) mois 2025, plus tard.
 
@@ -259,6 +262,7 @@ par Wise en deçà l'arrêterait silencieusement à la première page). (d) Aucu
 
 - 2026-11-20 — **développée** (Claude Sonnet 5.5, Dev Agent Record ci-dessus) : client, serveur simulé, transmission ; statut `review` ; revue P1 à lancer (`kesh-gate-logs/s39-12a1/revue-p1-prompt.md`).
 - 2026-11-20 — **remédiation de la revue de code P1** (Claude Sonnet 5.5 ; rapport `kesh-gate-logs/s39-12a1/revue-p1-rapport.md` : 0 C, 0 H, 2 M, 6 L). M1 : `amount.value` et `fee.total` lus par `RawValue` (fonctionnalité `raw_value` déclarée, `Cargo.lock` inchangé), tests au corps en texte brut (`99999999999999.99`, `123456789012345.67`, `0.123456789012345678`). M2 : déduplication sur l'`id` d'activité, dernière version gardée (aussi L6), AC-3 aligné sur 39-12a2. L1 : statut classé avant la lecture du corps. L2 : repli `quote` retiré. L3 : devis sans `payOut` refusé. L4 : tests du corps trop grand et du corps coupé. L5 : Dev Agent Record corrigé (trois conflits à la fusion). Revue P2 à lancer (`kesh-gate-logs/s39-12a1/revue-p2-prompt.md`).
+- 2026-11-20 — **remédiation de la revue de code P2** (Claude Sonnet 5.5, commit `b7dd76fd` ; revue P2 Sonnet : 0 C, 0 H, 0 M, 5 L). L3 (décision de l'orchestrateur) : la devise des frais est la devise source du **devis**, l'option en repli seulement ; test corrigé, cas inverse ajouté. L4 : `decimal_of_raw` refuse les chaînes hors `-?chiffres(.chiffres)?` et tout montant à plus de 28 décimales (arrondi silencieux de `Decimal`), doc-comment dit. L5 : test e2e `value: null` / `fee.total: null` → `PROVIDER_RESPONSE_INVALID`. L2 : phrase ajoutée à 39-12a2 (répétition d'un même `id` déjà fondue par le client). L1 : Dev Agent Record recompté, AC-3 `limit=100` motivé. Boucle de revue : P1 Opus 0 C / 0 H / 2 M / 6 L → P2 Sonnet 0 / 0 / 0 / 5 L. Passe ciblée P3 sur ce seul commit : `kesh-gate-logs/s39-12a1/revue-p3-prompt.md`. Gate complet après la fusion de 38-12a ; statut `review`.
 - 2026-11-20 — validation ciblée AC-0 (a) « décisions » P2 sur le commit `b2d272e0` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee-2.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici : (b) ne compare plus l'heure (l'écart d'une heure l'été entre Zurich et l'UTC+1 du CSV est dit prévu, sans test dessus) ; (a)(1) ne pose plus « Date Time » comme question ouverte, (a)(2) ne parle plus de règle provisoire.
 - 2026-11-20 — validation ciblée AC-0 (a) « décisions » sur le commit `d0cfeda7` (Claude Haiku 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee.md`) : 0 C, 0 H, 1 M, 1 L, remédiés. Ici : (a)(7) « option absente » tranché en « option `BALANCE` présente » ; (b) ne compte plus l'heure du CSV (UTC+1 fixe) comme identique à l'heure de Zurich de Kesh, écart d'une heure l'été prévu.
 - 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (recette réelle sur 2024, 34 appels ; source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : AC-0 (a) marquée faite et T0 cochée ; concordance exacte (176/177 identifiants, 22/22 frais, soldes égaux en clôture, 12/12 fins de mois, 163/163 fins de jour, 230/230 soldes courants). Règles tranchées, reportées dans 39-12a2 : date = jour de Zurich de `createdOn` (débits, conversions) ou de `updatedOn` (entrants), jamais d'heure comme clé ; heure du CSV en UTC+1 constant ; `AUTO_CONVERSION-<resource_id>` définitif ; solde `amount.value` ; sens et devise débitée confirmés ; table des types de détail ; `reference` = `Payment Reference` ; virement sans frais = option `BALANCE` à 0 ; virement remboursé non relevé (suffixe provisoire maintenu) ; cartes en devise étrangère non relevées. Restent AC-0 (b) et (c). Les mentions « à trancher à la recette » de la fiche sont devenues caduques ; aucun code touché.
