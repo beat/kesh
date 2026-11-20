@@ -26,7 +26,7 @@ schéma et la fonction de conversion posés ici (validation P1).
 
 1. **AC-1 — Arguments.** `kesh_bilan` et `kesh_compte_de_resultat` (`ArgumentsPeriode`, `deny_unknown_fields`
    conservé) gagnent quatre arguments facultatifs aux **noms de l'API** : `detailLevel` (entier 1–20 ou `"all"`),
-   `subtotalPosition` (`"header"` | `"footer"`), `open`, `closed` (tableaux d'entiers ≥ 1, au plus 500).
+   `subtotalPosition` (`"header"` | `"footer"`), `open`, `closed` (tableaux d'entiers, au plus 500).
    - *Lecture des arguments* : `arguments()` n'est que `serde_json::from_value` et rend `(arguments)` invalide sans
      jamais recopier le message de `serde` ; le schéma JSON n'est **pas** appliqué à l'exécution. `detailLevel` se lit
      donc par un type écrit à la main (entier ou `"all"`, tout autre JSON refusé), `open` et `closed` par
@@ -37,10 +37,14 @@ schéma et la fonction de conversion posés ici (validation P1).
      `ArgumentsPeriode` (et, à la 46-6a, dans `ArgumentsBalance`) ; **une seule fonction** les convertit en la demande
      typée de la 46-1 (`DemandeGroupes`) et en appelle la validation — **sans** passer par les chaînes séparées par des
      virgules de l'API REST (la 46-1 expose une entrée typée, à côté de l'analyse des chaînes de la route).
-   - *Refus* : les bornes (1–20, ≥ 1, ≤ 500), « `subtotalPosition`, `open` ou `closed` sans `detailLevel` » et « un
-     identifiant dans `open` et `closed` » sont celles de la 46-1 ; un refus de service (`AppError::Validation`) rend,
-     par `depuis_app_error`, le texte `(demande)` invalide, **sans nommer l'argument** (`mcp/textes.rs:315`) : la
-     description de l'outil énonce donc ces contraintes.
+   - *Refus* : les bornes (`detailLevel` 1–20, au plus 500 identifiants), « `subtotalPosition`, `open` ou `closed`
+     sans `detailLevel` » et « un identifiant dans `open` et `closed` » sont celles de la 46-1 (entrée typée, T3 de la
+     46-1). Un identifiant nul ou négatif n'est **pas** un refus de la 46-1 : il est ignoré comme un identifiant inconnu
+     (le `minimum: 1` du schéma n'est qu'une indication, le schéma n'étant pas appliqué). Tout refus — `serde`
+     (`(arguments)`) ou service (`AppError::Validation` → `(demande)`, `mcp/textes.rs:315`) — rend à l'agent le même
+     texte fixe « Arguments invalides. » (`textes.rs:127`, `:249-252`), qui ne nomme jamais l'argument : la description
+     de l'outil énonce donc ces contraintes ; aucune validation locale de plus n'est écrite dans l'outil (une seule
+     validation, celle de la 46-1).
    - *Schéma* : `SCHEMA_PERIODE` ne sert qu'à ces deux outils (la balance a son schéma en ligne,
      `rapports.rs:208-209`) ; il est remplacé par `SCHEMA_PERIODE_GROUPES`, `additionalProperties: false` gardé :
      `detailLevel` = `{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]}`,
@@ -48,11 +52,15 @@ schéma et la fonction de conversion posés ici (validation P1).
 2. **AC-2 — Sans argument neuf.** La réponse est **identique** à celle d'aujourd'hui (même contenu, même texte rendu) :
    un test compare le texte rendu à un **littéral écrit au commit de base** (avant T1) sur la société d'essai, pour
    chacun des deux outils — non à la sortie de la fonction qui le produit (un « avant et après » ne se rejoue pas dans
-   un seul commit).
+   un seul commit). ⚠️ La société d'essai (`societe_piegee`) est datée du jour de l'horloge de test
+   (`tests/common/jour.rs`, `aujourd_hui_test`), que la recette fait varier (`KESH_TEST_INSTANT`) : les dates de la
+   période (et tout identifiant qui ne serait pas stable) s'écrivent dans le littéral en **jetons** (`{debut}`,
+   `{fin}`), remplacés par les valeurs de `a.p` avant la comparaison ; tout le reste est littéral.
 3. **AC-3 — Réponse groupée.** Avec `detailLevel`, la sortie gagne un champ `groupes` (`null` sinon, convention
    C-37-9) : `{ niveau, tousLesNiveaux, positionSousTotaux, profondeurMax, ouverts, fermes, <sections> }` — l'écho
    `grouping` de la 46-1 (`niveau` à `null` et `tousLesNiveaux` à `true` pour `"all"` : un champ de `sortie!` ne porte
-   qu'un type) — et, par section, les lignes groupées (`actifs`, `passifs`, `fondsPropres` ; `produits`, `charges`).
+   qu'un type ; `positionSousTotaux` est, comme `genre`, un miroir admis par `champ_enum!`, valeurs `header`/`footer`) —
+   et, par section, les lignes groupées (`actifs`, `passifs`, `fondsPropres` ; `produits`, `charges`).
    Une ligne : `genre`, `profondeur`, `compteId`, `numero` et `nom` en `TexteNonFiable`, `solde` en `Montant`, `devise`
    en `Code<Devise>` et `soldeDevise` (`null` hors devise unique), `ouvert` (`null` hors groupe).
    - **`genre` suit la convention des outils** (`postes_ouverts.rs:75-110`) : un **miroir** local, énumération sans
@@ -71,23 +79,34 @@ schéma et la fonction de conversion posés ici (validation P1).
 4. **AC-4 — Résumé d'appel.** Le résumé (`resume_periode`, `Resume::outil`) porte `detailLevel` (`entier`, ou
    `code("detailLevel", "all")`) et `subtotalPosition` (`code`, chaînes statiques) quand ils sont donnés, et le
    **nombre** d'identifiants de `open` / `closed` sous les clés `openCount` / `closedCount` (pas la liste, et pas sous
-   la clé `open`, qui dirait une liste). `Resume` n'a que `entier`, `date`, `booleen`, `code`.
-5. **AC-5 — Tailles mesurées, et seuil écrit.** *Le plafond est celui de la réponse (24 576 o, refus pour taille) ;
-   le bilan plat tient 57 comptes en 20 156 o (`rapports.rs:7-13`), soit ≈ 350 o la ligne, et une ligne groupée est du
-   même ordre : **le plan PME complet au niveau `all` en `footer` (86 comptes, une quinzaine de groupes, autant de
-   sous-totaux) dépasse le plafond** — un critère « sous le plafond » à ce niveau est inatteignable.* À T3, des
-   mesures sur une fixture qui pose des `parent_id` par SQL (les fixtures des tailles créent des comptes sans parent,
-   donc des racines) : (a) plan PME complet, comptes en devise, **niveau 2**, `header` puis `footer` : réponse **sous
-   23 552 o** (marge des autres outils) ; (b) niveau `all`, `footer` : la taille de l'élément et le **nombre de
-   lignes groupées** au-delà duquel la réponse est refusée pour taille (même refus que `plafond_au_maximum`) ; ce
-   nombre s'écrit dans la doc du module (`rapports.rs:1-13`, avec sa date) et dans les descriptions des deux outils
+   la clé `open`, qui dirait une liste). Les méthodes de `Resume` (`sortie.rs:404-458`) sont `entier`, `date`,
+   `booleen`, `code` et `recherche_fournie` ; seules les quatre premières servent ici.
+5. **AC-5 — Tailles mesurées, et seuil écrit.** *Le plafond est celui de la réponse (24 576 o, refus pour taille,
+   `MCP_ENVOI_OCTETS_MAX`) ; le bilan plat tient 57 comptes en devise en 20 156 o (`rapports.rs:7-13`), soit ≈ 350 o
+   la ligne, et une ligne groupée est du même ordre. Le plan PME (`pme.json`, 86 comptes) ne se rend pas en entier
+   dans un seul rapport : le bilan n'en porte que les 31 comptes de bilan, le compte de résultat les 34 de produits et
+   de charges, et seulement ceux à solde non nul. Calcul du 2026-11-20 (tous les comptes à solde non nul, `footer`,
+   `2 Passifs` dissous au bilan, `6`, `7`, `70`, `8`, `80` au compte de résultat) : **43 lignes groupées au bilan et 52
+   au compte de résultat à `all`**, soit ≈ 15 et ≈ 18 Ko — sous le plafond attendu, à mesurer. (La remédiation P1
+   affirmait le contraire en comptant les 86 comptes dans un seul rapport : corrigé en P2.)* À T3, des mesures sur
+   une fixture qui pose des `parent_id` par SQL (les fixtures des tailles créent des comptes sans parent, donc des
+   racines) : (a) plan PME complet, tous ses comptes de bilan, de produits et de charges à solde non nul **en
+   devise**, **niveaux 2 et `all`**, `header` puis `footer` : réponse **sous 23 552 o** (marge des autres outils) ; si
+   `all` en `footer` dépasse, le chiffre mesuré s'écrit et la description le dit ; (b) sur une fixture synthétique
+   (comptes en devise, noms de 34 caractères, groupes posés par SQL), niveau `all`, `footer` : la taille de l'élément
+   et le **nombre de lignes groupées** au-delà duquel la réponse est refusée pour taille (même refus que
+   `plafond_au_maximum`) ; ce nombre s'écrit dans la doc du module (`rapports.rs:1-13`, avec sa date) et dans les descriptions des deux outils
    (« au-delà d'environ N lignes, choisissez un niveau plus bas ») ; (c) un test affirme le refus au-delà du seuil.
    Le seuil « environ 60 comptes » du bilan plat est conservé.
 6. **AC-6 — Gardes réelles.** Verts : `mcp_contrat` (forme de `inputSchema`, K7), `mcp_gardes_lexicales`
    (`champ_sur_en_un_lieu` : aucun `ChampSur` ni `scelle::` dans `rapports.rs` ; `sorties_sans_serialisation_parallele` :
    le miroir ne sérialise que par `donnees` ; `donnees_construites_par_la_politique_seule`), `mcp_matrice_manuel`
    (n'apparie que **portée × outil** : la phrase du manuel n'est contrôlée par aucune garde, la revue la lit),
-   `mcp_outils_e2e` (`bornes_des_schemas` inchangé : le bilan et le compte de résultat ne sont pas paginés) ; un cas
+   `mcp_outils_e2e` (`bornes_des_schemas` inchangé : le bilan et le compte de résultat ne sont pas paginés ;
+   `proprietes_du_schema_acceptees` exige que l'argument « complet » de `TEMOINS`
+   (`tests/common/mcp_pieges.rs:186`) nomme **chaque** propriété du schéma et soit servi : celui de `kesh_bilan` et de
+   `kesh_compte_de_resultat` gagne `detailLevel`, `subtotalPosition`, `open` et `closed` — deux listes disjointes —,
+   ce qui touche aussi `mcp_enveloppe_e2e`, qui parcourt `TEMOINS`) ; un cas
    groupé ajouté à `mcp_outils_e2e.rs` (arguments valides, un refus par contrainte de l'AC-1, `groupes` non nul, listes
    plates vides, témoin hors groupe où `groupes` vaut `null`). *(« Longueur des descriptions » : aucune garde ne la
    contrôle — retiré, validation P1.)*
@@ -111,7 +130,10 @@ schéma et la fonction de conversion posés ici (validation P1).
 `crates/kesh-api/src/mcp/outils/rapports.rs` (372 lignes) : `ArgumentsPeriode` (`:40`, bilan et compte de résultat
 seuls), `ArgumentsBalance` (`:50`, propre à la balance, paginée, schéma en ligne `:208-209`), `SCHEMA_PERIODE` (`:60`),
 `LigneDeSolde` (`:69`), `Bilan` (`:87`), `CompteDeResultat` (`:103`), `ligne`/`lignes` (`:161-177`), `resume_periode`,
-`demande`. Les erreurs de service passent par `depuis_app_error` (`mcp/textes.rs:311`), dont `Validation` rend un
+`demande`. ⚠️ `ArgumentsPeriode` n'est pas propre au bilan et au compte de résultat : `kesh_balance` en **construit**
+une (`:225-229`) depuis `ArgumentsBalance` pour réutiliser `resume_periode` et `demande`. Ajouter quatre champs à
+`ArgumentsPeriode` oblige donc à les poser à `None` à `:225` dans cette story ; à la 46-6a, la balance y recopie ses
+quatre champs, et la fonction de conversion unique (T1), qui lit `&ArgumentsPeriode`, la sert sans autre code (KISS). Les erreurs de service passent par `depuis_app_error` (`mcp/textes.rs:311`), dont `Validation` rend un
 texte sans l'argument. La 47-3, si fusionnée, ne change que les descriptions de ces deux outils (une phrase sur le
 miroir) et ajoute un champ de miroir : garder les deux phrases.
 
@@ -159,3 +181,14 @@ détail, les groupes ouverts ou fermés et la place des sous-totaux.
   base ; `SCHEMA_PERIODE` ne sert pas la balance (schéma renommé). Propagation : **46-4 avant 46-6a** déclarée (finding de la 46-6a). L :
   clés du résumé d'appel. Axes exercés : code de `origin/main` (rapports.rs, sortie.rs, outil.rs, textes.rs, tests
   MCP), concordance 46-1 à 46-3, 46-6a, manuel d'administration ; non exercés : compilation, mesures de taille réelles.
+- 2026-11-20 — **validation P2 (Claude Opus 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C, 0 H, 3 M,
+  4 L, remédiés.** M : prémisse fausse de la remédiation P1 à l'AC-5 (« le plan PME complet au niveau `all` dépasse le
+  plafond », en comptant les 86 comptes dans un seul rapport) — le bilan n'en porte que 31, le compte de résultat 34 ;
+  calcul : 43 et 52 lignes groupées à `all` en `footer`, sous le plafond attendu → mesures aux niveaux 2 et `all` sur
+  le plan PME, seuil sur fixture synthétique ; témoin littéral de l'AC-2 dépendant de la date du jour de l'horloge de
+  test (`societe_piegee`, `aujourd_hui_test`, `KESH_TEST_INSTANT`) → dates en jetons ; `proprietes_du_schema_acceptees`
+  et l'argument « complet » de `TEMOINS` (`tests/common/mcp_pieges.rs:186`) omis des gardes (AC-6). L : `≥ 1` n'est pas
+  un refus de la 46-1 (identifiant ignoré) ; tout refus rend « Arguments invalides. » (`textes.rs:127`), sans argument
+  nommé ; `positionSousTotaux` miroir `champ_enum!` ; `ArgumentsPeriode` construit aussi par `kesh_balance`
+  (`rapports.rs:225-229`) → champs à `None`, et conversion unique sur `&ArgumentsPeriode` réutilisée par la 46-6a ;
+  `Resume` a aussi `recherche_fournie`. Rapport : `kesh-gate-logs/epic-46/validation/46-4-P2.md`.

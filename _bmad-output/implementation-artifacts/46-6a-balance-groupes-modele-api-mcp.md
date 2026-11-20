@@ -21,7 +21,7 @@ afin de contrôler mes comptes au niveau des groupes, comme au bilan.
 ## Modules touchés (règle de splitting préventif)
 
 Cinq, la crate `kesh-report` comptant pour un : `kesh-report` (`trial_balance` : implémentation de `LigneAgregeable` ;
-`groupes` : clé de partition « nature », déjà prévue par la 46-1, et l'enveloppe `AvecGroupes<T>` que la 46-1 pose —
+`groupes` : clé de partition « nature », déjà prévue par la 46-1, et l'enveloppe `AvecGroupes<T, S>` que la 46-1 pose (`S` = les sections groupées ; pour la balance, qui n'a pas de sections, `S = Vec<LigneBalanceGroupee>`) —
 `TrialBalance` **ne change pas**, comme `BalanceSheet`, C-46-1-4), `kesh-api/services/rapports`,
 `kesh-api/routes/reports` (`GET /reports/trial-balance`), `kesh-api/mcp/outils/rapports.rs` (`kesh_balance`), la
 documentation (`docs/api-external.md`, manuel d'administration, tableau MCP).
@@ -37,7 +37,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    solde de la période, clôture]` — et leurs cinq montants en devise ; mêmes règles de groupes non affichés (Q2), de
    devise (Q3), de niveau, de règle d'ouverture, de position des sous-totaux et d'arbre défensif que la 46-1, **sous
    réserve de l'AC-3**. `regrouper` rend la ligne **neutre** de la 46-1 (un vecteur de montants) : la balance la
-   convertit, par **une** fonction (champs nommés de l'AC-5), en `LigneBalanceGroupee`, que porte `AvecGroupes<TrialBalance>`
+   convertit, par **une** fonction (champs nommés de l'AC-5), en `LigneBalanceGroupee`, que porte `AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>`
    (`grouped_rows: Option<Vec<LigneBalanceGroupee>>`) — `TrialBalance` et ses littéraux de tests restent intacts.
 2. **AC-2 — Nature, au lieu de section.** La balance n'a pas de sections ; ses soldes sont signés du côté naturel de
    chaque compte (`trial_balance.rs:91`, `opening::signed`). La clé de partition est la **nature**
@@ -47,8 +47,9 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    **Dans le plan PME** (relevé du 2026-11-20, `pme.json`, 86 comptes) les groupes mixtes sont `6` (6950 `Revenue`
    parmi des charges), `7`, `70`, `8` et `80` — non le seul `7` ; `2 Passifs` (dettes et fonds propres, tous
    `Liability`) **reste** un groupe à la balance, alors que le bilan le dissout (46-1 AC-4) ; **conséquence assumée** :
-   au niveau 1 de la balance du plan PME, les comptes des classes 6 à 8 (une vingtaine) paraissent à la profondeur 1,
-   faute de groupe qui les réunisse — à dire au manuel (46-6b). La dissolution se lit, comme à la 46-1, sur les **lignes
+   au niveau 1 de la balance du plan PME, les comptes des classes 6 à 8 (dix-huit : les treize comptes directs de
+   `6`, dont 6950, `7000`, `7010`, `8000`, `8010`, `8900`) paraissent à la profondeur 1, avec le groupe `60`, faute de
+   groupe qui les réunisse — à dire au manuel (46-6b). La dissolution se lit, comme à la 46-1, sur les **lignes
    présentes** ; à la balance, les comptes actifs à zéro en font partie, si bien que `6` l'est toujours (6950 actif).
 3. **AC-3 — Inclusion, groupes ouverts, devise.** La balance rend aussi des comptes actifs **à zéro** (règle
    d'inclusion, `trial_balance.rs:13-18`) : une ligne d'entrée à cinq montants nuls est permise, ce que ne connaît pas
@@ -60,13 +61,24 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    rendu à plat ne disparaît à `all` ;
    (c) pour la règle de devise unique, une ligne d'entrée dont les dix montants sont nuls **ne compte pas** (D7 : « tous
    ses comptes à solde non nul ») — un compte CHF à zéro ne retire pas sa devise à un groupe de comptes USD ;
+   (d) **la ligne propre d'un compte de groupe** : la balance rend aussi les comptes de groupe eux-mêmes (actifs, donc
+   rendus même sans mouvement — `1`, `10`, `14`… du plan PME), alors qu'au bilan un compte de groupe n'entre que s'il
+   porte un solde. Une telle ligne dont les dix montants sont nuls **n'est pas** une ligne d'entrée du regroupement :
+   elle ne donne pas de ligne `own` (D5 vise un groupe qui porte lui-même des écritures), ne compte pas pour la
+   dissolution par nature (un groupe typé `Liability` à enfants `Asset` ne se dissout pas à cause de son propre zéro),
+   ni pour la devise ; le groupe est montré par sa ligne `group`. Un groupe **dissous** dont la ligne propre est nulle
+   (`6`, `7`, `70`, `8`, `80` du plan PME) ne paraît donc pas du tout en mode groupé : c'est la seule exception à
+   (b), écrite au manuel (46-6b). Une ligne propre non nulle (ouverture ou mouvement) suit la règle de la 46-1 (ligne
+   `own`, ou ligne `account` si le groupe est dissous).
    La ligne calculée du résultat reporté reste **hors** des groupes, à sa place d'aujourd'hui.
 4. **AC-4 — Totaux et contrôles inchangés.** `total_debit`, `total_credit`, `balanced`, `retained_earnings`,
    `opening_balanced` identiques à tout niveau ; la somme des débits (crédits) des lignes de profondeur 1 égale
-   `total_debit` (`total_credit`) — test de propriété de la 46-1 étendu à la balance. (Ouverture, solde et clôture ne
+   `total_debit` (`total_credit`), lignes `subtotal` **exclues** (en `footer`, le pied d'un groupe de profondeur 1
+   porte la même profondeur et le même montant que sa ligne `group`) — test de propriété de la 46-1 étendu à la
+   balance. (Ouverture, solde et clôture ne
    se totalisent pas entre groupes de natures contraires : aucun contrôle n'est demandé sur eux au niveau de la racine.)
 5. **AC-5 — API.** `GET /reports/trial-balance` (`routes/reports.rs:348`) accepte `detailLevel`, `subtotalPosition`,
-   `open`, `closed`, mêmes refus et même validation (fonction du service de la 46-1) ; la réponse (`AvecGroupes<TrialBalance>`, absente de tout champ neuf sans `detailLevel`) gagne `grouping`
+   `open`, `closed`, mêmes refus et même validation (fonction du service de la 46-1) ; la réponse (`AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>`, absente de tout champ neuf sans `detailLevel`) gagne `grouping`
    (écho de la 46-1) et `groupedRows` — **un tableau JSON** (la balance n'a pas de sections ; au bilan, `groupedRows`
    est un objet par section) — de lignes `{ kind, depth, accountId, accountNumber, accountName, openingBalance,
    totalDebit, totalCredit, balance, closingBalance, currency?, openingCurrency?, totalDebitCurrency?,
@@ -80,19 +92,24 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    cinq `…Devise`, `devise`, `ouvert`) ; les lignes plates (`lignes`) sont vides ; la **tranche** (`limit`, `offset`,
    défaut 23, maximum 42) porte sur les **lignes groupées**, `total` en compte le nombre ; totaux du rapport entier
    inchangés. *Pourquoi la tranche et non le niveau seul (contraire du bilan, 46-4 C-46-4-3)* : une ligne de balance
-   pèse ≈ 540 o (dix montants), et le niveau 2 du plan PME compte une cinquantaine de lignes avec les pieds — au-delà
-   du plafond sans tranche. Bornes : le schéma est **unique** (`limit` maximum 42, défaut 23) pour les deux modes ; la
+   pèse ≈ 540 o (dix montants), et le plan PME rend, en `footer`, **42 lignes groupées au niveau 2 et 97 à `all`**
+   (calcul du 2026-11-20 sur `pme.json`, tous les comptes actifs, lignes propres nulles des groupes exclues, AC-3 (d))
+   — au-delà du plafond sans tranche dès le niveau 2. Bornes : le schéma est **unique** (`limit` maximum 42, défaut 23) pour les deux modes ; la
    ligne groupée est mesurée (`tailles_mesurees_en_devise` étendu, groupe et pied compris) ; si elle dépasse la plate,
    les **deux** bornes baissent ensemble, avec `LIMITE_DEFAUT_BALANCE` / `LIMITE_MAX_MCP_BALANCE`
    (`rapports.rs:25-29`), `bornes_attendues` et la table `mesurees` de `bornes_des_schemas`
    (`mcp_outils_e2e.rs:98`, `:161-181`) ; chiffre daté dans la doc du module. Sans argument neuf : sortie identique
-   (littéral du commit de base, comme 46-4 AC-2).
+   (littéral du commit de base, dates de la période en jetons, comme 46-4 AC-2). L'argument « complet » de
+   `kesh_balance` dans `TEMOINS` (`tests/common/mcp_pieges.rs:186`) gagne les quatre arguments
+   (`proprietes_du_schema_acceptees`), et `kesh_balance` recopie ses quatre champs dans l'`ArgumentsPeriode` qu'il
+   construit (`rapports.rs:225-229`), que lit la fonction de conversion de la 46-4.
 7. **AC-7 — Trace d'audit inchangée** (comme 46-1 AC-11) ; `services_motif.rs`, `audit_route_registry.rs` verts.
 8. **AC-8 — Arrondi.** Cette story ne formate aucun montant (JSON `Decimal`, MCP `Montant`) ; aucun `{:.2}` neuf dans
    `kesh-report`, **tel que la garde de la 48-11 l'interdira** (la 48-11 n'a pas encore de fiche : nom de la garde et
    des fonctions relevés à T0).
 9. **AC-9 — Tests et documentation.** Unitaires (`LigneAgregeable` de la balance, groupes mixtes du plan PME dissous
-   et `2` conservé, compte à zéro dans un groupe ouvert et dans un groupe fermé, devise avec un compte CHF nul parmi
+   et `2` conservé, compte à zéro dans un groupe ouvert et dans un groupe fermé, ligne propre nulle d'un groupe sans
+   ligne `own` et sans effet sur la dissolution, ligne propre non nulle en `own`, devise avec un compte CHF nul parmi
    des comptes USD) ; intégration (`reports_e2e.rs`) : refus, niveau 2 et `all`, égalité à l'octet sans paramètre,
    sonde négative (sans dissolution par nature, le test d'un groupe mixte rougit) ; `mcp_outils_e2e.rs` (cas groupé,
    tranche sur lignes groupées, `total`), `mcp_contrat`, `mcp_gardes_lexicales`, `mcp_matrice_manuel` verts ;
@@ -103,7 +120,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
 
 - [ ] **T0** — Reprise de la branche d'epic avec la 46-1 (et la 46-4 pour T3) fusionnées.
 - [ ] **T1** — `LigneAgregeable` pour `TrialBalanceRow` ; clé « nature » ; `LigneBalanceGroupee` et sa conversion ;
-      `AvecGroupes<TrialBalance>` (enveloppe de la 46-1, `TrialBalance` intact) ; tests (AC 1 à 4, 8).
+      `AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>` (enveloppe de la 46-1, `TrialBalance` intact) ; tests (AC 1 à 4, 8).
 - [ ] **T2** — service `balance` (`services/rapports.rs:640`) et route (AC 5, 7).
 - [ ] **T3** — MCP `kesh_balance` (AC 6), **après la 46-4** ; la sortie lit l'enveloppe (`.rapport` pour les lignes plates).
 - [ ] **T4** — tests d'intégration, documentation (AC 9) ; **T5** — gate complet, E2E complet au dernier commit de code.
@@ -153,3 +170,12 @@ d'ouverture, de mouvements et de clôture de chaque groupe ; sans paramètre, ri
   schéma unique et tests à jour nommés. L : décompte de modules (crate) ; garde et noms de la 48-11 non établis
   (« à relever à T0 »). Axes exercés : `trial_balance.rs`, `opening.rs`, `rapports.rs` MCP, `services/rapports.rs`,
   `pme.json`, tests MCP, concordance 46-1/46-4/46-6b ; non exercés : compilation, mesures.
+- 2026-11-20 — **validation P2 (Claude Opus 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C, 0 H, 1 M,
+  4 L, remédiés.** M : la balance rend les comptes de groupe eux-mêmes (actifs, à zéro : règle d'inclusion,
+  `trial_balance.rs:13-18`) — sans règle, chaque groupe aurait une ligne `own` nulle, et un groupe typé autrement que
+  ses enfants se dissoudrait sur son propre zéro → AC-3 (d), tests (AC-9), conséquence au manuel (46-6b). L : enveloppe
+  `AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>` (46-1 à deux paramètres, C-46-1-4) ; « une cinquantaine de
+  lignes » → 42 au niveau 2 et 97 à `all` (calcul sur `pme.json`) ; classes 6 à 8 au niveau 1 : dix-huit comptes et le
+  groupe `60` ; contrôle de l'AC-4 sans les lignes `subtotal`. Propagation de la 46-4 : témoin en jetons de date,
+  `TEMOINS`, champs recopiés dans l'`ArgumentsPeriode` de `rapports.rs:225`. Rapport :
+  `kesh-gate-logs/epic-46/validation/46-6a-P2.md`.

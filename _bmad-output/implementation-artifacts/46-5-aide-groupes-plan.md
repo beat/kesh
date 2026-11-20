@@ -53,7 +53,10 @@ inscrit ce que la maquette doit trancher ; elle se **revalide en entier** après
 3. **Numéro d'un groupe qui existe déjà.** Le cas de Beat (10 numéros par banque, groupe = numéro sans son dernier
    chiffre) tombe sur un numéro **déjà pris** quand le plan est celui de la PME (`1020 Banque`, mouvementé : refusé
    comme parent, #1351). L'aperçu doit le dire et laisser saisir un autre numéro.
-4. **Modules** : cinq (`routes/accounts` ou appels enchaînés, `repositories/accounts`, frontend, `kesh-i18n`, manuel) ;
+4. **Parent du groupe proposé.** Par défaut, le **parent commun** des comptes sélectionnés (p. ex. `10` pour des
+   comptes bancaires de la PME) : sans lui, le groupe neuf serait une racine et sortirait les comptes de leur place
+   dans l'arbre (et du sous-total de `10`). Une sélection sans parent commun : parent à choisir dans l'aperçu.
+5. **Modules** : cinq (`routes/accounts` ou appels enchaînés, `repositories/accounts`, frontend, `kesh-i18n`, manuel) ;
    un point 1 « extraction » ajoute des tests de `kesh-db`, non un module. Recompter après la maquette.
 
 ## Tâches principales
@@ -83,3 +86,8 @@ inscrit ce que la maquette doit trancher ; elle se **revalide en entier** après
   « Points à trancher » (extraction `_in_tx`, type et devise du groupe, `version`, numéro déjà pris). L : le statut
   reste `drafted` (conditionnelle), à relire entièrement après la maquette. Axes exercés : `repositories/accounts.rs`,
   `routes/accounts.rs`, `entities/account.rs` ; non exercés : maquette (absente), manuel, i18n.
+- 2026-11-20 — validation P2 (Claude Opus 5.5), allégée (fiche conditionnelle) : 0 C, 0 H, 0 M, 1 L, remédié. L : le
+  parent du groupe proposé (parent commun de la sélection, sinon les comptes sortent de leur place dans l'arbre) ajouté
+  aux points à trancher. Remédiation P1 (variantes `_in_tx`, `:189`, `:192`, `:1079`, `:1091`, `:1847` ;
+  `entities/account.rs:233` ; `routes/accounts.rs:83`) confrontée au code : juste. Rapport :
+  `kesh-gate-logs/epic-46/validation/46-5-P2.md`.
