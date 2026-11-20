@@ -62,7 +62,10 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
    les conversions au cours de Wise ; le rattachement à l'autre côté (virement depuis votre banque, versement Stripe de
    l'Epic 40 : jamais compté deux fois, jamais affecté par une règle) ; un virement vers sa banque par une règle quand
    l'autre côté n'est pas encore passé ; les écarts ; les limites (date de l'export sans conversion de fuseau, aucun
-   code TVA, pas de téléchargement automatique). Gardes de `textes_coherents.rs` à connaître avant d'écrire (38-11d
+   code TVA, pas de téléchargement automatique ; **celles de 38-11b AC-3 reprises pour Wise** : une facture fournisseur ne se paie
+   pas depuis un compte Wise — régler par un compte interne ou une écriture à la main, puis rattacher la transaction —, et la
+   réconciliation générale ne refuse pas un compte Wise **en francs** : ses lignes se traitent par la seule page Wise, sans quoi une
+   conversion ou des frais pourraient s'écrire deux fois). Gardes de `textes_coherents.rs` à connaître avant d'écrire (38-11d
    AC-6 : G2 « Réglages », G4-bis/G4-ter numéros de compte — ni « 1020 », « 4830 » ni « 9900 » —, G25, G18). La phrase
    du compte des routes du manuel d'administration est tenue par 39-11b et 39-11c. `docs/api-external.md` (section de
    38-11d AC-7) : `POST /api/v1/wise-imports`, `GET /api/v1/wise/review`, `POST /api/v1/wise/accept`, champ `wise`
@@ -72,8 +75,7 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
    `with-company`, exercice 2020, multi-devises activé par l'API, reseed en fin de parcours) : comptes du plan EUR et
    USD, trois comptes bancaires Wise d'un libellé, compte de frais, compte de conversion, cours mensuels de 2020 ;
    import par l'interface des trois fixtures de 39-11a, lues par chemin (`crates/kesh-import/tests/fixtures/`, ni
-   copie ni seconde fixture) ; compte rendu ; acceptation d'un frais et d'une conversion CHF↔EUR (une écriture) ; écart
-   Stripe affiché ; réimport → refus doublon. Captures (thème clair) de chaque état touché (formulaire du compte Wise,
+   copie ni seconde fixture) ; compte rendu ; acceptation d'un frais et d'une conversion CHF↔EUR (une écriture) ; ligne de versement Stripe « à examiner » (`stripe_payout_unmatched`) affichée ; réimport → refus doublon. Captures (thème clair) de chaque état touché (formulaire du compte Wise,
    compte rendu d'import, propositions, écarts, à examiner, acceptation), dans `KESH_CAPTURES_DIR`, hors dépôt
    (`kesh-gate-logs/`), jointes au Dev Agent Record et au prompt de revue. Suite E2E complète au dernier commit de code.
 
@@ -101,3 +103,7 @@ manuel utilisateur.
   de 38-11d nommés sans dire lesquels ni comment les généraliser (case PayPal, `withoutPaypal` et ses quatre sites,
   page PayPal, libellés des refus) ; E2E sans exercice d'accueil ni multi-devises (patron de `paypal-import.spec.ts`) ;
   `docs/api-external.md` absent. LOW : gardes du manuel (numéros de compte), clés i18n et `sitesTotal`.
+- 2026-11-20 — validation P2 (Claude Sonnet 5.5, contexte frais) : 0 CRITICAL, 0 HIGH, 1 MEDIUM, 1 LOW, remédiés (rapport
+  `kesh-gate-logs/epic-39-40-kiss/validation/39-11d-ecrans-manuel-e2e-wise-P2.md`). MEDIUM : le manuel ne reprenait pas les limites
+  de la phase 1 de 38-11b (facture fournisseur, angle mort de la réconciliation générale, plus lourd pour un solde Wise en francs
+  qui reçoit conversions et frais). LOW : « écart Stripe » est un motif « à examiner », non un écart.

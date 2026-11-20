@@ -57,8 +57,8 @@ versement, aucune règle.
   précédent + `Amount`, dans l'ordre chronologique), sinon il est refusé ; l'import pose solde d'ouverture et de
   clôture (premier solde − premier montant ; dernier solde). Un import qui ne prolonge pas le précédent du même
   compte est **accepté** et signalé en écart (`gap`), par la fonction existante `previous_statement_closing`
-  (`crates/kesh-db/src/repositories/bank_imports.rs:358`) ; un fichier qui chevauche le précédent (lignes en
-  doublon) ne l'est pas.
+  (`crates/kesh-db/src/repositories/bank_imports.rs:358`) ; un fichier dont la période chevauche celle d'un relevé du compte
+  (`overlapping_statements`) ne l'est pas — les doublons ne sont pas stockés, le chevauchement se relit de la même façon à l'import et à la revue.
 - **G5 — Règles : critères existants, filtres de 38-11b, rien de neuf pour Wise** (décision (3) de l'orchestrateur).
   Contrepartie = `Merchant` pour une carte, `Payee Name` pour un débit, `Payer Name` pour un crédit
   (`counterparty_contains`, `counterparty_exact`) ; IBAN du bénéficiaire (`iban_exact`, colonne `counterparty_iban`

@@ -61,8 +61,8 @@ afin que chaque ligne attende son rapprochement (39-11c).
    Epics 38 et suivants à la reprise) relevé de un avec sa raison, et la phrase « N des M routes à verbe mutant » du
    manuel d'administration (`docs/manual/fr/admin-manual.tex`, lue par `le_manuel_dit_le_compte_du_registre`)
    **recomptée** — `.tex` seul, PDF à la release. Si 38-11b a été développée avec une route d'import prestataire
-   générique, Wise s'y branche au lieu d'une route neuve (G10), choix au Change Log. Ordre des refus, rien d'écrit à
-   aucun : 400 `VALIDATION_ERROR` (champ manquant, aucun fichier) → 404 compte Wise introuvable (aucun compte bancaire
+   générique, Wise s'y branche au lieu d'une route neuve (G10), choix au Change Log. Handlers `wise_imports::create` (clé du registre). Ordre des refus, rien d'écrit à
+   aucun (codes `WISE_*` nommés ci-dessous, ou leurs équivalents génériques de 38-11b selon la règle de l'AC-2) : 400 `VALIDATION_ERROR` (champ manquant, aucun fichier) → 404 compte Wise introuvable (aucun compte bancaire
    non archivé `provider = 'wise'` de ce libellé ; code de l'AC-2) → 422 `WISE_CSV_INVALID` (erreur de 39-11a,
    `details` : nom du fichier et code fermé de 39-11a, puis colonnes manquantes ou erreurs de ligne, forme de
    `CsvLineErrorPayload`, `crates/kesh-api/src/errors.rs:1541`) → 422 `WISE_DUPLICATE_CURRENCY_FILE` (deux fichiers de
@@ -95,11 +95,14 @@ afin que chaque ligne attende son rapprochement (39-11c).
    même `transaction_id` déjà sur ce compte bancaire → ligne ignorée (la fenêtre date-montant-référence des imports
    bancaires, `find_in_dedup_window`, `crates/kesh-db/src/repositories/bank_transactions.rs:83`, ne s'applique pas,
    comme pour PayPal) ; un fichier tout en doublons ne crée pas d'entrée. **Continuité avec l'import précédent** du
-   même compte, **par la fonction existante** `previous_statement_closing` (`bank_imports.rs:358` : le relevé à solde
-   du compte dont `period_to` < `first_date`, le plus tardif) : si **aucune** ligne du fichier n'est un doublon (un
-   fichier qui chevauche le précédent se prolonge par ses doublons) et que cette clôture diffère de
-   `opening_balance` du fichier → avertissement `gap` au compte rendu (l'import passe). La même règle sert la liste des
-   écarts de 39-11c (une seule définition). Réponse `201` : `{ account, files: [{ filename, currency, bankAccountId,
+   même compte, **une seule définition** (servie aussi par les écarts de 39-11c, qui ne peut pas la lire des doublons :
+   le fichier n'est pas conservé, `transaction_count` ne compte que les lignes insérées) : un fichier **chevauche** les
+   relevés du compte quand `overlapping_statements(company, compte, first_date, last_date)` (`bank_imports.rs`, `period_from <=
+   to AND period_to >= from`, relevés saisis ou importés) en rend au moins un — pas d'avertissement. Sinon, par la fonction
+   existante `previous_statement_closing` (`bank_imports.rs:358` : le relevé à solde du compte dont `period_to` <
+   `first_date`, le plus tardif) : si elle en rend un et que sa clôture diffère de `opening_balance` du fichier →
+   avertissement `gap` au compte rendu (l'import passe) ; aucun relevé antérieur → rien. La clôture lue est celle d'un
+   relevé à solde : les imports Wise en ont toujours une, un relevé saisi sans solde est ignoré par la fonction. Réponse `201` : `{ account, files: [{ filename, currency, bankAccountId,
    importId | null, inserted, duplicates, openingBalance, closingBalance, warnings: [ { code: "gap", expected, found,
    previousImportId } ] }] }`.
 6. **AC-6 — Non-régression et factorisation.** Tests de 38-11b (PayPal) et des imports CAMT, CSV, manuel inchangés
@@ -157,3 +160,10 @@ bancaire ni règlement de facture.
   d'administration absents ; refus `BANK_ACCOUNT_IS_PROVIDER` et `PATCH` non étendus à `wise` ; verrou
   `with_account_lock` au lieu de `with_account_locks` de 38-11b. LOW : limite du corps multi-fichiers, place du refus
   de devise en double (après la lecture), troncature UTF-8 des détails.
+- 2026-11-20 — validation P2 (Claude Sonnet 5.5, contexte frais) : 0 CRITICAL, 0 HIGH, 1 MEDIUM, 1 LOW, remédiés (rapport
+  `kesh-gate-logs/epic-39-40-kiss/validation/39-11b-compte-wise-et-import-P2.md`). Remédiation P1 relue au code d'`origin/main`
+  et à 38-11b (validée P2) : rien à reprendre. MEDIUM : la règle de continuité « aucune ligne du fichier n'est un doublon »
+  n'était pas relisible par les écarts de 39-11c (les doublons ne sont pas stockés) et, relue à la revue, signalait à tort
+  l'import qui en chevauchait un autre (`previous_statement_closing` rend alors un relevé plus ancien) → chevauchement par
+  `overlapping_statements`, une seule définition. LOW : codes nommés `WISE_*` à l'AC-3 contre la règle de l'AC-2, clé du
+  registre des routes absente.

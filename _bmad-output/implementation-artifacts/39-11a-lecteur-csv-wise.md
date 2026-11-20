@@ -81,7 +81,8 @@ Wise, afin que l'import (39-11b) n'ait plus qu'à ranger ces lignes au compte ba
 5. **AC-5 — Contrôles du fichier.** Toutes les lignes de la même devise, sinon `MixedCurrencies` ; un identifiant en
    double dans le fichier → `DuplicateId` (une conversion porte le même identifiant dans **deux** fichiers, jamais deux
    fois dans un) ; lignes **triées par ordre chronologique** : `date_time` (valeur lue, jamais la chaîne : `JJ-MM-AAAA`
-   ne se trie pas en texte), à égalité ou en son absence, ordre **inverse** du fichier (Wise écrit la plus récente en
+   ne se trie pas en texte) quand **toutes** les lignes en ont un, à égalité, ou dès qu'une seule en manque (colonne
+   absente comprise), ordre **inverse** du fichier (Wise écrit la plus récente en
    tête ; une ligne de frais précède d'une milliseconde sa ligne d'origine) ; puis **continuité** : chaque
    `running_balance` = le précédent + `amount`, sinon `RunningBalanceBreak`. `WiseCsv { currency, rows
    (chronologiques), opening_balance = premier solde − premier montant, closing_balance = dernier solde, first_date,
@@ -117,8 +118,8 @@ valeurs de chacune, préfixes, `fee_of`, soldes d'ouverture et de clôture ; col
 de carte absentes du résultat ; requises manquantes ; doublon de colonne ; deux devises ; identifiant en double ;
 rupture du solde courant ; tri sur l'horodatage lu (cas des deux jours de la fixture) ; signe contraire ; date
 `MM/JJ/AAAA` refusée ; montant `1.500,00` et `1,50` refusés ; cours à onze décimales refusé ; BOM admis ; U+202F gardé
-dans la description ; plafond d'erreurs. Tests de 38-11a verts sans changement d'assertion après le déplacement des
-aides. Gate ciblé `binary(wise_csv)` et tests de `kesh-import` ; gate complet au push.
+dans la description ; plafond d'erreurs. Une ligne sans `Date Time` dans un fichier qui en a ailleurs → tri sur l'ordre inverse du fichier seul. Tests de 38-11a verts sans
+changement d'assertion après le déplacement des aides. Gate ciblé `binary(wise_csv)` et tests de `kesh-import` ; gate complet au push.
 
 ## Modules touchés (1)
 
@@ -147,3 +148,9 @@ nommant les colonnes qui manquent, et un relevé dont le solde courant ne se sui
   pas) → horodatage lu ; fixtures sans exercice d'accueil en E2E → dates de 2020 ; BOM, numéros de ligne et type
   d'erreur fermé non définis → repris de 38-11a. LOW : U+202F des descriptions, lignes citées de `lib.rs`
   (`MAX_CSV_LINE_ERRORS` défini à `error.rs:49`), catalogue des fixtures.
+- 2026-11-20 — validation P2 (Claude Sonnet 5.5, contexte frais) : 0 CRITICAL, 0 HIGH, 0 MEDIUM, 1 LOW, remédié (rapport
+  `kesh-gate-logs/epic-39-40-kiss/validation/39-11a-lecteur-csv-wise-P2.md`). Remédiation P1 relue au code d'`origin/main`
+  (`fd04099f`) et aux relevés 2024 en lecture seule (agrégats : montants et cours conformes aux formes fermées, identifiants
+  `[A-Z0-9_-]`, aucun doublon d'identifiant par fichier, `Date` = date de `Date Time`, solde courant continu dans l'ordre des
+  horodatages, aucun horodatage double) : rien à reprendre. LOW : tri sur `Date Time` quand une seule ligne en manque,
+  règle écrite (ordre inverse du fichier seul).
