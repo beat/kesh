@@ -2042,3 +2042,193 @@ async fn a_closed_closing_account_can_be_reopened_by_its_owner(pool: MySqlPool) 
          de D6 reparable, et donc la decision defendable"
     );
 }
+
+// ============================================================
+// Story 46-1 — rapports par groupes de comptes (arbre `parent_id`)
+// ============================================================
+
+/// Jeu de données déterministe de la Story 46-1 : plan PME complet
+/// (`pme.json`), un compte en dollars sous `10 Actifs circulants`, deux
+/// exercices (2025 et 2026). Base `#[sqlx::test]` neuve : les identifiants
+/// sont stables d'un run à l'autre, ce qui permet la fixture de l'AC-8.
+struct JeuPme {
+    jwt: String,
+    fy_2025: i64,
+    fy_2026: i64,
+    /// Identifiant de chaque compte, par numéro.
+    comptes: std::collections::HashMap<String, i64>,
+}
+
+impl JeuPme {
+    fn id(&self, numero: &str) -> i64 {
+        *self
+            .comptes
+            .get(numero)
+            .unwrap_or_else(|| panic!("compte {numero} absent du jeu PME"))
+    }
+}
+
+/// Une écriture à deux lignes du jeu PME ; `usd`, s'il est donné, est le
+/// montant en dollars de la ligne au débit (cours = CHF / USD).
+async fn ecriture_pme(
+    pool: &MySqlPool,
+    jeu: &JeuPme,
+    company_id: i64,
+    user_id: i64,
+    fy: i64,
+    date: NaiveDate,
+    debit: &str,
+    credit: &str,
+    montant: Decimal,
+    usd: Option<Decimal>,
+) {
+    let foreign = usd.map(|m| kesh_db::entities::ForeignAmount {
+        declared_currency: None,
+        amount: m,
+        rate: montant / m,
+        source: Some(kesh_db::entities::RateProvenance::Manual),
+        rate_derived: false,
+    });
+    journal_entries::create(
+        pool,
+        fy,
+        Acteur::utilisateur(user_id),
+        NewJournalEntry {
+            company_id,
+            entry_date: date,
+            journal: Journal::OD,
+            description: format!("{debit} / {credit}"),
+            project_id: None,
+            lines: vec![
+                NewJournalEntryLine {
+                    account_id: jeu.id(debit),
+                    debit: montant,
+                    credit: Decimal::ZERO,
+                    project_id: None,
+                    foreign,
+                },
+                NewJournalEntryLine {
+                    account_id: jeu.id(credit),
+                    debit: Decimal::ZERO,
+                    credit: montant,
+                    project_id: None,
+                    foreign: None,
+                },
+            ],
+        },
+    )
+    .await
+    .unwrap();
+}
+
+async fn jeu_pme(pool: &MySqlPool) -> JeuPme {
+    let company_id = create_company(pool, "Société PME 46-1").await;
+    let user_id = create_user(pool, "pme_46_1", Role::Comptable, company_id).await;
+    let d = |a, m, j| NaiveDate::from_ymd_opt(a, m, j).unwrap();
+    let fy_2025 = create_fy(pool, user_id, company_id, "2025", d(2025, 1, 1), d(2025, 12, 31)).await;
+    let fy_2026 = create_fy(pool, user_id, company_id, "2026", d(2026, 1, 1), d(2026, 12, 31)).await;
+    let plan = kesh_core::chart_of_accounts::load_chart("pme").expect("plan PME");
+    let crees = accounts::bulk_create_from_chart(pool, company_id, &plan, "fr")
+        .await
+        .unwrap();
+    let mut comptes: std::collections::HashMap<String, i64> =
+        crees.iter().map(|a| (a.number.clone(), a.id)).collect();
+
+    sqlx::query("UPDATE companies SET multi_currency_enabled = TRUE WHERE id = ?")
+        .bind(company_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE fiscal_years SET multi_currency = TRUE WHERE company_id = ?")
+        .bind(company_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    let usd = sqlx::query(
+        "INSERT INTO accounts (company_id, number, name, account_type, parent_id, currency) \
+         VALUES (?, '1025', 'Banque USD', 'Asset', ?, 'USD')",
+    )
+    .bind(company_id)
+    .bind(comptes["10"])
+    .execute(pool)
+    .await
+    .unwrap()
+    .last_insert_id() as i64;
+    comptes.insert("1025".into(), usd);
+
+    let jeu = JeuPme {
+        jwt: forge_jwt(user_id, role_str(Role::Comptable), company_id),
+        fy_2025,
+        fy_2026,
+        comptes,
+    };
+    let e = |fy, date, debit, credit, montant, usd| {
+        ecriture_pme(
+            pool, &jeu, company_id, user_id, fy, date, debit, credit, montant, usd,
+        )
+    };
+    // Exercice 2025.
+    e(fy_2025, d(2025, 1, 5), "1020", "2800", dec!(20000), None).await;
+    e(fy_2025, d(2025, 2, 10), "1100", "3000", dec!(8000), None).await;
+    e(fy_2025, d(2025, 3, 3), "4000", "2000", dec!(3000), None).await;
+    e(fy_2025, d(2025, 4, 1), "6000", "1020", dec!(1200), None).await;
+    e(fy_2025, d(2025, 5, 2), "1020", "6950", dec!(50), None).await;
+    e(fy_2025, d(2025, 6, 7), "7010", "1020", dec!(100), None).await;
+    e(fy_2025, d(2025, 6, 8), "1020", "7000", dec!(300), None).await;
+    e(fy_2025, d(2025, 7, 1), "1025", "1020", dec!(912), Some(dec!(1000))).await;
+    e(fy_2025, d(2025, 8, 1), "1520", "2400", dec!(4000), None).await;
+    // Exercice 2026.
+    e(fy_2026, d(2026, 1, 20), "1020", "1100", dec!(5000), None).await;
+    e(fy_2026, d(2026, 2, 25), "5000", "1020", dec!(2500), None).await;
+    e(fy_2026, d(2026, 3, 1), "1020", "8000", dec!(400), None).await;
+    e(fy_2026, d(2026, 3, 2), "8010", "1020", dec!(150), None).await;
+    e(fy_2026, d(2026, 4, 9), "1025", "1020", dec!(455), Some(dec!(500))).await;
+    jeu
+}
+
+/// Chemin d'une fixture JSON de la Story 46-1.
+fn fixture_46_1(nom: &str) -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/rapports-groupes")
+        .join(nom)
+}
+
+/// AC-8 (NFR-46-1) — sans `detailLevel`, le corps JSON du bilan et du compte
+/// de résultat est **identique à l'octet** à celui du commit de base de la
+/// Story 46-1 (`4c498494`), écrit dans `tests/fixtures/rapports-groupes/`
+/// avant toute modification du code. `KESH_ECRIRE_FIXTURES_46_1=1` les
+/// réécrit — à ne faire qu'au commit de base.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn rapports_sans_parametre_identiques_a_la_fixture_de_base(pool: MySqlPool) {
+    let jeu = jeu_pme(&pool).await;
+    let app = spawn_app(pool).await;
+    let ecrire = std::env::var("KESH_ECRIRE_FIXTURES_46_1").as_deref() == Ok("1");
+    for (route, nom) in [
+        ("balance-sheet", "bilan"),
+        ("income-statement", "resultat"),
+    ] {
+        for (fy, annee) in [(jeu.fy_2025, 2025), (jeu.fy_2026, 2026)] {
+            let resp = app
+                .client
+                .get(app.url(&format!("/api/v1/reports/{route}?fiscalYearId={fy}")))
+                .bearer_auth(&jeu.jwt)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), 200, "{route} {annee}");
+            let corps = resp.text().await.unwrap();
+            let chemin = fixture_46_1(&format!("{nom}-{annee}.json"));
+            if ecrire {
+                std::fs::create_dir_all(chemin.parent().unwrap()).unwrap();
+                std::fs::write(&chemin, &corps).unwrap();
+            }
+            let attendu = std::fs::read_to_string(&chemin)
+                .unwrap_or_else(|e| panic!("fixture {} illisible : {e}", chemin.display()));
+            assert_eq!(
+                corps, attendu,
+                "{route} {annee} sans paramètre : le JSON a changé (NFR-46-1)"
+            );
+            assert!(!corps.contains("grouping") && !corps.contains("groupedRows"));
+        }
+    }
+}
