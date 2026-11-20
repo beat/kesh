@@ -84,7 +84,7 @@ légales imposées (Q7) ; le grand livre (Q6) ; **la balance est dans le périm�
   `detailLevel` (`1`…`n` | `all`), chaque section gagne un champ `groupedRows` : lignes déjà ordonnées
   `{ kind: group|account|own, depth, accountId, number, name, balance, currency?, balanceCurrency? }`. Les trois rendus
   et le MCP lisent la même liste. *(Q5 pour le MCP)*
-  *Beat, 2026-11-19 :* approuvé (Q5 tel que proposé) ; le MCP suit, avec la position des sous-totaux (46-4).
+  *Beat, 2026-11-19 :* approuvé (Q5 tel que proposé) ; le MCP suit, avec la position des sous-totaux (46-4). *Précisé à la 46-1, § Le contrat (validation P3, 2026-11-20) : les noms de champs de la fiche font foi (`accountNumber`, `accountName`, `open`, `active`, `role`, `mirrorOf`, genre `subtotal` en pied) ; le schéma ci-dessus n'en est qu'une esquisse.*
 - **D9 — Choix du niveau à l'écran** : un sélecteur « À plat · Niveau 1 · … · Tous les comptes » sur le bilan et le
   compte de résultat ; le niveau passe à l'export (PDF, CSV). Retenu par visiteur (`localStorage`, convenance) ; aucun
   preset enregistré (hors périmètre).
@@ -186,7 +186,7 @@ Déclarés au kickoff (`CLAUDE.md` § *Travailler à plusieurs développeurs*, �
 
 | Fichier ou module | Stories de l'epic | Autres chantiers qui le touchent | Règle |
 |---|---|---|---|
-| `crates/kesh-report/src/groupes.rs` (neuf, enveloppe `AvecGroupes<T>`), `lib.rs` | 46-1, 46-6a | — | — |
+| `crates/kesh-report/src/groupes.rs` (neuf, enveloppe `AvecGroupes<T, S>`), `lib.rs` | 46-1, 46-6a | — | — |
 | `crates/kesh-report/src/balance_sheet.rs`, `income_statement.rs` | **aucune** (validation P1 de la 46-1, C-46-1-4 : enveloppe, structures et littéraux inchangés) | 47-3 (`mirror_of` d'`AccountBalance`) | — |
 | `crates/kesh-report/src/trial_balance.rs` | 46-6a | — | — |
 | `crates/kesh-report/src/pdf.rs` | 46-3, 46-6b | **48-11** (fort : formateurs, garde `{:.2}`), 47-3 (littéraux de tests), 49-1b (PDF des factures, autre région) | 46-3 part de `main` **après** la 48-11 |
@@ -281,3 +281,4 @@ La page pour Guy (`data-not-committed/epic-46-revue-pour-guy.html`) porte ces r�
   46-2 0/0/0/2, 46-3 0/0/1/1 (C/H/M/L), remédiés. `AvecGroupes<T, S>` (deux paramètres) ; entrée typée de la
   validation pour le MCP ; garde « rapport vide » des rendus groupés (46-3) ; groupes dissous du plan PME relevés.
   **Reste en attente de Beat** : « hiérarchie masquée » = vue à plat (46-2 C-46-2-2), question posée sans réponse.
+- 2026-11-20 — **P3 ciblée** (Claude Haiku 5.5, contexte frais, commit `8a7f0f73`) des fiches 46-1, 46-2, 46-3 : 0 C / 0 H / 1 M / 1 L, remédiés. M : la table des fichiers communs gardait `AvecGroupes<T>` (propagation du P2 incomplète) → `AvecGroupes<T, S>` ; L : les noms de champs de D8 renvoient désormais au contrat de la 46-1. **Hors périmètre de cette passe, à propager à la 46-6a et à la 46-6b (fiches d'un autre agent, non touchées)** : `AvecGroupes<T>` à un paramètre aux lignes 24, 40, 69 et 106 de la 46-6a, `AvecGroupes<TrialBalance>` à la ligne 45 de la 46-6b ; à lire `AvecGroupes<T, S>` (C-46-1-4). Rapport : `kesh-gate-logs/epic-46/validation/46-123-P3-ciblee.md`.

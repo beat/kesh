@@ -113,7 +113,7 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
    financiers`). **Relevé dans `pme.json` (validation P2)** : au compte de résultat, les groupes `6`, `7`, `70`, `8`
    et `80`, dont les feuilles mêlent charges et produits, sont dissous dès que les deux natures portent un solde ; au
    bilan, `2 Passifs` l'est quand un compte de rôle fonds propres a un solde (la partition du bilan est par rôle,
-   non par type de compte : `pme.json` ne porte que des passifs sous `2`). Le test PME de l'AC-14 les énumère.
+   non par type de compte : `pme.json` ne porte que des passifs sous `2`). Le test PME de l'AC-14 les vérifie une à une.
 5. **AC-5 — Groupes non affichés (D6 modifiée, Q2).** Un groupe sans descendance dans la section n'y paraît pas. Un
    groupe **fermé par le niveau** dont le sous-total est nul en CHF **et** en devise n'est pas affiché ; son zéro reste
    dans le sous-total de son parent. Un groupe **fermé à la main** (`closed`) reste affiché, même nul : sinon la ligne
@@ -154,7 +154,7 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
     comptes annuels** ; la même phrase va au manuel utilisateur à la 46-2.
 13. **AC-13 — Arrondi.** Aucun formatage de montant n'est écrit dans cette story (le JSON porte des `Decimal` exacts) ;
     aucun `format!("{…:.2}")` neuf dans `kesh-report` — la garde de la 48-11 l'interdit (cf. *Dev Notes*).
-14. **AC-14 — Tests.** Unitaires de `regrouper` sans base : plan PME complet ; groupe à solde propre ; groupe à cheval
+14. **AC-14 — Tests.** Unitaires de `regrouper` sans base : plan PME complet, dont les dissolutions de l'AC-4 (`2` au bilan ; `6`, `7`, `70`, `8`, `80` au compte de résultat) ; groupe à solde propre ; groupe à cheval
     (dissous) ; cycle et parent étranger ; devise unique, devises mêlées, CHF mêlé à une devise ; niveaux 1, 2, 3 et
     `all` ; `open` et `closed` (dont un groupe ouvert sous un ancêtre fermé) ; `header` et `footer` ; groupe ouvert à
     sous-total nul ; groupe nul fermé par le niveau (masqué) et fermé à la main (affiché) ; `maxDepth` égal au niveau 1
@@ -187,8 +187,7 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
       46-3 et 46-4) ; validation dans le service (un seul endroit, réutilisé par l'export de la 46-3 et
       le MCP de la 46-4) **avec deux entrées** : l'analyse des chaînes de la route REST (`detailLevel=2`,
       `open=1,2`) qui produit la même `DemandeGroupes` typée, et la construction directe depuis des valeurs typées
-      (tableaux d'entiers du MCP, 46-4) ; les refus de l'AC-8 vivent dans la seconde, la première n'ajoute que
-      l'analyse syntaxique ; `ReportQuery` gagne `detail_level`, `subtotal_position`, `open`, `closed`
+      (tableaux d'entiers du MCP, 46-4) ; les refus de l'AC-8 vivent dans la seconde, sauf ceux de la syntaxe de la chaîne (`2.5`, `ALL`, vide, élément non entier), que la première refuse à l'analyse ; `ReportQuery` gagne `detail_level`, `subtotal_position`, `open`, `closed`
       (`Option<String>`, validés à la main comme `validate_format`, pour un 400 et non un 422 Axum).
 - [ ] **T4 — tests d'intégration** (AC 14) dans `crates/kesh-api/tests/reports_e2e.rs`.
 - [ ] **T5 — documentation** (AC 12, 15).
@@ -313,3 +312,4 @@ facultatifs ; sans eux, la réponse ne change pas.
   la validation pour le MCP (T3) ; conversion en champs nommés propre à chaque rapport (T1) ; groupes dissous du plan PME
   relevés (`6`, `7`, `70`, `8`, `80` au compte de résultat ; `2` au bilan, partition par rôle) (AC-4) ; déterminisme de
   la fixture (AC-8). Rapport : `kesh-gate-logs/epic-46/validation/46-1-P2.md`.
+- 2026-11-20 — Validation P3 ciblée (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `8a7f0f73`, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 0 M / 2 L, remédiés. L : le test PME de l'AC-14 n'énumérait pas les dissolutions de l'AC-4 (désormais énumérées dans l'AC-14) ; les refus de syntaxe (`2.5`, `ALL`, vide, élément non entier) étaient attribués au service alors qu'ils se refusent à l'analyse (T3). Rapport : `kesh-gate-logs/epic-46/validation/46-123-P3-ciblee.md`.

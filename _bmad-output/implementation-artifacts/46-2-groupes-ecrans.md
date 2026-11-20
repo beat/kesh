@@ -90,7 +90,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
       `reports.api.ts` (`getBalanceSheet`, `getIncomeStatement`, `downloadReport`, `getReportExportUrl` avec options).
 - [ ] **T3 — composant** `GroupedReportRows.svelte` (neuf, partagé par les deux vues et réutilisé par la 46-6b) :
       rendu des lignes, accordéons, règle de rendu (AC-4). Il se paramètre par un **descripteur de colonnes** (une
-      colonne de montant ici ; la 46-6b l'étend à quatre colonnes pour la balance), non par un composant par rapport.
+      colonne de montant ici, le solde en devise restant dans la cellule du libellé comme `AccountCurrencyBalance` aujourd'hui ; la 46-6b l'étend à quatre colonnes pour la balance), non par un composant par rapport.
 - [ ] **T4 — vues et page** (AC 1, 2, 5, 7) : `BalanceSheetView.svelte`, `IncomeStatementView.svelte` (branche
       groupée, branche à plat inchangée), barre de contrôles dans `routes/(app)/reports/+page.svelte`, mémoire.
 - [ ] **T5 — i18n, Vitest, E2E, captures, manuel** (AC 9).
@@ -169,3 +169,4 @@ l'affichage d'avant.
   `+page.svelte` 893 lignes, `mode.svelte.ts`, manuel `:3923`, `:3954`. L : composant paramétré par un descripteur de
   colonnes (T3) ; mention « à confirmer par Beat » remise sur « hiérarchie masquée » = vue à plat (AC-2, C-46-2-2).
   Rapport : `kesh-gate-logs/epic-46/validation/46-2-P2.md`.
+- 2026-11-20 — Validation P3 ciblée (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `8a7f0f73`) : 0 C / 0 H / 0 M / 1 L, remédié. L : le descripteur « une colonne de montant » ne disait pas où loge le solde en devise ; il reste dans la cellule du libellé, comme `AccountCurrencyBalance` aujourd'hui (T3). Rapport : `kesh-gate-logs/epic-46/validation/46-123-P3-ciblee.md`.
