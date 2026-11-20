@@ -6605,3 +6605,95 @@ async fn full_import_of_a_0_18_0_backup_resets_the_group_ceiling(pool: MySqlPool
         "le plafond revient à sa valeur par défaut"
     );
 }
+
+/// Story 47-1 (AC-10) — le numéro du miroir de chaque compte source de la
+/// société, par numéro (les identifiants sont ceux de la sauvegarde).
+async fn miroirs_par_numero(pool: &MySqlPool, company_id: i64) -> Vec<(String, String)> {
+    sqlx::query_as(
+        "SELECT s.number, t.number FROM accounts s JOIN accounts t ON t.id = s.mirror_account_id \
+         WHERE s.company_id = ? ORDER BY s.number",
+    )
+    .bind(company_id)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+/// Story 47-1 (AC-10) — pose un lien de miroir en SQL : source 2279 (passif),
+/// miroir 1189 (actif non imputable).
+async fn poser_un_miroir(pool: &MySqlPool, company_id: i64) {
+    let cible = sqlx::query(
+        "INSERT INTO accounts (company_id, number, name, account_type, postable) \
+         VALUES (?, '1189', 'Créances sociales', 'Asset', FALSE)",
+    )
+    .bind(company_id)
+    .execute(pool)
+    .await
+    .unwrap()
+    .last_insert_id();
+    sqlx::query(
+        "INSERT INTO accounts (company_id, number, name, account_type, mirror_account_id) \
+         VALUES (?, '2279', 'Dettes sociales', 'Liability', ?)",
+    )
+    .bind(company_id)
+    .bind(cible)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// Story 47-1 (AC-10) — l'aller-retour d'une sauvegarde neuve conserve les
+/// miroirs ; une sauvegarde **0.19.0** (sans la colonne `mirror_account_id`)
+/// s'importe, miroirs vides (règle générique de `check_schema_compat`, colonne
+/// facultative), sans entrée à `ABSENCES_ADMISES_EPIC_37`.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn full_import_keeps_mirrors_and_takes_a_0_19_0_backup_without_them(pool: MySqlPool) {
+    let app = spawn_app(pool.clone()).await;
+    let biz = seed_business(&pool, "Miroirs").await;
+    let c = biz.ctx.company_id;
+    poser_un_miroir(&pool, c).await;
+    let attendu = vec![("2279".to_string(), "1189".to_string())];
+    assert_eq!(miroirs_par_numero(&pool, c).await, attendu);
+
+    // Aller-retour d'une sauvegarde neuve.
+    let backup = export_backup(&app, &biz.ctx.jwt).await;
+    let resp = post_import(&app, &biz.ctx.jwt, backup.clone()).await;
+    assert_eq!(resp.status(), 200, "{}", resp.text().await.unwrap());
+    assert_eq!(
+        miroirs_par_numero(&pool, c).await,
+        attendu,
+        "miroirs conservés"
+    );
+
+    // Sauvegarde 0.19.0 : la colonne retirée du manifeste et des NDJSON.
+    assert!(
+        !kesh_db::backup::ABSENCES_ADMISES_EPIC_37
+            .iter()
+            .any(|e| matches!(
+                e.absence,
+                kesh_db::backup::Absence::Colonne("accounts", "mirror_account_id")
+            )),
+        "la colonne n'a pas à figurer à ABSENCES_ADMISES_EPIC_37"
+    );
+    let (mut manifest, mut data, fichiers) = ouvrir_tout(&backup);
+    manifest["keshVersion"] = Value::from("0.19.0");
+    recrire_table(&mut manifest, &mut data, "accounts", |o| {
+        o.remove("mirror_account_id");
+    });
+    strip_column(&mut manifest, "accounts", "mirror_account_id");
+    let ancienne = rezip_tout(&manifest, &data, &fichiers);
+    let resp = post_import(&app, &biz.ctx.jwt, ancienne).await;
+    assert_eq!(resp.status(), 200, "{}", resp.text().await.unwrap());
+    assert!(
+        miroirs_par_numero(&pool, c).await.is_empty(),
+        "miroirs vides après l'import d'une sauvegarde 0.19.0"
+    );
+    let comptes: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM accounts WHERE company_id = ? AND number IN ('1189', '2279')",
+    )
+    .bind(c)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(comptes, 2, "les comptes eux-mêmes sont importés");
+}

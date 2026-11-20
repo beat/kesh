@@ -206,6 +206,7 @@ async fn create_account(
             postable: true,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await

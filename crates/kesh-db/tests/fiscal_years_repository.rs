@@ -954,6 +954,7 @@ async fn reopen_reactivates_entry_editability(pool: MySqlPool) {
             postable: true,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await
@@ -972,6 +973,7 @@ async fn reopen_reactivates_entry_editability(pool: MySqlPool) {
             postable: true,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await

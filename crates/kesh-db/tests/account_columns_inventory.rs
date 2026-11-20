@@ -19,6 +19,11 @@
 //!   l'affirmation « clé étrangère vers `bank_accounts` », que le test vérifie
 //!   au schéma (contrainte `FOREIGN KEY … REFERENCES bank_accounts`).
 //!
+//! L'inventaire n'est plus limité aux colonnes qui ne peuvent pas désigner un
+//! compte en devise : depuis la Story 47-1, `accounts.mirror_account_id` peut
+//! désigner un compte en devise (R8) — elle y est classée par sa propre preuve,
+//! « présentation seule » ([`Preuve::PresentationSeule`]).
+//!
 //! Test pur, sans base.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -34,6 +39,11 @@ enum Preuve {
     /// comptable d'un compte bancaire est `bank_accounts.journal_account_id`,
     /// inventorié à part. Vérifié au schéma.
     VersBankAccounts,
+    /// Story 47-1 (AC-11) — présentation seule : aucune écriture ne s'impute
+    /// sur le compte désigné, refusée au point de passage des lignes
+    /// (`validate_lines_accounts_in_tx`) ; une cible en devise est admise (R8).
+    /// Les tests nommés prouvent le refus et l'admission.
+    PresentationSeule(&'static [&'static str]),
 }
 
 /// Une colonne de la liste close, sa preuve et une note libre (ce que les
@@ -65,6 +75,18 @@ const INVENTAIRE: &[Colonne] = &[
             "kesh-db/tests/account_currency_repository.rs::compte_de_difference_propre_garde_avec_son_detenteur",
         ]),
         note: "Même contrôle que fx_gain_account_id (check_fx_account, tous champs).",
+    },
+    // --- Compte miroir (47-1, R1 à R4, R8) ----------------------------------
+    Colonne {
+        colonne: "accounts.mirror_account_id",
+        preuve: Preuve::PresentationSeule(&[
+            "kesh-db/tests/account_mirror.rs::aucune_ecriture_ne_se_passe_sur_un_compte_miroir",
+            "kesh-db/tests/account_mirror.rs::chaque_regle_de_validite_refuse_avec_sa_raison",
+            "kesh-db/tests/account_mirror.rs::plusieurs_sources_et_une_cible_en_devise_sont_admises",
+        ]),
+        note: "Présentation seule : aucune écriture ne s'y impute, refusée au point de \
+               passage des lignes (manuelle et flux automatiques, ACCOUNT_NOT_POSTABLE) ; \
+               une cible en devise est admise (R8), sa ligne se présente en CHF (47-3).",
     },
     // --- Compte bancaire -------------------------------------------------
     Colonne {
@@ -368,7 +390,7 @@ fn chaque_colonne_de_compte_du_schema_a_sa_preuve() {
     for c in INVENTAIRE {
         assert!(!c.note.trim().is_empty(), "{} : note vide", c.colonne);
         match c.preuve {
-            Preuve::Tests(tests) => {
+            Preuve::Tests(tests) | Preuve::PresentationSeule(tests) => {
                 assert!(!tests.is_empty(), "{} : aucun test", c.colonne);
                 for t in tests {
                     let (fichier, fonction) = t

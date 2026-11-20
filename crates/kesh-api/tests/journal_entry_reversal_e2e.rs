@@ -187,6 +187,7 @@ async fn make_account(pool: &MySqlPool, company_id: i64, number: &str, ty: Accou
             postable: true,
             currency: Default::default(),
             own_fx_accounts: Default::default(),
+            mirror_account_id: None,
         },
     )
     .await
@@ -3606,6 +3607,7 @@ async fn reversal_group_survives_retyping_and_bank_attachment_and_dissolves(pool
             postable: true,
             currency: Default::default(),
             own_fx_accounts: Default::default(),
+            mirror: kesh_db::entities::MirrorChange::Unchanged,
         },
         true,
     )

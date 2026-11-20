@@ -1179,6 +1179,19 @@ error-account-in-foreign-currency = Questo conto è tenuto in { $currency }: non
 error-account-is-fx-difference-account = Questo conto è un conto di differenza di cambio della società: non può essere né archiviato, né cambiato di tipo, né reso non imputabile, né ricevere una valuta, un sottoconto o un ruolo di ricavo.
 error-account-is-fx-difference-account-own = Questo conto è un conto di differenza di cambio del conto in valuta { $number }: non può essere né archiviato, né cambiato di tipo, né reso non imputabile, né ricevere una valuta, un sottoconto o un ruolo di ricavo.
 error-account-is-fx-transit-account = Questo conto è il conto di conversione della società: non può essere né archiviato, né cambiato di tipo fuori dal bilancio, né reso non imputabile, né ricevere una valuta o un sottoconto.
+# Story 47-1 (AC-9) — conto specchio: rifiuti di MIRROR_ACCOUNT_INVALID (una chiave per motivo) e di ACCOUNT_IS_MIRROR.
+error-mirror-account-self = Un conto non può essere il proprio conto specchio.
+error-mirror-account-unknown = Il conto specchio è introvabile o non appartiene a questa società.
+error-mirror-account-archived = Il conto specchio è archiviato.
+error-mirror-account-account-type = Il conto specchio deve trovarsi dall’altra parte dello stesso rendiconto: un passivo per un attivo, un attivo per un passivo, un costo per un ricavo, un ricavo per un costo.
+error-mirror-account-equity = Un conto di capitale proprio (capitale, altro capitale proprio, utile riportato, risultato d’esercizio) non designa un conto specchio.
+error-mirror-account-not-presentation = Il conto specchio deve essere un conto di presentazione: non imputabile, senza ruolo e senza registrazioni.
+error-mirror-account-chain = I conti specchio non si concatenano: il conto { $number } è già collegato da uno specchio.
+error-account-is-mirror-archive = Questo conto è il conto specchio di { $sources }: si archivia solo dopo aver rimosso il collegamento.
+error-account-is-mirror-postable = Questo conto è il conto specchio di { $sources }: resta non imputabile finché il collegamento rimane.
+error-account-is-mirror-account-type = Questo conto è il conto specchio di { $sources }: non cambia tipo finché il collegamento rimane.
+error-account-is-mirror-role = Questo conto è il conto specchio di { $sources }: non riceve un ruolo finché il collegamento rimane.
+error-account-is-mirror-reactivate-first = { $archived } è archiviato: riattivatelo prima, poi rimuovete il suo conto specchio.
 # Story 37-3a — registrazioni in valuta.
 error-multi-currency-disabled-fiscal-year = Questo esercizio è monovaluta: questa operazione in valuta non vi è possibile.
 error-fx-multiple-currencies = Una registrazione porta una sola valuta estera (qui: { $currencies }). Registri un cambio tra valute tramite il conto di conversione, in due registrazioni.

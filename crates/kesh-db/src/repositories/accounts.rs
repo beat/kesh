@@ -14,12 +14,13 @@ use sqlx::mysql::MySqlPool;
 
 use crate::entities::Company;
 use crate::entities::account::{
-    Account, AccountRole, AccountType, AccountUpdate, FxAccounts, FxAccountsOrigin, NewAccount,
-    OwnFxAccounts, OwnFxAccountsChange,
+    Account, AccountRole, AccountType, AccountUpdate, FxAccounts, FxAccountsOrigin, MirrorChange,
+    MirrorLink, NewAccount, OwnFxAccounts, OwnFxAccountsChange,
 };
 use crate::entities::audit_log::NewAuditLogEntry;
 use crate::errors::{
-    CurrencyUseSite, DbError, FxAccountField, FxAccountReason, FxDesignation, map_db_error,
+    AccountIsMirrorReason, CurrencyUseSite, DbError, FxAccountField, FxAccountReason,
+    FxDesignation, MirrorReason, MirrorSourceAccount, map_db_error,
 };
 use crate::repositories::{audit_log, company_invoice_settings};
 
@@ -39,7 +40,7 @@ use crate::repositories::{audit_log, company_invoice_settings};
 macro_rules! columns {
     () => {
         "id, company_id, number, name, account_type, parent_id, active, role, postable, \
-         currency, fx_gain_account_id, fx_loss_account_id, \
+         currency, fx_gain_account_id, fx_loss_account_id, mirror_account_id, \
          version, created_at, updated_at"
     };
 }
@@ -86,6 +87,8 @@ fn account_snapshot_json(account: &Account) -> serde_json::Value {
         "currency": account.currency,
         "fxGainAccountId": account.fx_gain_account_id,
         "fxLossAccountId": account.fx_loss_account_id,
+        // Story 47-1 : sans lui, le diff before/after d'une pose de miroir serait vide.
+        "mirrorAccountId": account.mirror_account_id,
         "version": account.version,
     })
 }
@@ -260,6 +263,20 @@ pub async fn create(pool: &MySqlPool, user_id: i64, new: NewAccount) -> Result<A
     )
     .await?;
 
+    // Story 47-1 (AC-4, AC-7) : un miroir posé dès la création — la cible seule
+    // se verrouille (le compte n'existe pas encore, rien ne le désigne).
+    if let Some(target_id) = new.mirror_account_id {
+        guard_mirror_set_in_tx(
+            &mut tx,
+            new.company_id,
+            None,
+            new.account_type,
+            new.role,
+            target_id,
+        )
+        .await?;
+    }
+
     // Un compte neuf n'a pas encore d'enfants : seule la règle « résultat de
     // l'exercice » peut s'appliquer ici.
     let postable = effective_postable(new.role, new.postable, false);
@@ -278,8 +295,8 @@ pub async fn create(pool: &MySqlPool, user_id: i64, new: NewAccount) -> Result<A
     // `[A-Z]{3}`, `CHF`, et des comptes propres dépareillés ou sur un compte CHF.
     let result = sqlx::query(
         "INSERT INTO accounts (company_id, number, name, account_type, parent_id, role, postable, \
-             currency, fx_gain_account_id, fx_loss_account_id) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             currency, fx_gain_account_id, fx_loss_account_id, mirror_account_id) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(new.company_id)
     .bind(&new.number)
@@ -291,6 +308,7 @@ pub async fn create(pool: &MySqlPool, user_id: i64, new: NewAccount) -> Result<A
     .bind(&new.currency)
     .bind(new.own_fx_accounts.map(|o| o.gain))
     .bind(new.own_fx_accounts.map(|o| o.loss))
+    .bind(new.mirror_account_id)
     .execute(&mut *tx)
     .await
     .map_err(map_db_error)?;
@@ -722,6 +740,8 @@ fn is_no_op_change(before: &Account, changes: &AccountUpdate) -> bool {
         // place, n'est pas un changement.
         && changes.currency.resolve(before.currency.as_deref()) == before.currency
         && changes.own_fx_accounts.resolve(before.own_fx_accounts()) == before.own_fx_accounts()
+        // Story 47-1 : reposer le miroir déjà posé n'est pas un changement.
+        && changes.mirror.resolve(before.mirror_account_id) == before.mirror_account_id
 }
 
 /// La société d'un compte, lue **sur le pool, hors transaction** (Story 37-1,
@@ -833,6 +853,79 @@ async fn guard_currency_update(
         own_fx,
     )
     .await
+}
+
+/// Les gardes du compte miroir d'[`update`] (Story 47-1, AC-4, AC-5, AC-7), sur
+/// l'état résultant, sous le `FOR UPDATE` du compte ; rend le miroir résultant.
+///
+/// 1. **Côté cible (AC-5)** — le compte est-il le miroir d'au moins un compte
+///    (lecture verrouillante, source archivée comprise) ? Alors le rendre
+///    imputable, le retyper ou lui poser un rôle est refusé,
+///    [`DbError::AccountIsMirror`] (`postable`, `accountType`, `role`).
+/// 2. **Pose ou changement** (`Set` d'un autre compte que le miroir actuel) :
+///    [`guard_mirror_set_in_tx`] — la cible seule `FOR UPDATE`.
+/// 3. **Miroir gardé** (`Unchanged`, ou `Set` du miroir actuel) : seules les
+///    règles du côté de la source (`accountType`, `equity`) se rejouent, et
+///    seulement si le type ou le rôle change ; le type de la cible se lit sans
+///    verrou — figé par l'AC-5 tant que ce compte la désigne. Une cible
+///    introuvable (état forgé) n'empêche rien. `Clear` lève ces refus.
+async fn guard_mirror_update(
+    conn: &mut sqlx::MySqlConnection,
+    before: &Account,
+    changes: &AccountUpdate,
+) -> Result<Option<i64>, DbError> {
+    let company_id = before.company_id;
+    let mirror = changes.mirror.resolve(before.mirror_account_id);
+    let mirror_set =
+        matches!(changes.mirror, MirrorChange::Set(t) if before.mirror_account_id != Some(t));
+
+    let postable_on = !before.postable && changes.postable;
+    let retyped = before.account_type != changes.account_type;
+    let role_posed = changes.role.is_some() && changes.role != before.role;
+    let target_reason = if postable_on {
+        Some(AccountIsMirrorReason::Postable)
+    } else if retyped {
+        Some(AccountIsMirrorReason::AccountType)
+    } else if role_posed {
+        Some(AccountIsMirrorReason::Role)
+    } else {
+        None
+    };
+    if let Some(reason) = target_reason {
+        let sources = mirror_sources_locked_in_tx(conn, company_id, before.id).await?;
+        if !sources.is_empty() {
+            return Err(DbError::AccountIsMirror { reason, sources });
+        }
+    }
+
+    match mirror {
+        Some(target_id) if mirror_set => {
+            guard_mirror_set_in_tx(
+                conn,
+                company_id,
+                Some(before.id),
+                changes.account_type,
+                changes.role,
+                target_id,
+            )
+            .await?;
+        }
+        Some(target_id) if retyped || changes.role != before.role => {
+            let target_type: Option<AccountType> = sqlx::query_scalar(
+                "SELECT account_type FROM accounts WHERE id = ? AND company_id = ?",
+            )
+            .bind(target_id)
+            .bind(company_id)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(map_db_error)?;
+            if let Some(target_type) = target_type {
+                check_mirror_source_rules(changes.account_type, changes.role, target_type)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(mirror)
 }
 
 /// Recense ce qu'un changement d'`account_type` infligerait à l'historique d'un
@@ -1030,6 +1123,10 @@ pub async fn update(
     )
     .await?;
 
+    // Story 47-1 (AC-4, AC-5, AC-7) : le compte miroir, après les gardes de
+    // devise et avant le rôle singleton.
+    let mirror = guard_mirror_update(&mut tx, &before, &changes).await?;
+
     // Story 14-3a : si le payload attribue un rôle singleton déjà porté par un
     // autre compte actif, échouer AVANT l'UPDATE pour pouvoir nommer ce compte.
     // La contrainte DB reste le filet (1062 sur course perdue).
@@ -1090,7 +1187,7 @@ pub async fn update(
 
     let rows = sqlx::query(
         "UPDATE accounts SET name = ?, account_type = ?, role = ?, postable = ?, \
-         currency = ?, fx_gain_account_id = ?, fx_loss_account_id = ?, \
+         currency = ?, fx_gain_account_id = ?, fx_loss_account_id = ?, mirror_account_id = ?, \
          version = version + 1 WHERE id = ? AND version = ? AND active = TRUE",
     )
     .bind(&changes.name)
@@ -1100,6 +1197,7 @@ pub async fn update(
     .bind(&currency)
     .bind(own_fx.map(|o| o.gain))
     .bind(own_fx.map(|o| o.loss))
+    .bind(mirror)
     .bind(id)
     .bind(version)
     .execute(&mut *tx)
@@ -1284,6 +1382,17 @@ pub async fn archive_guarded(
     // aucune confirmation n'y change rien.
     let hits = fx_designations_of_in_tx(&mut tx, company_id, &state, id).await?;
     refuse_designated(hits, |_| true)?;
+
+    // Story 47-1 (AC-5) — un compte désigné comme miroir, même par une source
+    // archivée, ne s'archive pas ; aucune confirmation n'y change rien.
+    let sources = mirror_sources_locked_in_tx(&mut tx, company_id, id).await?;
+    if !sources.is_empty() {
+        tx.rollback().await.map_err(map_db_error)?;
+        return Err(DbError::AccountIsMirror {
+            reason: AccountIsMirrorReason::Archive,
+            sources,
+        });
+    }
 
     let designated =
         company_invoice_settings::designations_of_account(&mut *tx, company_id, id).await?;
@@ -2648,6 +2757,625 @@ async fn check_own_fx_accounts_in_tx(
     check_fx_accounts_in_tx(conn, company_id, &checks, FxAccountLock::Share).await
 }
 
+// ---------------------------------------------------------------------------
+// Story 47-1 — le compte miroir (R1 à R4)
+// ---------------------------------------------------------------------------
+
+/// Les rôles de fonds propres (D8) : un compte qui en porte un ne désigne pas
+/// de compte miroir.
+const EQUITY_ROLES: [AccountRole; 4] = [
+    AccountRole::EquityCapital,
+    AccountRole::EquityOther,
+    AccountRole::RetainedEarnings,
+    AccountRole::CurrentYearResult,
+];
+
+/// `true` si les deux types sont **de part et d'autre du même rapport** : actif
+/// ↔ passif (bilan), produit ↔ charge (compte de résultat). Deux comptes du même
+/// type — un compte et lui-même compris — ne le sont jamais.
+pub fn is_opposite_side(a: AccountType, b: AccountType) -> bool {
+    use AccountType::{Asset, Expense, Liability, Revenue};
+    matches!(
+        (a, b),
+        (Asset, Liability) | (Liability, Asset) | (Revenue, Expense) | (Expense, Revenue)
+    )
+}
+
+/// La cible d'un miroir telle que la lit le dépôt, sous verrou (Story 47-1,
+/// AC-4, AC-7). Construite à la main par les tests de [`check_mirror`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MirrorTarget {
+    /// Identifiant.
+    pub id: i64,
+    /// Numéro (nommé par la raison `chain`).
+    pub number: String,
+    /// Actif ou archivé.
+    pub active: bool,
+    /// Type.
+    pub account_type: AccountType,
+    /// Imputable.
+    pub postable: bool,
+    /// Rôle.
+    pub role: Option<AccountRole>,
+    /// Son propre miroir, s'il en a un.
+    pub mirror_account_id: Option<i64>,
+    /// Au moins une ligne d'écriture.
+    pub has_journal_lines: bool,
+}
+
+/// Le compte source **tel qu'il sera après le geste** (Story 47-1, AC-4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MirrorSource<'a> {
+    /// Identifiant ; `None` à la création.
+    pub id: Option<i64>,
+    /// Type résultant.
+    pub account_type: AccountType,
+    /// Rôle résultant.
+    pub role: Option<AccountRole>,
+    /// Numéro d'un compte qui désigne déjà la source comme son miroir, s'il y
+    /// en a un (raison `chain`).
+    pub designated_by: Option<&'a str>,
+}
+
+fn mirror_invalid(reason: MirrorReason, linked_account_number: Option<String>) -> DbError {
+    DbError::MirrorAccountInvalid {
+        reason,
+        linked_account_number,
+    }
+}
+
+/// Les deux règles du côté de la source (Story 47-1, AC-4), dans leur ordre :
+/// `accountType` puis `equity`. Seules à se rejouer quand un compte **garde**
+/// son miroir et change de type ou de rôle.
+fn check_mirror_source_rules(
+    source_type: AccountType,
+    source_role: Option<AccountRole>,
+    target_type: AccountType,
+) -> Result<(), DbError> {
+    if !is_opposite_side(source_type, target_type) {
+        return Err(mirror_invalid(MirrorReason::AccountType, None));
+    }
+    if source_role.is_some_and(|r| EQUITY_ROLES.contains(&r)) {
+        return Err(mirror_invalid(MirrorReason::Equity, None));
+    }
+    Ok(())
+}
+
+/// Règles de validité d'un compte miroir (Story 47-1, AC-4, R2, R3), jugées
+/// sur l'état résultant — **fonction pure** : le dépôt lit `target` sous verrou
+/// et passe `source`. Ordre des refus, celui de [`MirrorReason::ALL`] : `self`
+/// → `unknown` (cible absente ou d'une autre société, `target = None`) →
+/// `archived` → `accountType` → `equity` → `notPresentationAccount` (cible
+/// imputable, à rôle, ou porteuse d'écritures) → `chain` (la cible a un miroir,
+/// ou la source est déjà le miroir d'un autre compte). Plusieurs sources
+/// peuvent viser le même miroir (R3) ; une cible en devise est admise (R8).
+pub fn check_mirror(
+    source: &MirrorSource<'_>,
+    target_id: i64,
+    target: Option<&MirrorTarget>,
+) -> Result<(), DbError> {
+    if source.id == Some(target_id) {
+        return Err(mirror_invalid(MirrorReason::SelfLink, None));
+    }
+    let Some(target) = target else {
+        return Err(mirror_invalid(MirrorReason::Unknown, None));
+    };
+    if !target.active {
+        return Err(mirror_invalid(MirrorReason::Archived, None));
+    }
+    check_mirror_source_rules(source.account_type, source.role, target.account_type)?;
+    if target.postable || target.role.is_some() || target.has_journal_lines {
+        return Err(mirror_invalid(MirrorReason::NotPresentationAccount, None));
+    }
+    if target.mirror_account_id.is_some() {
+        return Err(mirror_invalid(
+            MirrorReason::Chain,
+            Some(target.number.clone()),
+        ));
+    }
+    if let Some(number) = source.designated_by {
+        return Err(mirror_invalid(
+            MirrorReason::Chain,
+            Some(number.to_string()),
+        ));
+    }
+    Ok(())
+}
+
+/// La cible d'un miroir, prise **`FOR UPDATE`** (Story 47-1, AC-7), bornée à la
+/// société ; puis ses lignes d'écriture en lecture verrouillante (jamais une
+/// lecture d'instantané : une écriture commitée pendant l'attente du verrou
+/// serait manquée). `None` : introuvable ou d'une autre société.
+async fn lock_mirror_target_in_tx(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    target_id: i64,
+) -> Result<Option<MirrorTarget>, DbError> {
+    type Row = (
+        i64,
+        String,
+        bool,
+        AccountType,
+        bool,
+        Option<AccountRole>,
+        Option<i64>,
+    );
+    let row: Option<Row> = sqlx::query_as(
+        "SELECT id, number, active, account_type, postable, role, mirror_account_id \
+         FROM accounts WHERE id = ? AND company_id = ? FOR UPDATE",
+    )
+    .bind(target_id)
+    .bind(company_id)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(map_db_error)?;
+    let Some((id, number, active, account_type, postable, role, mirror_account_id)) = row else {
+        return Ok(None);
+    };
+    let has_journal_lines = has_journal_line_locked(conn, id).await?;
+    Ok(Some(MirrorTarget {
+        id,
+        number,
+        active,
+        account_type,
+        postable,
+        role,
+        mirror_account_id,
+        has_journal_lines,
+    }))
+}
+
+/// Les comptes de la société qui désignent `account_id` comme leur miroir,
+/// **archivés compris**, triés par numéro — en **lecture verrouillante** par
+/// l'index `idx_accounts_mirror` (Story 47-1, AC-5, AC-7) : la dernière version
+/// commitée, et des verrous d'intervalle qui font attendre une pose concurrente.
+async fn mirror_sources_locked_in_tx(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    account_id: i64,
+) -> Result<Vec<MirrorSourceAccount>, DbError> {
+    let rows: Vec<(i64, String, String, bool)> = sqlx::query_as(
+        "SELECT id, number, name, active FROM accounts \
+         WHERE company_id = ? AND mirror_account_id = ? ORDER BY number, id LOCK IN SHARE MODE",
+    )
+    .bind(company_id)
+    .bind(account_id)
+    .fetch_all(conn)
+    .await
+    .map_err(map_db_error)?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, number, name, active)| MirrorSourceAccount {
+            id,
+            number,
+            name,
+            active,
+        })
+        .collect())
+}
+
+/// Pose d'un miroir `target_id` sur la source (Story 47-1, AC-4, AC-7) :
+/// `self` jugé sans lecture, puis la cible `FOR UPDATE` et ses lignes, puis
+/// « qui désigne la source » (en lecture verrouillante), puis [`check_mirror`].
+/// À la création, la source n'existe pas : rien ne la désigne.
+async fn guard_mirror_set_in_tx(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    source_id: Option<i64>,
+    source_type: AccountType,
+    source_role: Option<AccountRole>,
+    target_id: i64,
+) -> Result<(), DbError> {
+    let mut source = MirrorSource {
+        id: source_id,
+        account_type: source_type,
+        role: source_role,
+        designated_by: None,
+    };
+    if source_id == Some(target_id) {
+        return check_mirror(&source, target_id, None);
+    }
+    let target = lock_mirror_target_in_tx(conn, company_id, target_id).await?;
+    let designators = match source_id {
+        Some(id) => mirror_sources_locked_in_tx(conn, company_id, id).await?,
+        None => Vec::new(),
+    };
+    source.designated_by = designators.first().map(|s| s.number.as_str());
+    check_mirror(&source, target_id, target.as_ref())
+}
+
+/// Une ligne brute du lecteur des liens (Story 47-1, AC-8) : la source, et sa
+/// cible **dans la même société** (colonnes `NULL` si elle est absente ou d'une
+/// autre société). Construite à la main par les tests de [`retain_valid_links`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MirrorLinkRow {
+    /// Le compte source.
+    pub source_id: i64,
+    /// Son numéro (journal des liens écartés).
+    pub source_number: String,
+    /// Son type.
+    pub source_account_type: AccountType,
+    /// Le miroir désigné, tel que lu.
+    pub mirror_account_id: i64,
+    /// La cible, si elle existe dans la société.
+    pub target: Option<MirrorLinkTargetRow>,
+}
+
+/// La cible d'un [`MirrorLinkRow`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MirrorLinkTargetRow {
+    /// Numéro.
+    pub number: String,
+    /// Nom.
+    pub name: String,
+    /// Type.
+    pub account_type: AccountType,
+    /// Actif ou archivé.
+    pub active: bool,
+    /// Son propre miroir, tel que lu.
+    pub mirror_account_id: Option<i64>,
+}
+
+/// Écarte, des liens **tels que lus**, la liste close de ce qui fausserait la
+/// présentation (Story 47-1, AC-8) — fonction **pure**, un `tracing::warn!` par
+/// lien écarté nommant les comptes et le cas : (a) cible absente ou d'une
+/// autre société ; (b) types qui ne sont pas de l'autre côté du même rapport
+/// (le lien vers soi-même y tombe : même type) ; (c) chaîne — la cible a
+/// elle-même un miroir. Ne sont **pas** écartés : une source de rôle de fonds
+/// propres, une cible à rôle, imputable ou porteuse d'écritures, un compte
+/// archivé (sans effet sur les invariants de la présentation, 47-3).
+pub fn retain_valid_links(rows: Vec<MirrorLinkRow>) -> Vec<MirrorLink> {
+    let mut links = Vec::with_capacity(rows.len());
+    for row in rows {
+        let Some(target) = row.target else {
+            tracing::warn!(
+                source_id = row.source_id,
+                source_number = %row.source_number,
+                mirror_account_id = row.mirror_account_id,
+                "lien de miroir écarté : cible absente ou d'une autre société"
+            );
+            continue;
+        };
+        if !is_opposite_side(row.source_account_type, target.account_type) {
+            tracing::warn!(
+                source_id = row.source_id,
+                source_number = %row.source_number,
+                mirror_account_id = row.mirror_account_id,
+                mirror_number = %target.number,
+                "lien de miroir écarté : la cible n'est pas de l'autre côté du même rapport"
+            );
+            continue;
+        }
+        if target.mirror_account_id.is_some() {
+            tracing::warn!(
+                source_id = row.source_id,
+                source_number = %row.source_number,
+                mirror_account_id = row.mirror_account_id,
+                mirror_number = %target.number,
+                "lien de miroir écarté : chaîne, la cible a elle-même un miroir"
+            );
+            continue;
+        }
+        links.push(MirrorLink {
+            source_id: row.source_id,
+            mirror_id: row.mirror_account_id,
+            mirror_number: target.number,
+            mirror_name: target.name,
+            mirror_account_type: target.account_type,
+            mirror_active: target.active,
+        });
+    }
+    links
+}
+
+/// Les liens de miroir **valides** de la société, en **une requête** (Story
+/// 47-1, AC-8), pour les rapports : un lien hors règle (import d'une sauvegarde,
+/// SQL) est lu comme absent ([`retain_valid_links`]). Lecture ordinaire. Triés
+/// par numéro de la source.
+pub async fn mirror_links<'e, E>(executor: E, company_id: i64) -> Result<Vec<MirrorLink>, DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::MySql>,
+{
+    type Row = (
+        i64,
+        String,
+        AccountType,
+        i64,
+        Option<String>,
+        Option<String>,
+        Option<AccountType>,
+        Option<bool>,
+        Option<i64>,
+    );
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT s.id, s.number, s.account_type, s.mirror_account_id, \
+                t.number, t.name, t.account_type, t.active, t.mirror_account_id \
+           FROM accounts s \
+           LEFT JOIN accounts t ON t.id = s.mirror_account_id AND t.company_id = s.company_id \
+          WHERE s.company_id = ? AND s.mirror_account_id IS NOT NULL \
+          ORDER BY s.number, s.id",
+    )
+    .bind(company_id)
+    .fetch_all(executor)
+    .await
+    .map_err(map_db_error)?;
+    let rows = rows
+        .into_iter()
+        .map(
+            |(
+                source_id,
+                source_number,
+                source_account_type,
+                mirror_account_id,
+                number,
+                name,
+                account_type,
+                active,
+                target_mirror,
+            )| MirrorLinkRow {
+                source_id,
+                source_number,
+                source_account_type,
+                mirror_account_id,
+                target: match (number, name, account_type, active) {
+                    (Some(number), Some(name), Some(account_type), Some(active)) => {
+                        Some(MirrorLinkTargetRow {
+                            number,
+                            name,
+                            account_type,
+                            active,
+                            mirror_account_id: target_mirror,
+                        })
+                    }
+                    _ => None,
+                },
+            },
+        )
+        .collect();
+    Ok(retain_valid_links(rows))
+}
+
+/// Story 47-1 — les fonctions pures du compte miroir, sans base.
+#[cfg(test)]
+mod mirror_tests {
+    use super::*;
+    use AccountType::{Asset, Expense, Liability, Revenue};
+
+    const TYPES: [AccountType; 4] = [Asset, Liability, Revenue, Expense];
+
+    fn cible(account_type: AccountType) -> MirrorTarget {
+        MirrorTarget {
+            id: 20,
+            number: "1179".into(),
+            active: true,
+            account_type,
+            postable: false,
+            role: None,
+            mirror_account_id: None,
+            has_journal_lines: false,
+        }
+    }
+
+    fn source(account_type: AccountType) -> MirrorSource<'static> {
+        MirrorSource {
+            id: Some(10),
+            account_type,
+            role: None,
+            designated_by: None,
+        }
+    }
+
+    fn raison(r: Result<(), DbError>) -> Option<(MirrorReason, Option<String>)> {
+        match r {
+            Ok(()) => None,
+            Err(DbError::MirrorAccountInvalid {
+                reason,
+                linked_account_number,
+            }) => Some((reason, linked_account_number)),
+            Err(other) => panic!("MirrorAccountInvalid attendu, reçu {other:?}"),
+        }
+    }
+
+    #[test]
+    fn les_cotes_opposes_sont_actif_passif_et_produit_charge() {
+        for a in TYPES {
+            for b in TYPES {
+                let attendu = matches!(
+                    (a, b),
+                    (Asset, Liability)
+                        | (Liability, Asset)
+                        | (Revenue, Expense)
+                        | (Expense, Revenue)
+                );
+                assert_eq!(is_opposite_side(a, b), attendu, "{a:?} / {b:?}");
+            }
+        }
+    }
+
+    /// Table de vérité : quatre types × rôle de la source × imputabilité, rôle
+    /// et écritures de la cible × chaîne. La première règle violée, dans
+    /// l'ordre de [`MirrorReason::ALL`], donne la raison.
+    #[test]
+    fn check_mirror_table_de_verite() {
+        let roles_source = [
+            None,
+            Some(AccountRole::EquityOther),
+            Some(AccountRole::Payable),
+        ];
+        for st in TYPES {
+            for tt in TYPES {
+                for role in roles_source {
+                    for postable in [false, true] {
+                        for t_role in [None, Some(AccountRole::VatRecoverable)] {
+                            for lignes in [false, true] {
+                                for chaine in [None, Some(30)] {
+                                    for designee in [None, Some("2000")] {
+                                        let mut t = cible(tt);
+                                        t.postable = postable;
+                                        t.role = t_role;
+                                        t.has_journal_lines = lignes;
+                                        t.mirror_account_id = chaine;
+                                        let mut s = source(st);
+                                        s.role = role;
+                                        s.designated_by = designee;
+                                        let attendu = if !is_opposite_side(st, tt) {
+                                            Some((MirrorReason::AccountType, None))
+                                        } else if role == Some(AccountRole::EquityOther) {
+                                            Some((MirrorReason::Equity, None))
+                                        } else if postable || t_role.is_some() || lignes {
+                                            Some((MirrorReason::NotPresentationAccount, None))
+                                        } else if chaine.is_some() {
+                                            Some((MirrorReason::Chain, Some("1179".into())))
+                                        } else if designee.is_some() {
+                                            Some((MirrorReason::Chain, Some("2000".into())))
+                                        } else {
+                                            None
+                                        };
+                                        assert_eq!(
+                                            raison(check_mirror(&s, t.id, Some(&t))),
+                                            attendu,
+                                            "{st:?}→{tt:?} rôle {role:?} postable {postable} \
+                                             rôle cible {t_role:?} lignes {lignes} chaîne {chaine:?} \
+                                             désignée {designee:?}"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn check_mirror_self_puis_unknown_puis_archived_priment() {
+        let mut t = cible(Liability);
+        t.active = false;
+        t.postable = true;
+        // self prime sur tout, sans lire la cible.
+        assert_eq!(
+            raison(check_mirror(&source(Liability), 10, Some(&t))),
+            Some((MirrorReason::SelfLink, None))
+        );
+        assert_eq!(
+            raison(check_mirror(&source(Liability), 20, None)),
+            Some((MirrorReason::Unknown, None))
+        );
+        // archived prime sur accountType et notPresentationAccount.
+        assert_eq!(
+            raison(check_mirror(&source(Liability), 20, Some(&t))),
+            Some((MirrorReason::Archived, None))
+        );
+        // À la création (pas d'id), pas de `self`.
+        let creation = MirrorSource {
+            id: None,
+            ..source(Liability)
+        };
+        assert_eq!(
+            raison(check_mirror(&creation, 20, Some(&cible(Asset)))),
+            None
+        );
+    }
+
+    #[test]
+    fn les_quatre_roles_de_fonds_propres_et_eux_seuls_refusent_en_equity() {
+        for role in AccountRole::ALL {
+            let mut s = source(Liability);
+            s.role = Some(role);
+            let r = raison(check_mirror(&s, 20, Some(&cible(Asset))));
+            if EQUITY_ROLES.contains(&role) {
+                assert_eq!(r, Some((MirrorReason::Equity, None)), "{role:?}");
+            } else {
+                assert_eq!(r, None, "{role:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn la_liste_close_des_raisons_est_dans_l_ordre_de_jugement() {
+        let codes: Vec<&str> = MirrorReason::ALL.iter().map(|r| r.as_str()).collect();
+        assert_eq!(
+            codes,
+            [
+                "self",
+                "unknown",
+                "archived",
+                "accountType",
+                "equity",
+                "notPresentationAccount",
+                "chain"
+            ]
+        );
+        let gestes: Vec<&str> = AccountIsMirrorReason::ALL
+            .iter()
+            .map(|r| r.as_str())
+            .collect();
+        assert_eq!(gestes, ["archive", "postable", "accountType", "role"]);
+    }
+
+    #[test]
+    fn mirror_change_se_resout_sur_trois_etats() {
+        assert_eq!(MirrorChange::Unchanged.resolve(Some(4)), Some(4));
+        assert_eq!(MirrorChange::Unchanged.resolve(None), None);
+        assert_eq!(MirrorChange::Clear.resolve(Some(4)), None);
+        assert_eq!(MirrorChange::Set(7).resolve(Some(4)), Some(7));
+        assert_eq!(MirrorChange::default(), MirrorChange::Unchanged);
+    }
+
+    fn ligne(
+        source_id: i64,
+        source_type: AccountType,
+        mirror: i64,
+        target: Option<(AccountType, Option<i64>)>,
+    ) -> MirrorLinkRow {
+        MirrorLinkRow {
+            source_id,
+            source_number: format!("{source_id}"),
+            source_account_type: source_type,
+            mirror_account_id: mirror,
+            target: target.map(|(account_type, mirror_account_id)| MirrorLinkTargetRow {
+                number: format!("{mirror}"),
+                name: format!("Compte {mirror}"),
+                account_type,
+                active: true,
+                mirror_account_id,
+            }),
+        }
+    }
+
+    #[test]
+    fn retain_valid_links_ecarte_les_trois_cas_et_garde_le_reste() {
+        let rows = vec![
+            ligne(1, Liability, 11, Some((Asset, None))), // valide
+            ligne(2, Liability, 12, None),                // (a) absente / autre société
+            ligne(3, Liability, 13, Some((Liability, None))), // (b) même type
+            ligne(4, Asset, 4, Some((Asset, None))),      // (b) soi-même
+            ligne(5, Revenue, 15, Some((Asset, None))),   // (b) autre rapport
+            ligne(6, Expense, 16, Some((Revenue, Some(99)))), // (c) chaîne
+            ligne(7, Revenue, 17, Some((Expense, None))), // valide
+        ];
+        let liens = retain_valid_links(rows);
+        let paires: Vec<(i64, i64)> = liens.iter().map(|l| (l.source_id, l.mirror_id)).collect();
+        assert_eq!(paires, [(1, 11), (7, 17)]);
+        assert_eq!(liens[0].mirror_number, "11");
+        assert_eq!(liens[0].mirror_account_type, Asset);
+        assert!(liens[0].mirror_active);
+        assert!(retain_valid_links(Vec::new()).is_empty());
+    }
+
+    /// AC-8 — ne sont pas écartés : une cible archivée (et, par construction du
+    /// type `MirrorLinkRow`, ni rôle ni imputabilité ne sont lus).
+    #[test]
+    fn retain_valid_links_garde_une_cible_archivee() {
+        let mut row = ligne(1, Asset, 11, Some((Liability, None)));
+        row.target.as_mut().unwrap().active = false;
+        let liens = retain_valid_links(vec![row]);
+        assert_eq!(liens.len(), 1);
+        assert!(!liens[0].mirror_active);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2842,6 +3570,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3090,6 +3819,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3150,6 +3880,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3193,6 +3924,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             true,
         )
@@ -3226,6 +3958,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3263,6 +3996,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3303,6 +4037,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3351,6 +4086,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             true,
         )
@@ -3421,6 +4157,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3461,6 +4198,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3496,6 +4234,7 @@ mod tests {
             postable: true,
             currency: Default::default(),
             own_fx_accounts: Default::default(),
+            mirror_account_id: None,
         };
         let account = create(&pool, admin_user_id, new).await.unwrap();
         assert_eq!(account.number, "T100");
@@ -3532,6 +4271,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3550,6 +4290,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3591,6 +4332,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3609,6 +4351,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3631,6 +4374,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3661,6 +4405,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3696,6 +4441,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3715,6 +4461,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3746,6 +4493,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3801,6 +4549,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3818,6 +4567,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -3887,6 +4637,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -3995,6 +4746,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -4014,6 +4766,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -4056,6 +4809,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror_account_id: None,
             },
         )
         .await
@@ -4074,6 +4828,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -4176,6 +4931,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -4232,6 +4988,7 @@ mod tests {
                 postable: a.postable,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -4252,6 +5009,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -4292,6 +5050,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -4421,6 +5180,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -4624,6 +5384,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -4707,6 +5468,7 @@ mod tests {
                 postable: true,
                 currency: Default::default(),
                 own_fx_accounts: Default::default(),
+                mirror: crate::entities::MirrorChange::Unchanged,
             },
             false,
         )

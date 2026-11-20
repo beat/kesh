@@ -1,6 +1,6 @@
 -- SQUASH DU SCHÉMA DE TEST — Story 22-5 (#251). GÉNÉRÉ, NE PAS ÉDITER.
 -- Régénérer : scripts/regen-test-schema.sh
--- Équivalent des 95 migrations de crates/kesh-db/migrations/,
+-- Équivalent des 96 migrations de crates/kesh-db/migrations/,
 -- rejouées en UN batch DDL par base éphémère de test.
 --
 -- Le garde-fou crates/kesh-db/tests/test_schema_guard.rs compare ce schéma
@@ -130,12 +130,14 @@ CREATE TABLE `accounts` (
   `currency` char(3) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL COMMENT 'Code ISO 4217 de la devise du compte, NULL = devise principale (CHF)',
   `fx_gain_account_id` bigint(20) DEFAULT NULL COMMENT 'Compte de gains de change propre (accounts.id, sans FK), NULL = réglage de la société',
   `fx_loss_account_id` bigint(20) DEFAULT NULL COMMENT 'Compte de pertes de change propre (accounts.id, sans FK), NULL = réglage de la société',
+  `mirror_account_id` bigint(20) DEFAULT NULL COMMENT 'Compte miroir de présentation (accounts.id, sans FK), NULL = aucun',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_accounts_company_number` (`company_id`,`number`),
   UNIQUE KEY `uq_accounts_company_singleton_role` (`company_id`,`singleton_role`),
   KEY `fk_accounts_parent` (`parent_id`),
   KEY `idx_accounts_fx_gain` (`company_id`,`fx_gain_account_id`),
   KEY `idx_accounts_fx_loss` (`company_id`,`fx_loss_account_id`),
+  KEY `idx_accounts_mirror` (`company_id`,`mirror_account_id`),
   CONSTRAINT `fk_accounts_company` FOREIGN KEY (`company_id`) REFERENCES `companies` (`id`),
   CONSTRAINT `fk_accounts_parent` FOREIGN KEY (`parent_id`) REFERENCES `accounts` (`id`),
   CONSTRAINT `chk_accounts_type` CHECK (cast(`account_type` as char charset binary) in (cast('Asset' as char charset binary),cast('Liability' as char charset binary),cast('Revenue' as char charset binary),cast('Expense' as char charset binary))),

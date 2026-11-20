@@ -470,6 +470,7 @@ async fn pat_mutation_is_audited_as_api_key(pool: MySqlPool) {
             postable: true,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await

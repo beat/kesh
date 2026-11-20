@@ -223,6 +223,7 @@ async fn create_acc(
             postable: true,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await
@@ -1914,6 +1915,7 @@ async fn posting_to_a_closed_closing_account_is_refused(pool: MySqlPool) {
             postable: false, // l'etat que produit le plan livre + le backfill
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await
@@ -1994,6 +1996,7 @@ async fn a_closed_closing_account_can_be_reopened_by_its_owner(pool: MySqlPool) 
             postable: false,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await

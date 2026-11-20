@@ -403,6 +403,7 @@ pub async fn create_account(
         postable: req.postable,
         currency,
         own_fx_accounts,
+        mirror_account_id: None,
     };
 
     // ⚠️ **Rejouée sur interblocage** (Story 37-1, AC-4 bis, 37-1-CR3-P2-1 ;
@@ -489,6 +490,7 @@ pub async fn update_account(
         postable,
         currency,
         own_fx_accounts,
+        mirror: kesh_db::entities::MirrorChange::Unchanged,
     };
 
     // Story 25-2-a : le dépôt refuse en 409 `ACCOUNT_HAS_ENTRIES` si le compte

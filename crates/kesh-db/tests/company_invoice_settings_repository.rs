@@ -2066,6 +2066,7 @@ async fn create_sub_account(
             // Story 37-1 : un compte en CHF, sans comptes de différence propres.
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await
