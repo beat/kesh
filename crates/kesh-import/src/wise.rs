@@ -214,6 +214,8 @@ pub enum WiseLineErrorCode {
     SignMismatch,
     /// Ligne de frais créditée.
     FeeSign,
+    /// Un contrôle de solde dépasse la capacité d'un `Decimal`.
+    Overflow,
     /// Cellule requise vide (`Transaction Details Type`).
     Required,
 }
@@ -232,6 +234,7 @@ impl WiseLineErrorCode {
             Self::Direction => "DIRECTION",
             Self::SignMismatch => "SIGN_MISMATCH",
             Self::FeeSign => "FEE_SIGN",
+            Self::Overflow => "OVERFLOW",
             Self::Required => "REQUIRED",
         }
     }
@@ -475,9 +478,13 @@ pub fn parse_wise_csv(bytes: &[u8]) -> Result<WiseCsv, WiseCsvError> {
     check_running_balance(&rows)?;
 
     let (first, last) = (&rows[0], &rows[rows.len() - 1]);
+    let opening_balance = first
+        .running_balance
+        .checked_sub(first.amount)
+        .ok_or_else(|| overflow(first))?;
     Ok(WiseCsv {
         currency: first.currency.clone(),
-        opening_balance: first.running_balance - first.amount,
+        opening_balance,
         closing_balance: last.running_balance,
         first_date: rows.iter().map(|r| r.date).min().unwrap_or(first.date),
         last_date: rows.iter().map(|r| r.date).max().unwrap_or(last.date),
@@ -531,10 +538,23 @@ fn chronological(mut rows: Vec<WiseRow>) -> Vec<WiseRow> {
     rows
 }
 
+/// Refus d'une ligne dont un contrôle de solde déborde d'un `Decimal`.
+fn overflow(row: &WiseRow) -> WiseCsvError {
+    WiseCsvError::Lines(vec![WiseLineError::new(
+        row.line,
+        Some(COL_RUNNING_BALANCE),
+        WiseLineErrorCode::Overflow,
+        Some(&row.running_balance.to_string()),
+    )])
+}
+
 /// Chaque solde courant est le précédent plus le montant de la ligne.
 fn check_running_balance(rows: &[WiseRow]) -> Result<(), WiseCsvError> {
     for pair in rows.windows(2) {
-        let expected = pair[0].running_balance + pair[1].amount;
+        let expected = pair[0]
+            .running_balance
+            .checked_add(pair[1].amount)
+            .ok_or_else(|| overflow(&pair[1]))?;
         if pair[1].running_balance != expected {
             return Err(WiseCsvError::RunningBalanceBreak {
                 line: pair[1].line,

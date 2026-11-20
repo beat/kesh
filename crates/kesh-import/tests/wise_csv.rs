@@ -567,3 +567,19 @@ fn real_statements_are_read() {
         }
     }
 }
+
+#[test]
+fn extreme_amounts_are_refused_without_panicking() {
+    let max = "79228162514264337593543950335";
+    // Montant et solde au maximum d'un `Decimal` : le chaînage déborde.
+    let f = set(&set(CHF, 0, "Amount", max), 0, "Running Balance", max);
+    let codes = line_codes(parse_wise_csv(&f).unwrap_err());
+    assert_eq!(codes, vec![(2, WiseLineErrorCode::Overflow)]);
+    // Trop de chiffres : refus de ligne, jamais de panique.
+    let long = "9".repeat(5000);
+    let f = set(CHF, 0, "Amount", &long);
+    assert_eq!(
+        line_codes(parse_wise_csv(&f).unwrap_err()),
+        vec![(2, WiseLineErrorCode::Amount)]
+    );
+}
