@@ -60,13 +60,18 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      (b) les relit, sans appel de plus. Elle **tranche et écrit** au fichier d'epic (Q-39-17) : (1) la **date** d'une
      ligne — `createdOn` ou `updatedOn`, en UTC ou en heure de Zurich — qui redonne la colonne `Date` **et** `Date Time`
      du CSV pour chacune des lignes de 2024 (y compris celles qui tombent près de minuit, et la date d'une ligne de
-     frais face à celle de son origine) ; (2) l'**identifiant** d'une conversion `AUTO_CONVERSION` : le numéro
+     frais face à celle de son origine) — **et le choix suit l'achèvement** : relever les lignes dont `createdOn` et
+     `updatedOn` tombent sur des jours différents (virements) et dire lequel le CSV suit ; un mouvement terminé après la fin
+     d'un relevé ne doit jamais porter une date antérieure à cette fin, sans quoi il est perdu et le contrôle refuse
+     (39-12a2, notes) ; (2) l'**identifiant** d'une conversion `AUTO_CONVERSION` : le numéro
      `CONVERSION_ORDER-…` du CSV se lit-il quelque part dans l'API (sinon la règle provisoire de 39-12a2 AC-3 vaut) ;
      (3) le **champ de solde** de `/v4/…/balances` : `amount.value` et `cashAmount.value` sont relevés tous deux sur les
      trois soldes ; **égaux**, on lit `amount.value` ; **différents**, la différence s'explique ou la phase 2 attend
      (l'effet des activités non `COMPLETED` sur le champ n'est pas mesurable sur 2024 : il reste couvert, de façon sûre,
      par le contrôle de 39-12a2 AC-5, qui refuse en cas d'écart) ; (4) la **règle du sens** des montants
-     (39-12a2 AC-3) sur les paiements par carte en devise étrangère et sur les entrants de 2024 ; (5) le **type de
+     (39-12a2 AC-3) sur les paiements par carte en devise étrangère **dont la devise est aussi un solde du profil**, sur les
+     virements sortants dont le bénéficiaire est payé dans une devise que le profil détient aussi (la devise débitée est
+     celle du devis, 39-12a2 AC-3) et sur les entrants de 2024 ; (5) le **type de
      détail** (`DEPOSIT`, `TRANSFER`, `CARD`, `CONVERSION`) que porte le CSV pour chaque type d'activité ; (6) la
      `reference` des transferts face à la colonne `Payment Reference` ; (7) **quand les frais d'un virement sont nuls**,
      ce que rend le devis (`fee.total` = 0, option absente) : les cinq virements sans frais le disent. Une règle
@@ -204,6 +209,10 @@ l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la sauv
 
 ## Change Log
 
+- 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a2, 39-12a3, 39-12b ;
+  rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés. Ici (AC-0 a) : le
+  choix de l'horodatage doit suivre l'achèvement, et la règle du sens est éprouvée sur les virements entre soldes détenus et
+  les cartes dont la devise est aussi un solde.
 - 2026-11-20 — **réécrite sur la voie activités (2026-11-20)** : recherche `data-not-committed/wise-recherche.md`
   (métadonnées). Relevé de solde et signature SCA retirés (Wise refuse par règle, signature non évaluée) ; variable
   `KESH_WISE_<n>_SCA_KEY_FILE`, module `wise/sca.rs`, code `WISE_SCA_REJECTED` et clé de test retirés ; client des

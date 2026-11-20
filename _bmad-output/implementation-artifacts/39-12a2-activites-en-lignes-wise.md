@@ -70,7 +70,7 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    | tout autre type `COMPLETED` (`BALANCE_INTEREST`, `BALANCE_CASHBACK`, `FEE_REFUND`, `DIRECT_DEBIT_TRANSACTION`, `CASH_WITHDRAWAL`, …) | **refus de l'ensemble** : `UnsupportedActivity { activity_type, date }` (`activity_type` rendu tel quel s'il a la forme `^[A-Z_]{1,40}$`,
    sinon `UNKNOWN` : c'est un texte de Wise, borné avant d'entrer dans une erreur), **même si son `date` est hors de `period`** (postérieure à `to` ou antérieure à `from`) : le solde se reconstruit depuis aujourd'hui, un mouvement inconnu n'importe où entre `readFrom` et maintenant fausse tous les soldes ; le refus dit donc la date du mouvement et que **tout** téléchargement qui remonte avant cette date est refusé tant que le type n'est pas pris en charge (le manuel, 39-12b : importer le CSV) | — |
    **Montant d'un débit simple** : `primary` si `secondary` est absent ; sinon celui des deux dont la devise est un solde du
-   profil (`balances`) ; les deux ou aucun → `AmbiguousAmount { activity_id }`. Une ligne dans une devise sans solde au
+   profil (`balances`) ; si les deux le sont et que l'activité est un **débit `TRANSFER`**, celui qui est dans la devise `fee_currency` de son entrée `transfer_fees` (la devise source du devis, donc la devise débitée : un virement du solde CHF vers un bénéficiaire en EUR, alors que le profil porte aussi un solde EUR, est le cas courant) ; sinon, les deux ou aucun → `AmbiguousAmount { activity_id }`. Une ligne dans une devise sans solde au
    profil → `UnknownCurrency { currency }` (limite assumée : un solde **fermé** chez Wise, absent de `balances`, fait
    refuser tout téléchargement qui remonte à ses mouvements ; importer alors le CSV). Un même identifiant deux fois dans une devise → `DuplicateId { id, currency }`.
    Les identifiants passent le contrôle de 39-11a (ASCII `[A-Z0-9_-]`, ≤ 64) ; `id_prefix`, `is_fee`, `fee_of` sont calculés
@@ -102,7 +102,7 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    celle de la dernière ligne **insérée**), le solde reconstruit à **l'un des instants du jour `date`** (avant sa première
    ligne, ou après l'une de ses lignes) ; sans cette tolérance, un mouvement survenu le même jour après la coupure ferait
    refuser **tout** téléchargement suivant, durablement (relancer n'y change rien) — ; sinon
-   `BalanceMismatch { currency, date, expected, found }` (`found` = le solde reconstruit à la fin du jour) — **un format de montant qui aurait changé, une activité
+   `BalanceMismatch { currency, date, expected, found }` (`found` = le solde reconstruit à la fin du jour ; **une devise sans aucune ligne lue** a pour solde reconstruit son solde actuel, **une devise absente de `balances` sans ligne** n'a ni `WiseCsv` ni contrôle : rien à importer, aucune erreur) — **un format de montant qui aurait changé, une activité
    manquée ou une activité en cours déjà portée au solde se voient ici** ; rien n'est importé. Puis seules les lignes dont
    `date` ∈ `period` sont rendues (une ligne de frais suit son origine) ; `opening_balance` = solde courant de la première rendue − son montant ;
    `closing_balance` = solde courant de la dernière ; une devise sans ligne dans la période n'a pas de `WiseCsv`. Sans
@@ -121,7 +121,7 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    inclus), écarts assertés un par un. Cas : une ligne de frais à `date` égale à celle de son origine alors que son horodatage passe sous minuit (période qui coupe entre les deux : les deux lignes suivent l'origine) ; un type inconnu hors de `period` refuse quand même ; chaque forme de montant admise (milliers, sans décimale, espace insécable,
    balises) et refusée (`1.234,56 USD`, `1,23 USD`, trois décimales, balise inconnue, signe contradictoire) ; chaque ligne du
    tableau de l'AC-3 ; activité non `COMPLETED` et `CARD_CHECK` comptées ; type non pris en charge ; débit ambigu ; frais
-   manquant, nul, d'une autre devise ; contrôle juste, faux (`BalanceMismatch`), absent, **juste à un instant du jour
+   manquant, nul, d'une autre devise ; virement CHF vers un bénéficiaire en EUR avec un solde EUR au profil (devise débitée = celle du devis, pas d'`AmbiguousAmount`) ; contrôle juste, faux (`BalanceMismatch`), absent, **juste à un instant du jour
    seulement** (relevé coupé en cours de journée, un mouvement plus tard le même jour : accepté) ; période qui ne garde qu'une partie
    des lignes lues (solde d'ouverture exact) ; devise sans ligne dans la période. Aucune dépendance neuve ni interne ;
    `cargo publish --dry-run -p kesh-import` vert ; tests de 39-11a inchangés en assertions.
@@ -166,12 +166,18 @@ importés.
   de conversion étant dans le débit, l'écriture d'une conversion téléchargée ne les passe pas en charge à part (39-11c : écriture
   au montant de la transaction) ; avec le CSV d'abord, la ligne `FEE-…` se propose, elle, au compte de frais : le traitement
   comptable dépend de l'ordre (écrit au manuel, 39-12b).
+- Limite assumée : l'horodatage retenu (AC-3) peut **bouger après coup** — un mouvement terminé après la fin d'un relevé déjà importé, ou une activité mise à jour après son import — ; le contrôle de l'AC-5 le voit alors comme un écart (refus, jamais une écriture fausse), et le refus **dure** tant que le relevé fautif reste dans Kesh (sortie écrite au manuel, 39-12b). De même, un mouvement **en cours** chez Wise (compté dans `ignored.notCompleted`) peut être déjà porté au solde actuel sans être une ligne : sans point de contrôle (`balanceUnchecked`), les soldes d'ouverture et de clôture du relevé importé peuvent en différer du montant de ce mouvement ; le compte rendu et le manuel le disent.
 - Limite assumée : le solde se reconstruit depuis le solde **actuel**, d'où un devis par virement sortant lu de `readFrom` à
   maintenant et un refus pour tout type inconnu de cette plage ; pour un usage mensuel (relevé de clôture récent), la plage est
   courte. Reconstruire en avant depuis le dernier relevé de Kesh serait un perfectionnement futur, hors périmètre.
 
 ## Change Log
 
+- 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a3, 39-12b ;
+  rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés. Ici : **M1** — un
+  virement entre deux soldes détenus (CHF vers EUR, solde EUR au profil) faisait refuser tout le téléchargement en
+  `AmbiguousAmount` : la devise du devis lève l'ambiguïté ; **M2** — horodatage qui bouge après coup et mouvement en cours
+  porté au solde, écrits en limite ; devise sans ligne ou absente de `balances` précisée (AC-5).
 - 2026-11-20 — validation P2 de la voie activités (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a3, 39-12b ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P2.md`) : 0 C, 1 H, 2 M, 9 L, remédiés. Ici : **H1** — le
   contrôle « solde à la fin du jour » refusait durablement tout téléchargement après un relevé arrêté en cours de journée

@@ -33,10 +33,10 @@ lecture seule, poser les variables et ce que le téléchargement ne sait pas fai
    transferts, 39-12a3 AC-2), pause « Wise demande de patienter », compte rendu de 39-11b plus, propres à Wise :
    `unlinkedCurrencies` (« soldes sans compte bancaire, non importés »), `feesIncluded` (« frais de conversion d'un relevé
    CSV déjà compris dans le montant téléchargé »), `balanceUnchecked` (« solde non contrôlé : aucun relevé antérieur dans
-   Kesh pour cette devise »), `ignored.notCompleted` (« mouvements en cours chez Wise, repris au prochain
+   Kesh pour cette devise ; comparez au site de Wise, surtout si des mouvements y sont en cours »), `ignored.notCompleted` (« mouvements en cours chez Wise, repris au prochain
    téléchargement »), avertissement `conversion_ambiguous` ; refus par code `PROVIDER_*`, `WISE_PROFILE_AMBIGUOUS`,
    `WISE_ACTIVITY_UNSUPPORTED` (« un mouvement de type … du … n'est pas pris en charge ; le téléchargement ne peut pas remonter avant cette date : importez le relevé CSV », la date pouvant être **hors de la période demandée**) et les raisons de `PROVIDER_RESPONSE_INVALID`
-   (`WISE_API_BALANCE_MISMATCH` : « le solde reconstruit ne concorde pas avec votre relevé du … ; rien n'a été enregistré ; si un mouvement vient d'avoir lieu chez Wise, relancez », `amount_mismatch`) en clair aux quatre locales (409 : reprise du suivi par `details.jobId`), « rien n'a été
+   (`WISE_API_BALANCE_MISMATCH` : « le solde reconstruit ne concorde pas avec votre relevé du … ; rien n'a été enregistré ; si un mouvement vient d'avoir lieu chez Wise, relancez ; si le refus persiste, le relevé nommé ne concorde pas avec Wise : voir le manuel », `amount_mismatch`) en clair aux quatre locales (409 : reprise du suivi par `details.jobId`), « rien n'a été
    enregistré, relancez » sur échec. **Aucun composant propre à Wise** : les libellés propres sont des paramètres. Le compte rendu de l'**import CSV** d'un compte Wise (39-11d) affiche aussi `feesIncluded` quand la clé est présente (39-12a3 AC-4, R1), avec le même libellé.
 3. **AC-3 — Manuels** (`.tex` seul, aucun PDF commité ; PDF contrôlé à la régénération, `pdftotext … | tr '\n' ' '`).
    *Administration* : créer un jeton personnel **lecture seule** (profil d'entreprise) ; aucune authentification forte ni
@@ -52,7 +52,7 @@ lecture seule, poser les variables et ce que le téléchargement ne sait pas fai
    mouvement inconnu de Kesh refuse le téléchargement (importer le CSV de la période) ; le solde reconstruit est contrôlé
    contre le dernier relevé de Kesh, d'où le conseil : **un premier relevé importé en CSV**, puis des téléchargements ;
    Kesh relit le dernier jour du relevé précédent (`importFrom`, 39-12a3 AC-3) et accepte un relevé arrêté en cours de
-   journée, si bien que télécharger « jusqu'à aujourd'hui » plusieurs fois ne perd ni ne double rien.
+   journée, si bien que télécharger « jusqu'à aujourd'hui » plusieurs fois ne perd ni ne double rien ; si la période demandée commence bien après ce relevé, Kesh comble le trou. *Refus qui dure* : un `WISE_API_BALANCE_MISMATCH` qui persiste après relance veut dire que le relevé nommé (sa date de fin) ne concorde pas avec l'activité de Wise (mouvement terminé ou mis à jour après coup, mouvement en cours déjà porté au solde) ; le manuel dit de comparer au site de Wise, puis, si le relevé de Kesh est faux et qu'aucune de ses transactions n'est rapprochée, de le supprimer (suppression d'un import, Story 27-1) et de relancer ; sinon importer le CSV de la période.
    *Éprouvé sur 2024 seulement* : le manuel dit que la voie a été comparée au relevé CSV de 2024 et que 2025 et la suite se vérifient sur le premier téléchargement réel (39-12a1 AC-0 c) ; conseil : comparer le solde de clôture au site de Wise. *Volume* : un devis par virement sortant lu, de `readFrom` à aujourd'hui, donc un téléchargement ancien est long (progression par étape, `KESH_WISE_PARALLEL`). *Comptabilité des conversions* : les frais de conversion étant compris dans le montant débité, l'écriture d'une conversion téléchargée ne les passe pas à part en charge ; importés du CSV d'abord, ils se proposent au compte de frais — le traitement dépend de l'ordre. *Type inconnu* : un mouvement d'un type non pris en charge, **même postérieur à la période demandée**, refuse tout téléchargement qui remonte avant sa date ; importer alors le CSV de la période. *Utilisateur* : le bouton, la période, la progression, ce qu'un échec veut dire (rien n'est enregistré), le contrôle de
    solde, le mélange sans doublon avec les CSV. `docs/api-external.md` : la route de 39-12a3 (sessions seules, 403
    `API_KEY_OPERATION_FORBIDDEN`), avec ses codes. Les deux phrases du registre des routes sont déjà relevées par 39-12a3 :
@@ -93,6 +93,10 @@ décrit le jeton en lecture seule et ce que le téléchargement lit.
 
 ## Change Log
 
+- 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3 ;
+  rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés. Ici : **M2** — sortie
+  d'un refus de solde qui dure (comparer, supprimer le relevé fautif non rapproché, relancer), message qui le dit ; L —
+  libellé de `balanceUnchecked` (mouvements en cours), trou comblé par `importFrom`.
 - 2026-11-20 — validation P2 de la voie activités (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3 ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P2.md`) : 0 C, 1 H, 2 M, 9 L, remédiés. Ici : manuel —
   relevé arrêté en cours de journée et dernier jour relu (H1 de 39-12a2/39-12a3) ; chemin du serveur simulé commun.

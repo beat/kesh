@@ -63,8 +63,11 @@ seulement si le solde reconstruit concorde avec mes relevés.
    de `previous_statement_closing` — un relevé arrêté en cours de journée (téléchargement jusqu'à l'instant, CSV exporté
    dans la journée) laisse en dehors de Kesh les mouvements de la fin de ce jour ; les relire, doublons ignorés par
    identifiant, les rattrape, alors qu'une période commencée au lendemain les perdrait sans rien dire —, et **début de
-   lecture** `readFrom` = le plus tôt d'`importFrom` et du **jour** du plus ancien point de contrôle (le contrôle de
-   39-12a2 AC-5 lit les instants de ce jour ; la reconstruction depuis le solde actuel doit l'atteindre) ; (5) **activités** de `readFrom` à
+   lecture** `readFrom` = `importFrom` (le jour du plus ancien point de contrôle, relevé précédent ou relevé qui
+   chevauche, n'est jamais antérieur à `importFrom` : une clause de plus serait sans effet ; le contrôle de 39-12a2 AC-5 lit
+   les instants de ce jour, que la lecture depuis le début de ce jour atteint). Quand `from` est bien postérieur au
+   relevé précédent, `importFrom` comble le trou (les mouvements entre les deux sont importés et le compte rendu le dit
+   par `downloaded.importFrom`) ; (5) **activités** de `readFrom` à
    `read_until` (fenêtres de 366 jours, 39-12a1) ; (6) **transferts** (`readFrom` − 31 jours à `read_until`) et **devis**
    de chaque virement sortant `COMPLETED` lu ; (7) `rows_from_activities` (39-12a2) avec ces données et `period = (importFrom, to)`, **les horodatages des activités ramenés avant l'appel** au fuseau que la recette 39-12a1 AC-0 (a)(1) a retenu (`kesh_core::horloge::heure_suisse`, ajoutée à `kesh-core/src/horloge.rs` par 38-12a, si c'est Zurich ; `kesh-import` ne connaît aucun fuseau) ; un horodatage illisible (texte rendu tel quel par 39-12a1) → `PROVIDER_RESPONSE_INVALID`, `details.reason = "activity_date"`. Les soldes sont lus à l'instant `read_until` = `now` et les activités jusqu'à lui : un mouvement survenu entre les deux lectures fait échouer le contrôle (`BalanceMismatch`), le message invite à relancer.
    **Une erreur à n'importe quelle étape — reprises épuisées, conversion refusée, `BalanceMismatch` — fait échouer la tâche
@@ -81,7 +84,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
 4. **AC-4 — Doublons avec le CSV, dans les deux ordres.** Règle de base (39-11b AC-5) : même `transaction_id` sur le même
    compte bancaire → ligne ignorée. S'y ajoutent trois règles **propres à Wise**, qui ne s'écrivent **pas** dans le chemin
    commun tel quel : le cœur `provider_imports.rs` reçoit un paramètre `rules: Option<&dyn DuplicateRules>` (rien par défaut),
-   appelé **sous les verrous et dans la transaction d'écriture**, après le test d'identifiant ; **PayPal (38-11b, 38-12a) et
+   appelé **sous les verrous et dans la transaction d'écriture**, après le test d'identifiant et **avant** le calcul de la période et de la clôture de la devise et le cas « aucune ligne gardée » (qui jugent les lignes restantes) ; **PayPal (38-11b, 38-12a) et
    Stripe (40-7b) passent `None` et se comportent comme avant, octet pour octet** — un doublon de montant différent y reste
    ignoré, test de non-régression sur une entrée PayPal ; Wise (la route CSV de 39-11b, `wise_imports::create`, **et** cette
    story) passe `WiseDuplicateRules` (module neuf `crates/kesh-api/src/wise_duplicates.rs`, préfixes d'identifiant Wise
@@ -96,10 +99,11 @@ seulement si le solde reconstruit concorde avec mes relevés.
    et des avertissements. Le cœur reporte ces deux derniers au compte rendu de la devise (`CurrencyReport`) en champs
    **omis quand ils sont vides** (`skip_serializing_if`) : la réponse de PayPal et de Stripe garde sa forme, octet pour
    octet. Une ligne ignorée par R1 ou R3 compte dans `duplicates` (elle n'est pas insérée) **et**, pour R1, dans
-   `feesIncluded`. ⚠️ **Deux extractions du cœur divergent** au moment de cette validation (38-12a : `ProviderLine`,
-   `import_lines`, `ImportRequest` ; 40-7b : `ProviderEntry`, `run`, `ProviderImport`, worktree de 40-7b) : le point
-   d'accroche se pose sur le cœur qui reste après leur réunion, à l'intégration des Epics 38 et 40 ; si celui-ci a une autre
-   forme, le contrat ci-dessus s'y transpose, sans changer le comportement de PayPal ni de Stripe. Le dépôt des transactions bancaires gagne **deux lectures** (`existing_transaction_ids` ne rend que des
+   `feesIncluded`. *(Relevé au code des worktrees de 38-12a et de 40-7b le 2026-11-20, P3 : le cœur de 40-7b **reprend** celui de 38-12a —
+   `ProviderLine`, `ImportRequest`, `import_lines` — et n'y ajoute que `ProviderLine.value_date` (`None` pour Wise), plus des
+   aides de formulaire ; il n'y a plus qu'une forme, au contraire de ce que la P2 avait relevé. `dedupe_lines` garde sa
+   signature et ses tests : les lignes écartées pour le point d'accroche se déduisent des lignes gardées. Les copies
+   privées de PayPal que 40-7b dit « à replier » ne concernent pas Wise.)* Le dépôt des transactions bancaires gagne **deux lectures** (`existing_transaction_ids` ne rend que des
    identifiants) : `existing_transactions_by_ids(company, compte, ids)` et `transactions_by_prefix_window(company, compte,
    préfixe, du, au)`, rendant `(transaction_id, amount, booking_date)`. Les tests de 39-11b restent verts sans changement
    d'assertion (un ré-import à l'identique ne remplit aucune condition ci-dessous).
@@ -198,6 +202,11 @@ CSV, sans doublon dans un sens comme dans l'autre ; tout ou rien en cas d'échec
 
 ## Change Log
 
+- 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12b ;
+  rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés. Ici : **M3** — le
+  point d'accroche `rules` s'exécute avant la période, la clôture et le cas « aucune ligne gardée » ; le renvoi « deux
+  extractions divergent » est périmé (40-7b reprend le cœur de 38-12a) ; **L** — `readFrom` = `importFrom` (la clause du
+  point de contrôle était sans effet), trou comblé par `importFrom` écrit.
 - 2026-11-20 — validation P2 de la voie activités (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12b ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P2.md`) : 0 C, 1 H, 2 M, 9 L, remédiés. Ici : **H1** —
   `importFrom` (dernier jour du relevé précédent, relu) et `readFrom` au jour du plus ancien point de contrôle, avec la
