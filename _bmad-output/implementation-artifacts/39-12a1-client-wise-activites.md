@@ -58,13 +58,13 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      l'instant (≈ 3 pages), devis des **22 virements à frais** de 2024 et de **cinq virements sans frais** (≈ 27). Les
      réponses brutes sont **sauvées** dans `data-not-committed/wise-recette-2024/` (non versionné) : la recette finale
      (b) les relit, sans appel de plus. Elle **tranche et écrit** au fichier d'epic (Q-39-17) : (1) la **date** d'une
-     ligne — `createdOn` ou `updatedOn`, en UTC ou en heure de Zurich — qui redonne la colonne `Date` **et** `Date Time`
-     du CSV pour chacune des lignes de 2024 (y compris celles qui tombent près de minuit, et la date d'une ligne de
+     ligne — `createdOn` ou `updatedOn`, en UTC ou en heure de Zurich — qui redonne la colonne `Date` du CSV
+     pour chacune des lignes de 2024 (y compris celles qui tombent près de minuit, et la date d'une ligne de
      frais face à celle de son origine) — **et le choix suit l'achèvement** : relever les lignes dont `createdOn` et
      `updatedOn` tombent sur des jours différents (virements) et dire lequel le CSV suit ; un mouvement terminé après la fin
      d'un relevé ne doit jamais porter une date antérieure à cette fin, sans quoi il est perdu et le contrôle refuse
      (39-12a2, notes) ; (2) l'**identifiant** d'une conversion `AUTO_CONVERSION` : le numéro
-     `CONVERSION_ORDER-…` du CSV se lit-il quelque part dans l'API (sinon la règle provisoire de 39-12a2 AC-3 vaut) ;
+     `CONVERSION_ORDER-…` du CSV se lit-il quelque part dans l'API (tranché : non, `AUTO_CONVERSION-<resource_id>` définitif, 39-12a2 AC-3) ;
      (3) le **champ de solde** de `/v4/…/balances` : `amount.value` et `cashAmount.value` sont relevés tous deux sur les
      trois soldes ; **égaux**, on lit `amount.value` ; **différents**, la différence s'explique ou la phase 2 attend
      (l'effet des activités non `COMPLETED` sur le champ n'est pas mesurable sur 2024 : il reste couvert, de façon sûre,
@@ -86,9 +86,8 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      l'API, écrite au compte rendu : 39-12a2 exige un frais par virement sortant (`MissingTransferFee`), et lire le devis
      des quelque 130 virements de 2024 dépasserait le quota (65 + ≈ 150 > 200) ; les 27 devis éprouvent la correspondance
      dans les deux cas (avec et sans frais), `checkpoints` = clôtures du CSV à chaque fin de mois (le CSV porte un solde courant à chaque ligne). Chaque
-     ligne rendue est comparée à la ligne du CSV de même identifiant (date ; heure, où l'écart d'une heure l'été entre
-     l'heure de Zurich de Kesh et l'UTC+1 du CSV est **prévu** ; montant, devise, sens, **solde
-     courant**) ; seules les différences **prévues** sont admises (frais de conversion inclus dans le débit, H2 ;
+     ligne rendue est comparée à la ligne du CSV de même identifiant (date ; montant, devise, sens, **solde
+     courant** ; **l'heure n'est pas comparée** : Kesh l'écrit à l'heure de Zurich, le CSV en UTC+1 toute l'année, d'où un écart prévu d'une heure l'été) ; seules les différences **prévues** sont admises (frais de conversion inclus dans le débit, H2 ;
      conversion automatique si (2) n'a pas trouvé le numéro) ; le solde d'ouverture et de clôture de chaque devise égale
      celui du CSV. Le compte rendu (métadonnées) s'écrit au fichier d'epic. Aucun appel de plus.
    - **(c) Comparaison d'un mois 2025, plus tard, non bloquante** : quand Beat dépose le CSV 2025 du site d'un mois, la
@@ -211,6 +210,7 @@ l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la sauv
 
 ## Change Log
 
+- 2026-11-20 — validation ciblée AC-0 (a) « décisions » P2 sur le commit `b2d272e0` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee-2.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici : (b) ne compare plus l'heure (l'écart d'une heure l'été entre Zurich et l'UTC+1 du CSV est dit prévu, sans test dessus) ; (a)(1) ne pose plus « Date Time » comme question ouverte, (a)(2) ne parle plus de règle provisoire.
 - 2026-11-20 — validation ciblée AC-0 (a) « décisions » sur le commit `d0cfeda7` (Claude Haiku 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee.md`) : 0 C, 0 H, 1 M, 1 L, remédiés. Ici : (a)(7) « option absente » tranché en « option `BALANCE` présente » ; (b) ne compte plus l'heure du CSV (UTC+1 fixe) comme identique à l'heure de Zurich de Kesh, écart d'une heure l'été prévu.
 - 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (recette réelle sur 2024, 34 appels ; source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : AC-0 (a) marquée faite et T0 cochée ; concordance exacte (176/177 identifiants, 22/22 frais, soldes égaux en clôture, 12/12 fins de mois, 163/163 fins de jour, 230/230 soldes courants). Règles tranchées, reportées dans 39-12a2 : date = jour de Zurich de `createdOn` (débits, conversions) ou de `updatedOn` (entrants), jamais d'heure comme clé ; heure du CSV en UTC+1 constant ; `AUTO_CONVERSION-<resource_id>` définitif ; solde `amount.value` ; sens et devise débitée confirmés ; table des types de détail ; `reference` = `Payment Reference` ; virement sans frais = option `BALANCE` à 0 ; virement remboursé non relevé (suffixe provisoire maintenu) ; cartes en devise étrangère non relevées. Restent AC-0 (b) et (c). Les mentions « à trancher à la recette » de la fiche sont devenues caduques ; aucun code touché.
 - 2026-11-20 — validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié. Ici : le virement remboursé entre dans la recette AC-0 (a), point (8) ; le message et le manuel du refus de solde, `MissingTransferFee` et `fee_currency` relus, cohérents.
