@@ -1,6 +1,6 @@
 # Story 39-12a1 : client de l'API Wise — configuration, profil, soldes, activités, transferts, devis
 
-Status: ready-for-dev
+Status: review
 
 *Fiche réécrite le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement) ; elle remplace la fiche « client de l'API Wise — configuration, signature SCA, profil, soldes et
@@ -172,9 +172,9 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
 ## Tâches
 
 - [x] T0 — Recette préalable constatée sur 2024 (AC-0 a), faite le 2026-11-20 (34 appels), réponses brutes sauvées ; décisions reportées dans 39-12a2, 39-12a3 et l'epic.
-- [ ] T1 — Configuration par le lecteur du socle, transmission, garde (AC-1).
-- [ ] T2 — Client : profil, soldes, activités paginées, transferts, devis, erreurs (AC-2 à AC-4).
-- [ ] T3 — Serveur simulé et tests (AC-5).
+- [x] T1 — Configuration par le lecteur du socle, transmission, garde (AC-1).
+- [x] T2 — Client : profil, soldes, activités paginées, transferts, devis, erreurs (AC-2 à AC-4).
+- [x] T3 — Serveur simulé et tests (AC-5).
 - [ ] T4 — Recette finale sur 2024 (AC-0 b), après 39-12a2 ; comparaison d'un mois 2025 (AC-0 c) quand Beat dépose son CSV, hors chemin critique.
 
 ## Stratégie de tests
@@ -208,8 +208,56 @@ l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la sauv
   consentement à renouveler tous les 90 jours (2FA). Option future, aucune fiche (H6 du fichier d'epic).
 - Ancienne 39-2 (authentification forte) : **abandonnée**, non reprise (H5).
 
+## Dev Agent Record
+
+*Développée le 2026-11-20 (Claude Sonnet 5.5). Commits de code : `51ae9874` (client, tests, transmission), `84940f05`
+(ordre des modules, `cargo fmt`). Aucun appel réseau réel ; données de test fictives écrites à la main.*
+
+**Ce qui est livré** : `crates/kesh-api/src/wise/mod.rs` (spécification `WISE`, `WiseClient` : `profiles`,
+`resolve_profile`, `balances`, `activities_window`, `activities`, `transfers`, `transfer`, `quote_fee`, `dedup_activities`) ;
+`crates/kesh-api/tests/wise_client_e2e.rs` (serveur Wise simulé, 25 tests) ; une ligne à `lib.rs` ; séries 1 à 3,
+`KESH_WISE_BASE_URL` et `KESH_WISE_PARALLEL` à `docker-compose.yml`, `docker-compose.prod.yml` et `.env.example`.
+Aucune migration, aucun paquet neuf (`Cargo.lock` inchangé).
+
+**⚠️ La branche ne compile pas seule : elle dépend du socle S1 à S9, écrit par 38-12a** (commit `d64688fc`, branche
+`story/38-12a`, non fusionné à `epic/39-wise`). Il n'a pas été recopié. Code compilé et testé dans un **bac d'essai** (clone
+`--shared`, `story/39-12a1` + fusion de `d64688fc`, sans conflit). **À la fusion de `story/38-12a`, se raccordent** :
+1. `provider_env.rs` : `ALL_PROVIDERS` devient `&[PAYPAL, crate::wise::WISE]` (une ligne ; sans elle, la série Wise n'est pas
+   lue au démarrage, et le test `wise_est_inscrit_a_la_liste_des_prestataires` rougit) ;
+2. la garde `configuration_transmise.rs` dérive ses noms d'`ALL_PROVIDERS` : aucune liste à toucher (à confirmer au gate
+   complet de la fusion) ;
+3. `docker-compose*.yml` et `.env.example` : le bloc Wise est inséré après `KESH_SKIP_PRE_UPGRADE_BACKUP`, comme le bloc
+   PayPal du socle : conflit de texte voisin attendu, résolu en gardant les deux blocs ;
+4. `tests/common/mod.rs` du socle déclare `secrets_prestataire` (employé par le test de Wise).
+
+**Écarts avec la fiche, dits** : (a) `details: { provider, step, from?, to? }` n'est pas exprimable avec les variantes
+`AppError::Provider*` du socle (`window`, `page`) : `step` n'est porté que par `PROVIDER_RESPONSE_INVALID`, ailleurs `window`
+(`2024-01-01…2024-12-31`) et `page` situent l'échec ; à reprendre en 39-12a3 si Guy veut `step` partout (variantes du socle à
+étendre). (b) `WISE_PROFILE_AMBIGUOUS` n'est pas une variante d'`AppError` : `WiseProfileError::Ambiguous { count }` la porte,
+39-12a3 la rend (variante, texte aux quatre locales) ; un `PROFILE_ID` absent de la liste donne `count: 0`. (c) Transferts :
+`limit=100` et non 200 (relevés réels faits à 100 ; une page plus courte que `limit` terminant la lecture, une limite plafonnée
+par Wise en deçà l'arrêterait silencieusement à la première page). (d) Aucun suivi de progression (`JobHandle`) dans le client :
+39-12a3 compose `activities_window` fenêtre par fenêtre.
+
+**Gates réellement exécutés** (bac d'essai, cible `kesh-targets/kesh-wt3912a1`, journaux `kesh-gate-logs/s39-12a1/`) :
+- `cargo test -p kesh-api --lib --test wise_client_e2e` : **15** tests unitaires `wise::` (`cible-1.log`) et **25** tests du
+  serveur simulé, verts au rejeu (`cible-3.log`). Les trois pauses arrondies : `Notee` compare en secondes arrondies (la pause
+  restante, relue un instant plus tard, perd des microsecondes ; premier passage rouge, `cible-2.log`, corrigé).
+- Mutations (`mutation-1.log`) : curseur non encodé, 403 repris comme passager, en-tête `X-Signature` ajouté → **10 tests
+  rouges** sur 25, dont `activites_sur_trois_pages_par_curseur`, `refus_403_avec_defi_…` et
+  `aucune_requete_ne_porte_de_signature_…` ; restauré, 25 verts.
+- `cargo fmt --all -- --check` vert (après `84940f05`) ; `cargo clippy --workspace --all-targets -- -D warnings` vert, 0
+  avertissement (`clippy.log`).
+- **Non fait au moment d'écrire** : `scripts/test-fast.sh --ci` (gate complet) — en file d'attente de `heavy.sh`
+  (`gate-backend.sh`, journal `gate-backend.log`, vide tant qu'il n'a pas pris sa place) ; `scripts/gate-ci.sh` ; E2E
+  Playwright (**sans objet** : aucun écran, route ni texte touché) ; Vitest (sans objet). **Ne rien en déduire tant que
+  `gate-backend.log` n'est pas lu.**
+
+**Recette AC-0** : (a) faite avant la story ; (b) recette finale **après 39-12a2** (T4) ; (c) mois 2025, plus tard.
+
 ## Change Log
 
+- 2026-11-20 — **développée** (Claude Sonnet 5.5, Dev Agent Record ci-dessus) : client, serveur simulé, transmission ; statut `review` ; revue P1 à lancer (`kesh-gate-logs/s39-12a1/revue-p1-prompt.md`).
 - 2026-11-20 — validation ciblée AC-0 (a) « décisions » P2 sur le commit `b2d272e0` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee-2.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici : (b) ne compare plus l'heure (l'écart d'une heure l'été entre Zurich et l'UTC+1 du CSV est dit prévu, sans test dessus) ; (a)(1) ne pose plus « Date Time » comme question ouverte, (a)(2) ne parle plus de règle provisoire.
 - 2026-11-20 — validation ciblée AC-0 (a) « décisions » sur le commit `d0cfeda7` (Claude Haiku 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee.md`) : 0 C, 0 H, 1 M, 1 L, remédiés. Ici : (a)(7) « option absente » tranché en « option `BALANCE` présente » ; (b) ne compte plus l'heure du CSV (UTC+1 fixe) comme identique à l'heure de Zurich de Kesh, écart d'une heure l'été prévu.
 - 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (recette réelle sur 2024, 34 appels ; source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : AC-0 (a) marquée faite et T0 cochée ; concordance exacte (176/177 identifiants, 22/22 frais, soldes égaux en clôture, 12/12 fins de mois, 163/163 fins de jour, 230/230 soldes courants). Règles tranchées, reportées dans 39-12a2 : date = jour de Zurich de `createdOn` (débits, conversions) ou de `updatedOn` (entrants), jamais d'heure comme clé ; heure du CSV en UTC+1 constant ; `AUTO_CONVERSION-<resource_id>` définitif ; solde `amount.value` ; sens et devise débitée confirmés ; table des types de détail ; `reference` = `Payment Reference` ; virement sans frais = option `BALANCE` à 0 ; virement remboursé non relevé (suffixe provisoire maintenu) ; cartes en devise étrangère non relevées. Restent AC-0 (b) et (c). Les mentions « à trancher à la recette » de la fiche sont devenues caduques ; aucun code touché.
