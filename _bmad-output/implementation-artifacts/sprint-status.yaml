@@ -1,4 +1,4 @@
-# last_updated: 2026-11-20 (Epic 39 : refonte en phase 1 KISS, 39-11a à 39-11d, et phase 2, 39-12a et 39-12b, décision de Beat ; 39-1, 39-3, 39-4, 39-6 superseded ; 39-2, 39-5 deferred)
+# last_updated: 2026-11-20 (Epic 39 : phase 2 réécrite sur la voie activités, 39-12a1 à 39-12a3 et 39-12b drafted ; refonte en phase 1 KISS, 39-11a à 39-11d, et phase 2, 39-12a et 39-12b, décision de Beat ; 39-1, 39-3, 39-4, 39-6 superseded ; 39-2, 39-5 deferred)
 # last_updated: 2026-11-18 (découpages : 48-13 → 48-13 et 48-15-troncatures-silencieuses (#1331 à #1334, dérogation à la règle de splitting, décision de Guy) ; Epic 48 à huit stories, dérogation à la borne de six élargie ; 49-1 split en 49-1a à 49-1d (règle de splitting, neuf modules) ; 48-13, 48-15 et 49-1a en validation (P3))
 # last_updated: 2026-11-18 (kickoff de la 0.20.0 révisé sur les réponses de Guy aux points ouverts : sous-totaux repoussés, 49-3-titres-et-sous-totaux renommée 49-3-titres-de-section ; #1234 retirée de la 48-13 ; 48-13 fusionnée avant l'Epic 49 ; issues de la solde #1263, #1262, #1261, #1255 au milestone v0.20.0)
 # last_updated: 2026-11-18 (kickoff de la 0.20.0 en autonomie, release-0.20.0.md : Epic 48 sort du réservoir et devient l'épique corrective de la release, sept stories par dérogation à la borne de six (décision de Guy du 2026-11-18), 48-11 à 48-14 ajoutées, 48-3 à 48-9 hors 0.20.0 ; Epic 49 ouverte, types de lignes de la facture client (#1242), seule migration de la release ; v0200-menu-sous-groupes (#1253), amélioration de la release)
@@ -1171,7 +1171,7 @@ development_status:
   epic-39: in-progress  # 2026-11-20 : refonte en phase 1 KISS (39-11a à 39-11d) et phase 2 (39-12a, 39-12b), décision de Beat. Avant : 2026-11-15 : epic-39-wise.md (cadrage, B1, B3, B4, B9, B10, B12, B14 de epics-38-40-cadrage.md ; socle de l'Epic 38 ; F1–F17 ; aucune migration) ; demande de Beat ; après les Epics 37 et 38, une PR à la fin ; faisabilité à établir en 39-0 (Q-39-1, Q-39-2)
   39-0-kickoff: done  # cadrage écrit le 2026-11-15 ; décomptes, validation du fichier d'epic et recette de faisabilité de Beat à tenir (bloquent les fiches)
   39-1-client-wise: superseded  # 2026-11-20, refonte phases 1 KISS / 2 (décision de Beat) : remplacée par 39-12a (jeton en variable d'environnement, sans connexion ni coffre)
-  39-2-authentification-forte: superseded  # 2026-11-20 : défi SCA constaté à la recette 1 ; reprise par 39-12a1 (H5)
+  39-2-authentification-forte: superseded  # 2026-11-20 : défi SCA constaté à la recette 1 ; reprise par 39-12a1, puis abandonnée avec la voie relevé + SCA (H5, voie activités)
   39-3-releve-json-mouvements: superseded  # 2026-11-20 : remplacée par 39-11a (lecteur) et 39-12a (téléchargement)
   39-4-classement-des-types-wise: superseded  # 2026-11-20 : remplacée par 39-11c (préfixes d'identifiant, règles)
   39-5-releve-pdf: deferred  # 2026-11-20 : hors des phases 1 et 2
@@ -1181,9 +1181,12 @@ development_status:
   39-11c-rapprochement-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; dépend de 38-11c
   39-11d-ecrans-manuel-e2e-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20
   39-12a-telechargement-api-wise: split  # 2026-11-20 : scindée en 39-12a1 et 39-12a2 (recette 1 : défi SCA)
-  39-12a1-client-wise-et-sca: deferred  # 2026-11-20, phase 2, validée P1 ; recette 2 (AC-0) après dépôt de la clé publique
-  39-12a2-telechargement-wise-route-et-import: deferred  # 2026-11-20, phase 2, validée P1
-  39-12b-ecran-manuels-wise-api: deferred  # 2026-11-20, phase 2, validée P1
+  39-12a1-client-wise-et-sca: superseded  # 2026-11-20 : renommée 39-12a1-client-wise-activites (voie activités, SCA abandonnée)
+  39-12a1-client-wise-activites: drafted  # 2026-11-20 : réécrite sur la voie activités (jeton lecture seule, sans SCA : activités, transferts, devis, soldes) ; recette AC-0 = un mois 2025 comparé au CSV 2025 du site ; à revalider
+  39-12a2-telechargement-wise-route-et-import: superseded  # 2026-11-20 : renumérotée 39-12a3-telechargement-wise-route-et-import (voie activités)
+  39-12a2-activites-en-lignes-wise: drafted  # 2026-11-20 : neuve, voie activités (activités → WiseRow, forme fermée des montants, frais des virements, solde reconstruit et contrôlé ; kesh-import) ; à revalider
+  39-12a3-telechargement-wise-route-et-import: drafted  # 2026-11-20 : ex-39-12a2, réécrite sur la voie activités (points de contrôle, doublons CSV ↔ téléchargement R1 à R3) ; à revalider
+  39-12b-ecran-manuels-wise-api: drafted  # 2026-11-20 : réécrite sur la voie activités (clé SCA retirée) ; à revalider
 
   # 2026-11-17 — Release 0.19.0 (publiée le 2026-11-20, coupure le 2026-11-19 au soir ; coupure avancée au 2026-11-18, décision de Guy) : correction de la semaine, hors epic.
   v0190-correction: done  # #1162 ; release 0.19.0 ; sans migration, frontend seul (ContactPicker) ; fiche rédigée le 2026-11-17 (Sonnet 5.5), validée (8 passes) ; développée le 2026-11-17 (Opus 5.5) ; revue P1 à P3 terminée, décision D4 de Guy ; close le 2026-11-17 (gate-ci et E2E complet au commit 23ff6338d) ; peut glisser à la 0.20.0 (décision de Guy du 2026-11-17) ; scindée le 2026-11-17 : #1097 passe à v0190-nom-societe ; issue liée #1228
