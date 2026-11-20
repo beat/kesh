@@ -35,7 +35,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
 2. **AC-2 — Contrôles.** Au-dessus du bilan et du compte de résultat (pas des autres rapports) :
    - **« Hiérarchie montrée / masquée »** : masquée = l'écran **à plat d'aujourd'hui**, requête **sans** `detailLevel`,
      sous-titres de rôle des fonds propres compris (D4) ; montrée = l'écran groupé. *(Ce contrôle tient lieu de l'entrée
-     « À plat » du sélecteur de D9 ; lecture à confirmer par Beat, C-46-2-2.)* Niveau, position et ouvertures sont gardés pendant que la hiérarchie est masquée ;
+     « À plat » du sélecteur de D9 ; lecture décidée par Beat le 2026-11-20, C-46-2-2.)* Niveau, position et ouvertures sont gardés pendant que la hiérarchie est masquée ;
    - **sélecteur de niveau** « Niveau 1 · … · Niveau n−1 · Tous les comptes », `n` = `grouping.maxDepth` de la dernière
      réponse (profondeur de l'arbre, indépendante de l'ouverture, 46-1), niveaux bornés à 20 ; désactivé quand la
      hiérarchie est masquée, et quand `maxDepth` ≤ 1 (plan sans groupe, rapport vide : seul « Tous les comptes ») ;
@@ -50,7 +50,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    (une seule source de la règle : la 46-1 ; aucun repli calculé dans le navigateur). Requêtes concurrentes : seule la
    réponse de la dernière demande s'affiche ; pendant le chargement, l'écran garde l'affichage précédent (sans
    clignotement, `aria-busy`). Chaque redemande écrit une trace `report.generated` au journal d'audit, comme un
-   changement de période aujourd'hui (46-1 AC-11) : assumé (C-46-2-1).
+   changement de période aujourd'hui (46-1 AC-11) : assumé (C-46-2-1), **à condition que la vue soit mémorisée** (AC-10).
 4. **AC-4 — Rendu (D5, Q2, Q3).** Lignes rendues dans l'ordre de `groupedRows` : retrait par `depth` ; `group` en gras,
    son montant **selon la règle de rendu de la 46-1** (sur le titre en `header` ou si fermé ; sinon sur la ligne
    `subtotal`, en gras, libellé « Total <nom du groupe> ») ; `own` libellée « <numéro> <nom> (solde propre) » ; solde en
@@ -61,7 +61,8 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
 5. **AC-5 — Mémoire par visiteur.** Hiérarchie montrée ou masquée, niveau, position, et les listes `open`/`closed`
    **par rapport** (bilan, compte de résultat) sont retenus en `localStorage`, toute lecture et écriture sous
    `try`/`catch`, l'écran rendu par défaut (AC-1) si le stockage est vide, illisible ou refusé. Une valeur relue
-   invalide (niveau hors bornes, liste non numérique) est ignorée, non transmise.
+   invalide (niveau hors bornes, liste non numérique) est ignorée, non transmise. Clé, restauration avant la
+   première requête et groupes disparus : AC-10 (décision de Beat du 2026-11-20).
 6. **AC-6 — Export fidèle à l'écran.** Les boutons PDF et CSV du bilan et du compte de résultat passent **les mêmes
    paramètres** que la dernière requête affichée (aucun si la hiérarchie est masquée) : `downloadReport` et
    `getReportExportUrl` (`reports.api.ts:334`, `:446`) gagnent un argument facultatif de groupement. Le rendu exporté
@@ -75,11 +76,23 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    Agent Record et montrée à Beat avant le développement des vues.
 9. **AC-9 — Textes, tests, manuel.** Libellés en quatre locales (bloc `reports-groups-*` propre à l'epic) ;
    `i18n-keys` (`sitesTotal` recompté par la garde) et `i18n-libelle-en-dur` verts ; Vitest des vues (rendu `header`
-   et `footer`, groupe fermé, `own`, devise de groupe, mémoire illisible) et du composant ; un E2E Playwright
+   et `footer`, groupe fermé, `own`, devise de groupe, mémoire illisible, AC-10) et du composant ; un E2E Playwright
    (`reports-groupes.spec.ts`) traverse : écran groupé par défaut, niveau 1, ouverture d'un groupe à la main, export
-   CSV dont l'URL porte les mêmes paramètres, hiérarchie masquée qui rend l'écran d'aujourd'hui ; captures d'écran
+   CSV dont l'URL porte les mêmes paramètres, hiérarchie masquée qui rend l'écran d'aujourd'hui, vue retrouvée au retour (AC-10) ; captures d'écran
    (thème clair) de chaque état au Dev Agent Record ; manuel utilisateur FR, § *Bilan* et *Compte de résultat*
    (`docs/manual/fr/user-manual.tex:3923`, `:3954`), `.tex` seul, PDF non commité.
+10. **AC-10 — Vue retrouvée au retour (décision de Beat du 2026-11-20).** Le rechargement à chaque clic (C-46-2-1)
+    n'est accepté que si l'écran retrouve sa vue : en revenant sur la page (même rapport, même société, même
+    utilisateur, même navigateur), il rétablit le niveau choisi et les groupes ouverts ou fermés à la main (ainsi que
+    montrée/masquée et la position, AC-5). Choix KISS : mémorisation côté navigateur en `localStorage`, **clé par
+    société et par rapport**, sous la convention de `lib/app/stores/mode.svelte.ts` (lecture et écriture sous
+    `try`/`catch`, écran par défaut correct si le stockage est vide, illisible ou refusé) ; **restaurée avant la
+    première requête** (la première demande part avec la vue mémorisée, sans passer d'abord par la vue par défaut) ;
+    les groupes mémorisés qui n'existent plus dans le plan (compte archivé, groupe dissous) sont ignorés, non
+    transmis. Tests : Vitest de la persistance (écriture au changement de niveau et au clic, relecture au montage,
+    clé distincte par société et par rapport, stockage vide, illisible et refusé, groupe disparu ignoré, première
+    requête déjà munie de la vue) ; E2E (`reports-groupes.spec.ts`) : choisir un niveau, ouvrir un groupe, quitter la
+    page, revenir → même niveau, même groupe ouvert.
 
 ## Tâches / sous-tâches
 
@@ -91,8 +104,8 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
 - [ ] **T3 — composant** `GroupedReportRows.svelte` (neuf, partagé par les deux vues et réutilisé par la 46-6b) :
       rendu des lignes, accordéons, règle de rendu (AC-4). Il se paramètre par un **descripteur de colonnes** (une
       colonne de montant ici, le solde en devise restant dans la cellule du libellé comme `AccountCurrencyBalance` aujourd'hui ; la 46-6b l'étend à quatre colonnes pour la balance), non par un composant par rapport.
-- [ ] **T4 — vues et page** (AC 1, 2, 5, 7) : `BalanceSheetView.svelte`, `IncomeStatementView.svelte` (branche
-      groupée, branche à plat inchangée), barre de contrôles dans `routes/(app)/reports/+page.svelte`, mémoire.
+- [ ] **T4 — vues et page** (AC 1, 2, 5, 7, 10) : `BalanceSheetView.svelte`, `IncomeStatementView.svelte` (branche
+      groupée, branche à plat inchangée), barre de contrôles dans `routes/(app)/reports/+page.svelte`, mémoire (clé par société et rapport, AC-10).
 - [ ] **T5 — i18n, Vitest, E2E, captures, manuel** (AC 9).
 - [ ] **T6 — gates** : `npm run check`, `lint-i18n-ownership`, `test:unit`, `build` ; E2E complet au dernier commit de
       code.
@@ -108,7 +121,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
 - `reports.api.ts` : `buildQuery` (`:26`), `getBalanceSheet` (`:36`), `getIncomeStatement` (`:45`), `isReportEmpty`
   (`:158`), `formatReportAmount` (`:280`), `roundToCents` (`:306`), `getReportExportUrl` (`:334`), `downloadReport`
   (`:446`). `routes/(app)/reports/+page.svelte` (893 lignes) : onglets, période, export (`:455-480`).
-- `localStorage` : précédents sous `lib/app/stores/` (`mode.svelte.ts`) — même garde `try`/`catch`.
+- `localStorage` : précédents sous `lib/app/stores/` (`mode.svelte.ts`, lecture/écriture protégées ; `session-idle.svelte.ts`, sonde d'écriture) — convention reprise par l'AC-10 (relevé à `origin/main`, 2026-11-20).
 
 ### Ce qui doit rester
 
@@ -123,9 +136,9 @@ garde « rapport vide » ; les autres onglets ; l'export sans paramètre.
   dans le navigateur une réponse `all` — il faudrait y recopier la règle d'ouverture, celle du montant (titre ou pied
   selon l'ouverture) et celle des groupes nuls masqués (46-1 AC-5), et l'export ne serait plus fidèle que si les deux
   copies s'accordent.
-- **C-46-2-2** : « hiérarchie masquée » = vue à plat d'aujourd'hui (**à confirmer par Beat** — question posée, sans
-  réponse à ce jour ; retenu en attendant, décidé à la validation P1 : c'est la lecture qui
-  ne double pas l'entrée « À plat » de D9, et le contrôle de Beat la remplace).
+- **C-46-2-2** : « hiérarchie masquée » = vue à plat d'aujourd'hui (**décidé par Beat le 2026-11-20** ; retenu
+  d'abord à la validation P1 : c'est la lecture qui ne double pas l'entrée « À plat » de D9, et le contrôle de Beat
+  la remplace).
 - **C-46-2-3** : « tout ouvrir / tout fermer » passe par le niveau, non par la liste de tous les groupes (URL courte).
 
 ### References
@@ -170,3 +183,8 @@ l'affichage d'avant.
   colonnes (T3) ; mention « à confirmer par Beat » remise sur « hiérarchie masquée » = vue à plat (AC-2, C-46-2-2).
   Rapport : `kesh-gate-logs/epic-46/validation/46-2-P2.md`.
 - 2026-11-20 — Validation P3 ciblée (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `8a7f0f73`) : 0 C / 0 H / 0 M / 1 L, remédié. L : le descripteur « une colonne de montant » ne disait pas où loge le solde en devise ; il reste dans la cellule du libellé, comme `AccountCurrencyBalance` aujourd'hui (T3). Rapport : `kesh-gate-logs/epic-46/validation/46-123-P3-ciblee.md`.
+- 2026-11-20 — Décisions de Beat : (1) « hiérarchie masquée » = la liste à plat des comptes, comme l'écran d'aujourd'hui
+  (AC-2, C-46-2-2 : « à confirmer » remplacé par « décidé ») ; (2) rechargement à chaque clic accepté (aller-retour API,
+  trace `report.generated`) **à condition que la vue soit mémorisée** : AC-10 neuf (`localStorage`, clé par société et
+  par rapport, restaurée avant la première requête, groupes disparus ignorés), AC-5, AC-3, T4 et les tests de l'AC-9
+  réalignés ; convention réutilisée : `mode.svelte.ts`.
