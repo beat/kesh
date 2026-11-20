@@ -1,6 +1,6 @@
 # Story 39-12a2 : téléchargement des relevés Wise — route, tâche en fond, import et audit
 
-Status: ready-for-dev
+Status: deferred
 
 *Fiche rédigée le 2026-11-20 (seconde moitié de l'ancienne 39-12a, voir 39-12a1). Branche `epic/39-wise`. Epic 39,
 **phase 2** ; **socle commun S1 à S9** (fichier d'epic). **Dépend de** : 39-12a1 (client, signature SCA), 39-11b (import CSV), du
@@ -129,3 +129,9 @@ les importe comme un relevé CSV, sans doublon ; tout ou rien en cas d'échec.
 - 2026-11-20 — validation P5 ciblée (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-40-phase2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié : entrée P4 limitée à ce qui concerne ce fichier (la recette 2 relève de 39-12a1), casse des noms.
 - 2026-11-20 — validation P2, complément (Claude Opus 5.5)
  : cœur `ProviderLine` extrait par 38-12a (ou 39-11b), appelé ici.
+
+- 2026-11-20 — **reportée** : recettes réelles 1 et 2 (11 appels) : le relevé de solde par jeton personnel est refusé
+  pour le compte suisse (403 `x-2fa-approval` à chaque requête ; rejeu signé par clé publique, signature vérifiée en
+  local, toujours `REJECTED` ; endpoint de statut du jeton à usage unique 404). La doc publique des jetons personnels le
+  dit : relevés par API non pris en charge hors US, CA, AU, NZ, SG, MY. Reprise seulement si Wise ouvre l'accès (support
+  ou accord Wise Platform). Voie retenue : import CSV de la phase 1. Détails : `data-not-committed/wise-recette-ac0*.md`.

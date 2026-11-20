@@ -1,6 +1,6 @@
 # Story 39-12b : bouton « Télécharger depuis Wise », manuels, E2E
 
-Status: ready-for-dev
+Status: deferred
 
 *Fiche rédigée le 2026-11-20 (reprend l'écran de l'ancienne 39-12b ; le parallélisme est passé à 39-12a2). Branche
 `epic/39-wise`. Epic 39, **phase 2** ; **socle S7 et S8** (fichier d'epic). **Dépend de** : 39-12a2, 39-11d, du composant
@@ -96,3 +96,9 @@ seule et la clé de signature de l'authentification forte.
 - 2026-11-20 — validation P2, complément (Claude Opus 5.5)
  : manuel — deux tableaux de variables, au-delà de trois comptes,
   volume du fichier de clé.
+
+- 2026-11-20 — **reportée** : recettes réelles 1 et 2 (11 appels) : le relevé de solde par jeton personnel est refusé
+  pour le compte suisse (403 `x-2fa-approval` à chaque requête ; rejeu signé par clé publique, signature vérifiée en
+  local, toujours `REJECTED` ; endpoint de statut du jeton à usage unique 404). La doc publique des jetons personnels le
+  dit : relevés par API non pris en charge hors US, CA, AU, NZ, SG, MY. Reprise seulement si Wise ouvre l'accès (support
+  ou accord Wise Platform). Voie retenue : import CSV de la phase 1. Détails : `data-not-committed/wise-recette-ac0*.md`.

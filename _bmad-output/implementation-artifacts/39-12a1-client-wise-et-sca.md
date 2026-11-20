@@ -1,6 +1,6 @@
 # Story 39-12a1 : client de l'API Wise — configuration, signature SCA, profil, soldes et relevés
 
-Status: ready-for-dev
+Status: deferred
 
 *Fiche rédigée le 2026-11-20 (ex-39-12a, scindée le même jour en 39-12a1 et 39-12a2 par la règle de splitting préventif : la
 recette réelle a imposé la signature SCA, qui s'ajoute à la configuration, au client et à la route). Branche
@@ -203,3 +203,9 @@ dans l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la
 - 2026-11-20 — validation P5 ciblée (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-40-phase2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 2 L, remédiés : casse des noms `KESH_WISE_BASE_URL` et `KESH_WISE_PARALLEL` au Change Log P4 ; titre du « Socle commun » aligné au niveau `##` des deux epics.
 - 2026-11-20 — validation P2, complément (Claude Opus 5.5) : corrections du socle relevées par la P2 de la 38-12 appliquées —
   valeur vide = absente, séries 1 à 3 transmises par les deux compose et `.env.example`, fichier de clé monté à la main.
+
+- 2026-11-20 — **reportée** : recettes réelles 1 et 2 (11 appels) : le relevé de solde par jeton personnel est refusé
+  pour le compte suisse (403 `x-2fa-approval` à chaque requête ; rejeu signé par clé publique, signature vérifiée en
+  local, toujours `REJECTED` ; endpoint de statut du jeton à usage unique 404). La doc publique des jetons personnels le
+  dit : relevés par API non pris en charge hors US, CA, AU, NZ, SG, MY. Reprise seulement si Wise ouvre l'accès (support
+  ou accord Wise Platform). Voie retenue : import CSV de la phase 1. Détails : `data-not-committed/wise-recette-ac0*.md`.
