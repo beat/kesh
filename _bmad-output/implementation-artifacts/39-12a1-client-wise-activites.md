@@ -209,6 +209,7 @@ l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la sauv
 
 ## Change Log
 
+- 2026-11-20 — validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié. Ici : le virement remboursé entre dans la recette AC-0 (a), point (8) ; le message et le manuel du refus de solde, `MissingTransferFee` et `fee_currency` relus, cohérents.
 - 2026-11-20 — validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3, 39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici (AC-0 b, L) : la devise `fee_currency` des frais pris au CSV est celle du fichier qui porte le débit, puisqu'elle départage désormais le montant.
 - 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a2, 39-12a3, 39-12b ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés. Ici (AC-0 a) : le

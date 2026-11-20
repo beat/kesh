@@ -173,6 +173,7 @@ importés.
 
 ## Change Log
 
+- 2026-11-20 — validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié. Ici : deux activités distinctes de même `resource_id` (virement remboursé) donnent deux lignes, identifiants suffixés `-<n>`, au lieu d'un `DuplicateId` durable (AC-3) ; cas ajouté au test de l'AC-7. Limite sur le mouvement en cours, `MissingTransferFee` (AC-3, AC-4, AC-7) relus, cohérents.
 - 2026-11-20 — validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3, 39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici : **M** — un mouvement en cours porté au solde, avec un point de contrôle, fait refuser jusqu'à sa fin sans que le relevé soit en cause (limite complétée : attendre, ne rien supprimer) ; **L** — une entrée `transfer_fees` absente rend `MissingTransferFee` et non `AmbiguousAmount` quand les deux montants sont dans des soldes du profil (AC-3, test AC-7).
 - 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a3, 39-12b ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés. Ici : **M1** — un

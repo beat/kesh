@@ -93,6 +93,7 @@ décrit le jeton en lecture seule et ce que le téléchargement lit.
 
 ## Change Log
 
+- 2026-11-20 — validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié. Ici : le manuel dit le virement remboursé (deux lignes, ne pas mélanger CSV et téléchargement) et où voir qu'un mouvement est en cours ; message de `WISE_API_BALANCE_MISMATCH` et manuel à deux cas relus, cohérents.
 - 2026-11-20 — validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3, 39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici : **M** — le message de `WISE_API_BALANCE_MISMATCH` et le manuel menaient à supprimer un relevé juste quand un mouvement est en cours chez Wise ; ils distinguent désormais les deux causes (attendre la fin du mouvement ; supprimer seulement un relevé dont la clôture diffère du site de Wise).
 - 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3 ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés. Ici : **M2** — sortie
