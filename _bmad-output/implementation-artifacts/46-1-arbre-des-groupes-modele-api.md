@@ -19,7 +19,7 @@ la balance (46-6a). Aucun écran, aucun rendu PDF ou CSV.
 
 ## Modules touchés (règle de splitting préventif)
 
-Quatre : `kesh-report/groupes` (module neuf, avec l'enveloppe `AvecGroupes<T>`), `kesh-api/services/rapports`,
+Quatre : `kesh-report/groupes` (module neuf, avec l'enveloppe `AvecGroupes<T, S>`), `kesh-api/services/rapports`,
 `kesh-api/routes/reports`, la documentation (`docs/api-external.md`). **`BalanceSheet` et `IncomeStatement` ne changent
 pas** (C-46-1-4) : ni `balance_sheet.rs`, ni `income_statement.rs`, ni les littéraux des tests de `pdf.rs`, `csv.rs`
 et de `benches/export.rs` (zones de la 48-11 et de la 47-3). Tests : `kesh-report` (unitaires),
@@ -62,7 +62,7 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
   rapport vide, `1` pour un plan sans groupe.
 - `groupedRows` : un objet par section — `{ assets, liabilities, equity }` au bilan, `{ revenues, expenses }` au
   compte de résultat. *(D8 parlait d'un champ « par section » : les sections étant des tableaux JSON, le champ se
-  porte à la racine, une clé par section.)* Les deux champs viennent de l'enveloppe `AvecGroupes<T>` (C-46-1-4),
+  porte à la racine, une clé par section.)* Les deux champs viennent de l'enveloppe `AvecGroupes<T, S>` (C-46-1-4),
   sérialisée **après** les champs du rapport (`#[serde(flatten)]`), absents (non `null`) sans `detailLevel`.
 - Chaque ligne : `{ kind, depth, accountId, accountNumber, accountName, balance, currency?, balanceCurrency?, open?,
   active? }`, déjà **dans l'ordre d'affichage** :
@@ -110,7 +110,10 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
    enfants remontés. La dissolution dépend des **lignes présentes** : un groupe peut être dissous à une date d'arrêté
    et non à une autre (p. ex. `2 Passifs` quand aucun compte de fonds propres n'a de solde) ; c'est voulu (règle sur
    les données du rapport, non sur la structure du plan, qui dissoudrait toujours `6`, à cause de `6950 Produits
-   financiers`).
+   financiers`). **Relevé dans `pme.json` (validation P2)** : au compte de résultat, les groupes `6`, `7`, `70`, `8`
+   et `80`, dont les feuilles mêlent charges et produits, sont dissous dès que les deux natures portent un solde ; au
+   bilan, `2 Passifs` l'est quand un compte de rôle fonds propres a un solde (la partition du bilan est par rôle,
+   non par type de compte : `pme.json` ne porte que des passifs sous `2`). Le test PME de l'AC-14 les énumère.
 5. **AC-5 — Groupes non affichés (D6 modifiée, Q2).** Un groupe sans descendance dans la section n'y paraît pas. Un
    groupe **fermé par le niveau** dont le sous-total est nul en CHF **et** en devise n'est pas affiché ; son zéro reste
    dans le sous-total de son parent. Un groupe **fermé à la main** (`closed`) reste affiché, même nul : sinon la ligne
@@ -127,7 +130,8 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
 8. **AC-8 — Contrat de l'API.** Les quatre paramètres, leurs refus et la réponse du § *Le contrat* sur
    `GET /reports/balance-sheet` et `GET /reports/income-statement`. Sans `detailLevel` : JSON **identique à l'octet**
    à celui de `main` pour le même jeu de données (NFR-46-1), prouvé par un test qui compare le corps à une **fixture
-   écrite au commit de base** (T0, avant toute modification ; plan PME, un compte en devise, deux exercices) — champs
+   écrite au commit de base** (T0, avant toute modification ; plan PME, un compte en devise, deux exercices ; base
+   `#[sqlx::test]` neuve et montage déterministe, donc identifiants stables — sinon le test normalise les `accountId`) — champs
    `grouping` et `groupedRows` absents, non `null`. Avec `detailLevel`, les champs
    d'aujourd'hui restent identiques (les sections plates sont toujours rendues).
 9. **AC-9 — Ordre miroir puis groupes.** Le regroupement s'applique dans `services/rapports.rs` (`bilan`,
@@ -169,9 +173,11 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
       compte de résultat sans paramètre).
 - [ ] **T1 — `groupes.rs`** (AC 1 à 7, 13) : `ArbreComptes`, `LigneAgregeable`, `OptionsGroupes`
       (`NiveauDetail::{Niveau(u8), Tous}`, `PositionSousTotal::{Titre, Pied}`, ensembles `ouverts`, `fermes`),
-      `LigneGroupee` (`Serialize`, camelCase, champs optionnels `skip_serializing_if`), `regrouper` ; tests unitaires et
-      de propriété. Déclarer le module dans `crates/kesh-report/src/lib.rs`.
-- [ ] **T2 — enveloppe** (AC 8, C-46-1-4) : dans `groupes.rs`, `AvecGroupes<T>` (`Serialize`, camelCase) —
+      `LigneGroupee` (neutre : un vecteur de montants), `regrouper` ; tests unitaires et de propriété. La **conversion** de
+      `LigneGroupee` en ligne JSON à champs nommés (`balance`, `currency`, `balanceCurrency`, `role`, `mirrorOf`…,
+      `skip_serializing_if`) est propre à chaque rapport : bilan et compte de résultat la posent ici (`LigneRapport`,
+      `Serialize`, camelCase), la balance en 46-6a (cinq colonnes). Déclarer le module dans `crates/kesh-report/src/lib.rs`.
+- [ ] **T2 — enveloppe** (AC 8, C-46-1-4) : dans `groupes.rs`, `AvecGroupes<T, S>` (`Serialize`, camelCase) —
       `#[serde(flatten)] rapport: T`, puis `grouping: Option<Grouping>` et `grouped_rows: Option<S>` (`S` : les sections
       du rapport), `#[serde(skip_serializing_if = "Option::is_none")]`. `BalanceSheet`, `IncomeStatement` et leurs
       littéraux ne changent pas.
@@ -179,7 +185,10 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
       `bilan` / `compte_de_resultat`, qui rendent `Rapport<AvecGroupes<…>, U>` (appelants : `routes/reports.rs:241`,
       `:253`, `:393`, `:524`, `mcp/outils/rapports.rs:305`, `:357` — l'export et le MCP lisent `.rapport` jusqu'aux
       46-3 et 46-4) ; validation dans le service (un seul endroit, réutilisé par l'export de la 46-3 et
-      le MCP de la 46-4) ; `ReportQuery` gagne `detail_level`, `subtotal_position`, `open`, `closed`
+      le MCP de la 46-4) **avec deux entrées** : l'analyse des chaînes de la route REST (`detailLevel=2`,
+      `open=1,2`) qui produit la même `DemandeGroupes` typée, et la construction directe depuis des valeurs typées
+      (tableaux d'entiers du MCP, 46-4) ; les refus de l'AC-8 vivent dans la seconde, la première n'ajoute que
+      l'analyse syntaxique ; `ReportQuery` gagne `detail_level`, `subtotal_position`, `open`, `closed`
       (`Option<String>`, validés à la main comme `validate_format`, pour un 400 et non un 422 Axum).
 - [ ] **T4 — tests d'intégration** (AC 14) dans `crates/kesh-api/tests/reports_e2e.rs`.
 - [ ] **T5 — documentation** (AC 12, 15).
@@ -248,7 +257,7 @@ invariants NFR-46-2 se vérifient sur les sections présentées.
   MCP lisent la même liste (D8, FR-46-9).
 - **C-46-1-3** : « tout ouvrir / tout fermer » ne passe pas par l'API : c'est `detailLevel=all` ou `1` sans liste
   (46-2) ; les listes ne portent que les écarts manuels, bornées à 500.
-- **C-46-1-4** (validation P1, KISS) : une **enveloppe** `AvecGroupes<T>` (`#[serde(flatten)]`) plutôt que deux
+- **C-46-1-4** (validation P1, KISS) : une **enveloppe** `AvecGroupes<T, S>` (`#[serde(flatten)]` ; `S` = les sections groupées du rapport, `SectionsBilan { assets, liabilities, equity }` ou `SectionsResultat { revenues, expenses }`, de `LigneGroupee`) plutôt que deux
   champs ajoutés à `BalanceSheet` et `IncomeStatement`. *Pourquoi* : ces structures ont une vingtaine de littéraux dans
   les tests de `pdf.rs` et `csv.rs` (`git grep -n "BalanceSheet {\|IncomeStatement {"`, 22 sites à `d29aa557`), là où
   la 48-11 et la 47-3 écrivent ; les y toucher créait une collision non déclarée, la 46-1 pouvant partir avant la
@@ -286,7 +295,7 @@ facultatifs ; sans eux, la réponse ne change pas.
   paramètre réponse inchangée) de Guy, ordre miroir puis groupes, contrainte de la 48-11. Quinze critères. `drafted`.
 - 2026-11-20 — Validation P1 (Claude Opus 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 4 M
   / 4 L, remédiés. M : collision non déclarée des champs ajoutés à `BalanceSheet`/`IncomeStatement` (22 littéraux dans
-  les tests de `pdf.rs`/`csv.rs`, zones de la 48-11 et de la 47-3) → enveloppe `AvecGroupes<T>` (C-46-1-4, T2, T3,
+  les tests de `pdf.rs`/`csv.rs`, zones de la 48-11 et de la 47-3) → enveloppe `AvecGroupes<T, S>` (C-46-1-4, T2, T3,
   modules : quatre) ; `maxDepth` ambigu (lignes émises ou arbre : le sélecteur se repliait au niveau 1) → arbre
   affiché, indépendant de l'ouverture ; groupe fermé **à la main** à sous-total nul masqué (ligne impossible à
   rouvrir) et invariant de l'AC-2 contredit par les groupes nuls masqués → AC-5 (masqué seulement s'il est fermé par
@@ -294,3 +303,13 @@ facultatifs ; sans eux, la réponse ne change pas.
   solde propre d'un groupe dissous et dissolution selon les lignes présentes (AC-4) ; « groupe affiché » de l'écho
   précisé, `trial-balance` qui partage `ReportQuery` ; trace d'audit à chaque redemande dite (AC-11) ; noms de la
   48-11 annoncés et non relevés (*Dev Notes*). Rapport : `kesh-gate-logs/epic-46/validation/46-1-P1.md`.
+- 2026-11-20 — Validation P2 (Claude Sonnet 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 1 M
+  / 4 L, remédiés. Vérifié : `rust_decimal` en `serde-str` (`Cargo.toml:18`), aucun `arbitrary_precision` ni
+  `preserve_order` dans les `Cargo.toml` ; `flatten` en sérialisation passe par `serialize_map`, ordre et forme du JSON
+  sans paramètre inchangés (l'AC-8 le prouve) ; `Rapport<T, U>` générique (`afficher`, `exporter`, `periode()` ne
+  dépendent pas de `T`) ; appelants et lignes citées (`routes/reports.rs:241/253/393/524`, `rapports.rs:610-637`,
+  `:1059`, MCP `:305/:357`, `accounts.rs:688`). M : `AvecGroupes<T>` annoncé à un paramètre mais `grouped_rows: Option<S>`
+  en réclame un second → `AvecGroupes<T, S>`, sections `SectionsBilan`/`SectionsResultat` (T2). L : entrée **typée** de
+  la validation pour le MCP (T3) ; conversion en champs nommés propre à chaque rapport (T1) ; groupes dissous du plan PME
+  relevés (`6`, `7`, `70`, `8`, `80` au compte de résultat ; `2` au bilan, partition par rôle) (AC-4) ; déterminisme de
+  la fixture (AC-8). Rapport : `kesh-gate-logs/epic-46/validation/46-1-P2.md`.

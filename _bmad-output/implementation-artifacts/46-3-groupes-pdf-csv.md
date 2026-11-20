@@ -42,7 +42,9 @@ dur, i18n des PDF différée).
    (`ensure_space_for_rows(2.0)`, comme les sous-titres de rôle, `pdf.rs:877`). En-tête : une ligne sous la période
    dit le niveau (« Niveau 2 » ou « Tous les comptes ») et, si `grouping.open` ou `grouping.closed` n'est pas vide,
    ajoute « , détail ajusté à la main » — sans liste de numéros (C-46-3-1). Totaux de section, lignes calculées et
-   équation : inchangés.
+   équation : inchangés. **Rapport vide** : les fonctions groupées reprennent la garde « rapport vide » des fonctions à
+   plat (`BalanceSheet::is_empty` et son pendant, message « rapport vide » au PDF, garde par section au CSV), car l'écran
+   groupé étant celui par défaut (46-2 AC-1), l'export d'un bilan vide part désormais avec `detailLevel=all`.
 4. **AC-4 — Fidélité prouvée.** Un test d'intégration demande le JSON (46-1) et le PDF avec **les mêmes paramètres**
    (niveau 2, un groupe ouvert à la main, un fermé, `footer`), et affirme que, **section par section**, la suite des
    lignes de texte du PDF entre le titre de la section et sa ligne de total est exactement celle des
@@ -78,11 +80,13 @@ dur, i18n des PDF différée).
 - [ ] **T2 — route** (AC-1) : `ExportQuery` (`routes/reports.rs`) gagne les quatre champs ; validation par la fonction
       du service de la 46-1.
 - [ ] **T3 — PDF** (AC 3, 4, 6) : deux fonctions **neuves** de rendu groupé, qui reçoivent l'enveloppe
-      `AvecGroupes<BalanceSheet>` / `AvecGroupes<IncomeStatement>` de la 46-1 (C-46-1-4) ; `render_balance_sheet_pdf`
+      `AvecGroupes<BalanceSheet, SectionsBilan>` / `AvecGroupes<IncomeStatement, SectionsResultat>` de la 46-1 (C-46-1-4) ; `render_balance_sheet_pdf`
       (`pdf.rs:816`) et `render_income_statement_pdf` (`:954`) restent **inchangées**, avec leurs appelants et leurs
       tests : la route choisit l'une ou l'autre selon que `grouping` est présent (AC-2 tenu par construction, et
       prouvé par les fixtures). Libellés neufs dans `SectionLabels` et `fr_ch_defaults` ; une fonction de rendu de
-      ligne groupée partagée par les deux rapports **et** par la balance (46-6b).
+      ligne groupée partagée par les deux rapports **et** par la balance (46-6b) ; l'en-tête, les totaux, les lignes
+      calculées, l'équation et la garde « rapport vide » se **partagent** avec les fonctions à plat (extraits en
+      fonctions communes, comportement inchangé), seul le corps des sections diffère (DRY).
 - [ ] **T4 — CSV** (AC 5, 6) : de même, deux fonctions neuves à côté de `render_balance_sheet_csv` (`csv.rs:143`) et
       `render_income_statement_csv` (`:277`), inchangées.
 - [ ] **T5 — tests, documentation** (AC 8).
@@ -145,8 +149,15 @@ l'export ne change pas.
   Huit critères. `drafted`.
 - 2026-11-20 — Validation P1 (Claude Opus 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 1 M
   / 4 L, remédiés. M : les rendus groupés greffés dans `render_*_pdf`/`render_*_csv` lisaient des champs de
-  `BalanceSheet` que la 46-1 n'ajoute plus (enveloppe `AvecGroupes<T>`, C-46-1-4) → fonctions neuves, rendus à plat
+  `BalanceSheet` que la 46-1 n'ajoute plus (enveloppe `AvecGroupes<T, S>`, C-46-1-4) → fonctions neuves, rendus à plat
   inchangés avec leurs tests (T3, T4). L : en-tête du PDF simplifié (niveau et « détail ajusté à la main », sans liste
   tronquée, C-46-3-1, AC-3) ; fidélité de l'AC-4 vérifiée section par section ; noms de la 48-11 annoncés, non
   relevés, et cas d'une 48-11 sortie de la 0.20.0 (T0) ; lignes citées corrigées (`fr_ch_default` `:294`,
   garder-avec-la-suite `:877`). Rapport : `kesh-gate-logs/epic-46/validation/46-3-P1.md`.
+- 2026-11-20 — Validation P2 (Claude Sonnet 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 1 M
+  / 1 L, remédiés. Lignes vérifiées : `pdf.rs:294`, `:399`, `:487`, `:816`, `:877`, `:954`, `csv.rs:143`, `:277`,
+  `routes/reports.rs:174` (`ExportQuery` : ni `deny_unknown_fields` ni les quatre champs), `user-manual.tex:4188`. M :
+  les fonctions groupées neuves omettaient la garde « rapport vide », alors que l'export d'un bilan vide part avec
+  `detailLevel=all` depuis la 46-2 (AC-3, test `reports-export-pdf.spec.ts:40`). L : en-tête, totaux, équation et garde
+  partagés avec les rendus à plat (T3, DRY) ; nom de l'enveloppe à deux paramètres. Rapport :
+  `kesh-gate-logs/epic-46/validation/46-3-P2.md`.

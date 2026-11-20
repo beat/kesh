@@ -277,3 +277,7 @@ La page pour Guy (`data-not-committed/epic-46-revue-pour-guy.html`) porte ces r�
   une trace d'audit par demande, assumée (46-2 C-46-2-1) ; ordre 46-3 → 46-2 fixé ; en-tête du PDF sans liste de
   numéros (46-3 C-46-3-1). **À propager à la 46-6a** (en validation par un autre agent au même moment, non touchée
   ici) : T1 par l'enveloppe, et l'AC-3 sur la règle des groupes nuls fermés à la main.
+- 2026-11-20 — **P2** des fiches 46-1, 46-2, 46-3 (Claude Sonnet 5.5, contexte frais ; rapports `*-P2.md`) : 46-1 0/0/1/4,
+  46-2 0/0/0/2, 46-3 0/0/1/1 (C/H/M/L), remédiés. `AvecGroupes<T, S>` (deux paramètres) ; entrée typée de la
+  validation pour le MCP ; garde « rapport vide » des rendus groupés (46-3) ; groupes dissous du plan PME relevés.
+  **Reste en attente de Beat** : « hiérarchie masquée » = vue à plat (46-2 C-46-2-2), question posée sans réponse.

@@ -35,7 +35,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
 2. **AC-2 — Contrôles.** Au-dessus du bilan et du compte de résultat (pas des autres rapports) :
    - **« Hiérarchie montrée / masquée »** : masquée = l'écran **à plat d'aujourd'hui**, requête **sans** `detailLevel`,
      sous-titres de rôle des fonds propres compris (D4) ; montrée = l'écran groupé. *(Ce contrôle tient lieu de l'entrée
-     « À plat » du sélecteur de D9.)* Niveau, position et ouvertures sont gardés pendant que la hiérarchie est masquée ;
+     « À plat » du sélecteur de D9 ; lecture à confirmer par Beat, C-46-2-2.)* Niveau, position et ouvertures sont gardés pendant que la hiérarchie est masquée ;
    - **sélecteur de niveau** « Niveau 1 · … · Niveau n−1 · Tous les comptes », `n` = `grouping.maxDepth` de la dernière
      réponse (profondeur de l'arbre, indépendante de l'ouverture, 46-1), niveaux bornés à 20 ; désactivé quand la
      hiérarchie est masquée, et quand `maxDepth` ≤ 1 (plan sans groupe, rapport vide : seul « Tous les comptes ») ;
@@ -89,7 +89,8 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
 - [ ] **T2 — types et appels** (AC 3, 6) : `reports.types.ts` (`Grouping`, `GroupedRow`, champs facultatifs des DTO),
       `reports.api.ts` (`getBalanceSheet`, `getIncomeStatement`, `downloadReport`, `getReportExportUrl` avec options).
 - [ ] **T3 — composant** `GroupedReportRows.svelte` (neuf, partagé par les deux vues et réutilisé par la 46-6b) :
-      rendu des lignes, accordéons, règle de rendu (AC-4).
+      rendu des lignes, accordéons, règle de rendu (AC-4). Il se paramètre par un **descripteur de colonnes** (une
+      colonne de montant ici ; la 46-6b l'étend à quatre colonnes pour la balance), non par un composant par rapport.
 - [ ] **T4 — vues et page** (AC 1, 2, 5, 7) : `BalanceSheetView.svelte`, `IncomeStatementView.svelte` (branche
       groupée, branche à plat inchangée), barre de contrôles dans `routes/(app)/reports/+page.svelte`, mémoire.
 - [ ] **T5 — i18n, Vitest, E2E, captures, manuel** (AC 9).
@@ -122,7 +123,8 @@ garde « rapport vide » ; les autres onglets ; l'export sans paramètre.
   dans le navigateur une réponse `all` — il faudrait y recopier la règle d'ouverture, celle du montant (titre ou pied
   selon l'ouverture) et celle des groupes nuls masqués (46-1 AC-5), et l'export ne serait plus fidèle que si les deux
   copies s'accordent.
-- **C-46-2-2** : « hiérarchie masquée » = vue à plat d'aujourd'hui (décidé à la validation P1 : c'est la lecture qui
+- **C-46-2-2** : « hiérarchie masquée » = vue à plat d'aujourd'hui (**à confirmer par Beat** — question posée, sans
+  réponse à ce jour ; retenu en attendant, décidé à la validation P1 : c'est la lecture qui
   ne double pas l'entrée « À plat » de D9, et le contrôle de Beat la remplace).
 - **C-46-2-3** : « tout ouvrir / tout fermer » passe par le niveau, non par la liste de tous les groupes (URL courte).
 
@@ -160,3 +162,10 @@ l'affichage d'avant.
   groupé, en silence) → ordre 46-1 → 46-3 → 46-2 fixé, drapeau écarté. L : sélecteur désactivé si `maxDepth` ≤ 1,
   borné à 20 ; affichage gardé pendant le chargement ; « hiérarchie masquée » = vue à plat décidée (C-46-2-2).
   Rapport : `kesh-gate-logs/epic-46/validation/46-2-P1.md`.
+- 2026-11-20 — Validation P2 (Claude Sonnet 5.5, contexte frais, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 0 M
+  / 2 L, remédiés. Vérifié : `ExportQuery` ignore les paramètres inconnus (`routes/reports.rs:174`), E2E cités
+  (`reports.spec.ts` axe `:165`, `:176` ; `reports-export-pdf.spec.ts:40` ; `reports-currency.spec.ts:71`), lignes de
+  `reports.api.ts` (`:26`, `:36`, `:45`, `:158`, `:280`, `:306`, `:334`, `:446`), vues (283, 113, 138 lignes),
+  `+page.svelte` 893 lignes, `mode.svelte.ts`, manuel `:3923`, `:3954`. L : composant paramétré par un descripteur de
+  colonnes (T3) ; mention « à confirmer par Beat » remise sur « hiérarchie masquée » = vue à plat (AC-2, C-46-2-2).
+  Rapport : `kesh-gate-logs/epic-46/validation/46-2-P2.md`.
