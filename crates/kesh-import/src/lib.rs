@@ -23,6 +23,7 @@
 //!   défaillances des parseurs.
 //! - [`camt053`] : parseur CAMT.053 v04 / v08 (Story 8-1a).
 //! - [`csv`] : parseur CSV multi-encodage / multi-profils (Story 8-2).
+//! - [`wise`] : lecteur du CSV « relevé » de Wise (un solde, une devise).
 //! - [`paypal`] : lecteur du CSV PayPal « Balance affecting transactions »,
 //!   par noms de colonnes (Story 38-11a).
 
@@ -31,6 +32,7 @@ pub mod csv;
 pub mod error;
 pub mod paypal;
 pub mod types;
+pub mod wise;
 
 /// Première année qu'un relevé peut porter : celle qu'une colonne de date de la
 /// base sait tenir (Story 33-4). Ce crate n'a aucune dépendance interne, si bien
@@ -60,3 +62,6 @@ pub use paypal::{
     PaypalRow, parse_paypal_csv,
 };
 pub use types::{ImportedStatement, ImportedTransaction, SourceFormat};
+pub use wise::{
+    WiseCsv, WiseCsvError, WiseDirection, WiseLineError, WiseLineErrorCode, WiseRow, parse_wise_csv,
+};

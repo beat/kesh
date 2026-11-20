@@ -22,7 +22,7 @@ pub mod parser;
 pub mod profile;
 
 pub use amount::parse_dot_decimal_amount;
-pub use by_name::{ColumnsByName, HeaderByNameError};
+pub use by_name::{ColumnsByName, HeaderByNameError, RawRecords, read_records};
 pub use encoding::{DetectedEncoding, detect_encoding};
 pub use parser::{
     DEFAULT_CSV_CURRENCY, MAX_REPORTED_CURRENCIES, ParseCsvOutcome, empty_valid_sentinel_date,
