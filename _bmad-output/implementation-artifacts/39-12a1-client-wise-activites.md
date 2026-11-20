@@ -74,7 +74,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      celle du devis, 39-12a2 AC-3) et sur les entrants de 2024 ; (5) le **type de
      détail** (`DEPOSIT`, `TRANSFER`, `CARD`, `CONVERSION`) que porte le CSV pour chaque type d'activité ; (6) la
      `reference` des transferts face à la colonne `Payment Reference` ; (7) **quand les frais d'un virement sont nuls**,
-     ce que rend le devis (`fee.total` = 0, option absente) : les cinq virements sans frais le disent. Une règle
+     ce que rend le devis (`fee.total` = 0, option absente) : les cinq virements sans frais le disent ; (8) un **virement remboursé** (s'il s'en trouve en 2024, sinon noté « non relevé », la règle de suffixe de 39-12a2 AC-3 valant alors) : comment l'API le rend — seconde activité de même `resource_id`, autre `activity_type`, ou statut du virement d'origine —, sous quel identifiant et quel `Payment Reference` le CSV porte la ligne de remboursement, et que le solde reconstruit reste juste ; **sans cette ligne relevée, un téléchargement qui couvre un remboursement reste possible** (suffixe provisoire), mais le manuel avertit de ne pas mélanger CSV et téléchargement sur ce virement. Une règle
      **contredite** par 2024 se corrige dans la fiche concernée avant le développement ; un écart qui ne se règle pas va
      à Beat, et la phase 2 attend.
    - **(b) Recette finale, après 39-12a2, avant que Beat s'y fie** : les réponses brutes sauvées en (a) passent par
