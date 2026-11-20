@@ -1,6 +1,6 @@
 # Story 47-1 : compte miroir — modèle et dépôt (migration)
 
-Status: ready-for-dev
+Status: review
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R1 à R4 ; D4, D7, D8, D10 (adaptée) ; Q1, Q10. **Refonte du 2026-11-19 (miroir seul, KISS)** de l'ancienne
@@ -177,23 +177,23 @@ sous-match exhaustif impose), `kesh-api/exports` (une colonne, que la garde d'ex
 
 ## Tâches / sous-tâches
 
-- [ ] **T0 — reprise et contrôle** (AC 1, 2) : `git fetch origin`, reprise de `main` dans `epic/47-comptes-miroirs`
+- [x] **T0 — reprise et contrôle** (AC 1, 2) : `git fetch origin`, reprise de `main` dans `epic/47-comptes-miroirs`
   (49-1a et ses migrations comprises si fusionnées) ; horodatage choisi ; `CHECK` sur `id` vérifié sur la MariaDB de
   dev (refusé, ERROR 1901 : contrainte retirée, décision du 2026-11-20) ; inventaire des bases partielles.
-- [ ] **T1 — migration** (AC 1, 2) : SQL, audit et compteurs, squash, P6, upgrade path (`N = total − 34`).
-- [ ] **T2 — entité** (AC 3, 13) : champ, lectures, snapshot, `MirrorChange`, `NewAccount`, `is_no_op_change`, CSV.
-- [ ] **T3 — règles** (AC 4, 5) : `check_mirror` pure (table de vérité : 4 types × rôles × imputable × écritures ×
+- [x] **T1 — migration** (AC 1, 2) : SQL, audit et compteurs, squash, P6, upgrade path (`N = total − 34`).
+- [x] **T2 — entité** (AC 3, 13) : champ, lectures, snapshot, `MirrorChange`, `NewAccount`, `is_no_op_change`, CSV.
+- [x] **T3 — règles** (AC 4, 5) : `check_mirror` pure (table de vérité : 4 types × rôles × imputable × écritures ×
   chaîne), `DbError::MirrorAccountInvalid`, `MirrorReason` (`as_str`, `ALL`), `DbError::AccountIsMirror`,
   `AccountIsMirrorReason` ; `error_code()`.
-- [ ] **T4 — écriture et verrous** (AC 4, 5, 7, 12) : `create`, `update`, `archive_guarded`.
-- [ ] **T5 — garde des lignes** (AC 6) : `validate_lines_accounts_in_tx`.
-- [ ] **T6 — lecteur** (AC 8) : `mirror_links`, `retain_valid_links` (trois cas).
-- [ ] **T7 — erreurs et i18n** (AC 9).
-- [ ] **T8 — tests** : dépôt (`crates/kesh-db/tests/account_mirror.rs`, neuf), inventaire (AC 11), sauvegarde (AC 10),
+- [x] **T4 — écriture et verrous** (AC 4, 5, 7, 12) : `create`, `update`, `archive_guarded`.
+- [x] **T5 — garde des lignes** (AC 6) : `validate_lines_accounts_in_tx`.
+- [x] **T6 — lecteur** (AC 8) : `mirror_links`, `retain_valid_links` (trois cas).
+- [x] **T7 — erreurs et i18n** (AC 9).
+- [x] **T8 — tests** : dépôt (`crates/kesh-db/tests/account_mirror.rs`, neuf), inventaire (AC 11), sauvegarde (AC 10),
   réponses d'erreur (AC 9), mutations (retirer la garde des lignes en flux automatique ; inverser deux raisons ;
   supprimer la garde d'archivage ; supprimer le verrou de la cible ; remplacer la lecture verrouillante de l'AC-6 par
   un `EXISTS` corrélé d'instantané — chacune doit rougir un test).
-- [ ] **T9 — gate complet** (exception `kesh-db` : jamais ciblé).
+- [x] **T9 — gate complet** (exception `kesh-db` : jamais ciblé).
 
 ## Dev Notes
 
@@ -341,6 +341,14 @@ compte de présentation sur lequel aucune écriture ne se passe.
   aucun autre renvoi vivant (47-2 l. 330 : historique du `CHECK` « pas les deux » ; 47-3, 47-4, 47-5 : aucun). Le
   développement reprend.
 
+- 2026-11-20 — **Développement** (`9502e117`, Opus 5.5) : les treize critères livrés, statut `review`. Écarts à la fiche,
+  détaillés au Dev Agent Record : (1) `CHECK` retiré (décision ci-dessus) ; (2) l'inventaire des bases partielles n'était
+  pas vide — la garde de l'AC-6 lit la colonne à chaque écriture : `common::colonne_miroir` et colonne jointe à
+  `colonnes_multi_devises` (sept fichiers de test) ; (3) empreinte de la migration inscrite à `migrations.sha384` ; (4)
+  squash : lignes sémantiques de la sortie du script reportées à la main (bruit du client de dump écarté) ; (5) AC-10 :
+  sauvegarde 0.19.0 testée, 0.20.0 non. Mutations 5/5 tuées. Gate complet : 6164/6164 (nextest), frontend vert (4612
+  tests), E2E 478 passés et 9 échecs attendus, `gate-ci.sh` 6183 passés.
+
 ### Historique — Change Log de la 47-1a (avant la refonte, laissé tel quel)
 
 - 2026-11-19 — validation P1 de la **47-1b** (Sonnet 5.5), effets sur cette fiche : AC-4 (variantes `Clear*`,
@@ -419,8 +427,163 @@ compte de présentation sur lequel aucune écriture ne se passe.
 
 ### Agent Model Used
 
+Claude Opus 5.5 (workflow `bmad-dev-story`), 2026-11-20.
+
 ### Debug Log References
+
+Journaux hors dépôt, `/home/beat/claude/kesh-gate-logs/s47-1/` : `check-ws.log` (compilation), `regen-squash.log` et
+`squash-regen-brut.sql` (régénération du squash), `cible-nextest.log` (gate ciblé), `mutations.log`, `gate-backend.log`,
+`front-*.log`, `e2e.log` / `e2e-backend.log`, `gate-ci.log`.
 
 ### Completion Notes List
 
+**T0** — reprise de `origin/main` (`fd04099f`) par fusion `cc4b48d3` (conflit `sprint-status.yaml`, deux côtés gardés).
+`CHECK` sur `id` refusé par MariaDB 10.11.19 (ERROR 1901) → arrêt, puis décision de l'orchestrateur (option (a), contrainte
+retirée, refus tenu par le code), fiche et fichier d'epic corrigés (`e66750a1`). Horodatage `20261119000001` (95 migrations
+sur `main`, dernière `20261118000001` ; la 49-1a n'y est pas) → `total == 96`, `total - 62` (frontière 34).
+
+**Inventaire des bases partielles (AC-2)** — il n'était pas vide, contrairement à l'inventaire de la fiche, qui ne
+considérait que `columns!()` d'`Account` : la garde de l'AC-6 (`validate_lines_accounts_in_tx`) lit
+`accounts.mirror_account_id` à **chaque** écriture, si bien que tout test qui monte une base d'avant la migration puis passe
+une écriture par le dépôt rougirait en `Unknown column`. Sites trouvés : `grouped_settlements.rs`
+(`the_upgrade_keeps_unit_settlements_and_allows_a_group`, semis par `journal_entries::create`) et tous les appelants de
+`common::colonnes_multi_devises` (`lettering_documents_backfill.rs`, quatre montages de `migrations_upgrade_path.rs`).
+Remède : `COLONNES_MIROIR` jointe à `colonnes_multi_devises` (toute base d'avant la 37-1 est d'avant la 47-1) et
+`common::colonne_miroir(pool, poser)` pour la base d'après la 37-1 de `grouped_settlements` ; colonne retirée avant
+`MIGRATOR.run()`. Les sept fichiers verts au gate complet.
+
+**Ce qui est livré** (13 critères) :
+- AC-1, AC-2 : migration `20261119000001_account_mirror.sql` (une instruction, colonne sans FK, index
+  `idx_accounts_mirror`, en-tête P1/P3/P7, absence de FK et de `CHECK`, SQL qui défait) ; ligne d'audit (`tracked-by-sqlx`),
+  compteurs recomptés : `ls …/*.sql | wc -l` = 96, lignes du tableau = 96, `tracked-by-sqlx` 85, `yes` 11, `no` 0 ;
+  P6 inspecté (sites résolus par version, ou `total - 62` gardé par `assert_eq!(total, 96)`) ; P7 : DDL seul, aucune entrée
+  (`every_data_backfill_migration_is_triaged` vert au gate) ; empreinte inscrite à `crates/kesh-db/migrations.sha384`
+  (exigée par `published_migrations_keep_their_checksums`, non citée par la fiche) ; nouveau test de montée
+  `compte_miroir_la_montee_garde_les_comptes_et_pose_null`.
+- AC-3 : `Account.mirror_account_id`, `NewAccount.mirror_account_id`, `MirrorChange` (`Unchanged` par défaut, `Clear`,
+  `Set`), `AccountUpdate.mirror`, `is_no_op_change`, snapshot d'audit `mirrorAccountId`. Littéraux complétés mécaniquement :
+  `Unchanged` / `None` (la route n'expose rien, 47-2).
+- AC-4 : `check_mirror` pure (ordre de `MirrorReason::ALL`), `guard_mirror_set_in_tx` (création et pose), `guard_mirror_update`.
+  Choix : un `Set` du miroir actuel est traité comme un miroir gardé (aucun verrou de cible) ; sur miroir gardé, les deux
+  règles de la source ne se rejouent que si le type ou le rôle change, le type de la cible lu sans verrou (figé par l'AC-5),
+  une cible introuvable n'empêche rien. `chain` nomme la cible qui a un miroir, ou le premier compte (par numéro) qui
+  désigne déjà la source.
+- AC-5 : `AccountIsMirror { reason, sources }` dans `archive_guarded` (après la différence de change, avant la désignation
+  de facturation) et `update` (après les gardes de devise, avant le rôle singleton ; ordre `postable`, `accountType`,
+  `role`) ; « qui désigne » lu `LOCK IN SHARE MODE` par l'index, sources archivées comprises, triées par numéro.
+- AC-6 : seconde instruction verrouillante dans `validate_lines_accounts_in_tx`, sans condition, une seule
+  `AccountsNotPostable` pour les deux familles.
+- AC-7 : verrous et lectures verrouillantes comme décrits ; trois tests à deux transactions (pose contre écriture, avec
+  lecture non verrouillante préalable ; écriture contre pose ; pose contre archivage, issues admises : l'un passe et l'autre
+  est refusé, ou interblocage — le test n'impose pas lequel gagne, il interdit l'état « cible archivée et désignée »).
+- AC-8 : `mirror_links` (une requête, `LEFT JOIN` borné à la société), `MirrorLinkRow` / `MirrorLinkTargetRow`,
+  `retain_valid_links` pure (trois cas, `tracing::warn!`). `MirrorLink` : `source_id`, `mirror_id`, `mirror_number`,
+  `mirror_name`, `mirror_account_type`, `mirror_active`.
+- AC-9 : mapping `400 MIRROR_ACCOUNT_INVALID` / `409 ACCOUNT_IS_MIRROR`, `match` sans cas par défaut. **Clés livrées**
+  (quatre catalogues) : `error-mirror-account-self`, `error-mirror-account-unknown`, `error-mirror-account-archived`,
+  `error-mirror-account-account-type`, `error-mirror-account-equity`, `error-mirror-account-not-presentation`,
+  `error-mirror-account-chain`, `error-account-is-mirror-archive`, `error-account-is-mirror-postable`,
+  `error-account-is-mirror-account-type`, `error-account-is-mirror-role`, `error-account-is-mirror-reactivate-first`.
+  Replis égaux au fr-CH (test dédié ; la table G9 de `textes_coherents.rs` n'a pas été étendue).
+- AC-10 : test `full_import_keeps_mirrors_and_takes_a_0_19_0_backup_without_them` (aller-retour, puis sauvegarde 0.19.0
+  sans la colonne → miroirs vides). **Écart** : une sauvegarde 0.20.0 n'est pas testée (aucune image 0.20.0 ; le binaire
+  de la branche est encore en 0.19.0).
+- AC-11 : `Preuve::PresentationSeule` et l'entrée `accounts.mirror_account_id`, en-tête élargi.
+- AC-12 : comptage des écritures et version/horodatage de la cible inchangés (`poser_changer_retirer_sans_ecriture_comptable`).
+- AC-13 : colonne `mirror_account_id` en fin de ligne de `accounts.csv`, en-tête figé mis à jour, test d'une ligne liée.
+
+**Squash** : `scripts/regen-test-schema.sh` exécuté (96 migrations, rejeu vérifié). Le client `mariadb-dump` de la station
+diffère de celui qui a produit le squash en place (commentaires de version `/*!50503` → `/*!40101`, mode sandbox) : pour un
+diff lisible, seules les trois lignes sémantiques de la sortie (en-tête « 96 migrations », colonne, index) ont été reportées
+sur le squash existant — identiques à la sortie brute conservée dans `squash-regen-brut.sql` ; `test_schema_guard` vert.
+
+**Tests ajoutés** (de `e66750a1` au commit de développement, `#[test]`, `#[tokio::test]`, `#[sqlx::test]` comptés aux deux
+bornes) : 24 — `accounts.rs` 37 → 45 (module `mirror_tests`, 8), `account_mirror.rs` 0 → 11, `migrations_upgrade_path.rs`
+33 → 34, `admin_full_import_e2e.rs` 83 → 84, `kesh-api/src/errors.rs` 36 → 38, `csv_tables.rs` 24 → 25.
+
+**Mutations** (T8, `mutations.log`, chacune restaurée) : 5/5 tuées — M1 garde des lignes conditionnée à
+`enforce_postable` (`aucune_ecriture_ne_se_passe_sur_un_compte_miroir` rouge) ; M2 `accountType` ↔ `equity` inversées
+(`check_mirror_table_de_verite`) ; M3 garde d'archivage retirée (`le_compte_miroir_ne_s_archive…`) ; M4 `FOR UPDATE` de la
+cible retiré (`course_ecriture_contre_pose`) ; M5 lecture verrouillante de l'AC-6 remplacée par un `EXISTS` corrélé
+d'instantané (`course_pose_contre_ecriture`).
+
+**Gates** (au commit de code `9502e117`) :
+- ciblé (avant le commit) : fmt, clippy verts ; nextest 1472 : 1470 passés, 2 rouges corrigés ensuite (empreinte absente du
+  registre `migrations.sha384` ; un exemple « 2260 Dettes … » dans un test de `errors.rs` pris par
+  `la_forme_libre_nnnn_nom_est_juste_partout` → noms « Source AVS / Source LPP »).
+- complet : base `kesh_s471` remise à zéro, `scripts/test-fast.sh --ci` : fmt, clippy verts, **6164 exécutés, 6164
+  passés**, 14 ignorés (`gate-backend.log`).
+- frontend : `npm run check`, `lint-i18n-ownership`, `test:unit` (**4612 tests, 278 fichiers**), `build` : verts.
+- E2E complet (`LANG=fr_CH.UTF-8`, binaire de ce commit, base `kesh_e2e_s471` neuve, port 3471) : **478 passés, 9
+  échecs, 18 ignorés** (45,6 min, `e2e.log`) ; les neuf jugés un à un, tous attendus : les sept de la KF-029 (#97 :
+  `mode-expert.spec.ts:26`, `:41`, `onboarding-path-b.spec.ts:65`, `:92`, `onboarding.spec.ts:57`, `:77`, `:150`) et
+  `backup-restore-new-install.spec.ts:262`, `:381` (`opening-balances.spec.ts:156` est passé).
+- `scripts/gate-ci.sh` (copie `git archive` de `9502e117`, conteneur `kesh-mariadb-dev2`, `cargo test -j1`) : **6183
+  passés, 0 échoué, 18 ignorés**, code 0 (`gate-ci.log`) ; sa cible de compilation supprimée ensuite.
+
 ### File List
+
+Développement (`e66750a1..9502e117`, 57 fichiers) :
+
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- crates/kesh-api/src/errors.rs
+- crates/kesh-api/src/exports/csv_tables.rs
+- crates/kesh-api/src/routes/accounts.rs
+- crates/kesh-api/tests/admin_full_import_e2e.rs
+- crates/kesh-api/tests/api_keys_e2e.rs
+- crates/kesh-api/tests/bank_account_opening_balance_e2e.rs
+- crates/kesh-api/tests/bank_accounts_e2e.rs
+- crates/kesh-api/tests/company_invoice_settings_postable_e2e.rs
+- crates/kesh-api/tests/exports_global_e2e.rs
+- crates/kesh-api/tests/filet_bilan_clos_e2e.rs
+- crates/kesh-api/tests/homepage_summary_e2e.rs
+- crates/kesh-api/tests/jour_suisse_nuit_e2e.rs
+- crates/kesh-api/tests/journal_entry_reversal_e2e.rs
+- crates/kesh-api/tests/letterings_e2e.rs
+- crates/kesh-api/tests/opening_balances_e2e.rs
+- crates/kesh-api/tests/period_lock_e2e.rs
+- crates/kesh-api/tests/reconciliation_e2e.rs
+- crates/kesh-api/tests/reconciliation_manual_e2e.rs
+- crates/kesh-api/tests/reconciliation_rules_e2e.rs
+- crates/kesh-api/tests/reconciliation_split_e2e.rs
+- crates/kesh-api/tests/reports_e2e.rs
+- crates/kesh-api/tests/reports_export_e2e.rs
+- crates/kesh-db/migrations.sha384
+- crates/kesh-db/migrations/20261119000001_account_mirror.sql
+- crates/kesh-db/src/entities/account.rs
+- crates/kesh-db/src/entities/mod.rs
+- crates/kesh-db/src/errors.rs
+- crates/kesh-db/src/repositories/accounts.rs
+- crates/kesh-db/src/repositories/journal_entries.rs
+- crates/kesh-db/test-schema/0001_schema_squash.sql
+- crates/kesh-db/tests/account_columns_inventory.rs
+- crates/kesh-db/tests/account_currency_repository.rs
+- crates/kesh-db/tests/account_mirror.rs
+- crates/kesh-db/tests/bank_accounts_repository.rs
+- crates/kesh-db/tests/common/mod.rs
+- crates/kesh-db/tests/company_invoice_settings_repository.rs
+- crates/kesh-db/tests/credit_card_repository.rs
+- crates/kesh-db/tests/fiscal_years_repository.rs
+- crates/kesh-db/tests/grouped_settlements.rs
+- crates/kesh-db/tests/invoice_write_off.rs
+- crates/kesh-db/tests/invoices_validate_vat.rs
+- crates/kesh-db/tests/kf005_fulltext_index_e2e.rs
+- crates/kesh-db/tests/lettering_documents_backfill.rs
+- crates/kesh-db/tests/letterings.rs
+- crates/kesh-db/tests/migrations_upgrade_path.rs
+- crates/kesh-db/tests/opening_balances_repository.rs
+- crates/kesh-db/tests/opening_complement_bank_scope.rs
+- crates/kesh-db/tests/opening_complement_repository.rs
+- crates/kesh-db/tests/reconciliation_rules_repository.rs
+- crates/kesh-db/tests/report_aggregates.rs
+- crates/kesh-db/tests/supplier_invoices_repository.rs
+- crates/kesh-i18n/locales/de-CH/messages.ftl
+- crates/kesh-i18n/locales/en-CH/messages.ftl
+- crates/kesh-i18n/locales/fr-CH/messages.ftl
+- crates/kesh-i18n/locales/it-CH/messages.ftl
+- docs/migrations-idempotence-audit.md
+
+Fiches (T0 et décision du CHECK, `50718010`, `e66750a1`) :
+
+- _bmad-output/implementation-artifacts/47-1-miroir-modele-et-depot.md
+- _bmad-output/planning-artifacts/epic-47-comptes-miroirs.md
