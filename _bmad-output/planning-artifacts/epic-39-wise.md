@@ -57,8 +57,9 @@ versement, aucune règle.
   précédent + `Amount`, dans l'ordre chronologique), sinon il est refusé ; l'import pose solde d'ouverture et de
   clôture (premier solde − premier montant ; dernier solde). Un import qui ne prolonge pas le précédent du même
   compte est **accepté** et signalé en écart (`gap`), par la fonction existante `previous_statement_closing`
-  (`crates/kesh-db/src/repositories/bank_imports.rs:358`) ; un fichier dont la période chevauche celle d'un relevé du compte
-  (`overlapping_statements`) ne l'est pas — les doublons ne sont pas stockés, le chevauchement se relit de la même façon à l'import et à la revue.
+  (`crates/kesh-db/src/repositories/bank_imports.rs:358`) ; un fichier dont le **premier jour** est couvert par un relevé du compte
+  (`overlapping_statements(…, first_date, first_date)`) ne l'est pas — les doublons ne sont pas stockés ; le premier jour, et
+  non toute la période, pour que la revue réponde comme l'import (un relevé postérieur ne masque pas l'écart du début).
 - **G5 — Règles : critères existants, filtres de 38-11b, rien de neuf pour Wise** (décision (3) de l'orchestrateur).
   Contrepartie = `Merchant` pour une carte, `Payee Name` pour un débit, `Payer Name` pour un crédit
   (`counterparty_contains`, `counterparty_exact`) ; IBAN du bénéficiaire (`iban_exact`, colonne `counterparty_iban`
@@ -228,6 +229,9 @@ documentée) ; la profondeur d'historique servie ; le mécanisme de signature du
   (G5, G6, G7, G8, G11 ; Q-39-10, Q-39-12, Q-39-15) ; migration de repli retirée ; propositions par les routes de
   38-11c, non par le rapprochement CHF ; virements internes et versements Stripe par l'autre côté déjà passé
   (`find_matched_elsewhere`) puis les règles ; continuité par `previous_statement_closing` ; demandes à l'Epic 38.
+- 2026-11-20 — Validation P3 ciblée du commit `02ed58c6` (Claude Opus 5.5, contexte frais ; rapport
+  `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P3-ciblee.md`) : G4, continuité jugée sur le **premier jour** du fichier
+  (`overlapping_statements(…, first_date, first_date)`), non sur toute sa période, pour que la revue réponde comme l'import.
 
 ---
 

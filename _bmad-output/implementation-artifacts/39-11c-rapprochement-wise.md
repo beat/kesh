@@ -45,10 +45,13 @@ ce qu'il ne sait pas rapprocher, afin de tenir mon compte Wise sans saisie et sa
    bank_transaction_id, error_code, details }`, `routes/reconciliation.rs:576`, HTTP 200 ; 400 global seulement pour
    un corps mal formé, vide, de plus de `MAX_IN_CLAUSE_IDS` propositions ou portant deux fois la même transaction) ;
    proposition périmée → `failed[]` sous le code de 38-11c (générique `PROVIDER_PROPOSAL_STALE` demandé, Q-39-10 ;
-   sinon `WISE_PROPOSAL_STALE`). `POST /api/v1/wise/accept` à `LIB_ROUTES` (`audit_route_registry.rs:440`, clé `wise::post_accept`) en
+   sinon `WISE_PROPOSAL_STALE`). `POST /api/v1/wise/accept` à `LIB_ROUTES` (`audit_route_registry.rs:440`, clé `wise::accept_proposals`) en
    **`Traced, Rejouee`**, comme `paypal/accept` (38-11c AC-7) : le handler appelle l'enveloppe `retry_app_on_deadlock`
-   (`crates/kesh-api/src/retry.rs:40`), **jamais `retry_with`** (`RETRY_WITH_AUTORISE = ["post_accept"]`, le test refuse
-   tout autre appel), et un interblocage (`is_app_deadlock`) ou un échec de `ROLLBACK TO SAVEPOINT` **remonte** en
+   (`crates/kesh-api/src/retry.rs:40`), **jamais `retry_with`** (`RETRY_WITH_AUTORISE = ["post_accept"]`, `audit_route_registry.rs:1303`). ⚠️ Le
+   handler **ne s'appelle pas `post_accept`** : l'exemption désigne une fonction par son **seul nom** (angle mort (d),
+   `audit_route_registry.rs:376-378`), si bien qu'une `fn post_accept` de `routes/wise.rs` pourrait appeler `retry_with`
+   sans que le volet (c bis) (`no_route_calls_retry_with_except_post_accept`, `:1707`) la refuse ; nom au choix de la
+   reprise s'il est aligné sur celui de PayPal, jamais `post_accept`. Et un interblocage (`is_app_deadlock`) ou un échec de `ROLLBACK TO SAVEPOINT` **remonte** en
    `AppError` au lieu d'entrer dans `failed[]` — le moteur de 38-11c le fait une fois, la route Wise en hérite, et un test
    la prend en défaut sur le modèle de `rejeu_interblocage_e2e.rs` ; compte de la partition et phrase du manuel
    d'administration recomptés comme en 39-11b AC-3 ; trace par proposition
@@ -92,26 +95,30 @@ ce qu'il ne sait pas rapprocher, afin de tenir mon compte Wise sans saisie et sa
      **commun à toute la page** (devise du compte du plan, comme `t.bank_account_id`). **Inerte pour l'existant** : tant qu'aucun compte
      bancaire n'est en devise (seuls les comptes prestataires peuvent l'être, C-37-9), toute transaction liée est en CHF
      (condition 1) et la seconde branche ne s'active jamais — tests existants verts sans changement d'assertion.
-     ⚠️ **Texte unique avec 40-7c** : 40-7c AC-1 ajoute au même prédicat `AND bt.currency = <devise de t>` (« aucune autre paire
-     ne passe ») ; les deux changements s'écrivent **dans le même texte** : `(bt.bank_account_id <> ? AND ((bt.currency = ?
-     AND bt.amount = -(M)) OR (bt.currency <> ? AND SIGN(bt.amount) = -SIGN(M))) AND exclusions)` — première branche : même
-     devise et montant opposé exact (virement, versement Stripe) ; seconde : les deux côtés d'une conversion. Le premier des
-     deux epics qui arrive écrit les deux branches, le second reprend `main`, relit le texte et garde les tests de l'autre ;
-     le test d'égalité de la 34-4 couvre un compte en devise et une paire de devises différentes.
+     ⚠️ **Texte unique, porté par la 38-11c pour les trois prestataires** (décision de l'orchestrateur du 2026-11-20 ;
+     40-7c écrit ce même texte et n'ajoute aucune condition de devise isolée, kesh-wt40 `c8924cfd`) : `(bt.bank_account_id
+     <> ? AND ((bt.currency = ? AND bt.amount = -(M)) OR (bt.currency <> ? AND SIGN(bt.amount) = -SIGN(M))) AND
+     exclusions)` — première branche : même devise et montant opposé exact (virement, versement Stripe) ; seconde : les
+     deux côtés d'une conversion. Cette story le **réutilise** et en teste les cas Wise ; elle ne l'écrit qu'à défaut (T0 :
+     38-11c développée sans), auquel cas l'epic qui arrive le second reprend `main`, relit le texte et garde les tests de
+     l'autre ; le test d'égalité de la 34-4 couvre un compte en devise et une paire de devises différentes.
      **Le plafond « une transaction liée au plus »** de `linkable_side` (doc `:730-737`) reste inerte : chaque branche
      impose `SIGN(bt.amount) = -SIGN(M)` ; deux transactions liées à l'écriture sont de signes opposés, une troisième ne
      peut l'être des deux (démonstration à écrire au Change Log de développement) ; un test de comportement (troisième
      transaction d'un compte qui partage le grand livre, refusée) le garde quand même. Porté par **38-11c** avec le
      constructeur — **c'est 38-11c qui livre la première conversion à une écriture (PayPal)** : sans l'alternative,
-     annuler un côté d'une conversion PayPal contre-passe l'écriture et laisse l'autre côté rapproché d'une écriture annulée
-     (demande à l'Epic 38, au rapport P2) ; si 38-11c est développée sans, cette story le porte. Changement de `kesh-db` : gate complet en boucle.
+     annuler un côté d'une conversion PayPal contre-passe l'écriture et laisse l'autre côté rapproché d'une écriture annulée ;
+     si 38-11c est développée sans, cette story le porte (dans la forme ci-dessus). Changement de `kesh-db` : gate complet en boucle.
    - Moitié manquante (l'autre devise pas encore importée, ou déjà rapprochée) → écart `conversion_half_missing`.
 4. **AC-4 — Autre côté déjà passé : virements entre ses comptes, versements Stripe** (G7, G8 ; décision (4) de
    l'orchestrateur). Pour une ligne `StripePayout`, ou `Other` de préfixe `TRANSFER` (virement, dépôt : seuls genres qui peuvent être l'autre côté
    d'un virement entre ses comptes ; un achat par carte ne l'est jamais et n'ouvre pas la lecture) : `find_matched_elsewhere`
    (`reconciliation_link.rs:896` : les écritures rattachables à `t` **déjà rapprochées** d'une transaction d'un autre
    compte bancaire, l'autre côté d'un virement, 34-4 et 34-11b), en devise par la levée de 38-11c AC-1 →
-   **exactement une** candidate à 5 jours au plus (`days_apart`) → proposition `link_entry { bankTransactionId,
+   **exactement une** candidate à 5 jours au plus — champ `EntryCandidate::days_apart` (`reconciliation_link.rs:552`,
+   `ABS(DATEDIFF(e.entry_date, date de paiement de t))`) que la fonction rend **triée sans filtrer** (« Trie, ne filtre
+   pas ») : le seuil de 5 jours s'applique en Rust sur la liste rendue (50 au plus, `ENTRY_CANDIDATES_LIMIT`), les
+   candidates plus lointaines ne comptent ni pour « une » ni pour « plusieurs » → proposition `link_entry { bankTransactionId,
    journalEntryId }`, exécutée par `link_entry_in_tx` (`:1156`) comme le `link_sale` de 38-11c (une seule fonction) ;
    coût **mesuré** au développement (une lecture par transaction concernée, sur 20 000 écritures et 300 transactions `TRANSFER`, au Change Log) ;
    au-delà d'une seconde, lecture par page sur le patron de `count_already_booked_for_page` (`:959`) ; plusieurs → « à examiner », motif `ambiguous_link` (candidates nommées, choix à l'écran par `POST …/link-entry`,
@@ -133,9 +140,10 @@ ce qu'il ne sait pas rapprocher, afin de tenir mon compte Wise sans saisie et sa
 6. **AC-6 — Écarts** (dans `gaps` de la revue, calculés, rien de stocké) : `conversion_half_missing` ;
    `fee_without_origin` (ligne `FEE-x` sans transaction `x` sur le même compte bancaire) ; `balance_gap` (pour chaque
    import des comptes du libellé dont la période tombe dans l'exercice et dont `opening_balance` n'est pas `NULL`, **la règle
-   de 39-11b AC-5, telle quelle** : aucun autre relevé du compte ne chevauche sa période (`overlapping_statements`, hors lui-même)
-   et `previous_statement_closing` (`crates/kesh-db/src/repositories/bank_imports.rs:358`, relevé antérieur à `period_from`) en
-   rend un dont la clôture diffère de l'ouverture ; les doublons ne se relisent pas, ils ne sont pas stockés). Chaque écart et chaque « à examiner » : transaction, date, montant, devise, motif.
+   de 39-11b AC-5, telle quelle** : aucun autre relevé du compte ne couvre son **premier jour** (`overlapping_statements(…,
+   period_from, period_from)`, hors lui-même) et `previous_statement_closing` (`crates/kesh-db/src/repositories/bank_imports.rs:358`,
+   relevé à solde dont `period_to` < `period_from`) en rend un dont la clôture diffère de l'ouverture — à la revue, sur
+   l'état présent des relevés (un relevé saisi depuis l'import peut changer la réponse, rien n'est stocké) ; les doublons ne se relisent pas, ils ne sont pas stockés). Chaque écart et chaque « à examiner » : transaction, date, montant, devise, motif.
 7. **AC-7 — Acceptation.** Corps `{ account, proposals: [ {type, …} ] }` (`fee`, `conversion`, `link_entry`, `rule`) ;
    chaque proposition **rejuge** son classement sous verrou (transaction encore `pending`, même genre, même paire, même
    candidate, règle qui correspond toujours), sinon `failed[]` périmée ; refus du contrôle central des lignes en devise
@@ -168,7 +176,9 @@ ce qu'il ne sait pas rapprocher, afin de tenir mon compte Wise sans saisie et sa
   transaction d'un compte bancaire `stripe` posé en base → `link_entry` accepté, sans → `stripe_payout_unmatched` ;
   paiement par règle `counterparty_contains` filtrée `CARD` (jamais de lecture `find_matched_elsewhere` pour une ligne `CARD`) ; virement par règle `iban_exact` ; écarts listés ;
   proposition périmée ; interblocage injecté dans une proposition → rejeu, aucune ligne dans `failed[]` ; import chevauchant un autre
-  → aucun `balance_gap` à la revue, import discontinu → un seul ; clé `read` → 403 au `POST`. Somme des écritures par compte Wise = variation du solde Wise.
+  → aucun `balance_gap` à la revue, import discontinu → un seul, **même quand un import postérieur chevauche sa fin** ;
+  candidate unique à 5 jours parmi d'autres plus lointaines → `link_entry` ; handler d'acceptation qui n'est pas nommé
+  `post_accept` (relu à la revue de code : le volet (c bis) ne le garde pas par le nom) ; clé `read` → 403 au `POST`. Somme des écritures par compte Wise = variation du solde Wise.
   Tests PayPal de 38-11c et de l'annulation 34-11b verts sans changement d'assertion.
 - Gate complet en boucle (prédicat de `kesh-db`).
 
@@ -218,3 +228,15 @@ depuis votre banque, versement Stripe), le reste par vos règles ; ce qui ne se 
   écriture sans l'alternative) et à 40 ; (4) `find_matched_elsewhere` lu pour toute ligne `Other` (une lecture lourde par
   transaction) → seulement `StripePayout` et `TRANSFER`, coût mesuré. LOW : constructeur de conversion nommé (`plan_conversion`,
   `create_provider_conversion_in_tx`) au lieu de `create_conversion_in_tx` « rendue publique ».
+- 2026-11-20 — validation P3 ciblée (Claude Opus 5.5, contexte frais, commit `02ed58c6` seul) : 0 CRITICAL, 0 HIGH, 3 MEDIUM,
+  1 LOW, remédiés (rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P3-ciblee.md`). MEDIUM : (1) `balance_gap`
+  jugé sur le chevauchement de toute la période, dont la réponse à la revue diffère de celle de l'import (un relevé
+  postérieur chevauchant la fin masque l'écart du début) → premier jour seul, comme 39-11b AC-5 ; (2) « le test refuse
+  tout autre appel » à `retry_with` est faux pour un handler nommé `post_accept` (exemption par le seul nom, angle mort (d)
+  de `audit_route_registry.rs:376-378`) → clé `wise::accept_proposals`, jamais `post_accept` ; (3) `days_apart` cité comme
+  un filtre alors que c'est le champ d'`EntryCandidate` qui trie sans filtrer → seuil de 5 jours appliqué en Rust, nommé.
+  LOW : phrase périmée « 40-7c AC-1 ajoute `AND bt.currency = …` » (40-7c écrit le texte à deux branches depuis `c8924cfd`)
+  → texte porté par 38-11c, réutilisé ici, écrit seulement à défaut. Vérifié sans finding : enveloppe `retry_app_on_deadlock`
+  (`retry.rs:40`), prédicat à deux branches (existant CHF inerte, plafond inerte : deux liens de signes opposés, une
+  troisième ne peut être l'autre côté des deux ; annulation d'un côté), `find_matched_elsewhere` limité à `StripePayout` et
+  `TRANSFER` (les dépôts Wise portent aussi le préfixe `TRANSFER`, relevés 2024 en agrégats).

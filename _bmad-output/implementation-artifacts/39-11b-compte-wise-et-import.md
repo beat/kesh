@@ -96,9 +96,13 @@ afin que chaque ligne attende son rapprochement (39-11c).
    bancaires, `find_in_dedup_window`, `crates/kesh-db/src/repositories/bank_transactions.rs:83`, ne s'applique pas,
    comme pour PayPal) ; un fichier tout en doublons ne crée pas d'entrée. **Continuité avec l'import précédent** du
    même compte, **une seule définition** (servie aussi par les écarts de 39-11c, qui ne peut pas la lire des doublons :
-   le fichier n'est pas conservé, `transaction_count` ne compte que les lignes insérées) : un fichier **chevauche** les
-   relevés du compte quand `overlapping_statements(company, compte, first_date, last_date)` (`bank_imports.rs`, `period_from <=
-   to AND period_to >= from`, relevés saisis ou importés) en rend au moins un — pas d'avertissement. Sinon, par la fonction
+   le fichier n'est pas conservé, `transaction_count` ne compte que les lignes insérées), jugée sur le **premier jour** du
+   fichier seul : un fichier **prolonge par chevauchement** un relevé du compte quand `overlapping_statements(company, compte,
+   first_date, first_date)` (`bank_imports.rs:386`, `period_from <= first_date AND period_to >= first_date`, relevés saisis ou
+   importés ; à la revue, l'import jugé exclu) en rend au moins un — pas d'avertissement. Jamais le chevauchement de toute la
+   période (`first_date..last_date`) : un relevé **postérieur** qui chevauche la fin d'un import masquerait, à la revue,
+   l'écart du début de cet import, et un import rattrapé après coup qui chevauche un relevé plus récent ne serait jamais
+   jugé. Sinon, par la fonction
    existante `previous_statement_closing` (`bank_imports.rs:358` : le relevé à solde du compte dont `period_to` <
    `first_date`, le plus tardif) : si elle en rend un et que sa clôture diffère de `opening_balance` du fichier →
    avertissement `gap` au compte rendu (l'import passe) ; aucun relevé antérieur → rien. La clôture lue est celle d'un
@@ -123,7 +127,8 @@ afin que chaque ligne attende son rapprochement (39-11c).
 - **HTTP** (`crates/kesh-api/tests/wise_import_e2e.rs`, `#[sqlx::test]` sur le squash) avec les fixtures de 39-11a :
   société multi-devises, trois comptes bancaires du libellé fictif ; import des trois fichiers → trois entrées,
   nombres et soldes attendus ; réimport → 422 `BANK_IMPORT_DUPLICATE_FILE` ; fichier chevauchant → seules les lignes
-  neuves insérées, aucun `gap` ; fichier suivant discontinu → `gap` ; devise sans compte → 422, rien d'écrit ; deux
+  neuves insérées, aucun `gap` ; fichier suivant discontinu → `gap` ; import rattrapé après coup dont la fin chevauche un relevé plus récent et
+  dont le début ne prolonge pas le précédent → `gap` ; devise sans compte → 422, rien d'écrit ; deux
   fichiers de même devise → 422 ; compte clos → 409 ; clé d'API `read` → 403 ; numéro de compte non IBAN → `None` et
   détails. Réglages : chaque refus de l'AC-2 pour `wise` ; `paypal` et `wise` ensemble → 400 ; import CAMT, relevé
   saisi, règlement de facture et paiement fournisseur sur un compte Wise → 409 `BANK_ACCOUNT_IS_PROVIDER` ; PayPal
@@ -167,3 +172,9 @@ bancaire ni règlement de facture.
   l'import qui en chevauchait un autre (`previous_statement_closing` rend alors un relevé plus ancien) → chevauchement par
   `overlapping_statements`, une seule définition. LOW : codes nommés `WISE_*` à l'AC-3 contre la règle de l'AC-2, clé du
   registre des routes absente.
+- 2026-11-20 — validation P3 ciblée (Claude Opus 5.5, contexte frais, commit `02ed58c6` seul) : 0 CRITICAL, 0 HIGH, 1 MEDIUM,
+  0 LOW, remédié (rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P3-ciblee.md`). MEDIUM : le chevauchement jugé
+  sur toute la période (`first_date..last_date`) ne donnait pas la même réponse à l'import et à la revue — un relevé
+  postérieur chevauchant la fin d'un import masquait à la revue l'écart du début, et un import rattrapé après coup n'était
+  jamais jugé → chevauchement du **premier jour** seul (`overlapping_statements(…, first_date, first_date)`, l'import jugé
+  exclu à la revue), complémentaire de `previous_statement_closing` (`period_to < first_date`) ; test ajouté.
