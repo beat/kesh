@@ -24,6 +24,7 @@ pub mod journal_report;
 pub mod opening;
 pub mod pdf;
 pub mod period;
+pub mod presentation;
 pub mod project_report;
 pub mod trial_balance;
 pub mod vat_report;
@@ -31,7 +32,9 @@ pub mod vat_report;
 pub use aged_receivables::{
     AgedBucket, AgedReceivables, AgedReceivablesRow, generate as generate_aged_receivables,
 };
-pub use balance_sheet::{AccountBalance, BalanceSheet, generate as generate_balance_sheet};
+pub use balance_sheet::{
+    AccountBalance, BalanceSheet, MirrorSource, generate as generate_balance_sheet,
+};
 pub use csv::{render_aged_receivables_csv, render_general_ledger_csv};
 pub use errors::ReportError;
 pub use general_ledger::{
