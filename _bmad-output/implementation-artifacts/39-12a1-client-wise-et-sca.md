@@ -5,8 +5,8 @@ Status: drafted
 *Fiche rédigée le 2026-11-20 (ex-39-12a, scindée le même jour en 39-12a1 et 39-12a2 par la règle de splitting préventif : la
 recette réelle a imposé la signature SCA, qui s'ajoute à la configuration, au client et à la route). Branche
 `epic/39-wise`, numéros de ligne relevés au code de `origin/main` (`fd04099f`). Epic 39, **phase 2** (H1 à H5 du fichier
-d'epic ; **socle commun S1 à S9** de la phase 2 des Epics 38, 39 et 40, § *Socle commun* du fichier d'epic). **Dépend de** :
-39-11a (lecteur), du **socle S1, S2 et S5**, écrit par 38-12a (ou, à défaut, par la première des fiches de phase 2
+d'epic ; **socle commun S1 à S9** de la phase 2 des Epics 38, 39 et 40, § *Socle commun* du fichier d'epic). **Dépend de** : la
+**recette 2 (AC-0), préalable à tout développement**, 39-11a (lecteur), du **socle S1, S2 et S5**, écrit par 38-12a (ou, à défaut, par la première des fiches de phase 2
 développée, générique : C-40-K6). **Suivie par** : 39-12a2.*
 
 ## Story
@@ -25,7 +25,7 @@ chaque solde sans que ni le jeton ni la clé soient jamais en base ni dans une s
 | `GET /v4/profiles/{profileId}/balances?types=STANDARD` | **constaté** : 200 ; champs `id`, `currency`, `type`, `name`, `amount`, `cashAmount`, `groupId`, `primary`, `visible`… |
 | `GET /v1/profiles/{profileId}/balance-statements/{balanceId}/statement.csv?currency=…&intervalStart=…&intervalEnd=…&type=FLAT` | **constaté** : **403**, corps vide, en-têtes `x-2fa-approval: <uuid>` et `x-2fa-approval-result: REJECTED` : le jeton seul ne suffit pas, **Wise exige la signature SCA pour la Suisse** |
 | limite de débit | **aucune visible** (ni `x-ratelimit-*` ni `Retry-After`) ; la forme d'un 429 : **non confirmée** |
-| rejeu signé (`x-2fa-approval` et `X-Signature`, RSA-SHA256 en base64 du jeton à usage unique, clé publique déposée dans les réglages API de Wise) | **non constaté** : procédure documentée par Wise (guide SCA, de mémoire ; la page `…/sca-over-api/personal-tokens` n'a pas été relue : 404 au 2026-11-20) ; à constater à la **recette 2** (AC-0) |
+| rejeu signé (`x-2fa-approval` et `X-Signature`, RSA-SHA256 en base64 du jeton à usage unique, clé publique déposée dans les réglages API de Wise) | **non constaté** : procédure de la page *Personal Token SCA* de Wise (`docs.wise.com/api-docs/features/strong-customer-authentication-2fa/personal-token-sca`), vue le 2026-11-20 par le résumé d'un moteur de recherche seulement — page 404 au chargement direct — : signature du jeton par un pipeline OpenSSL, encodée en base64 (RFC 4648), en-têtes `x-2fa-approval` et `X-Signature` ; à constater à la **recette 2** (AC-0) |
 | colonnes du `statement.csv` de l'API ; `statement.json` | **non obtenus** (SCA) : recette 2 |
 | profondeur d'historique servie, durée de validité du jeton à usage unique, interface où se dépose la clé publique | **non confirmées** |
 
@@ -34,57 +34,78 @@ chaque solde sans que ni le jeton ni la clé soient jamais en base ni dans une s
 | Exigence | Texte | AC |
 |---|---|---|
 | `FR-39-12a1-0` | La **recette 2** (rejeu signé) constate colonnes du CSV de l'API et signature acceptée. | AC-0 |
-| `FR-39-12a1-1` | Jeton, identifiant de profil facultatif et fichier de la clé SCA se posent par variables d'environnement, une série par compte Wise, rattachée à son libellé ; rien en base ni en sauvegarde. | AC-1 |
-| `FR-39-12a1-2` | Un défi SCA (403 avec `x-2fa-approval`) est relevé par une signature RSA-SHA256 de son jeton, rejeu unique. | AC-2 |
+| `FR-39-12a1-1` | Jeton, identifiant de profil facultatif et fichier de la clé SCA (exigé) se posent par variables d'environnement, une série par compte Wise, rattachée à son libellé ; rien en base ni en sauvegarde. | AC-1 |
+| `FR-39-12a1-2` | Un défi SCA (403 avec `x-2fa-approval`) est relevé par une signature RSA-SHA256 de son jeton, rejeu signé unique ; la reprise sur 429 et 5xx porte sur le couple requête-rejeu. | AC-2 |
 | `FR-39-12a1-3` | Le client lit le profil d'entreprise, ses soldes `STANDARD` et le relevé d'un solde sur une fenêtre, rendu en `WiseRow`. | AC-3 |
-| `FR-39-12a1-4` | Chaque erreur de Wise devient un code `PROVIDER_*` ou `WISE_*` lisible, sans texte de Wise, jeton, signature ni clé. | AC-4 |
+| `FR-39-12a1-4` | Chaque erreur de Wise devient un code `PROVIDER_*`, `WISE_PROFILE_AMBIGUOUS` ou `WISE_SCA_REJECTED`, lisible, sans texte de Wise, jeton, signature ni clé. | AC-4 |
 | `NFR-39-12a1-1` | Aucun appel réseau en CI ni par un agent : serveur Wise simulé dans le processus (socle S5). | AC-5 |
 | `NFR-39-12a1-2` | Jeton, clé privée, jeton de défi et signature absents de tout journal, erreur, réponse, audit, export et sauvegarde (test au marqueur, socle S9). | AC-1, AC-5 |
 | `NFR-39-12a1-3` | Aucune migration ; aucun paquet neuf au `Cargo.lock`. | AC-2 |
 
 ## Critères d'acceptation
 
-0. **AC-0 — Recette 2 (non bloquante pour le développement, bloquante pour le choix CSV ou JSON de l'AC-3).** Une fois la
-   **clé publique** déposée par Beat dans les réglages API de Wise, un appel réel signé, **à la main, hors de Kesh**, par
-   l'orchestrateur, **chaque appel précédé de `kesh-gate-logs/appel-reel.sh wise "<motif>"`** (1 par minute, 40 au total ;
+0. **AC-0 — Recette 2, préalable : aucune ligne de 39-12a1, 39-12a2 ni 39-12b ne s'écrit avant son constat** (validation P2 :
+   la doc de Wise restreint la lecture des relevés au jeton personnel aux comptes des États-Unis, du Canada, de l'Australie,
+   de la Nouvelle-Zélande, de Singapour et de la Malaisie ; le défi SCA de la recette 1 laisse espérer la voie signée sans la
+   prouver, et une source tierce parle d'une inscription de la clé auprès de Wise : développer d'abord risquerait trois
+   stories pour rien, la recette coûte un dépôt de clé et quatre appels). Une fois la **clé publique** déposée par Beat dans
+   les réglages API de Wise, un appel réel signé, **à la main, hors de Kesh**, par l'orchestrateur (signature :
+   `printf '%s' "$OTT" | openssl sha256 -sign wise-sca.pem | base64 -w0`, `$OTT` = valeur de `x-2fa-approval` ; le jeton, la
+   clé et la signature ne s'écrivent dans aucun journal ni rapport), **chaque appel précédé de `kesh-gate-logs/appel-reel.sh wise "<motif>"`** (1 par minute, 40 au total ;
    **3 consommés** à la recette 1) : relevé CSV d'un mois pour un solde (403 puis rejeu signé = **2 appels**), puis le
    relevé JSON du même mois (2 appels), soit **4 appels de plus**. Constats écrits au fichier d'epic (Q-39-13, Q-39-14) :
    rejeu accepté ou non ; colonnes du CSV de l'API comparées à celles de 39-11a (relevé du site, au rapport de recette 1) ;
-   forme d'un 429 s'il survient. **Rejeu refusé** malgré une clé correctement déposée → la story s'arrête et Beat décide.
+   forme d'un 429 s'il survient. **Rejeu refusé** malgré une clé correctement déposée → la phase 2 de Wise s'arrête (39-12a1, 39-12a2, 39-12b) et Beat
+   décide ; l'import CSV de la phase 1 reste la voie.
    **Colonnes identiques** → `parse_wise_csv` de 39-11a sert tel quel (AC-3, branche CSV) ; **différentes** →
    `kesh_import::wise::rows_from_statement_json` (pure, une fonction, module de 39-11a) rend les mêmes `WiseRow`, frais à
-   part, solde courant contrôlé. Aucun développement de la branche JSON avant ce constat.
+   part, solde courant contrôlé. Le constat note aussi si une seconde requête, juste après, reçoit encore un défi (SCA « une fois tous les 90 jours »,
+   doc de Wise) — sans appel de plus : la requête JSON en tient lieu.
 1. **AC-1 — Configuration**, par le **lecteur unique du socle S1** (`provider_env`, écrit par 38-12a ; patron
    `KESH_SMTP_PASSWORD`, `crates/kesh-api/src/config.rs:329-332`, `Debug` masqué `:380`, accesseur `:399`,
    `is_template_placeholder` `:1538`) : `KESH_WISE_<n>_ACCOUNT` (libellé du compte Wise de 39-11b), `KESH_WISE_<n>_TOKEN`,
-   `n` de 1 à 9 ; facultatifs `KESH_WISE_<n>_PROFILE_ID` (sinon le seul profil `business` du jeton, AC-3) et
-   **`KESH_WISE_<n>_SCA_KEY_FILE`** (chemin d'un fichier PEM, clé privée RSA **non chiffrée**, 2048 bits au moins, PKCS#8
+   `n` de 1 à 9 ; facultatif `KESH_WISE_<n>_PROFILE_ID` (sinon le seul profil `business` du jeton, AC-3) ; et, **exigée** dans la série, **`KESH_WISE_<n>_SCA_KEY_FILE`** (chemin d'un fichier PEM, clé privée RSA **non chiffrée**, 2048 bits au moins, PKCS#8
    `BEGIN PRIVATE KEY` ou PKCS#1 `BEGIN RSA PRIVATE KEY`) ; `KESH_WISE_BASE_URL` (défaut `https://api.wise.com` ; bac à sable
    `https://api.sandbox.transferwise.tech`, de mémoire ; `http` admis vers le seul bouclage, S5) ; `KESH_WISE_PARALLEL`
-   (S1 : 1 à 6, défaut 1 ; employé par 39-12a2). Paire ACCOUNT/TOKEN incomplète, libellé en double (sans casse), valeur vide
-   ou de la forme `<…>`, **fichier de clé illisible, vide, chiffré, non RSA ou de moins de 2048 bits** → refus au
+   (S1 : 1 à 6, défaut 1 ; employé par 39-12a2). Série ACCOUNT/TOKEN/SCA_KEY_FILE incomplète, libellé en double (sans casse), valeur de la forme `<…>`
+   (une valeur **vide vaut absente**, `env_nonempty`, `config.rs:1406` : sans aucune variable Wise, Kesh démarre), **fichier de clé illisible, vide, chiffré, non RSA ou de moins de 2048 bits** → refus au
    **démarrage**, message qui nomme la variable (et le chemin du fichier, jamais son contenu). La clé est lue **une fois**,
    au démarrage, et gardée en mémoire dans un champ privé de `Config` (masqué dans `Debug`) ; la remplacer exige un
    redémarrage, comme tout secret. Le fichier se trouve **hors** des dossiers qu'emporte la sauvegarde (rien dans
-   `.keshbackup`) ; en conteneur, il se monte en lecture seule (manuel, 39-12b). Sans `SCA_KEY_FILE`, un défi rencontré donne
-   `WISE_SCA_KEY_NOT_CONFIGURED` (AC-4) : un compte hors Suisse et hors Union européenne peut ne jamais en avoir besoin.
+   `.keshbackup`) ; en conteneur, il se monte en lecture seule (manuel, 39-12b). **Transmission au conteneur** (socle S1) :
+   les séries `KESH_WISE_1_*` à `KESH_WISE_3_*`, `KESH_WISE_BASE_URL` et `KESH_WISE_PARALLEL` s'ajoutent à
+   `docker-compose.yml` et `docker-compose.prod.yml` en `${NOM:-}` (patron `KESH_SMTP_*`, `docker-compose.yml:117-122`) et à
+   `.env.example` (commentées, avec `<EDIT: …>`, patron `:302-340`) ; le **fichier** de clé, lui, n'est pas monté d'office (un
+   volume vers un chemin absent créerait un dossier vide) : le manuel (39-12b) dit la ligne `volumes:` à ajouter, en `:ro`. La clé est **exigée** (validation P2, simplification) : la recette 1 a montré que Wise l'exige pour un compte suisse ;
+   une série sans clé ne servirait à rien, et l'exiger retire un code (`WISE_SCA_KEY_NOT_CONFIGURED`), un champ d'écran
+   (`scaKeyConfigured`) et son avertissement.
 2. **AC-2 — Signature SCA.** Module `crates/kesh-api/src/wise/sca.rs`, **sans réseau** : `sign_challenge(key, token: &str) ->
    Result<String, ScaError>` = signature **RSA PKCS#1 v1.5 / SHA-256** des octets UTF-8 du jeton `x-2fa-approval`, en
-   **base64 standard**. **Aucun paquet neuf** : `ring` (**0.17.14**, déjà au `Cargo.lock` par `rustls`) pour
-   `RsaKeyPair::from_pkcs8` / `from_der` et `sign(&RSA_PKCS1_SHA256, …)`, `base64` (**0.22.1**, déjà au `Cargo.lock`) ; les deux
-   se déclarent en dépendances directes de `kesh-api` (`Cargo.toml`, à côté de `sha2 = "0.10"` `:55`), versions du lock ;
-   le décodage PEM par `pem` (3.0.6, déjà au lock) ou à la main (retrait des lignes d'en-tête, base64). ⚠️ **Pourquoi pas
-   `rsa` 0.9.10**, pourtant au lock par `sqlx-mysql` : il porte l'avis RUSTSEC-2023-0071 (attaque par chronométrage, sans
-   correctif ; **numéro cité de mémoire, à relire**) ; `ring` n'en porte pas. Procédure du client (AC-3) : une requête `GET`
-   reçoit **403 avec `x-2fa-approval`** → signer le jeton → **rejouer la même requête une seule fois** avec les en-têtes
-   `x-2fa-approval: <jeton>` et `X-Signature: <signature>` ; la réponse du rejeu est **définitive** (un second 403 →
-   `WISE_SCA_REJECTED`, jamais de troisième essai : chaque tentative consomme un jeton et un appel). Chaque requête de
-   relevé coûte donc **deux** appels HTTP (progression et délais en tiennent compte, AC-5). Le jeton de défi, la signature
-   et la clé ne sont jamais journalisés. **Test** : signature vérifiée avec la clé publique correspondante
-   (`ring::signature::UnparsedPublicKey`, `RSA_PKCS1_2048_8192_SHA256`) sur une clé **de test sans valeur**, versionnée
-   (`crates/kesh-api/tests/fixtures/wise/sca-test-key.pem`, en-tête qui dit qu'elle ne sert qu'aux tests ; si la protection
-   de dépôt de GitHub la refuse, elle se reconstruit au test depuis un DER en constante) ; la **conformité à ce que Wise
-   accepte** n'est prouvée que par la recette 2.
+   **base64 standard** (RFC 4648, avec remplissage — ce que rend `openssl sha256 -sign … | base64`). **Aucun paquet neuf, et
+   le plus court chemin** (validation P2) : `jsonwebtoken` 9.3.1, **déjà dépendance directe** de `kesh-api` (`Cargo.toml:44`)
+   — `EncodingKey::from_rsa_pem` lit une clé PEM PKCS#1 **ou** PKCS#8 (refus d'une clé chiffrée ou non RSA), et
+   `jsonwebtoken::crypto::sign(token, &key, Algorithm::RS256)` signe par `ring` 0.17.14 (`RsaKeyPair::from_der`,
+   `RSA_PKCS1_SHA256`) ; elle rend du **base64url sans remplissage**, réencodé en base64 standard par `base64` 0.22.1 (au
+   lock, à déclarer en dépendance directe à cette version ; un `base64` 0.23.1 est aussi au lock, ne pas le prendre). La
+   **borne de 2048 bits** est celle de `ring` (`RsaKeyPair`, `ring-0.17.14/src/rsa/keypair.rs:269-283`), qui ne s'applique
+   qu'à la signature : la configuration (AC-1) signe donc une chaîne d'essai **au démarrage** pour refuser une clé trop
+   courte. Repli admis si `jsonwebtoken` change de version : `ring` en dépendance directe (`RsaKeyPair::from_pkcs8` /
+   `from_der`, déjà au lock) — jamais un décodage PEM écrit à la main. ⚠️ **Pourquoi pas `rsa` 0.9.10**, au lock par
+   `sqlx-mysql` : avis **RUSTSEC-2023-0071**, « Marvin Attack » (récupération de clé par chronométrage), corrigé à partir de
+   `rsa` 0.10.0 seulement (relu sur `rustsec.org` le 2026-11-20). **Procédure du client** (AC-3) : une requête `GET` reçoit
+   **403 avec `x-2fa-approval`** → signer le jeton → **rejouer la même requête une seule fois** avec les en-têtes
+   `x-2fa-approval: <jeton>` et `X-Signature: <signature>` ; un second 403 au rejeu → `WISE_SCA_REJECTED`, jamais de
+   troisième essai signé. **Unité de reprise** (validation P2 : sans elle, « un seul rejeu » contredisait les six essais du
+   socle) : la reprise du socle S2 (429 et 5xx, six essais) enveloppe **le couple requête puis rejeu** ; un 429 ou un 5xx,
+   au premier appel comme au rejeu, fait reprendre le couple **depuis la requête non signée** (nouveau jeton de défi, jamais un
+   jeton réutilisé) ; un 401 ou un 403 n'est jamais repris. Wise annonce la SCA « une fois tous les 90 jours » : une
+   requête peut aussi rendre 200 **sans défi**, que le client accepte tel quel ; une requête de relevé coûte donc **un ou deux**
+   appels HTTP. Le jeton de défi, la signature et la clé ne sont jamais journalisés. **Test** : signature vérifiée avec la clé
+   publique correspondante (`ring::signature::UnparsedPublicKey`, `RSA_PKCS1_2048_8192_SHA256`, `ring` en dépendance de
+   développement à la version du lock) sur une clé **de test sans valeur**, versionnée
+   (`crates/kesh-api/tests/fixtures/wise/sca-test-key.pem` et sa clé publique, en-tête qui dit qu'elles ne servent qu'aux
+   tests ; si la protection de dépôt de GitHub refuse la clé privée, elle se reconstruit au test depuis un DER en constante) ;
+   clé de 1024 bits refusée au démarrage ; la **conformité à ce que Wise accepte** n'est prouvée que par la recette 2.
 3. **AC-3 — Client** (`crates/kesh-api/src/wise/`, client HTTP du socle S5 : rustls, aucune redirection — le jeton ne suit
    jamais une redirection —, délais bornés, `User-Agent` sans donnée personnelle ; **`reqwest` n'a pas la fonctionnalité
    `json` en dépendance normale** (`Cargo.toml:112`, `default-features = false, features = ["rustls-tls"]`) : lire par
@@ -95,9 +116,10 @@ chaque solde sans que ni le jeton ni la clé soient jamais en base ni dans une s
    - **Soldes** : `GET /v4/profiles/{profileId}/balances?types=STANDARD` (constaté) ; un solde = `id` et `currency`.
    - **Relevé** : `GET /v1/profiles/{profileId}/balance-statements/{balanceId}/statement.csv` (ou `.json`, AC-0) avec
      `currency`, `intervalStart`, `intervalEnd`, `type=FLAT` (frais sur une ligne à part). **Fenêtres** : fonction du socle
-     S2, `windows(from, to, max_days = 469)` (borne de Wise, doc publique), jours de **Zurich** ; `intervalStart` =
+     S2, `windows(from, to, max_days = 468, now)` (borne de 469 jours de Wise, doc publique, comptée sur des instants UTC : un jour
+     de moins pour le jour de 25 heures, règle du socle), jours de **Zurich** ; `intervalStart` =
      `kesh_core::horloge::debut_du_jour_suisse(début de fenêtre)` et `intervalEnd` = `fin_du_jour_suisse(fin de fenêtre)`
-     (`crates/kesh-core/src/horloge.rs:95`, `:110`), en UTC à la milliseconde (`…T23:59:59.999Z`) : fenêtres contiguës, sans
+     (`crates/kesh-core/src/horloge.rs:95`, `:110`), en UTC à la milliseconde (fin du 31 décembre = `…12-31T22:59:59.999Z` en hiver, `…T21:59:59.999Z` en été) : fenêtres contiguës, sans
      chevauchement d'une milliseconde.
    - **Plusieurs fenêtres d'une même devise** : lignes concaténées dans l'ordre ; solde d'ouverture de la **première**,
      de clôture de la **dernière** (colonnes de 39-11a AC-5) ; la clôture de chaque fenêtre doit égaler l'ouverture de la
@@ -105,20 +127,18 @@ chaque solde sans que ni le jeton ni la clé soient jamais en base ni dans une s
    - Un solde Wise sans compte bancaire de la devise dans Kesh est listé (`unlinkedCurrencies`, 39-12a2) et **non
      téléchargé** : le client expose la liste des soldes, le choix est fait par 39-12a2.
 4. **AC-4 — Erreurs**, codes du socle S4 (génériques `PROVIDER_*`, jamais de texte de Wise) : 401 →
-   `PROVIDER_AUTH_FAILED` ; **403 sans `x-2fa-approval`** → `PROVIDER_PERMISSION_DENIED` ; 403 avec défi et sans clé →
-   `WISE_SCA_KEY_NOT_CONFIGURED` ; **403 au rejeu signé → `WISE_SCA_REJECTED`** (le message dit : clé publique non déposée
-   chez Wise, ou qui ne correspond pas à la clé privée du fichier) ; 429 et 5xx → reprise du socle S2 (`Retry-After` entier
-   borné à 120 s, sinon 5, 10, 20, 40, 60 s ; six essais ; pause commune), puis `PROVIDER_RATE_LIMITED` ou
+   `PROVIDER_AUTH_FAILED` ; **403 sans `x-2fa-approval`** → `PROVIDER_PERMISSION_DENIED` ; **403 au rejeu signé → `WISE_SCA_REJECTED`** (le message dit : clé publique non déposée
+   chez Wise, ou qui ne correspond pas à la clé privée du fichier) ; 429 et 5xx → reprise du socle S2 sur le couple requête-rejeu (AC-2 ; `Retry-After`
+   entier borné à 120 s, sinon 5, 10, 20, 40, 60 s ; six essais ; pause commune), puis `PROVIDER_RATE_LIMITED` ou
    `PROVIDER_UNAVAILABLE` ; délai dépassé → `PROVIDER_UNAVAILABLE` ; réponse illisible ou colonnes inattendues →
-   `PROVIDER_RESPONSE_INVALID` ; autre statut → `PROVIDER_API_ERROR` (code HTTP seul). Chaque erreur nomme l'étape (devise
-   et fenêtre) dans `detail`. Messages aux quatre locales par 39-12a2.
+   `PROVIDER_RESPONSE_INVALID` ; autre statut → `PROVIDER_API_ERROR` (code HTTP seul). Chaque erreur porte `details: { provider: "wise", currency, from, to }` (un seul nom, `details`, socle S3). Messages aux quatre locales par 39-12a2.
 5. **AC-5 — Tests sans réseau** (socle S5 et S9). Serveur `axum` **dans le processus** sur `127.0.0.1:0`
    (`KESH_WISE_BASE_URL`), données **fictives** : `profiles` (un `business`, un `personal`), `balances` (trois soldes),
-   `statement.csv` qui joue : le **défi** (403 avec `x-2fa-approval: TEST-…`) puis, au rejeu, la **vérification de la
-   signature avec la clé publique de test** (200 si juste, 403 `x-2fa-approval-result: REJECTED` sinon), un 429 avec puis
-   sans `Retry-After`, un 401, un 403 sans défi, une réponse tronquée, deux fenêtres dont la clôture de l'une ≠ l'ouverture de
-   l'autre. Unitaires : configuration (AC-1 : paire incomplète, gabarit, fichier de clé absent, chiffré, trop court ;
-   patron de `smtp_password_masked_in_debug`, `config.rs:3484`), `sign_challenge` (AC-2), `windows` à 469 jours (socle).
+   `statement.csv` qui joue : un 200 **sans défi**, le **défi** (403 avec `x-2fa-approval: TEST-…`) puis, au rejeu, la **vérification de la
+   signature avec la clé publique de test** (200 si juste, 403 `x-2fa-approval-result: REJECTED` sinon), un 429 au rejeu (le couple reprend
+   depuis la requête non signée, nouveau jeton), un 429 avec puis sans `Retry-After`, un 401, un 403 sans défi, une réponse tronquée, deux fenêtres dont la clôture de l'une ≠ l'ouverture de
+   l'autre. Unitaires : configuration (AC-1 : série incomplète — clé absente comprise —, gabarit, fichier de clé illisible, chiffré, de 1024 bits ;
+   patron de `smtp_password_masked_in_debug`, `config.rs:3484`), `sign_challenge` (AC-2), `windows` à 468 jours (socle).
    **Test au marqueur** : `TOKEN-MARQUEUR-…`, le contenu de la clé, `x-2fa-approval` et la signature n'apparaissent dans
    aucun journal capturé, erreur ni réponse.
 
@@ -128,7 +148,7 @@ chaque solde sans que ni le jeton ni la clé soient jamais en base ni dans une s
 - [ ] T2 — `wise/sca.rs` : signature et clé de test (AC-2).
 - [ ] T3 — Client : profil, soldes, relevé, fenêtres, rejeu signé, erreurs (AC-3, AC-4).
 - [ ] T4 — Serveur simulé et tests (AC-5).
-- [ ] T5 — Après la recette 2 : branche CSV ou JSON (AC-0).
+- [ ] T0 — Recette 2 constatée (AC-0), avant tout le reste ; puis branche CSV ou JSON.
 
 ## Stratégie de tests
 
@@ -138,12 +158,13 @@ paquet ajouté) — se contrôle par `git diff Cargo.lock`.
 
 ## Modules touchés (2)
 
-`kesh-api` (configuration, client, signature), `kesh-import` (JSON → `WiseRow`, **si** la recette 2 l'exige).
+`kesh-api` (configuration, client, signature), `kesh-import` (JSON → `WiseRow`, **si** la recette 2 l'exige) ; plus
+`docker-compose.yml`, `docker-compose.prod.yml`, `.env.example` (transmission des variables).
 
 ## Fichiers communs
 
 `crates/kesh-api/src/config.rs` et `provider_env` du socle (38-12a), `crates/kesh-api/Cargo.toml`, `Cargo.lock` (se régénère
-après fusion) : à relire à la reprise de `main`.
+après fusion), `docker-compose.yml`, `docker-compose.prod.yml`, `.env.example` (blocs de PayPal et Stripe à côté) : à relire à la reprise de `main`.
 
 ## Note de version
 
@@ -155,8 +176,10 @@ dans l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la
 - Doc publique de Wise consultée le 2026-11-20 : relevé de solde (`docs.wise.com/api-reference/balance-statement`, **469
   jours**, `type` `COMPACT` ou `FLAT`, `currency` obligatoire, formats JSON, CSV, PDF, XLSX, CAMT.053, MT940, QIF, SCA
   exigée hors des États-Unis, de l'Australie, de la Nouvelle-Zélande, de Singapour, du Canada et de la Malaisie « une fois tous
-  les 90 jours »), jetons personnels. Les en-têtes `x-2fa-approval` et `X-Signature` et l'algorithme sont **constatés pour le
-  défi** (recette 1) et **de mémoire pour la réponse** (non relus).
+  les 90 jours »), jetons personnels. Les en-têtes `x-2fa-approval` et `X-Signature` sont **constatés pour le défi** (recette 1) ;
+  pour la réponse, la page *Personal Token SCA* n'a été vue que par un résumé de recherche (pipeline OpenSSL, base64 RFC 4648),
+  page 404 au chargement direct le 2026-11-20 ; la même doc dit que les relevés au jeton personnel sont restreints aux comptes
+  de six pays (d'où la recette 2 préalable).
 - **Non confirmé** : acceptation du rejeu (recette 2), colonnes du CSV de l'API, durée de vie du jeton de défi, forme d'un 429,
   chemin de dépôt de la clé publique dans l'interface de Wise.
 - Anciennes 39-1 et 39-3 (`superseded`) : connexion, coffre et relevé JSON remplacés par la variable d'environnement et le
@@ -168,3 +191,12 @@ dans l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la
 - 2026-11-20 — fiche rédigée (phase 2), non validée.
 - 2026-11-20 — validation P1 (Claude Sonnet 5.5, contexte frais) : voir le Change Log de 39-12a2 (commun aux deux fiches) ;
   la recette 1 impose la signature SCA : fiche scindée, AC-0 recentré sur la recette 2, AC-1 et AC-2 neufs, socle S1 à S9.
+- 2026-11-20 — validation P2 (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12b ; rapport
+  `kesh-gate-logs/epic-39-40-kiss/validation/39-12-P2.md`) : 0 C, 0 H, 3 M, 7 L, remédiés, plus trois décisions de l'orchestrateur sur le socle. Ici : recette 2 rendue
+  **préalable** au développement (doc de Wise : relevés au jeton personnel restreints à six pays) ; unité de reprise =
+  couple requête-rejeu (contradiction avec les six essais du socle) ; clé SCA **exigée** (retrait de
+  `WISE_SCA_KEY_NOT_CONFIGURED`) ; signature par `jsonwebtoken` RS256, déjà dépendance directe (au lieu de `ring` + PEM à la
+  main), borne de 2048 bits contrôlée au démarrage ; RUSTSEC-2023-0071 relu ; réponse sans défi admise (90 jours) ;
+  `max_days` = 468 et `details` (décisions de l'orchestrateur sur le socle) ; exemple d'heure UTC de fin de jour corrigé.
+- 2026-11-20 — validation P2, complément (Claude Opus 5.5) : corrections du socle relevées par la P2 de la 38-12 appliquées —
+  valeur vide = absente, séries 1 à 3 transmises par les deux compose et `.env.example`, fichier de clé monté à la main.
