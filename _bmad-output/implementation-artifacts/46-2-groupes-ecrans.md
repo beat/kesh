@@ -1,6 +1,6 @@
 # Story 46-2 : écrans du bilan et du compte de résultat par groupes
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D3, D4, D9 (étendue), Q2, Q3, Q10 ; FR-46-2,
 FR-46-7 à FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1,
