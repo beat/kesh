@@ -202,6 +202,7 @@ CSV, sans doublon dans un sens comme dans l'autre ; tout ou rien en cas d'échec
 
 ## Change Log
 
+- 2026-11-20 — validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3, 39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici : rien à changer (point d'accroche avant `kept.is_empty()`, la période et la clôture, relu au cœur de 38-12a ; cœur de 40-7b = celui de 38-12a plus `value_date` et des aides de formulaire ; `readFrom` = `importFrom` vérifié contre `previous_statement_closing` et `overlapping_statements`).
 - 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12b ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés. Ici : **M3** — le
   point d'accroche `rules` s'exécute avant la période, la clôture et le cas « aucune ligne gardée » ; le renvoi « deux

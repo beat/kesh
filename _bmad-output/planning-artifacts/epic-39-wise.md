@@ -310,6 +310,7 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 
 ## Change Log (refonte)
 
+- 2026-11-20 — Validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés dans 39-12a1, 39-12a2 et 39-12b. Socle S1 à S9 inchangé.
 - 2026-11-20 — Validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés dans les fiches 39-12a1 à 39-12b. Le renvoi de la P2 (« deux extractions du cœur d'import divergent ») est **périmé** : le cœur de 40-7b reprend celui de 38-12a (relevé aux worktrees). Socle S1 à S9 inchangé.
 - 2026-11-20 — Validation P2 de la voie activités (Claude Opus 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P2.md`) : 0 C, 1 H, 2 M, 9 L, remédiés dans les fiches 39-12a1 à 39-12b ; ici, « deux lectures » de `kesh-db` au tableau (résidu de la P1). Socle S1 à S9 inchangé. Renvoi : deux extractions du cœur d'import divergent (38-12a, 40-7b), à réunir à l'intégration.
 - 2026-11-20 — Validation P1 de la voie activités (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P1.md`) : 0 C, 2 H, 10 M, 7 L, remédiés dans les fiches 39-12a1 à 39-12b ; ici, Q-39-17 et le paragraphe « À confirmer » passent sur 2024 (mois 2025 plus tard, non bloquant). Socle S1 à S9 inchangé et toujours identique à `epic-40-stripe.md`.

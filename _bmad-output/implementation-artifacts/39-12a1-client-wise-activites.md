@@ -81,7 +81,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      `rows_from_activities` (39-12a2), **dans un test local non versionné**, **comme si l'on était le 2024-12-31** :
      `period` = 2024, soldes actuels = clôtures 2024-12-31 du CSV de chaque devise, activités de 2024
      seules, `transfer_fees` = les devis sauvés en (a) pour les 27 virements qu'ils couvrent et, **pour les autres
-     virements sortants de 2024**, les frais du CSV (ligne `FEE-TRANSFER-…` ou zéro) — seule entrée qui ne vient pas de
+     virements sortants de 2024**, les frais du CSV (ligne `FEE-TRANSFER-…` ou zéro ; `fee_currency` = la devise du fichier CSV qui porte le débit `TRANSFER-…`, celle qui départage le montant, 39-12a2 AC-3) — seule entrée qui ne vient pas de
      l'API, écrite au compte rendu : 39-12a2 exige un frais par virement sortant (`MissingTransferFee`), et lire le devis
      des quelque 130 virements de 2024 dépasserait le quota (65 + ≈ 150 > 200) ; les 27 devis éprouvent la correspondance
      dans les deux cas (avec et sans frais), `checkpoints` = clôtures du CSV à chaque fin de mois (le CSV porte un solde courant à chaque ligne). Chaque
@@ -209,6 +209,7 @@ l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la sauv
 
 ## Change Log
 
+- 2026-11-20 — validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3, 39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici (AC-0 b, L) : la devise `fee_currency` des frais pris au CSV est celle du fichier qui porte le débit, puisqu'elle départage désormais le montant.
 - 2026-11-20 — validation P3 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a2, 39-12a3, 39-12b ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P3.md`) : 0 C, 0 H, 3 M, 4 L, remédiés. Ici (AC-0 a) : le
   choix de l'horodatage doit suivre l'achèvement, et la règle du sens est éprouvée sur les virements entre soldes détenus et
