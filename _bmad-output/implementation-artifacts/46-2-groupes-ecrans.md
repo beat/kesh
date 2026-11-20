@@ -83,16 +83,21 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    (`docs/manual/fr/user-manual.tex:3923`, `:3954`), `.tex` seul, PDF non commité.
 10. **AC-10 — Vue retrouvée au retour (décision de Beat du 2026-11-20).** Le rechargement à chaque clic (C-46-2-1)
     n'est accepté que si l'écran retrouve sa vue : en revenant sur la page (même rapport, même société, même
-    utilisateur, même navigateur), il rétablit le niveau choisi et les groupes ouverts ou fermés à la main (ainsi que
+    navigateur), il rétablit le niveau choisi et les groupes ouverts ou fermés à la main (ainsi que
     montrée/masquée et la position, AC-5). Choix KISS : mémorisation côté navigateur en `localStorage`, **clé par
-    société et par rapport**, sous la convention de `lib/app/stores/mode.svelte.ts` (lecture et écriture sous
+    société et par rapport** (par navigateur, non par utilisateur, comme `kesh-mode` ; l'identifiant de société est
+    `company.id` de `fetchCompanyCurrent`, que `+page.ts` doit renvoyer à côté du nom aujourd'hui seul chargé), sous la
+    convention de `lib/app/stores/mode.svelte.ts` (lecture et écriture sous
     `try`/`catch`, écran par défaut correct si le stockage est vide, illisible ou refusé) ; **restaurée avant la
     première requête** (la première demande part avec la vue mémorisée, sans passer d'abord par la vue par défaut) ;
-    les groupes mémorisés qui n'existent plus dans le plan (compte archivé, groupe dissous) sont ignorés, non
-    transmis. Tests : Vitest de la persistance (écriture au changement de niveau et au clic, relecture au montage,
-    clé distincte par société et par rapport, stockage vide, illisible et refusé, groupe disparu ignoré, première
-    requête déjà munie de la vue) ; E2E (`reports-groupes.spec.ts`) : choisir un niveau, ouvrir un groupe, quitter la
-    page, revenir → même niveau, même groupe ouvert.
+    les groupes mémorisés qui n'existent plus dans le plan (compte archivé, groupe dissous) **sont transmis tels
+    quels** : la première requête part avant que le plan soit connu, donc le client ne peut pas les filtrer ; l'API les
+    ignore sans erreur et les retire de l'écho `grouping` (46-1, § *Le contrat*) ; après chaque réponse, la mémoire
+    reprend les listes de l'écho, et ces identifiants disparaissent au prochain enregistrement. Tests : Vitest de la
+    persistance (écriture au changement de niveau, de position, de hiérarchie montrée/masquée et au clic, relecture au
+    montage, clé distincte par société et par rapport, stockage vide, illisible et refusé, groupe disparu retiré de la
+    mémoire après la réponse de l'API, première requête déjà munie de la vue) ; E2E (`reports-groupes.spec.ts`) :
+    choisir un niveau, ouvrir un groupe, quitter la page, revenir → même niveau, même groupe ouvert.
 
 ## Tâches / sous-tâches
 
@@ -188,3 +193,4 @@ l'affichage d'avant.
   trace `report.generated`) **à condition que la vue soit mémorisée** : AC-10 neuf (`localStorage`, clé par société et
   par rapport, restaurée avant la première requête, groupes disparus ignorés), AC-5, AC-3, T4 et les tests de l'AC-9
   réalignés ; convention réutilisée : `mode.svelte.ts`.
+- 2026-11-20 — Validation P-ciblée des décisions de Beat (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `644b9e55` ; au code de `origin/main`) : 0 C / 0 H / 1 M / 3 L, remédiés. M : AC-10 se contredisait — « restaurée avant la première requête » et « groupes disparus ignorés, non transmis » ne tiennent pas ensemble, le client ne connaissant pas le plan avant la première réponse ; remédié : les identifiants sont transmis, l'API les ignore et les retire de l'écho (46-1 § *Le contrat*), la mémoire reprend l'écho. L : « même utilisateur » promis sans que la clé porte l'utilisateur (clé par navigateur, comme `kesh-mode`) ; identifiant de société non chargé par `+page.ts` (`company.id` de `fetchCompanyCurrent`) ; tests de l'AC-10 n'écrivant pas position ni montrée/masquée, pourtant retenues (AC-5). Non remédié, à trancher par Beat : AC-3 dit le rechargement accepté « à condition que la vue soit mémorisée », condition sans objet si le stockage est refusé (la vue n'est alors pas retenue, le rechargement reste). Boucle non close (un M remédié). Rapport : `kesh-gate-logs/epic-46/validation/46-2-decisions-ciblee.md`.
