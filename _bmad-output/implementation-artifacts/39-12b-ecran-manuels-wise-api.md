@@ -35,10 +35,9 @@ lecture seule, poser les variables et ce que le téléchargement ne sait pas fai
    CSV déjà compris dans le montant téléchargé »), `balanceUnchecked` (« solde non contrôlé : aucun relevé antérieur dans
    Kesh pour cette devise »), `ignored.notCompleted` (« mouvements en cours chez Wise, repris au prochain
    téléchargement »), avertissement `conversion_ambiguous` ; refus par code `PROVIDER_*`, `WISE_PROFILE_AMBIGUOUS`,
-   `WISE_ACTIVITY_UNSUPPORTED` (« importez le relevé CSV de cette période ») et les raisons de `PROVIDER_RESPONSE_INVALID`
-   (`WISE_API_BALANCE_MISMATCH` : « le solde reconstruit ne concorde pas avec votre relevé du … ; rien n'a été
-   enregistré », `amount_mismatch`) en clair aux quatre locales (409 : reprise du suivi par `details.jobId`), « rien n'a été
-   enregistré, relancez » sur échec. **Aucun composant propre à Wise** : les libellés propres sont des paramètres.
+   `WISE_ACTIVITY_UNSUPPORTED` (« un mouvement de type … du … n'est pas pris en charge ; le téléchargement ne peut pas remonter avant cette date : importez le relevé CSV », la date pouvant être **hors de la période demandée**) et les raisons de `PROVIDER_RESPONSE_INVALID`
+   (`WISE_API_BALANCE_MISMATCH` : « le solde reconstruit ne concorde pas avec votre relevé du … ; rien n'a été enregistré ; si un mouvement vient d'avoir lieu chez Wise, relancez », `amount_mismatch`) en clair aux quatre locales (409 : reprise du suivi par `details.jobId`), « rien n'a été
+   enregistré, relancez » sur échec. **Aucun composant propre à Wise** : les libellés propres sont des paramètres. Le compte rendu de l'**import CSV** d'un compte Wise (39-11d) affiche aussi `feesIncluded` quand la clé est présente (39-12a3 AC-4, R1), avec le même libellé.
 3. **AC-3 — Manuels** (`.tex` seul, aucun PDF commité ; PDF contrôlé à la régénération, `pdftotext … | tr '\n' ' '`).
    *Administration* : créer un jeton personnel **lecture seule** (profil d'entreprise) ; aucune authentification forte ni
    clé à déposer ; variables `KESH_WISE_<n>_ACCOUNT` (le libellé **identique** à celui du compte Wise de Kesh — **propre à
@@ -52,15 +51,15 @@ lecture seule, poser les variables et ce que le téléchargement ne sait pas fai
    débité (le relevé CSV les met sur une ligne à part : les deux se mélangent sans doublon, 39-12a3 AC-4) ; un type de
    mouvement inconnu de Kesh refuse le téléchargement (importer le CSV de la période) ; le solde reconstruit est contrôlé
    contre le dernier relevé de Kesh, d'où le conseil : **un premier relevé importé en CSV**, puis des téléchargements.
-   *Utilisateur* : le bouton, la période, la progression, ce qu'un échec veut dire (rien n'est enregistré), le contrôle de
+   *Éprouvé sur 2024 seulement* : le manuel dit que la voie a été comparée au relevé CSV de 2024 et que 2025 et la suite se vérifient sur le premier téléchargement réel (39-12a1 AC-0 c) ; conseil : comparer le solde de clôture au site de Wise. *Volume* : un devis par virement sortant lu, de `readFrom` à aujourd'hui, donc un téléchargement ancien est long (progression par étape, `KESH_WISE_PARALLEL`). *Comptabilité des conversions* : les frais de conversion étant compris dans le montant débité, l'écriture d'une conversion téléchargée ne les passe pas à part en charge ; importés du CSV d'abord, ils se proposent au compte de frais — le traitement dépend de l'ordre. *Type inconnu* : un mouvement d'un type non pris en charge, **même postérieur à la période demandée**, refuse tout téléchargement qui remonte avant sa date ; importer alors le CSV de la période. *Utilisateur* : le bouton, la période, la progression, ce qu'un échec veut dire (rien n'est enregistré), le contrôle de
    solde, le mélange sans doublon avec les CSV. `docs/api-external.md` : la route de 39-12a3 (sessions seules, 403
    `API_KEY_OPERATION_FORBIDDEN`), avec ses codes. Les deux phrases du registre des routes sont déjà relevées par 39-12a3 :
    ne pas les retoucher ici.
 4. **AC-4 — E2E** `frontend/tests/e2e/wise-download.spec.ts`, **serveur de prestataire simulé de 38-12b (socle S8)**, port lu
-   de `KESH_E2E_PROVIDER_MOCK_PORT`, backend d'E2E démarré avec `KESH_WISE_1_*` (jeton fictif) et `KESH_WISE_BASE_URL` vers
+   de `KESH_E2E_PROVIDER_MOCK_PORT`, **le serveur simulé commun gagne les routes de Wise** (`provider-mock.ts`, que 38-12b ne fait jouer qu'à PayPal, en CHF : profils, soldes, activités paginées, transferts, devis ; un seul solde CHF, avec le compte lié créé par la spec ; un 401 et un solde décalé commandés par la spec), backend d'E2E démarré avec `KESH_WISE_1_*` (jeton fictif) et `KESH_WISE_BASE_URL` vers
    lui (ajout au montage de `docs/testing.md` ; le bloc de `CLAUDE.md` n'est pas touché) : sans variables, bouton absent ;
    période → progression → compte rendu (activités fictives de 39-12a2, une page de soldes, de transferts et un devis) ;
-   second téléchargement → « 0 insérée » ; solde qui ne concorde pas → message de `WISE_API_BALANCE_MISMATCH` ; 401 simulé
+   second téléchargement → « 0 insérée » ; solde qui ne concorde pas (la spec a d'abord posé un relevé à solde par l'import CSV de 39-11d, dont la clôture diffère de ce que reconstruit le serveur simulé) → message de `WISE_API_BALANCE_MISMATCH` ; 401 simulé
    affiché. Sans la variable du port, ignoré avec son motif écrit (jamais compté vert). Vitest : indicateur `providerApi`
    (configuré, non configuré), libellés propres à Wise. Captures hors du dépôt.
 
@@ -92,6 +91,11 @@ décrit le jeton en lecture seule et ce que le téléchargement lit.
 
 ## Change Log
 
+- 2026-11-20 — validation P1 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3 ;
+  rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P1.md`) : routes de Wise ajoutées au serveur simulé commun (E2E
+  sans elles ne tournait pas), relevé préalable pour le cas du solde qui ne concorde pas, manuel — éprouvé sur 2024 seulement,
+  volume d'appels, frais de conversion et ordre des imports, portée du refus d'un type inconnu —, message de solde (relancer),
+  `feesIncluded` à l'écran d'import CSV.
 - 2026-11-20 — **réécrite sur la voie activités (2026-11-20)** : clé de signature SCA, sa paire de clés, son dépôt chez
   Wise, son volume et `WISE_SCA_REJECTED` retirés ; libellés propres (`feesIncluded`, `balanceUnchecked`,
   `ignored.notCompleted`, `conversion_ambiguous`, `WISE_ACTIVITY_UNSUPPORTED`, `WISE_API_BALANCE_MISMATCH`) ; manuel : ce que

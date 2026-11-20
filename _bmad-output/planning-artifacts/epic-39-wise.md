@@ -195,7 +195,7 @@ métadonnées seulement) : la voie « relevé de solde + signature SCA » des re
 
 Confirmé par la recherche du 2026-11-20 : chemins et paramètres des activités, transferts, devis et soldes au jeton
 personnel, sans défi ; pagination ; identifiants ; frais des virements (22 sur 22) ; soldes 2024 au centime hors frais de
-conversion. **À confirmer sur un mois 2025, comparé une fois au CSV 2025 du site avant de s'y fier** (Q-39-17) : l'horodatage
+conversion. **À confirmer sur 2024, dont le CSV du site est en local et a déjà été comparé par la recherche** (décision de l'orchestrateur, Q-39-17 ; un mois 2025 se compare plus tard, sans bloquer) : l'horodatage
 qui redonne la colonne `Date` du CSV (`createdOn` ou `updatedOn`, UTC ou Zurich) ; l'identifiant d'une conversion
 automatique ; le champ de solde (`amount` ou `cashAmount`) et l'effet des mouvements en cours ; la règle du sens des
 montants (cartes en devise étrangère, entrants) ; le type de détail du CSV par type d'activité ; la `reference` des
@@ -269,7 +269,7 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 
 | Story | Objet | Modules (≤ 5) | Dépend de | Migration |
 |---|---|---|---|---|
-| 39-12a1 | configuration (jeton seul), client Wise (profil, soldes, activités paginées, transferts, devis), erreurs, serveur simulé ; recette AC-0 (un mois 2025 comparé au CSV 2025 du site) | `kesh-api` (config, client) | **recette préalable (AC-0 a)**, socle S1/S2/S5 (38-12a) | aucune |
+| 39-12a1 | configuration (jeton seul), client Wise (profil, soldes, activités paginées, transferts, devis), erreurs, serveur simulé ; recette AC-0 (2024 comparé au CSV 2024 du site, en local ; un mois 2025 plus tard, non bloquant) | `kesh-api` (config, client) | **recette préalable (AC-0 a)**, socle S1/S2/S5 (38-12a) | aucune |
 | 39-12a2 | activités → `WiseRow`/`WiseCsv` : forme fermée des montants, sens, identifiants du CSV, frais des virements, solde reconstruit et contrôlé (fonction pure) | `kesh-import` | 39-11a, recette 39-12a1 AC-0 (a) | aucune |
 | 39-12a3 | route, tâche en fond, ordre de lecture et points de contrôle, import par le cœur de 39-11b, doublons CSV ↔ téléchargement (R1 à R3), parallélisme, audit, erreurs, tests | `kesh-api` (route, tâche, cœur d'import), `kesh-db` (une lecture), `kesh-reconciliation` (un préfixe), `kesh-i18n` | 39-12a1, 39-12a2, 39-11b, 39-11c, socle S2/S3/S4/S6 | aucune |
 | 39-12b | bouton et dialogue générique de 38-12b, manuels (jeton, ce que Kesh lit et ne lit pas), E2E | `frontend`, `kesh-i18n`, `docs/manual` (`.tex`), E2E | 39-12a3, 39-11d, 38-12b | aucune |
@@ -306,9 +306,12 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
   numéros de compte non IBAN) : faut-il un réglage « numéros de mes comptes » ou une règle suffit-elle ? **Tranchée
   par G7** : une règle d'affectation vers le compte du plan de la banque ; l'autre côté s'y rattache à son import.
 - **Q-39-16 — Délai du rejeu SCA** : **close** (2026-11-20) — sans objet, plus aucun rejeu signé (H5). (Le délai de 120 s du rejeu dans `appel-reel.sh` reste sans emploi pour Wise.)
-- **Q-39-17 — Recette d'un mois 2025 (Beat dépose le CSV 2025 du site d'un mois ; orchestrateur)** : avant toute ligne de la phase 2, comparer une fois ce mois de l'API au CSV et trancher l'horodatage de la date, l'identifiant d'une conversion automatique, le champ de solde, la règle du sens, le type de détail par type d'activité et la `reference` des transferts (39-12a1 AC-0 a) ; puis, après 39-12a2, rejouer la conversion de Kesh sur le même mois (AC-0 b) avant de s'y fier. Constats (métadonnées) à écrire ici.
+- **Q-39-17 — Recette sur 2024 (orchestrateur, 2026-11-20 ; elle n'attend pas Beat)** : avant toute ligne de la phase 2, comparer 2024 de l'API (≈ 45 appels, réponses brutes sauvées hors du dépôt) au CSV 2024 du site, en local, et trancher l'horodatage de la date, l'identifiant d'une conversion automatique, le champ de solde (`amount` ou `cashAmount`), la règle du sens, le type de détail par type d'activité, la `reference` des transferts et le devis d'un virement sans frais (39-12a1 AC-0 a) ; puis, après 39-12a2, rejouer la conversion de Kesh sur 2024 comme au 2024-12-31, ligne à ligne, solde courant compris (AC-0 b). **Un mois 2025** se compare plus tard, quand Beat aura son CSV 2025, avec les soldes réels (AC-0 c) : non bloquant. Constats (métadonnées) à écrire ici.
 
 ## Change Log (refonte)
+
+- 2026-11-20 — Validation P1 de la voie activités (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P1.md`) : 0 C, 2 H, 10 M, 7 L, remédiés dans les fiches 39-12a1 à 39-12b ; ici, Q-39-17 et le paragraphe « À confirmer » passent sur 2024 (mois 2025 plus tard, non bloquant). Socle S1 à S9 inchangé et toujours identique à `epic-40-stripe.md`.
+
 
 - 2026-11-20 — **Phase 2 réécrite sur la voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
   métadonnées) : jeton personnel lecture seule, sans SCA — activités paginées, transferts, devis des virements sortants,

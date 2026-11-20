@@ -40,8 +40,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
    `no_matter` inchangés) — `.tex` seul, comptes **recomptés** après ceux des stories fusionnées avant (sans cela le gate de
    cette story rougit, le manuel n'étant touché qu'en 39-12b). Refus dans cet ordre, rien lancé : 403
    `API_KEY_OPERATION_FORBIDDEN` → 400 `VALIDATION_ERROR` → 404 `PROVIDER_ACCOUNT_NOT_FOUND` (38-11b) → 422
-   `PROVIDER_API_NOT_CONFIGURED` (aucun jeton pour ce libellé) → 400 `PROVIDER_PERIOD_INVALID` (`from` > `to`, `to` dans le
-   futur à Zurich ; aucun plafond de durée) → 409 `PROVIDER_DOWNLOAD_RUNNING` (une tâche tourne déjà pour ce libellé ;
+   `PROVIDER_API_NOT_CONFIGURED` (aucun jeton pour ce libellé) → 400 `PROVIDER_PERIOD_INVALID` (`check_period` du socle, `details.reason` = `from_after_to` ou `future` — `from` après le jour de Zurich du jour ; **une `to` future n'est pas refusée, elle est ramenée à l'instant**, comme pour PayPal —, **sans** `too_old` : l'API des activités n'a pas de borne d'ancienneté, le paramètre `years` reçoit une valeur qui ne limite rien ; aucun plafond de durée) → 409 `PROVIDER_DOWNLOAD_RUNNING` (une tâche tourne déjà pour ce libellé ;
    `details: { provider: "wise", jobId }`) ; sinon **202** `{ jobId }`.
 2. **AC-2 — État** `GET /api/v1/wise-downloads/{jobId}` (socle S3, société de l'appelant seulement, sinon 404) :
    `{ state, steps: { done, total }, pausedUntilSeconds, result, error: { code, message, details? } }`. **Étapes** : profil,
@@ -62,45 +61,57 @@ seulement si le solde reconstruit concorde avec mes relevés.
    téléchargement) ou saisis ; (4) **début de lecture** `readFrom` = le plus tôt de `from` et du lendemain du plus ancien
    point de contrôle (pour que la reconstruction depuis le solde actuel l'atteigne) ; (5) **activités** de `readFrom` à
    `read_until` (fenêtres de 366 jours, 39-12a1) ; (6) **transferts** (`readFrom` − 31 jours à `read_until`) et **devis**
-   de chaque virement sortant `COMPLETED` lu ; (7) `rows_from_activities` (39-12a2) avec ces données et `period = (from, to)`.
+   de chaque virement sortant `COMPLETED` lu ; (7) `rows_from_activities` (39-12a2) avec ces données et `period = (from, to)`, **les horodatages des activités ramenés avant l'appel** au fuseau que la recette 39-12a1 AC-0 (a)(1) a retenu (`kesh_core::horloge::heure_suisse` si c'est Zurich ; `kesh-import` ne connaît aucun fuseau). Les soldes sont lus à l'instant `read_until` = `now` et les activités jusqu'à lui : un mouvement survenu entre les deux lectures fait échouer le contrôle (`BalanceMismatch`), le message invite à relancer.
    **Une erreur à n'importe quelle étape — reprises épuisées, conversion refusée, `BalanceMismatch` — fait échouer la tâche
    entière : rien n'est écrit**, pour aucune devise. Puis les `WiseCsv` rendus passent, comme les fichiers d'un import CSV,
    par le **cœur commun de 39-11b** (socle S6 ; une entrée `bank_imports` par devise, `source_format` = la valeur de 39-11b,
    `filename` = « API Wise <devise> <from>–<to> », verrous, doublons par identifiant Wise et règles de l'AC-4, **une seule
-   transaction de base**, tout ou rien). **Empreinte** (`file_hash`) = SHA-256 de `« wise-api:<devise> » ‖ identifiants triés` :
+   transaction de base**, tout ou rien). **Empreinte** (`file_hash`) = SHA-256 des identifiants des lignes de la devise, triés, ‖ `":"` ‖ devise (la forme de 38-12a AC-7 et du socle S6) :
    le refus `BANK_IMPORT_DUPLICATE_FILE` **ne s'applique pas** à un téléchargement (relancer la même période rend
    `inserted: 0`). La continuité avec l'import précédent (39-11b AC-5) se juge comme pour le CSV ; elle est ici garantie par
    le contrôle de 39-12a2 AC-5 quand un point de contrôle existe.
 4. **AC-4 — Doublons avec le CSV, dans les deux ordres.** Règle de base (39-11b AC-5) : même `transaction_id` sur le même
-   compte bancaire → ligne ignorée. S'y ajoutent, **dans le cœur commun**, donc pour l'import CSV comme pour le
-   téléchargement (un test de 39-11b reste vert sans changement d'assertion) :
+   compte bancaire → ligne ignorée. S'y ajoutent trois règles **propres à Wise**, qui ne s'écrivent **pas** dans le chemin
+   commun tel quel : le cœur `provider_imports.rs` reçoit un paramètre `rules: Option<&dyn DuplicateRules>` (rien par défaut),
+   appelé **sous les verrous et dans la transaction d'écriture**, après le test d'identifiant ; **PayPal (38-11b, 38-12a) et
+   Stripe (40-7b) passent `None` et se comportent comme avant, octet pour octet** — un doublon de montant différent y reste
+   ignoré, test de non-régression sur une entrée PayPal ; Wise (la route CSV de 39-11b, `wise_imports::create`, **et** cette
+   story) passe `WiseDuplicateRules` (module neuf `crates/kesh-api/src/wise_duplicates.rs`, préfixes d'identifiant Wise
+   seuls). Le dépôt des transactions bancaires gagne **deux lectures** (`existing_transaction_ids` ne rend que des
+   identifiants) : `existing_transactions_by_ids(company, compte, ids)` et `transactions_by_prefix_window(company, compte,
+   préfixe, du, au)`, rendant `(transaction_id, amount, booking_date)`. Les tests de 39-11b restent verts sans changement
+   d'assertion (un ré-import à l'identique ne remplit aucune condition ci-dessous).
    - **(R1) Frais de conversion inclus.** Une ligne de frais `FEE-BALANCE-x` ou `FEE-CONVERSION_ORDER-x` d'un CSV dont la
      ligne d'origine `x` est un doublon, et dont l'origine en base a pour montant `montant de x dans le fichier + montant
      des frais` (débit téléchargé, frais inclus, 39-12a2 AC-4), est **ignorée** et comptée dans `feesIncluded` — sans quoi
-     les frais compteraient deux fois. Dans l'autre ordre (CSV d'abord), le débit téléchargé est un doublon par identifiant
-     et rien n'est à faire.
+     les frais compteraient deux fois. Le compte est rendu par fichier à la réponse de l'import CSV sous la clé
+     `feesIncluded`, **absente quand elle vaut 0** (les réponses de 39-11b gardent leur forme) ; l'écran d'import CSV
+     (39-11d) l'affiche avec le libellé de 39-12b.
    - **(R2) Montant différent.** Hors (R1), un doublon de **téléchargement** dont le montant diffère de la ligne en base →
      la tâche échoue, `PROVIDER_RESPONSE_INVALID`, `details.reason = "amount_mismatch"` (`currency`, `id`) ; rien n'est
-     écrit. L'import CSV, lui, garde le comportement de 39-11b (doublon ignoré).
+     écrit. **Exemption — CSV d'abord, puis téléchargement** : le débit téléchargé d'une conversion porte les frais, la
+     ligne du CSV en base non ; si la ligne en base est un débit `BALANCE-x` ou `CONVERSION_ORDER-x`, que le compte porte sa
+     ligne `FEE-BALANCE-x` ou `FEE-CONVERSION_ORDER-x` de montant `f` et que `montant téléchargé = montant en base + f`, le
+     doublon est **ignoré** (sans cette exemption, le mélange CSV puis téléchargement des conversions échouerait à chaque
+     fois, en contradiction avec cette AC) ; sans ligne de frais en base ou avec un autre écart, `amount_mismatch`. L'import
+     CSV, lui, garde le comportement de 39-11b (doublon ignoré).
    - **(R3) Conversion automatique, tant que son identifiant est provisoire** (39-12a2 AC-3 ; règle retirée si 39-12a1
      AC-0 (a)(2) trouve le numéro du CSV) : une ligne `AUTO_CONVERSION-y` est un doublon si le compte porte une ligne
      `CONVERSION_ORDER-n` de date à un jour près et de même montant (crédit), ou dont le montant plus celui de
      `FEE-CONVERSION_ORDER-n` égale le sien (débit) ; symétriquement, une ligne CSV `CONVERSION_ORDER-n` (et sa ligne de
      frais, par R1) est un doublon d'une ligne `AUTO_CONVERSION-y` en base qui remplit la même condition. Plusieurs
      candidates → aucune n'est retenue et la ligne est importée, avec l'avertissement `conversion_ambiguous` au compte
-     rendu (jamais un rattachement deviné). La recherche se fait par une requête du dépôt des transactions bancaires
-     (compte, préfixe, fenêtre de dates).
+     rendu, **qui nomme les identifiants des candidates** (jamais un rattachement deviné : une conversion peut alors figurer
+     deux fois, visible et à rapprocher à la main). La recherche se fait par `transactions_by_prefix_window`.
    - **Rapprochement** (39-11c) : le préfixe `AUTO_CONVERSION` s'ajoute aux préfixes de conversion reconnus (même
-     identifiant sur deux soldes du même compte Wise) ; une conversion téléchargée sans ligne de frais n'est pas un écart
-     « frais sans origine » ni « origine sans frais ».
+     identifiant sur deux soldes du même compte Wise) ; l'écart `fee_without_origin` ne vise que les lignes `FEE-x`, une
+     conversion téléchargée sans ligne de frais n'en est donc pas un (aucun écart « origine sans frais » n'existe).
 5. **AC-5 — Parallélisme.** `KESH_WISE_PARALLEL` (socle S2, lue par 39-12a1) borne les requêtes de devis faites en même
    temps pour l'ensemble du serveur (les activités et transferts se lisent dans l'ordre, par curseur et par `offset`) ; la
    reprise sur 429 (pause commune, `Retry-After`, six essais) est celle du socle, la même qu'à PayPal et Stripe ; **aucune
    pause fixe** entre deux requêtes. Résultat **identique** à 1 et à 3 en parallèle (test qui compare les lignes importées).
-6. **AC-6 — Audit, secrets, i18n.** Trace `wise_download.created` (`details` : libellé, période, `readFrom`, étapes, compte
-   rendu) sous l'acteur (`NewAuditLogEntry::for_actor`), à la fin réussie ; **aucun secret** (jeton) ni `KESH_WISE_BASE_URL`
-   dans une réponse ou une trace. Codes `PROVIDER_*` du socle S4, `WISE_PROFILE_AMBIGUOUS` et **`WISE_ACTIVITY_UNSUPPORTED`**
-   (`details: { activityType, date }` : le manuel dit d'importer le CSV de cette période) ; les autres refus de 39-12a2
+6. **AC-6 — Audit, secrets, i18n.** Trace `wise_download.created` (`details` : libellé, période, `readFrom`, étapes, compte rendu) sous l'acteur (`NewAuditLogEntry::for_actor`), **écrite dans la même transaction que l'import** (comme `paypal_download.created`, 38-12a AC-7), plus `bank_import.created` par devise comme à l'import CSV, jamais `wise_import.created` ; l'action est **déclarée à `ACTIONS` de `crates/kesh-api/src/audit_labels.rs` avec son libellé dans les quatre catalogues** (la garde `audit_label_registry.rs` rougit sinon) ; **aucun secret** (jeton) ni `KESH_WISE_BASE_URL`
+   dans une réponse ou une trace. Codes `PROVIDER_*` du socle S4, `WISE_PROFILE_AMBIGUOUS` et **`WISE_ACTIVITY_UNSUPPORTED`** (`details: { activityType, date }` : un mouvement de ce type, daté de `date`, se trouve entre le début de lecture et maintenant, même hors de la période demandée, et le solde ne peut plus se reconstruire : le message le dit, et que le téléchargement ne remontera pas avant cette date ; le manuel dit d'importer le CSV) ; les autres refus de 39-12a2
    deviennent `PROVIDER_RESPONSE_INVALID` avec `details.reason` = leur code (`WISE_API_BALANCE_MISMATCH` porte aussi
    `currency`, `date`, `expected`, `found`) ; **la panique de la tâche** → `INTERNAL_ERROR` (socle S4). `errors.rs` et
    messages aux quatre locales (`crates/kesh-i18n/locales/*`) — les `PROVIDER_*` du socle sont posés par 38-12a, seuls les
@@ -109,20 +120,18 @@ seulement si le solde reconstruit concorde avec mes relevés.
    activités fictives de 39-12a2 qui redonnent les fixtures CSV de 39-11a) : période de 400 jours (deux fenêtres), trois
    soldes dont un sans compte bancaire (`unlinkedCurrencies`) → import par devise, soldes d'ouverture et de clôture
    exacts ; **CSV puis téléchargement** des mêmes mouvements → rien de doublé ; **téléchargement puis CSV** → rien de
-   doublé, `FEE-BALANCE-…` comptée dans `feesIncluded`, solde du compte égal dans les deux ordres ; conversion automatique
-   dans les deux ordres (R3), et deux candidates → `conversion_ambiguous` ; doublon de montant différent → `amount_mismatch`,
+   doublé, `FEE-BALANCE-…` comptée dans `feesIncluded`, solde du compte égal dans les deux ordres ; conversion automatique dans les deux ordres (R3), et deux candidates → `conversion_ambiguous` ; **CSV d'abord puis téléchargement d'une conversion à frais** → doublon ignoré par l'exemption de R2, non `amount_mismatch` ; **non-régression** : le cœur appelé avec `None` (PayPal) ignore un doublon de montant différent comme avant ; doublon de montant différent → `amount_mismatch`,
    rien d'écrit ; relevé antérieur dont la clôture ne concorde pas → `WISE_API_BALANCE_MISMATCH`, rien d'écrit ; aucun relevé
    antérieur → `balanceUnchecked` ; relance de la même période → `inserted: 0` ; activité d'un type non pris en charge →
    `WISE_ACTIVITY_UNSUPPORTED` ; échec au troisième devis → rien d'écrit ; 429 puis reprise ; parallélisme 3 =
    parallélisme 1 ; deux tâches du même libellé → 409 avec `details.jobId` ; clé d'API → 403 sur le `POST` et le `GET` ;
-   registre et phrases du manuel au compte ; jeton absent des journaux (test au marqueur de 39-12a1). Tests de 39-11b et
-   39-11c verts sans changement d'assertion.
+   registre et phrases du manuel au compte ; jeton absent des journaux (test au marqueur de 39-12a1). Tests de 39-11b et 39-11c verts sans changement d'assertion (la clé `feesIncluded` n'apparaît pas dans leurs réponses).
 
 ## Tâches
 
 - [ ] T1 — Route, état, tâche (socle S2/S3) (AC-1, AC-2).
 - [ ] T2 — Ordre de lecture, points de contrôle, appel de 39-12a2, appel du cœur d'import, empreinte (AC-3).
-- [ ] T3 — Règles R1 à R3 dans le cœur commun, requête du dépôt, préfixe `AUTO_CONVERSION` de 39-11c (AC-4).
+- [ ] T3 — Point d'accroche `rules` du cœur commun, règles R1 à R3 côté Wise (`wise_duplicates.rs`), deux lectures du dépôt, préfixe `AUTO_CONVERSION` de 39-11c (AC-4).
 - [ ] T4 — Parallélisme, audit, erreurs, i18n (AC-5, AC-6).
 - [ ] T5 — Tests (AC-7).
 
@@ -134,14 +143,13 @@ Aucune migration : P5 à P8 sans objet.
 
 ## Modules touchés (4)
 
-`kesh-api` (route, tâche, cœur d'import), `kesh-db` (une requête de lecture du dépôt des transactions bancaires, R3),
+`kesh-api` (route, tâche, cœur d'import, `wise_duplicates.rs`, `audit_labels.rs`), `kesh-db` (deux lectures du dépôt des transactions bancaires, R1 à R3),
 `kesh-reconciliation` (un préfixe de conversion), `kesh-i18n` ; plus les deux phrases du registre dans
 `docs/manual/fr/admin-manual.tex`.
 
 ## Fichiers communs
 
-`crates/kesh-api/src/lib.rs` (routes, état), `errors.rs`, `provider_imports.rs` (cœur commun : les règles R1 à R3 y entrent,
-PayPal et Stripe non concernés — préfixes Wise seuls), `audit_route_registry.rs` et les phrases du registre de
+`crates/kesh-api/src/lib.rs` (routes, état), `errors.rs`, `provider_imports.rs` (cœur commun : un paramètre `rules` facultatif y entre, PayPal et Stripe le passent à `None`), `routes/wise_imports.rs` (39-11b : la route CSV passe `WiseDuplicateRules`), `audit_route_registry.rs` et les phrases du registre de
 `admin-manual.tex` (comptes recomptés), catalogues i18n (leur bloc), dépôt des transactions bancaires : à relire à la
 reprise de `main`.
 
@@ -156,10 +164,20 @@ CSV, sans doublon dans un sens comme dans l'autre ; tout ou rien en cas d'échec
 - Aucun appel réel en test ni en CI ; la première exécution réelle est celle de Beat, après la recette finale de 39-12a1
   (AC-0 b).
 - Un écart de la recette (règle de sens, date, identifiant) se corrige dans 39-12a2, jamais dans le cœur de 39-11b.
-- Les règles R1 à R3 ne touchent que des identifiants Wise ; elles laissent PayPal et Stripe inchangés.
+- Les règles R1 à R3 ne touchent que des identifiants Wise et vivent côté Wise ; le cœur commun ne gagne qu'un point d'accroche, que PayPal et Stripe laissent à `None`.
+- Volume d'appels : un devis par virement sortant lu de `readFrom` à maintenant, donc quelques appels pour un mois courant, plusieurs centaines pour un an lu depuis un relevé ancien (progression par étape, `KESH_WISE_PARALLEL`) ; le manuel (39-12b) le dit.
+- Aucun outil MCP (comme 39-11b).
 
 ## Change Log
 
+- 2026-11-20 — validation P1 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12b ;
+  rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P1.md`) : **R1 à R3 sortis du cœur commun** (R2 aurait changé
+  PayPal et Stripe : point d'accroche `rules`, `None` pour eux) ; **exemption de R2** pour le CSV d'abord (le débit téléchargé
+  à frais inclus n'est pas le débit du CSV : la fiche échouait dans l'ordre qu'elle déclarait sans effet) ; deux lectures du
+  dépôt (montants par identifiant, fenêtre par préfixe) ; `feesIncluded` aussi à l'import CSV, absent à 0 ;
+  `PROVIDER_PERIOD_INVALID` aligné sur `check_period` (`to` future ramenée, pas de `too_old`) ; empreinte de 38-12a ; audit dans
+  la transaction, `bank_import.created`, `audit_labels.rs` ; horodatages ramenés ici ; portée du refus `WISE_ACTIVITY_UNSUPPORTED` ;
+  « origine sans frais » (écart inexistant) retiré.
 - 2026-11-20 — **réécrite sur la voie activités (2026-11-20)** : renumérotée 39-12a2 → 39-12a3 ; relevés et rejeu SCA
   remplacés par soldes, activités, transferts et devis (39-12a1) convertis par 39-12a2 ; ordre de lecture, points de
   contrôle et début de lecture ; règles de doublon R1 (frais de conversion inclus), R2 (montant différent), R3

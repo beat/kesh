@@ -26,13 +26,13 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
 | `GET /v3/profiles/{p}/quotes/{quoteUuid}` | **constaté** (200), devis de 2024 lisibles en 2026 ; `paymentOptions[payIn=BALANCE].fee.total` = frais du CSV, 22 sur 22 |
 | borne de période de `activities` | **aucune** dans la doc (`docs.wise.com/api-reference/activity/activitylist`, relue le 2026-11-20 : « no maximum period », `size` 1 à 100, défaut 10) |
 | limite de débit, forme d'un 429 | **aucune vue** (ni `x-ratelimit-*` ni `Retry-After`) ; forme d'un 429 **non confirmée** |
-| comparaison à un CSV 2025 | **non faite** (pas de CSV 2025 local) : AC-0 |
+| comparaison à un CSV | **faite pour 2024** (176 identifiants sur 177, soldes au centime hors frais) ; les six points ouverts se tranchent sur **2024**, dont le CSV du site est en local : AC-0 ; **2025 non comparée** (pas de CSV 2025 local), comparaison plus tard, non bloquante (AC-0 c) |
 
 ## Exigences
 
 | Exigence | Texte | AC |
 |---|---|---|
-| `FR-39-12a1-0` | Une recette préalable compare un mois 2025 de l'API au CSV 2025 du site et tranche les points ouverts ; une recette finale rejoue la conversion de Kesh sur ce mois avant qu'on s'y fie. | AC-0 |
+| `FR-39-12a1-0` | Une recette préalable compare l'API au CSV 2024 du site, en local, et tranche les points ouverts ; une recette finale rejoue la conversion de Kesh sur 2024, ligne à ligne ; un mois 2025 se compare plus tard. | AC-0 |
 | `FR-39-12a1-1` | Jeton et identifiant de profil facultatif se posent par variables d'environnement, une série par compte Wise, rattachée à son libellé ; rien en base ni en sauvegarde. | AC-1 |
 | `FR-39-12a1-2` | Le client lit le profil d'entreprise, ses soldes `STANDARD`, les activités d'une période (toutes les pages), les transferts de la période et le devis d'un transfert. | AC-2, AC-3 |
 | `FR-39-12a1-3` | Chaque erreur de Wise devient un code `PROVIDER_*` ou `WISE_PROFILE_AMBIGUOUS`, lisible, sans texte de Wise ni jeton. | AC-4 |
@@ -42,37 +42,53 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
 
 ## Critères d'acceptation
 
-0. **AC-0 — Recettes réelles, hors de Kesh puis par Kesh.** Chaque appel réel est précédé de
-   `kesh-gate-logs/appel-reel.sh wise "<motif>"` (plafond 200 pour Wise, rafales de 4 ; **relire le journal
-   `appels-reels/wise.log` avant** : 65 consommés à la fin de la recherche du 2026-11-20). Jeton, réponses brutes et CSV
-   restent dans `data-not-committed/` ; seules des **métadonnées** (comptes, égalités, formes) s'écrivent au fichier
-   d'epic et aux fiches. Beat dépose d'abord, dans `data-not-committed/`, le **CSV 2025 du site** d'un mois choisi par
-   lui (les trois soldes ; un mois qui porte un virement sortant à frais, une conversion et, si possible, un paiement
-   par carte dans une devise sans solde).
-   - **(a) Recette préalable, à la main, avant toute ligne de 39-12a1, 39-12a2, 39-12a3 ou 39-12b** (≈ 15 appels :
-     soldes, activités du mois, transferts du mois, devis des virements sortants). Elle **tranche et écrit** au fichier
-     d'epic (Q-39-17) : (1) la **date** d'une ligne — `createdOn` ou `updatedOn`, en UTC ou en heure de Zurich —
-     qui redonne la colonne `Date` du CSV ; (2) l'**identifiant** d'une conversion `AUTO_CONVERSION` : le numéro
+0. **AC-0 — Recettes réelles, hors de Kesh puis par Kesh, sur 2024** (décision de l'orchestrateur : la recette n'attend
+   pas le CSV 2025 de Beat). Chaque appel réel est précédé de `kesh-gate-logs/appel-reel.sh wise "<motif>"` (plafond 200
+   pour Wise, rafales de 4 ; **relire le journal `appels-reels/wise.log` avant** : 65 appels comptés au quota à la fin de
+   la recherche du 2026-11-20, le fichier portant 73 lignes dont 8 `REJEU`, qui ne comptent pas). Jeton, réponses brutes
+   et CSV restent dans `data-not-committed/` ; seules des **métadonnées** (comptes, égalités, formes) s'écrivent au
+   fichier d'epic et aux fiches. **Matière** : le CSV 2024 du site des trois soldes, déjà en local
+   (`data-not-committed/2024/OK_11-wise/Extraits-de-compte-Wise-CSV/`, CHF, EUR, USD, du 2024-01-01 au 2024-12-31), et la
+   recherche du 2026-11-20 l'a déjà comparé (176 des 177 identifiants, soldes au centime hors frais, 22 frais de
+   virement par les devis) ; 2024 porte des entrants, des paiements par carte, des conversions `INTERBALANCE` et
+   `AUTO_CONVERSION`, des virements à frais : **tous les types à trancher y sont**.
+   - **(a) Recette préalable, à la main, avant toute ligne de 39-12a1, 39-12a2, 39-12a3 ou 39-12b** (budget **45 appels,
+     80 au plus** ; au-delà, s'arrêter et rendre compte) : profils (1), soldes (2, à deux instants), activités de
+     2024-01-01 à l'instant de l'appel par les mêmes fenêtres que Kesh (≈ 8 pages), transferts de 2023-12-01 à
+     l'instant (≈ 3 pages), devis des **22 virements à frais** de 2024 et de **cinq virements sans frais** (≈ 27). Les
+     réponses brutes sont **sauvées** dans `data-not-committed/wise-recette-2024/` (non versionné) : la recette finale
+     (b) les relit, sans appel de plus. Elle **tranche et écrit** au fichier d'epic (Q-39-17) : (1) la **date** d'une
+     ligne — `createdOn` ou `updatedOn`, en UTC ou en heure de Zurich — qui redonne la colonne `Date` **et** `Date Time`
+     du CSV pour chacune des lignes de 2024 (y compris celles qui tombent près de minuit, et la date d'une ligne de
+     frais face à celle de son origine) ; (2) l'**identifiant** d'une conversion `AUTO_CONVERSION` : le numéro
      `CONVERSION_ORDER-…` du CSV se lit-il quelque part dans l'API (sinon la règle provisoire de 39-12a2 AC-3 vaut) ;
-     (3) le **champ de solde** (`amount.value` ou `cashAmount.value` de `/v4/…/balances`) qui égale, au moment de
-     l'appel, le solde courant de la dernière ligne du CSV le plus récent, et l'effet des activités non `COMPLETED`
-     sur ce champ ; (4) la **règle du sens** des montants (39-12a2 AC-3) sur les paiements par carte en devise
-     étrangère et les entrants ; (5) le **type de détail** (`DEPOSIT`, `TRANSFER`, `CARD`, `CONVERSION`) que porte le
-     CSV pour chaque type d'activité ; (6) la `reference` des transferts face à la colonne `Payment Reference`. Une
-     règle **contredite** par le mois 2025 se corrige dans la fiche concernée avant le développement ; un écart qui
-     ne se règle pas va à Beat, et la phase 2 attend.
-   - **(b) Recette finale, après 39-12a2, avant que Beat s'y fie** : les réponses brutes du même mois (sauvées en
-     (a)) passent par `rows_from_activities` (39-12a2), **dans un test local non versionné** ; chaque ligne rendue est
-     comparée à la ligne du CSV de même identifiant (date, montant, devise, sens) ; seules les différences **prévues**
-     sont admises (frais de conversion inclus dans le débit, H2 ; conversion automatique si (2) n'a pas trouvé le
-     numéro) ; le solde de clôture du mois égale celui du CSV. Le compte rendu (métadonnées) s'écrit au fichier
-     d'epic. Aucun appel de plus.
+     (3) le **champ de solde** de `/v4/…/balances` : `amount.value` et `cashAmount.value` sont relevés tous deux sur les
+     trois soldes ; **égaux**, on lit `amount.value` ; **différents**, la différence s'explique ou la phase 2 attend
+     (l'effet des activités non `COMPLETED` sur le champ n'est pas mesurable sur 2024 : il reste couvert, de façon sûre,
+     par le contrôle de 39-12a2 AC-5, qui refuse en cas d'écart) ; (4) la **règle du sens** des montants
+     (39-12a2 AC-3) sur les paiements par carte en devise étrangère et sur les entrants de 2024 ; (5) le **type de
+     détail** (`DEPOSIT`, `TRANSFER`, `CARD`, `CONVERSION`) que porte le CSV pour chaque type d'activité ; (6) la
+     `reference` des transferts face à la colonne `Payment Reference` ; (7) **quand les frais d'un virement sont nuls**,
+     ce que rend le devis (`fee.total` = 0, option absente) : les cinq virements sans frais le disent. Une règle
+     **contredite** par 2024 se corrige dans la fiche concernée avant le développement ; un écart qui ne se règle pas va
+     à Beat, et la phase 2 attend.
+   - **(b) Recette finale, après 39-12a2, avant que Beat s'y fie** : les réponses brutes sauvées en (a) passent par
+     `rows_from_activities` (39-12a2), **dans un test local non versionné**, **comme si l'on était le 2024-12-31** :
+     `read_until` = fin de 2024, soldes actuels = clôtures 2024-12-31 du CSV de chaque devise, activités de 2024
+     seules, `checkpoints` = clôtures du CSV à chaque fin de mois (le CSV porte un solde courant à chaque ligne). Chaque
+     ligne rendue est comparée à la ligne du CSV de même identifiant (date, heure, montant, devise, sens, **solde
+     courant**) ; seules les différences **prévues** sont admises (frais de conversion inclus dans le débit, H2 ;
+     conversion automatique si (2) n'a pas trouvé le numéro) ; le solde d'ouverture et de clôture de chaque devise égale
+     celui du CSV. Le compte rendu (métadonnées) s'écrit au fichier d'epic. Aucun appel de plus.
+   - **(c) Comparaison d'un mois 2025, plus tard, non bloquante** : quand Beat dépose le CSV 2025 du site d'un mois, la
+     même comparaison (a)(1)(4) et (b) se rejoue sur ce mois, avec les soldes **réels** d'aujourd'hui ; aucune ligne de
+     la phase 2 n'attend. Tant qu'elle n'est pas faite, le manuel (39-12b) dit que la voie n'a été éprouvée que sur 2024.
 1. **AC-1 — Configuration**, par le **lecteur unique du socle S1** (`provider_env`, écrit par 38-12a ; patron
    `KESH_SMTP_PASSWORD`, `crates/kesh-api/src/config.rs:329-332`, `Debug` masqué `:380`, accesseur `:399`,
    `is_template_placeholder` `:1538`) : `KESH_WISE_<n>_ACCOUNT` (libellé du compte Wise de 39-11b), `KESH_WISE_<n>_TOKEN`
    (jeton personnel **lecture seule**), `n` de 1 à 9 ; facultatif `KESH_WISE_<n>_PROFILE_ID` (sinon le seul profil
    `business` du jeton, AC-2) ; `KESH_WISE_BASE_URL` (défaut `https://api.wise.com` ; `http` admis vers le seul bouclage,
-   S5) ; `KESH_WISE_PARALLEL` (S1 : 1 à 6, défaut 1 ; employé par 39-12a3). **Aucune clé SCA** : la variable
+   S5) ; `KESH_WISE_PARALLEL` (S1 : 1 à 6, défaut 1 ; employé par 39-12a3). **Le lecteur du socle exige aujourd'hui tous les champs d'une série** (`ProviderSpec.fields` : « tous requis », `provider_env.rs`, 38-12a) : cette story lui donne la notion de **champ facultatif** (liste `optional_fields`, vide pour PayPal, dont le comportement et les tests ne changent pas ; une série reste incomplète sans `ACCOUNT` ou sans `TOKEN`, jamais sans `PROFILE_ID`), au lieu de lire `PROFILE_ID` à part ; la spécification de Wise est `key: "WISE"`, `provider: "wise"`, `fields: ["TOKEN"]`, `optional_fields: ["PROFILE_ID"]`, hôte par défaut `https://api.wise.com`, inscrite à `ALL_PROVIDERS`. **Aucune clé SCA** : la variable
    `KESH_WISE_<n>_SCA_KEY_FILE` des versions précédentes de cette fiche n'existe pas et n'est lue nulle part. Série
    ACCOUNT/TOKEN incomplète, libellé en double (sans casse), valeur de la forme `<…>` (une valeur **vide vaut absente**,
    `env_nonempty`, `config.rs:1406` : sans aucune variable Wise, Kesh démarre) → refus au **démarrage**, message qui nomme
@@ -101,8 +117,11 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      `cursor` n'est pas nul ; `since`/`until` en ISO 8601 UTC à la milliseconde. **Fenêtres** : fonction du socle S2,
      `windows(from, to, max_days = 366, now)` (aucune borne de Wise : la fenêtre ne sert qu'à découper la progression,
      366 couvre une année civile bissextile en une fenêtre), jours de **Zurich** ; `since` =
-     `kesh_core::horloge::debut_du_jour_suisse(début)`, `until` = `fin_du_jour_suisse(fin)` (`crates/kesh-core/src/horloge.rs:95`,
-     `:110`) borné à l'instant présent, fenêtres contiguës sans chevauchement d'une milliseconde ; une activité vue dans
+     `kesh_core::horloge::debut_du_jour_suisse(Window.from)`, `until` = `fin_du_jour_suisse(Window.to)` (`crates/kesh-core/src/horloge.rs:95`,
+     `:110`) borné à `now`, **à la milliseconde** : `Window.start` et `Window.end` du socle sont tronqués à la seconde
+     (l'API de PayPal les veut ainsi) et **ne servent pas ici**, sans quoi une activité de la dernière seconde d'une
+     fenêtre n'appartiendrait à aucune ; un chevauchement éventuel des bornes est sans effet, la déduplication par clé
+     (ci-dessous) le résorbe ; une activité vue dans
      deux pages ou deux fenêtres (frontière) n'est gardée qu'une fois (clé : `resource.type` + `resource.id`). Rendu brut :
      `WiseActivity { id, activity_type, resource_type, resource_id, title, description, primary_amount, secondary_amount,
      status, created_on, updated_on }` (textes tels quels ; l'analyse est celle de 39-12a2). Plafond de garde : 200 pages
@@ -138,11 +157,11 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
 
 ## Tâches
 
-- [ ] T0 — Recette préalable constatée (AC-0 a), avant tout le reste ; règles corrigées s'il le faut.
+- [ ] T0 — Recette préalable constatée sur 2024 (AC-0 a), réponses brutes sauvées, avant tout le reste ; règles corrigées s'il le faut.
 - [ ] T1 — Configuration par le lecteur du socle, transmission, garde (AC-1).
 - [ ] T2 — Client : profil, soldes, activités paginées, transferts, devis, erreurs (AC-2 à AC-4).
 - [ ] T3 — Serveur simulé et tests (AC-5).
-- [ ] T4 — Recette finale (AC-0 b), après 39-12a2.
+- [ ] T4 — Recette finale sur 2024 (AC-0 b), après 39-12a2 ; comparaison d'un mois 2025 (AC-0 c) quand Beat dépose son CSV, hors chemin critique.
 
 ## Stratégie de tests
 
@@ -156,7 +175,7 @@ variables).
 
 ## Fichiers communs
 
-`crates/kesh-api/src/config.rs` et `provider_env` du socle (38-12a), `crates/kesh-api/tests/configuration_transmise.rs`,
+`crates/kesh-api/src/config.rs` et `provider_env` du socle (38-12a ; un champ facultatif y est ajouté), `crates/kesh-api/tests/configuration_transmise.rs`,
 `docker-compose.yml`, `docker-compose.prod.yml`, `.env.example` (blocs de PayPal et Stripe à côté) : à relire à la reprise
 de `main`.
 
@@ -184,6 +203,13 @@ l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la sauv
   comparaison d'un mois 2025 au CSV 2025 du site (préalable à la main, puis finale par la fonction de 39-12a2).
   Conversion en lignes déplacée dans la nouvelle 39-12a2 ; route et import renumérotés 39-12a3. Fiche renommée
   (`39-12a1-client-wise-et-sca` → `39-12a1-client-wise-activites`), statut `deferred` → `drafted`, à revalider.
+
+- 2026-11-20 — validation P1 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3,
+  39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P1.md`) : 0 C, 2 H, 10 M, 7 L, remédiés. Ici :
+  AC-0 réécrit sur **2024** (décision de l'orchestrateur : CSV local, budget 45 appels, réponses brutes sauvées,
+  recette finale ligne à ligne « comme au 2024-12-31 », mois 2025 plus tard et non bloquant, point (7) frais nuls) ;
+  champ **facultatif** au lecteur du socle (`PROFILE_ID` : le lecteur exige tous les champs d'une série) ;
+  bornes en milliseconde de `Window.from`/`to`, non `Window.start`/`end` tronquées à la seconde.
 
 *Historique — entrées de la fiche « client de l'API Wise — configuration, signature SCA, profil, soldes et relevés »,
 laissées telles quelles :*
