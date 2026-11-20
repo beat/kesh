@@ -146,27 +146,33 @@ pour PayPal).
 ### Décisions (H1…)
 
 - **H1 — Jeton en variable d'environnement**, comme le mot de passe SMTP (`Config::smtp_password`, champ privé,
-  jamais journalisé : `crates/kesh-api/src/config.rs:329-332`, `:380`, `:399`) : une variable par compte Wise,
-  rattachée à son libellé (`KESH_WISE_<n>_ACCOUNT` = libellé du compte Wise de G2, `KESH_WISE_<n>_TOKEN` = jeton
-  personnel **lecture seule** — Wise propose à la création d'un jeton d'entreprise le choix « accès complet » ou
-  « lecture seule »). Rien en base, rien en sauvegarde, pas de coffre. Même forme que les identifiants PayPal de la
-  phase 2 de l'Epic 38 (`KESH_PAYPAL_<n>_…`) : un seul lecteur de configuration pour les deux (G10).
+  jamais journalisé : `crates/kesh-api/src/config.rs:329-332`, `:380`, `:399`) : une série par compte Wise, rattachée à son
+  libellé (`KESH_WISE_<n>_ACCOUNT` = libellé du compte Wise de G2, `KESH_WISE_<n>_TOKEN` = jeton personnel **lecture
+  seule**, `KESH_WISE_<n>_PROFILE_ID` facultatif, **`KESH_WISE_<n>_SCA_KEY_FILE`** = chemin du fichier PEM de la clé privée
+  de signature SCA, H5). Rien en base, rien en sauvegarde, pas de coffre. Lue par le **lecteur unique du socle S1**
+  (`KESH_PAYPAL_<n>_…` de l'Epic 38, `KESH_STRIPE_<n>_…` de l'Epic 40, même forme ; G10).
 - **H2 — Ce qui se télécharge** : `GET /v1/profiles/{profileId}/balance-statements/{balanceId}/statement.{csv|json}`
-  (`currency`, `intervalStart`, `intervalEnd` en UTC, au plus **469 jours** ; `type=FLAT` : frais sur une ligne à
-  part, comme le CSV de la phase 1). Si le `statement.csv` de l'API a les colonnes du CSV de la phase 1, le lecteur
-  de 39-11a sert tel quel ; sinon le JSON est converti vers les mêmes lignes (`WiseRow`) par **une** fonction. À
-  constater à la recette (Q-39-13).
-- **H3 — Séquentiel d'abord** : un solde après l'autre, une requête à la fois, pause entre deux requêtes, reprise sur
-  `429` (attente de `Retry-After` s'il est donné, sinon d'une durée fixe, nombre d'essais borné), progression
-  (« solde 2/3 », « période 3/5 »). Parallélisme **en option** : `KESH_WISE_PARALLEL`, défaut 1, maximum 6, comme
-  `KESH_PAYPAL_PARALLEL`.
-- **H4 — Recette d'abord, par Beat, hors de Kesh** : la documentation publique de Wise dit les relevés de solde
-  **non servis** au jeton personnel hors des comptes établis aux États-Unis, au Canada, en Australie, en
-  Nouvelle-Zélande, à Singapour et en Malaisie, et l'authentification forte (SCA) exigée hors de ces pays une fois
-  tous les 90 jours. Le compte de Beat est suisse : la phase 2 ne se développe qu'après un appel réel, avec son jeton
-  lecture seule, qui rend un relevé. Refus → la phase 2 s'arrête là, constat écrit ; défi SCA → l'ancienne 39-2 (clé
-  RSA, signature du défi) revient, avec la clé privée **en fichier désigné par une variable d'environnement**, non
-  au coffre (Q-39-14).
+  (`currency`, `intervalStart`, `intervalEnd` en UTC, au plus **469 jours** par requête — la période choisie se découpe en
+  fenêtres par la fonction `windows` du socle S2 ; `type=FLAT` : frais sur une ligne à part, comme le CSV de la phase 1). Si le
+  `statement.csv` de l'API a les colonnes du CSV de la phase 1, le lecteur de 39-11a sert tel quel ; sinon le JSON est
+  converti vers les mêmes lignes (`WiseRow`) par **une** fonction. À constater à la **recette 2** (Q-39-13).
+- **H3 — Séquentiel d'abord, reprise du socle** : une requête à la fois par défaut, **sans pause fixe**, reprise sur
+  `429` et 5xx par la **politique commune** du socle S2 (`Retry-After` entier borné à 120 s sinon 5, 10, 20, 40, 60 s ; six
+  essais ; pause commune), progression en étapes (« relevé 2/6 »). Parallélisme **en option** : `KESH_WISE_PARALLEL`, défaut
+  1, maximum 6, comme `KESH_PAYPAL_PARALLEL` (utile surtout avec plusieurs fenêtres et soldes ; sans effet sur une période
+  d'un an et trois soldes, qui sont trois requêtes). Tout est lu **avant** toute écriture : un échec n'écrit rien.
+- **H4 — Recette 1 (2026-11-20, par l'orchestrateur, trois appels réels) : le relevé est refusé au jeton seul depuis la
+  Suisse (403, `x-2fa-approval`, `x-2fa-approval-result: REJECTED`), aucune limite de débit visible** ; profil et soldes lus
+  (200). Q-39-14 **tranchée par ce constat**. Décision de l'orchestrateur : la signature SCA est **intégrée** (H5), non
+  reportée.
+- **H5 — Signature SCA intégrée** (remplace l'ancienne 39-2) : sur un 403 portant `x-2fa-approval`, le client signe le jeton
+  (RSA PKCS#1 v1.5, SHA-256, base64) avec une clé privée PEM lue **au démarrage** du fichier désigné par
+  `KESH_WISE_<n>_SCA_KEY_FILE` (jamais en base ni en sauvegarde ; montée en lecture seule en conteneur) et rejoue la requête
+  **une seule fois** avec `x-2fa-approval` et `X-Signature` ; la clé publique est déposée par l'Administrateur dans les
+  réglages API de Wise (manuel d'administration : génération de la paire, dépôt, rotation). Aucun paquet neuf :
+  `ring` 0.17.14 et `base64` 0.22.1 sont au `Cargo.lock` (`rsa` 0.9.10 aussi, écarté pour son avis RUSTSEC-2023-0071, cité de
+  mémoire). **Recette 2** après le dépôt de la clé publique par Beat : rejeu accepté, colonnes du CSV de l'API (4 appels réels
+  de plus, 7 sur 40 au total).
 
 ### Ce qui n'a pas pu être confirmé (documentation publique, consultée le 2026-11-20)
 
@@ -179,25 +185,66 @@ soldes (`/v4/profiles/{profileId}/balances?types=STANDARD`) ; les limites de dé
 documentée) ; la profondeur d'historique servie ; le mécanisme de signature du défi SCA pour un jeton personnel (en-tête
 `X-Signature`, clé publique déposée chez Wise) ; la date de dépréciation des jetons personnels pour les PME.
 
+### Socle commun de la phase 2 (Epics 38, 39, 40) — contrat S1 à S9
+
+*Texte identique au fichier de l'Epic 40 ; décidé à la validation P1 des phases 2 de Wise et de Stripe (2026-11-20, rapport
+`39-12-P1.md`) pour que les trois prestataires partagent **un** code. **Écrit par la première fiche de phase 2 développée**
+(38-12a, normalement), **générique dès le départ** (C-40-K6) ; les deux autres l'appellent. Ce que chaque fiche garde
+en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propres au format.*
+
+- **S1 — Configuration.** Un lecteur unique `provider_env` (kesh-api) lit `KESH_<P>_<n>_ACCOUNT` (libellé = `provider_account`
+  de 38-11b), les champs du prestataire (`_CLIENT_ID`/`_SECRET`, `_TOKEN`, `_KEY`…), des champs facultatifs, `KESH_<P>_BASE_URL`
+  et `KESH_<P>_PARALLEL` (1 à 6 strict, défaut 1) ; `n` de 1 à 9 ; série incomplète, libellé en double (sans casse), valeur vide
+  ou `<…>` → refus de démarrer, message qui nomme la variable ; champs privés, `Debug` masqué ; un contrôle propre au prestataire
+  s'y branche (clé Stripe `rk_`, fichier de clé SCA de Wise). Le libellé est **propre à l'installation**, non à la société.
+- **S2 — Mécanique de téléchargement** (`provider_download`) : table des tâches en mémoire (une par prestataire, société et
+  libellé, purgée une heure après la fin), `windows(from, to, max_days)` pure (jours de Zurich), **politique de reprise unique**
+  (429 et 5xx : `Retry-After` entier borné à 120 s, sinon 5, 10, 20, 40, 60 s ; six essais par requête ; **pause commune** à
+  tous les fils, sans réduire le parallélisme ; aucune pause fixe entre requêtes), permis de parallélisme, horloge et attente
+  injectables. Chaque prestataire écrit sa propre boucle d'étapes.
+- **S3 — Routes** `POST /api/v1/<prestataire>-downloads` (`paypal`, `wise`, `stripe`) : Comptable et plus, **sessions seules (clés
+  d'API non admises : un secret de l'Administrateur sort)**, registre des routes auditées ; 202 `{ jobId }` ; `GET …/{jobId}` →
+  `{ state: running | done | failed, steps: { done, total: number | null }, pausedUntilSeconds, result, error: { code, message,
+  detail? } }`.
+- **S4 — Codes génériques** (38-11b a déjà posé `PROVIDER_ACCOUNT_NOT_FOUND`…) : `PROVIDER_API_NOT_CONFIGURED` (422),
+  `PROVIDER_DOWNLOAD_RUNNING` (409), `PROVIDER_PERIOD_INVALID` (400, `details.reason`), et, dans `error.code` d'une tâche,
+  `PROVIDER_AUTH_FAILED`, `PROVIDER_PERMISSION_DENIED`, `PROVIDER_RATE_LIMITED`, `PROVIDER_UNAVAILABLE`,
+  `PROVIDER_RESPONSE_INVALID`, `PROVIDER_API_ERROR` ; `details.provider` nomme le prestataire ; jamais le texte du prestataire.
+- **S5 — Transport.** Un constructeur de client HTTP commun (rustls, aucune redirection, délais, `User-Agent`), extrait de
+  `exchange_rates/source.rs:116-130` ; **`reqwest` n'a pas la fonctionnalité `json` en dépendance normale** (`Cargo.toml:112`) :
+  `.bytes()` puis `serde_json`. Une adresse de base par prestataire (`https` ; `http` admis vers le seul bouclage), et **un seul
+  schéma de test** : un petit serveur `axum` dans le processus (`127.0.0.1:0`) joue le prestataire sur cette adresse — pas de
+  trait de source simulée.
+- **S6 — Import.** Tout est lu **avant** toute écriture ; les lignes passent par le **cœur commun** de 38-11b/39-11b (lignes
+  neutres `ProviderLine`), **une** transaction de base ; l'empreinte d'un téléchargement porte sur les identifiants triés et le
+  refus `BANK_IMPORT_DUPLICATE_FILE` **ne s'applique pas** (relancer rend « 0 insérée »).
+- **S7 — Écran.** Un dialogue générique (38-12b), paramétré par prestataire ; `providerApi: { configured, mode?, … }` sur le
+  compte bancaire.
+- **S8 — E2E.** Un seul serveur de prestataire simulé pour Playwright, port `KESH_E2E_PROVIDER_MOCK_PORT`.
+- **S9 — Secrets.** Un test au marqueur commun : aucun secret (jeton, clé, défi, signature) dans un journal, une réponse, une
+  erreur ou une trace d'audit.
+
 ### Stories de la phase 2
 
 | Story | Objet | Modules (≤ 5) | Dépend de | Migration |
 |---|---|---|---|---|
-| 39-12a | recette, configuration, client Wise et téléchargement séquentiel, route | `kesh-api` (config, client, route), `kesh-import` (conversion JSON → `WiseRow` si besoin), `kesh-i18n` | 39-11b, recette de Beat | aucune |
-| 39-12b | parallélisme en option, bouton et progression à l'écran, manuel, E2E | `kesh-api`, `frontend`, `kesh-i18n`, `docs/manual` (`.tex`), E2E | 39-12a, 39-11d | aucune |
+| 39-12a1 | configuration (jeton, clé SCA), signature SCA, client Wise (profil, soldes, relevés par fenêtres), serveur simulé | `kesh-api` (config, client, signature), `kesh-import` (conversion JSON → `WiseRow` si la recette 2 l'exige) | 39-11a, socle S1/S2/S5 (38-12a) | aucune |
+| 39-12a2 | route, tâche en fond, lecture complète puis import par le cœur de 39-11b, parallélisme, audit, erreurs, tests | `kesh-api` (route, tâche, import), `kesh-i18n`, `kesh-db` (appel) | 39-12a1, 39-11b, socle S2/S3/S4/S6 | aucune |
+| 39-12b | bouton et dialogue générique de 38-12b, manuels (paire de clés SCA comprise), E2E | `frontend`, `kesh-i18n`, `docs/manual` (`.tex`), E2E | 39-12a2, 39-11d, 38-12b | aucune |
 
 ## Registre (stories de l'epic)
 
 | Clé | Statut | Note |
 |---|---|---|
 | `39-0-kickoff` | done | cadrage du 2026-11-15 (historique) |
-| `39-1-client-wise` | superseded | remplacée par 39-12a (jeton en variable d'environnement, sans connexion ni coffre) |
-| `39-2-authentification-forte` | deferred | revient en phase 2 seulement si la recette de 39-12a montre un défi SCA (H4) |
-| `39-3-releve-json-mouvements` | superseded | remplacée par 39-11a (lecteur) et 39-12a (téléchargement) |
+| `39-1-client-wise` | superseded | remplacée par 39-12a1 (jeton en variable d'environnement, sans connexion ni coffre) |
+| `39-2-authentification-forte` | superseded | le défi SCA constaté à la recette 1 (2026-11-20) : reprise par 39-12a1 (H5), clé en fichier désigné par variable d'environnement |
+| `39-3-releve-json-mouvements` | superseded | remplacée par 39-11a (lecteur) et 39-12a1/39-12a2 (téléchargement) |
 | `39-4-classement-des-types-wise` | superseded | remplacée par 39-11c (préfixes d'identifiant, règles) |
 | `39-5-releve-pdf` | deferred | hors des phases 1 et 2 |
 | `39-6-ecrans-et-manuels` | superseded | remplacée par 39-11d et 39-12b |
-| `39-11a` à `39-11d`, `39-12a`, `39-12b` | drafted | fiches du 2026-11-20 ; validation P1 des 39-11a à 39-11d le 2026-11-20 |
+| `39-11a` à `39-11d`, `39-12a1`, `39-12a2`, `39-12b` | drafted | fiches du 2026-11-20 ; phase 1 validée ; phase 2 : validation P1 le 2026-11-20 (39-12a scindée en 39-12a1 et 39-12a2 après la recette 1) |
+| `39-12a-telechargement-api-wise` | split | scindée en 39-12a1 et 39-12a2 (2026-11-20) |
 
 ## Questions ouvertes (2026-11-20)
 
@@ -209,8 +256,8 @@ documentée) ; la profondeur d'historique servie ; le mécanisme de signature du
   coup suffisent.)
 - **Q-39-12 — CHF d'une conversion EUR↔USD** : **tranchée** (décision (1)) — CHF = côté source au cours habituel de
   Kesh (cours mensuel retenu de la société), même CHF aux deux écritures.
-- **Q-39-13 — CSV de l'API** : mêmes colonnes que l'export du site ? (recette de 39-12a.)
-- **Q-39-14 — Relevés au jeton personnel suisse et SCA** (recette de Beat, bloquant pour la phase 2) : voir H4.
+- **Q-39-13 — CSV de l'API** : mêmes colonnes que l'export du site ? (recette 2, AC-0 de 39-12a1.)
+- **Q-39-14 — Relevés au jeton personnel suisse et SCA** : **tranchée** par la recette 1 du 2026-11-20 (défi SCA constaté, H4) et la décision de l'orchestrateur (signature intégrée, H5). Reste la recette 2.
 - **Q-39-15 — Virement vers son propre compte reconnu par un numéro qui n'est pas un IBAN** (relevés 2024 : des
   numéros de compte non IBAN) : faut-il un réglage « numéros de mes comptes » ou une règle suffit-elle ? **Tranchée
   par G7** : une règle d'affectation vers le compte du plan de la banque ; l'autre côté s'y rattache à son import.
@@ -772,3 +819,4 @@ attendent le test de Beat sur l'API des relevés Wise (Q-39-1) :
   pour une fonctionnalité nouvelle si on le dit au kickoff, repli de fusion décrit.
 - Rappel en tête : les fiches attendent la recette de 39-0 (Q-39-1).
 - 2026-11-20 — Validation P5 ciblée (Claude Sonnet 5.5, passe ciblée, contexte frais, rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P5-ciblee.md`) : 0 C/H/M, 2 LOW remédiés — G4, 39-11b AC-5 et 39-11c AC-6 disent la même chose (l'import juge à son instant, la revue relit la même règle sur l'état présent) ; 39-11c AC-3 : 40-7c n'écrit le texte qu'en dernier recours.
+- 2026-11-20 — Validation P1 de la phase 2 (Claude Sonnet 5.5, contexte frais, rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-P1.md`) : **3 HIGH, 11 MEDIUM, 8 LOW, remédiés**. Recette 1 de Wise : défi SCA constaté, signature intégrée (H4, H5, `KESH_WISE_<n>_SCA_KEY_FILE`), 39-12a scindée en 39-12a1 (client, SCA) et 39-12a2 (route, import), 39-2 `superseded` ; socle commun S1 à S9 avec les Epics 38 et 40 ; lecture complète avant écriture, aucune pause fixe, politique de reprise unique, codes `PROVIDER_*`, sessions seules, `providerApi`.
