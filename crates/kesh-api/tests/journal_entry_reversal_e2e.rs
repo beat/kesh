@@ -3608,6 +3608,7 @@ async fn reversal_group_survives_retyping_and_bank_attachment_and_dissolves(pool
             currency: Default::default(),
             own_fx_accounts: Default::default(),
             mirror: kesh_db::entities::MirrorChange::Unchanged,
+            parent: Default::default(),
         },
         true,
     )

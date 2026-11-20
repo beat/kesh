@@ -2546,6 +2546,7 @@ async fn group_detail_of_an_account_no_longer_letterable(pool: MySqlPool) {
             currency: Default::default(),
             own_fx_accounts: Default::default(),
             mirror: kesh_db::entities::MirrorChange::Unchanged,
+            parent: Default::default(),
         },
         true,
     )

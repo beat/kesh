@@ -350,6 +350,35 @@ impl MirrorChange {
     }
 }
 
+/// Changement du compte parent d'un compte à la mise à jour (correctif
+/// `fix-api-parent-compte`) — trois états, comme [`CurrencyChange`], résolus
+/// **dans le dépôt**, sous le `FOR UPDATE` du compte.
+///
+/// Côté API, `parentId` **absent** = inchangé (un client qui ne connaît pas le
+/// champ ne détache rien), `null` = racine, un identifiant = le nouveau parent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ParentChange {
+    /// Champ absent de la requête : le parent ne change pas.
+    #[default]
+    Unchanged,
+    /// Le compte devient racine (`parent_id` à `NULL`).
+    Root,
+    /// Le compte se range sous ce compte.
+    Under(i64),
+}
+
+impl ParentChange {
+    /// Le parent du compte après le changement, depuis le parent actuel.
+    pub fn resolve(&self, current: Option<i64>) -> Option<i64> {
+        match self {
+            Self::Unchanged => current,
+            Self::Root => None,
+            Self::Under(id) => Some(*id),
+        }
+    }
+}
+
 /// Un lien de miroir **valide** d'une société, tel que le lisent les rapports
 /// (Story 47-1, AC-8) : la source, et de quoi construire la ligne du compte
 /// miroir, qui n'a aucune écriture (les agrégats des rapports ne la portent pas).
@@ -471,7 +500,8 @@ impl NewAccount {
 }
 
 /// Données de modification d'un compte.
-/// Le numéro n'est PAS modifiable après création.
+/// Le numéro n'est PAS modifiable après création ; le parent l'est depuis le
+/// correctif `fix-api-parent-compte` ([`ParentChange`]).
 ///
 /// Sémantique **full-replace** : tous les champs sont obligatoires côté API, y
 /// compris `role` et `postable`. Un `Option` laxiste aurait permis à un client
@@ -493,4 +523,8 @@ pub struct AccountUpdate {
     /// Compte miroir (Story 47-1, AC-3), trois états — `Unchanged` côté API
     /// quand le champ est absent.
     pub mirror: MirrorChange,
+    /// Compte parent (correctif `fix-api-parent-compte`), trois états —
+    /// absent côté API = inchangé. Mêmes contrôles qu'à la création, plus le
+    /// refus d'un cycle (cf. `repositories::accounts::update`).
+    pub parent: ParentChange,
 }

@@ -100,6 +100,7 @@ fn tel_quel(a: &Account) -> AccountUpdate {
         currency: CurrencyChange::Unchanged,
         own_fx_accounts: OwnFxAccountsChange::Unchanged,
         mirror: kesh_db::entities::MirrorChange::Unchanged,
+        parent: Default::default(),
     }
 }
 
