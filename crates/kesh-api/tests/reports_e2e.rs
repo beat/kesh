@@ -2293,7 +2293,7 @@ async fn mirror_example_is_replayed_by_the_reports(pool: MySqlPool) {
     );
     assert!(
         miroir_actif.get("currency").is_none()
-            && miroir_actif.get("role").map_or(true, Value::is_null)
+            && miroir_actif.get("role").is_none_or(Value::is_null)
     );
     let miroir_passif = &bilan["liabilities"][1];
     assert_eq!(miroir_passif["mirrorOf"][0]["accountNumber"], "1020");
