@@ -55,7 +55,7 @@ chaque solde sans que ni le jeton ni la clé soient jamais en base ni dans une s
    **3 consommés** à la recette 1) : relevé CSV d'un mois pour un solde (403 puis rejeu signé = **2 appels**), puis le
    relevé JSON du même mois (2 appels), soit **4 appels de plus**. Constats écrits au fichier d'epic (Q-39-13, Q-39-14) :
    rejeu accepté ou non ; colonnes du CSV de l'API comparées à celles de 39-11a (relevé du site, au rapport de recette 1) ;
-   forme d'un 429 s'il survient. **Rejeu refusé** malgré une clé correctement déposée → la phase 2 de Wise s'arrête (39-12a1, 39-12a2, 39-12b) et Beat
+   forme d'un 429 s'il survient. ⚠️ **Délai du rejeu** : `appel-reel.sh` attend jusqu'à 60 s avant chaque appel, et la durée de vie du jeton à usage unique n'est pas confirmée : un rejeu lancé après cette attente peut être refusé pour un jeton périmé, non pour une clé fausse. Le rejeu se fait donc **dans les secondes qui suivent le défi** (la ligne de l'appel se consigne sans l'attente — point à faire trancher par Beat, Q-39-15 — ), et **un refus n'est conclu qu'après un second essai ainsi minuté**. **Rejeu refusé** malgré une clé correctement déposée → la phase 2 de Wise s'arrête (39-12a1, 39-12a2, 39-12b) et Beat
    décide ; l'import CSV de la phase 1 reste la voie.
    **Colonnes identiques** → `parse_wise_csv` de 39-11a sert tel quel (AC-3, branche CSV) ; **différentes** →
    `kesh_import::wise::rows_from_statement_json` (pure, une fonction, module de 39-11a) rend les mêmes `WiseRow`, frais à
@@ -76,7 +76,7 @@ chaque solde sans que ni le jeton ni la clé soient jamais en base ni dans une s
    les séries `KESH_WISE_1_*` à `KESH_WISE_3_*`, `KESH_WISE_BASE_URL` et `KESH_WISE_PARALLEL` s'ajoutent à
    `docker-compose.yml` et `docker-compose.prod.yml` en `${NOM:-}` (patron `KESH_SMTP_*`, `docker-compose.yml:117-122`) et à
    `.env.example` (commentées, avec `<EDIT: …>`, patron `:302-340`) ; le **fichier** de clé, lui, n'est pas monté d'office (un
-   volume vers un chemin absent créerait un dossier vide) : le manuel (39-12b) dit la ligne `volumes:` à ajouter, en `:ro`. La clé est **exigée** (validation P2, simplification) : la recette 1 a montré que Wise l'exige pour un compte suisse ;
+   volume vers un chemin absent créerait un dossier vide) : le manuel (39-12b) dit la ligne `volumes:` à ajouter, en `:ro`, et que le chemin posé dans `.env` est **celui vu du conteneur**. **Garde `configuration_transmise.rs` (#550)** : cette story **inscrit la famille `KESH_WISE_<n>_*`** (ACCOUNT, TOKEN, PROFILE_ID, SCA_KEY_FILE, séries 1 à 3 exigées, 4 à 9 admises absentes avec raison) à la famille indexée générique de 38-12a, sans relâcher aucune liste. La clé est **exigée** (validation P2, simplification) : la recette 1 a montré que Wise l'exige pour un compte suisse ;
    une série sans clé ne servirait à rien, et l'exiger retire un code (`WISE_SCA_KEY_NOT_CONFIGURED`), un champ d'écran
    (`scaKeyConfigured`) et son avertissement.
 2. **AC-2 — Signature SCA.** Module `crates/kesh-api/src/wise/sca.rs`, **sans réseau** : `sign_challenge(key, token: &str) ->
@@ -98,7 +98,7 @@ chaque solde sans que ni le jeton ni la clé soient jamais en base ni dans une s
    troisième essai signé. **Unité de reprise** (validation P2 : sans elle, « un seul rejeu » contredisait les six essais du
    socle) : la reprise du socle S2 (429 et 5xx, six essais) enveloppe **le couple requête puis rejeu** ; un 429 ou un 5xx,
    au premier appel comme au rejeu, fait reprendre le couple **depuis la requête non signée** (nouveau jeton de défi, jamais un
-   jeton réutilisé) ; un 401 ou un 403 n'est jamais repris. Wise annonce la SCA « une fois tous les 90 jours » : une
+   jeton réutilisé) ; un 401 ou un 403 n'est jamais repris par la politique du socle (le seul 403 avec défi déclenche le rejeu signé ci-dessus). Wise annonce la SCA « une fois tous les 90 jours » : une
    requête peut aussi rendre 200 **sans défi**, que le client accepte tel quel ; une requête de relevé coûte donc **un ou deux**
    appels HTTP. Le jeton de défi, la signature et la clé ne sont jamais journalisés. **Test** : signature vérifiée avec la clé
    publique correspondante (`ring::signature::UnparsedPublicKey`, `RSA_PKCS1_2048_8192_SHA256`, `ring` en dépendance de
@@ -119,7 +119,7 @@ chaque solde sans que ni le jeton ni la clé soient jamais en base ni dans une s
      S2, `windows(from, to, max_days = 468, now)` (borne de 469 jours de Wise, doc publique, comptée sur des instants UTC : un jour
      de moins pour le jour de 25 heures, règle du socle), jours de **Zurich** ; `intervalStart` =
      `kesh_core::horloge::debut_du_jour_suisse(début de fenêtre)` et `intervalEnd` = `fin_du_jour_suisse(fin de fenêtre)`
-     (`crates/kesh-core/src/horloge.rs:95`, `:110`), en UTC à la milliseconde (fin du 31 décembre = `…12-31T22:59:59.999Z` en hiver, `…T21:59:59.999Z` en été) : fenêtres contiguës, sans
+     (`crates/kesh-core/src/horloge.rs:95`, `:110`), en UTC à la milliseconde (fin d'un jour d'hiver, le 31 décembre : `…12-31T22:59:59.999Z` ; d'un jour d'été, le 31 juillet : `…07-31T21:59:59.999Z`) ; **pour le jour courant**, `intervalEnd` = le plus petit de `fin_du_jour_suisse` et de l'instant présent (jamais un instant futur) : fenêtres contiguës, sans
      chevauchement d'une milliseconde.
    - **Plusieurs fenêtres d'une même devise** : lignes concaténées dans l'ordre ; solde d'ouverture de la **première**,
      de clôture de la **dernière** (colonnes de 39-11a AC-5) ; la clôture de chaque fenêtre doit égaler l'ouverture de la
@@ -198,5 +198,6 @@ dans l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la
   `WISE_SCA_KEY_NOT_CONFIGURED`) ; signature par `jsonwebtoken` RS256, déjà dépendance directe (au lieu de `ring` + PEM à la
   main), borne de 2048 bits contrôlée au démarrage ; RUSTSEC-2023-0071 relu ; réponse sans défi admise (90 jours) ;
   `max_days` = 468 et `details` (décisions de l'orchestrateur sur le socle) ; exemple d'heure UTC de fin de jour corrigé.
+- 2026-11-20 — validation P3 ciblée (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-40-phase2-P3-ciblee.md`) : 0 C, 0 H, 1 M, 3 L, remédiés : recette 2 minutée (attente de 60 s de la garde contre jeton périmé), `intervalEnd` borné à l'instant présent, exemple d'heure d'été, « jamais repris » précisé, garde `configuration_transmise.rs` — famille Wise inscrite.
 - 2026-11-20 — validation P2, complément (Claude Opus 5.5) : corrections du socle relevées par la P2 de la 38-12 appliquées —
   valeur vide = absente, séries 1 à 3 transmises par les deux compose et `.env.example`, fichier de clé monté à la main.

@@ -31,8 +31,7 @@ compte Wise et l'importe comme un relevé CSV, sans doublon avec ce que j'ai dé
    38-12a AC-8). Le `POST` est inscrit à `LIB_ROUTES` (`crates/kesh-api/tests/audit_route_registry.rs:440`) en
    `Traced, SansEcritureAuJournal` ; **dans cette story**, le compte de `the_registry_partition_is_what_the_story_declares`
    (`:1082`) est relevé de un avec sa raison et la phrase « N des M routes à verbe mutant » du manuel d'administration
-   (`docs/manual/fr/admin-manual.tex`, lue par `le_manuel_dit_le_compte_du_registre`, `:1194`) mise à jour — `.tex` seul,
-   comptes **recomptés** après ceux des stories fusionnées avant (validation P2 : sans cela, le gate de cette story rougit,
+   (`docs/manual/fr/admin-manual.tex`, lue par `le_manuel_dit_le_compte_du_registre`, `:1194`) mise à jour, **ainsi que la phrase « N + E + R = M »** du même paragraphe (lue par le même test) et la quatrième assertion (`LIB_ROUTES.len() + TEST_ENDPOINT_ROUTES.len()`) — `.tex` seul, comptes **recomptés** après ceux des stories fusionnées avant (validation P2 : sans cela, le gate de cette story rougit,
    le manuel n'étant touché qu'en 39-12b). Refus dans cet ordre, rien lancé : 403 `API_KEY_OPERATION_FORBIDDEN` → 400
    `VALIDATION_ERROR` → 404 `PROVIDER_ACCOUNT_NOT_FOUND` (38-11b) → 422
    `PROVIDER_API_NOT_CONFIGURED` (aucun jeton pour ce libellé) → 400 `PROVIDER_PERIOD_INVALID` (`from` > `to`, `to` dans le
@@ -64,7 +63,7 @@ compte Wise et l'importe comme un relevé CSV, sans doublon avec ce que j'ai dé
 5. **AC-5 — Audit, secrets, i18n.** Trace `wise_download.created` (`details` : libellé, période, étapes, compte rendu) sous
    l'acteur (`NewAuditLogEntry::for_actor`), à la fin réussie ; **aucun secret** (jeton, clé, défi, signature) ni
    `KESH_WISE_BASE_URL` dans une réponse ou une trace. Codes `PROVIDER_*` du socle S4 et `WISE_PROFILE_AMBIGUOUS`,
-   `WISE_SCA_REJECTED` (la clé SCA étant exigée au démarrage, 39-12a1 AC-1, aucun code « clé non posée ») : `errors.rs` et messages aux quatre locales
+   `WISE_SCA_REJECTED` ; **la panique de la tâche** → `INTERNAL_ERROR`, non `PROVIDER_API_ERROR` (socle S4) (la clé SCA étant exigée au démarrage, 39-12a1 AC-1, aucun code « clé non posée ») : `errors.rs` et messages aux quatre locales
    (`crates/kesh-i18n/locales/*`) — les `PROVIDER_*` du socle sont posés par 38-12a, seuls les `WISE_*` le sont ici ; garde
    d'audit `audit_acteur_garde.rs` verte.
 6. **AC-6 — Tests** (`crates/kesh-api/tests/wise_download_e2e.rs`, serveur Wise simulé de 39-12a1, base `#[sqlx::test]`) :
@@ -125,4 +124,6 @@ les importe comme un relevé CSV, sans doublon ; tout ou rien en cas d'échec.
   ici, compte du registre et phrase du manuel relevés **dans cette story** (son gate les lit), clé d'API refusée en 403
   `API_KEY_OPERATION_FORBIDDEN` sur les deux routes (comme 38-12a), 409 avec `details: { provider, jobId }`, `details` seul
   nom, `WISE_SCA_KEY_NOT_CONFIGURED` retiré, écart assumé avec PayPal sur les soldes sans compte écrit, fenêtres de 468 jours.
-- 2026-11-20 — validation P2, complément (Claude Opus 5.5) : cœur `ProviderLine` extrait par 38-12a (ou 39-11b), appelé ici.
+- 2026-11-20 — validation P3 ciblée (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-40-phase2-P3-ciblee.md`) : registre : les **deux** phrases du manuel et les quatre assertions du test relevées ; panique de tâche → `INTERNAL_ERROR`.
+- 2026-11-20 — validation P2, complément (Claude Opus 5.5)
+ : cœur `ProviderLine` extrait par 38-12a (ou 39-11b), appelé ici.

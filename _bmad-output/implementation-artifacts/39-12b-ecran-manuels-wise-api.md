@@ -39,7 +39,7 @@ lecture seule, générer la paire de clés de signature, déposer la clé publiq
    *Administration* : créer un jeton personnel **lecture seule** (profil d'entreprise) ; variables `KESH_WISE_<n>_ACCOUNT`
    (le libellé **identique** à celui du compte Wise de Kesh — il est **propre à l'installation** : deux sociétés qui portent le
    même libellé atteignent le même compte Wise), `_TOKEN`, `_PROFILE_ID`, **`_SCA_KEY_FILE`** (exigée : sans elle, Kesh refuse de démarrer), `KESH_WISE_BASE_URL`,
-   `KESH_WISE_PARALLEL`, dans les **deux tableaux de variables** du manuel ; comment aller **au-delà de trois comptes** (lignes à
+   `KESH_WISE_PARALLEL`, dans **un tableau neuf du § `sec:env-vars`** (modèle `:840-862`) **et** le tableau de la section Wise, jamais le tableau SMTP (`:1155`) ; comment aller **au-delà de trois comptes** (lignes à
    ajouter aux compose) ; la ligne `volumes:` du fichier de clé (`:ro`) ; **générer la paire de clés** (`openssl genrsa -out wise-sca.pem 2048`, puis `openssl rsa -in
    wise-sca.pem -pubout -out wise-sca-pub.pem`), **déposer la clé publique** dans les réglages API de Wise (chemin d'interface
    **à vérifier**), monter le fichier privé en **lecture seule** dans le conteneur, droits `600`, **hors** des dossiers
@@ -92,5 +92,7 @@ seule et la clé de signature de l'authentification forte.
 - 2026-11-20 — validation P2 (Claude Opus 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-P2.md`) :
   ici, `scaKeyConfigured` et son avertissement retirés (clé SCA exigée), E2E du rejeu borné à la présence des en-têtes,
   reprise du suivi sur 409 par `details.jobId`, phrase du registre laissée à 39-12a2.
-- 2026-11-20 — validation P2, complément (Claude Opus 5.5) : manuel — deux tableaux de variables, au-delà de trois comptes,
+- 2026-11-20 — validation P3 ciblée (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-40-phase2-P3-ciblee.md`) : tableaux de variables précisés (§ `sec:env-vars` neuf + section Wise, jamais SMTP).
+- 2026-11-20 — validation P2, complément (Claude Opus 5.5)
+ : manuel — deux tableaux de variables, au-delà de trois comptes,
   volume du fichier de clé.
