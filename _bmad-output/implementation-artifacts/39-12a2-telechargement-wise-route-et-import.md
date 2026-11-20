@@ -1,6 +1,6 @@
 # Story 39-12a2 : téléchargement des relevés Wise — route, tâche en fond, import et audit
 
-Status: drafted
+Status: ready-for-dev
 
 *Fiche rédigée le 2026-11-20 (seconde moitié de l'ancienne 39-12a, voir 39-12a1). Branche `epic/39-wise`. Epic 39,
 **phase 2** ; **socle commun S1 à S9** (fichier d'epic). **Dépend de** : 39-12a1 (client, signature SCA), 39-11b (import CSV), du

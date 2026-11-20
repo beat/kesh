@@ -1,6 +1,6 @@
 # Story 39-12a1 : client de l'API Wise — configuration, signature SCA, profil, soldes et relevés
 
-Status: drafted
+Status: ready-for-dev
 
 *Fiche rédigée le 2026-11-20 (ex-39-12a, scindée le même jour en 39-12a1 et 39-12a2 par la règle de splitting préventif : la
 recette réelle a imposé la signature SCA, qui s'ajoute à la configuration, au client et à la route). Branche

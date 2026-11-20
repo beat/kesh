@@ -1,6 +1,6 @@
 # Story 39-12b : bouton « Télécharger depuis Wise », manuels, E2E
 
-Status: drafted
+Status: ready-for-dev
 
 *Fiche rédigée le 2026-11-20 (reprend l'écran de l'ancienne 39-12b ; le parallélisme est passé à 39-12a2). Branche
 `epic/39-wise`. Epic 39, **phase 2** ; **socle S7 et S8** (fichier d'epic). **Dépend de** : 39-12a2, 39-11d, du composant
