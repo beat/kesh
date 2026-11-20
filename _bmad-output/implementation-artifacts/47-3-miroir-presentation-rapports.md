@@ -1,6 +1,6 @@
 # Story 47-3 : compte miroir — présentation au bilan et au compte de résultat
 
-Status: ready-for-dev
+Status: in-progress
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R5 à R8 ; D4, D5, D7, D8 ; Q2, Q4, Q5, Q7, Q11 ; FR-47-3, FR-47-4 ; NFR-47-1, NFR-47-2, NFR-47-4. **Refonte du
@@ -107,13 +107,13 @@ d'intégration de `kesh-api`. Aucun écran (47-4), aucun rendu PDF ou CSV propre
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** : reprise de `main` ; si l'Epic 46 est fusionnée, appliquer d'emblée le recâblage (§ ci-dessous).
-- [ ] **T1 — types** (AC 3, 12) : `MirrorSource`, champ `mirror_of`, littéraux.
-- [ ] **T2 — fonction** (AC 1, 2, 4, 5, 6) : `presentation.rs`, tests unitaires et de propriété maison.
-- [ ] **T3 — service** (AC 7) et **MCP** (AC 8).
-- [ ] **T4 — tests d'intégration** (AC 9, 10, 11) : `reports_e2e.rs`, `homepage_summary_e2e.rs`, `mcp_outils_e2e.rs`
+- [x] **T0** : reprise de `main` ; si l'Epic 46 est fusionnée, appliquer d'emblée le recâblage (§ ci-dessous).
+- [x] **T1 — types** (AC 3, 12) : `MirrorSource`, champ `mirror_of`, littéraux.
+- [x] **T2 — fonction** (AC 1, 2, 4, 5, 6) : `presentation.rs`, tests unitaires et de propriété maison.
+- [x] **T3 — service** (AC 7) et **MCP** (AC 8).
+- [~] **T4 — tests d'intégration** (AC 9, 10, 11) : `reports_e2e.rs`, `homepage_summary_e2e.rs`, `mcp_outils_e2e.rs`
   (le bilan MCP de l'exemple montre 1040.1).
-- [ ] **T5 — documentation** (AC 13).
+- [x] **T5 — documentation** (AC 13).
 - [ ] **T6 — gate complet**, E2E complet au dernier commit de code.
 
 ## Dev Notes
@@ -273,8 +273,56 @@ restent à `GET /reports/trial-balance`.
 
 ### Agent Model Used
 
-### Debug Log References
+Sonnet 5.5.
 
 ### Completion Notes List
 
+**Fait (commits `213c66b7`, `4797ba9c` sur `story/47-3`).**
+- `crates/kesh-report/src/presentation.rs` (neuf) : `present_balance_sheet`, `present_income_statement`, cœur commun
+  `reclasser` (R5 ; sens inverse = `balance < 0` en CHF ; plusieurs sources ; ligne brute forgée du miroir additionnée ;
+  ligne nulle omise ; tri par numéro ; `role`/`currency`/`balance_currency` à `None`). Chemin court : sans lien, ou sans
+  source de sens inverse, le rapport brut est rendu tel quel. Repli sur le brut avec `tracing::error!` si l'équation
+  (`equation_holds`) ou le résultat net recalculés diffèrent. `equity` et lignes calculées jamais lues. Aucun `{:.2}`,
+  aucune fonction d'arrondi ajoutée.
+- `AccountBalance.mirror_of: Vec<MirrorSource>` (`#[sqlx(skip)]`, omis du JSON si vide) ; littéraux des tests de
+  `pdf.rs`, `csv.rs`, `balance_sheet.rs` et de `benches/export.rs` complétés (`Vec::new()`).
+- `services/rapports.rs::bilan` et `::compte_de_resultat` : lecture de `accounts::mirror_links` puis présentation,
+  toujours ; aucune route, paramètre ni trace d'audit neufs. Générateurs inchangés (l'accueil et `equity_result` du bilan
+  restent bruts).
+- MCP : phrase ajoutée aux descriptions de `kesh_bilan` et `kesh_compte_de_resultat`.
+- Docs : `docs/api-external.md` (paragraphe « Les comptes miroirs au bilan et au compte de résultat », changement de
+  contrat, phrase de l'accueil) ; `docs/manual/fr/admin-manual.tex` (tableau MCP) ; PDF non commités.
+- Tests : 7 tests de `presentation::tests` dont la propriété maison (500 tours, graine fixe : équation, résultat net,
+  fonds propres, totaux recomposés, chemin court octet pour octet) ; `reports_e2e::mirror_example_is_replayed_by_the_reports`
+  (exemple chiffré, quatorze montants entre les marqueurs `// exemple-presentation:debut/fin`, balance inchangée, aucune
+  écriture) ; `homepage_summary_e2e::mirror_leaves_the_homepage_on_real_balances`.
+
+**Écarts et réserves honnêtes.**
+- **Aucun test MCP d'intégration** du bilan présenté (T4 partielle) : le MCP passe par le même service, couvert en HTTP ;
+  seules les descriptions changent (contrat MCP à rejouer).
+- Le test de l'exemple monte la société avec `OrgType::Independant` (helper existant) et charge le plan `pme` par
+  `load_chart("pme")` : le plan est celui de l'exemple, le type d'organisation non.
+- Pas de sonde négative par mutation exécutée (accueil présenté, présentation sans retri) : à faire à la revue.
+- **Gates** : sur la cible partagée (abandonnée), `gate-cible` (fmt ; nextest `kesh-report` lib, `reports_e2e`,
+  `homepage_summary_e2e`, `mcp_*`, `textes_coherents`, `services_motif` : 345 passés, 4 échecs `mcp_outils_e2e`
+  imputables à une base `_sqlx_test_*` supprimée en cours de test, base partagée) et frontend (`npm run check` 0 erreur,
+  lint-i18n-ownership PASS, Vitest 278 fichiers / 4627 tests, build) — **tous à rejouer sur la cible propre**
+  `/home/beat/claude/kesh-targets/kesh-wt47s3` (règle du 2026-11-20). Gate backend complet + E2E complet **en file**
+  (`kesh-gate-logs/s47-3/chaine2.sh`, journal `chaine2.log`, `gate-backend.log`, `e2e.log`), pas encore joués : la story
+  reste `in-progress`. Un premier gate backend a rougi sur `clippy::unnecessary_map_or` dans mon test (corrigé, `4797ba9c`).
+  Les clippy/nextest de `kesh-db` rouges de la première tentative venaient de la cible partagée (artefacts d'une autre
+  worktree).
+
+**À recâbler à la fusion de l'Epic 46 (Q5)** : (1) `groupedRows` à calculer **après** `present_*` (si la 46-1 le calcule
+dans `generate`, déplacer l'appel dans le service) ; (2) la ligne de miroir doit aller au groupe du miroir (l'arbre
+lit toutes les lignes présentées) ; (3) la ligne `kind: account` de `groupedRows` doit transporter `mirrorOf` ;
+(4) rejouer l'exemple à chaque niveau de détail et la propriété NFR-46-2 en présenté ; revue du code d'intégration.
+
 ### File List
+
+- crates/kesh-report/src/presentation.rs (neuf)
+- crates/kesh-report/src/{lib,balance_sheet,csv,pdf}.rs, crates/kesh-report/benches/export.rs
+- crates/kesh-api/src/services/rapports.rs, crates/kesh-api/src/mcp/outils/rapports.rs
+- crates/kesh-api/tests/{reports_e2e,homepage_summary_e2e}.rs
+- docs/api-external.md, docs/manual/fr/admin-manual.tex
+- _bmad-output/implementation-artifacts/47-3-miroir-presentation-rapports.md, sprint-status.yaml
