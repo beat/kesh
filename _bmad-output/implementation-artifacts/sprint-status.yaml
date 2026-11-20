@@ -1176,7 +1176,7 @@ development_status:
   39-4-classement-des-types-wise: superseded  # 2026-11-20 : remplacée par 39-11c (préfixes d'identifiant, règles)
   39-5-releve-pdf: deferred  # 2026-11-20 : hors des phases 1 et 2
   39-6-ecrans-et-manuels: superseded  # 2026-11-20 : remplacée par 39-11d et 39-12b
-  39-11a-lecteur-csv-wise: review  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20
+  39-11a-lecteur-csv-wise: done  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; revues de code P1 (Opus) et P2 (Sonnet) closes, gate backend complet vert (6254 passés)
   39-11b-compte-wise-et-import: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; aucune migration (38-11b admet 'wise', G11)
   39-11c-rapprochement-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; dépend de 38-11c
   39-11d-ecrans-manuel-e2e-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20
@@ -1187,6 +1187,7 @@ development_status:
   39-12a2-activites-en-lignes-wise: ready-for-dev  # 2026-11-20 : neuve, voie activités (activités → WiseRow, forme fermée des montants, frais des virements, solde reconstruit et contrôlé ; kesh-import) ; à revalider
   39-12a3-telechargement-wise-route-et-import: ready-for-dev  # 2026-11-20 : ex-39-12a2, réécrite sur la voie activités (points de contrôle, doublons CSV ↔ téléchargement R1 à R3) ; à revalider
   39-12b-ecran-manuels-wise-api: ready-for-dev  # 2026-11-20 : réécrite sur la voie activités (clé SCA retirée) ; à revalider
+  39-13-solde-dette: backlog  # 2026-11-20, story de solde de l'Epic 39 (règle « une story de solde à la fin de chaque epic ») : check_single_currency quadratique en nombre de devises distinctes (wise.rs, dette de la 39-11a, revue P2 L2) ; propriétaire Beat
 
   # 2026-11-17 — Release 0.19.0 (publiée le 2026-11-20, coupure le 2026-11-19 au soir ; coupure avancée au 2026-11-18, décision de Guy) : correction de la semaine, hors epic.
   v0190-correction: done  # #1162 ; release 0.19.0 ; sans migration, frontend seul (ContactPicker) ; fiche rédigée le 2026-11-17 (Sonnet 5.5), validée (8 passes) ; développée le 2026-11-17 (Opus 5.5) ; revue P1 à P3 terminée, décision D4 de Guy ; close le 2026-11-17 (gate-ci et E2E complet au commit 23ff6338d) ; peut glisser à la 0.20.0 (décision de Guy du 2026-11-17) ; scindée le 2026-11-17 : #1097 passe à v0190-nom-societe ; issue liée #1228

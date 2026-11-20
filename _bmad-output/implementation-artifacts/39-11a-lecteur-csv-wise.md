@@ -1,6 +1,6 @@
 # Story 39-11a : lecteur du CSV « relevé » de Wise (`kesh-import`)
 
-Status: review
+Status: done
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, numéros de ligne relevés au code de `origin/main` (`fd04099f`,
 fusionné dans `epic/39-wise` au commit `9c8bc452`), revérifiés à la validation P1. Epic 39, **phase 1 KISS**
@@ -69,8 +69,8 @@ Wise, afin que l'import (39-11b) n'ait plus qu'à ranger ces lignes au compte ba
    ligne `DATE` ; année hors `ANNEE_MIN..=ANNEE_MAX` (`lib.rs:35-43`, `annee_recevable`) → erreur. `Date Time` au
    format `JJ-MM-AAAA HH:MM:SS` suivi ou non de `.fff` (exactement trois décimales ; relevés : millisecondes ; seconde intercalaire `:60` et forme ISO refusées, remédiation P1 L3), lu en `NaiveDateTime` **sans
    conversion de fuseau** (limite au manuel par 39-11d) ; autre forme → erreur `DATE_TIME`. **Montants** : la forme
-   fermée de 38-11a AC-5 (`^-?(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$`, virgule seulement en séparateur de milliers),
-   par la **même fonction**, restée dans `csv/amount.rs` (venue de 38-11a ; l'aide d'en-tête est dans `csv/by_name.rs`) (⚠️ **pas** `parse_amount`,
+   fermée de 38-11a AC-5 (`^-?(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$`, virgule seulement en séparateur de milliers,
+   bornée à 15 chiffres : fusion `ff5b690e`, `csv/amount.rs`), par la **même fonction**, restée dans `csv/amount.rs` (venue de 38-11a ; l'aide d'en-tête est dans `csv/by_name.rs`) (⚠️ **pas** `parse_amount`,
    `csv/parser.rs:816`, privé, qui retire toute virgule sans la contrôler : 38-11a AC-5 l'écarte pour cette raison,
    et ne le rend pas `pub(crate)`) — pour `Amount`, `Running Balance`, `Total fees`, `Exchange To Amount` (les
    relevés portent `-9.99`, `9.99` et des entiers sans décimale) ; `Exchange Rate` : `^\d+(\.\d{1,10})?$` (cinq
@@ -228,3 +228,34 @@ nommant les colonnes qui manquent, et un relevé dont le solde courant ne se sui
     (lib 140, `wise_csv` 29 passés + 1 ignoré, `paypal_csv` 11, doctests 0), `cargo publish --dry-run -p kesh-import` vert (journaux `g4-*.log`).
     Le gate backend complet du 18:25 (`gate-backend.log`) est **non joué** (disque de `kesh-mariadb-dev2` plein, arrêté par l'orchestrateur) ;
     la fusion ne touche que `kesh-import` et des fiches.
+- 2026-11-20 — revue de code P2 (Claude Sonnet 5.5, contexte frais ; `kesh-gate-logs/s39-11a/revue-p2-rapport.md`) : 0 CRITICAL, 0 HIGH,
+  0 MEDIUM, 4 LOW. Trend des revues de code : P1 (Opus) 0/0/1 MEDIUM/9 LOW -> P2 (Sonnet) 0/0/0/4 LOW ; boucle close (aucun finding
+  au-dessus de LOW). Remédiation de la P2, tests et fiches seulement (aucune ligne de production) :
+  - L1 : `dates_are_strict` reçoit `"15-03-2020 08:00:00x"` et `"15-03-2020 +8:00:00"` ; mutations sur copie hors dépôt (voir Dev Agent Record).
+  - L3 : forme du montant de la fiche (AC-4) alignée sur `csv/amount.rs` (borne de 15 chiffres, fusion `ff5b690e`).
+  - L2 : `check_single_currency` quadratique en nombre de devises distinctes (`wise.rs:507`) : dette tracée (voir § Dette ci-dessous).
+  - L4 : borne murale du test de volume (20 s pour ~4 s mesurées) : signalé par la revue, sans remédiation.
+
+### Dette (Change Log)
+
+- `check_single_currency` quadratique en nombre de devises distinctes (`wise.rs`) : `technical-debt`, P4, propriétaire Beat ;
+  remédiation par la story de solde de l'Epic 39, `39-13-solde-dette` (`backlog` au registre, sur le modèle de `40-9-solde-dette`).
+  Entrée au registre des issues à ouvrir : `kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md`.
+- Restent en issue (même fichier) : L2 de la P1 (numéro de ligne après une ligne vide, no 12) et L8 de la P1 (plafond de
+  100 erreurs et ordre de collecte, no 13).
+
+### Gate de clôture
+
+- Gate backend complet au dernier commit de code `f3530162` (fiche `75d042a0`) : `scripts/test-fast.sh --ci`, **6254 passés, 15 ignorés, 875 s**,
+  cible propre `kesh-targets/kesh-wt39`, base `kesh-mariadb-dev2` (journal `kesh-gate-logs/s39-11a/gate-backend.log`, `gate2.console` rc=0).
+  Périmètre : workspace backend complet ; ni frontend ni E2E (la story ne touche que `kesh-import`).
+  Ce gate remplace la mention « NON obtenu » du Dev Agent Record ci-dessus (relevé daté du premier essai, laissé tel quel).
+- Les commits de remédiation P2 ne touchent que `tests/wise_csv.rs` et des fiches : gate ciblé (fmt `--check`, clippy workspace
+  `-D warnings`, `cargo test -p kesh-import`, `cargo publish --dry-run -p kesh-import`) ; le gate complet ci-dessus reste celui du
+  dernier commit de code (règle de `CLAUDE.md`).
+- Modèles : validation P1 Opus 5.5, P2 Sonnet 5.5 ; revue de code P1 Opus, P2 Sonnet.
+- Mutations de la remédiation L1 (copie hors dépôt, `dates_are_strict` seul) : base verte ; `b.len() == 8` -> `>= 8` : ROUGE ;
+  retrait du contrôle des six chiffres ASCII : ROUGE ; chacune rougit grâce aux deux cas ajoutés.
+- Gate ciblé de la remédiation P2 : `cargo fmt --all -- --check` vert (lancé directement) ; clippy, `cargo test -p kesh-import` et
+  `publish --dry-run` mis en file de `heavy.sh` (journal `kesh-gate-logs/s39-11a/g5-cible.log`, file saturée, non rendus à la
+  clôture de cette fiche : à relever dans ce journal).

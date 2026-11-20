@@ -424,6 +424,9 @@ fn dates_are_strict() {
         "15-03-2020 23:59:60",
         "15-03-2020 23:59:60.000",
         "2020-03-15 08:00:00",
+        // Revue P2, L1 : longueur de l'heure et six chiffres ASCII.
+        "15-03-2020 08:00:00x",
+        "15-03-2020 +8:00:00",
     ] {
         let f = set(CHF, 0, "Date Time", bad);
         assert_eq!(
