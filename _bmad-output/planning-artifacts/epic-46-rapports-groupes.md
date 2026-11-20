@@ -195,7 +195,7 @@ Déclarés au kickoff (`CLAUDE.md` § *Travailler à plusieurs développeurs*, �
 | `crates/kesh-api/src/services/rapports.rs` | 46-1, 46-6a | **47-3** (`bilan`, `compte_de_resultat` : présentation miroir) | miroir puis groupes (46-1 AC-9) ; recâblage par le second arrivé |
 | `crates/kesh-api/src/routes/reports.rs` | 46-1, 46-3, 46-6a, 46-6b | — | — |
 | `crates/kesh-api/tests/reports_e2e.rs`, `reports_export_e2e.rs` | 46-1, 46-3, 46-6a, 46-6b | 47-3 (exemple chiffré) | blocs de tests distincts |
-| `crates/kesh-api/src/mcp/outils/rapports.rs`, `tests/mcp_*.rs` | 46-4, 46-6a | 47-3 (descriptions de `kesh_bilan`, `kesh_compte_de_resultat`) | garder les deux phrases ; longueurs par `mcp_gardes_lexicales` |
+| `crates/kesh-api/src/mcp/outils/rapports.rs`, `tests/mcp_*.rs` | 46-4, 46-6a | 47-3 (descriptions de `kesh_bilan`, `kesh_compte_de_resultat`) | garder les deux phrases (aucune garde ne contrôle la longueur des descriptions ; la taille des réponses est mesurée à la 46-4, AC-5) |
 | `crates/kesh-api/src/routes/accounts.rs`, `kesh-db/src/repositories/accounts.rs` | 46-5 (si décidée) | 47-1/47-2 (miroir), 48-x | blocs distincts |
 | `crates/kesh-i18n/locales/*/messages.ftl` | 46-2, 46-6b, 46-5 | tous | bloc propre `reports-groups-*` ; conflit : garder les deux côtés |
 | `frontend/src/lib/features/reports/*` (vues, `reports.api.ts`, `reports.types.ts`, `GroupedReportRows.svelte` neuf) | 46-2, 46-6b | 47-4 (écrans du miroir) | le second arrivé résout |

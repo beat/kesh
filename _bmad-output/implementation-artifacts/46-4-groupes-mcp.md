@@ -84,8 +84,9 @@ schéma et la fonction de conversion posés ici (validation P1).
 5. **AC-5 — Tailles mesurées, et seuil écrit.** *Le plafond est celui de la réponse (24 576 o, refus pour taille,
    `MCP_ENVOI_OCTETS_MAX`) ; le bilan plat tient 57 comptes en devise en 20 156 o (`rapports.rs:7-13`), soit ≈ 350 o
    la ligne, et une ligne groupée est du même ordre. Le plan PME (`pme.json`, 86 comptes) ne se rend pas en entier
-   dans un seul rapport : le bilan n'en porte que les 31 comptes de bilan, le compte de résultat les 34 de produits et
-   de charges, et seulement ceux à solde non nul. Calcul du 2026-11-20 (tous les comptes à solde non nul, `footer`,
+   dans un seul rapport : le bilan n'en porte que les 31 comptes de bilan **feuilles** (18 actifs, 13 passifs), le compte de résultat
+   les 34 de produits et de charges feuilles (9 et 25) — les 21 autres sont des groupes, qui ne portent pas d'écriture
+   propre ici (relevé du 2026-11-20 sur `pme.json`) —, et seulement ceux à solde non nul. Calcul du 2026-11-20 (tous les comptes à solde non nul, `footer`,
    `2 Passifs` dissous au bilan, `6`, `7`, `70`, `8`, `80` au compte de résultat) : **43 lignes groupées au bilan et 52
    au compte de résultat à `all`**, soit ≈ 15 et ≈ 18 Ko — sous le plafond attendu, à mesurer. (La remédiation P1
    affirmait le contraire en comptant les 86 comptes dans un seul rapport : corrigé en P2.)* À T3, des mesures sur
@@ -96,7 +97,8 @@ schéma et la fonction de conversion posés ici (validation P1).
    (comptes en devise, noms de 34 caractères, groupes posés par SQL), niveau `all`, `footer` : la taille de l'élément
    et le **nombre de lignes groupées** au-delà duquel la réponse est refusée pour taille (même refus que
    `plafond_au_maximum`) ; ce nombre s'écrit dans la doc du module (`rapports.rs:1-13`, avec sa date) et dans les descriptions des deux outils
-   (« au-delà d'environ N lignes, choisissez un niveau plus bas ») ; (c) un test affirme le refus au-delà du seuil.
+   (« au-delà d'environ N lignes, choisissez un niveau plus bas » : N n'est connu qu'après la mesure, les descriptions
+   se complètent donc à T3) ; (c) un test affirme le refus au-delà du seuil.
    Le seuil « environ 60 comptes » du bilan plat est conservé.
 6. **AC-6 — Gardes réelles.** Verts : `mcp_contrat` (forme de `inputSchema`, K7), `mcp_gardes_lexicales`
    (`champ_sur_en_un_lieu` : aucun `ChampSur` ni `scelle::` dans `rapports.rs` ; `sorties_sans_serialisation_parallele` :
@@ -106,7 +108,8 @@ schéma et la fonction de conversion posés ici (validation P1).
    `proprietes_du_schema_acceptees` exige que l'argument « complet » de `TEMOINS`
    (`tests/common/mcp_pieges.rs:186`) nomme **chaque** propriété du schéma et soit servi : celui de `kesh_bilan` et de
    `kesh_compte_de_resultat` gagne `detailLevel`, `subtotalPosition`, `open` et `closed` — deux listes disjointes —,
-   ce qui touche aussi `mcp_enveloppe_e2e`, qui parcourt `TEMOINS`) ; un cas
+   `mcp_enveloppe_e2e` parcourt `TEMOINS` mais ne lit que ses **jeux** (`for (outil, jeux, _)`, `:654`, `:974`, `:1291`),
+   jamais l'argument « complet » : il n'est pas touché) ; un cas
    groupé ajouté à `mcp_outils_e2e.rs` (arguments valides, un refus par contrainte de l'AC-1, `groupes` non nul, listes
    plates vides, témoin hors groupe où `groupes` vaut `null`). *(« Longueur des descriptions » : aucune garde ne la
    contrôle — retiré, validation P1.)*
@@ -192,3 +195,11 @@ détail, les groupes ouverts ou fermés et la place des sous-totaux.
   nommé ; `positionSousTotaux` miroir `champ_enum!` ; `ArgumentsPeriode` construit aussi par `kesh_balance`
   (`rapports.rs:225-229`) → champs à `None`, et conversion unique sur `&ArgumentsPeriode` réutilisée par la 46-6a ;
   `Resume` a aussi `recherche_fournie`. Rapport : `kesh-gate-logs/epic-46/validation/46-4-P2.md`.
+- 2026-11-20 — **validation P3 ciblée (Claude Sonnet 5.5, contexte frais, sur le seul commit `bb673929`, au code de
+  `origin/main`) : 0 C, 0 H, 0 M, 3 L, remédiés.** Recompté et confirmé : 31 et 34 feuilles du plan PME (`pme.json`, 86
+  comptes dont 21 groupes), 43 et 52 lignes groupées à `all` en `footer` (script d'arbre avec dissolution : 6, 7, 70, 8,
+  80 et `2`), `MCP_ENVOI_OCTETS_MAX` 24 576 (`envois_mcp.rs:55`), marge 23 552 (`plan_comptable.rs:7`),
+  `aujourd_hui_test` (`tests/common/jour.rs:14`), `proprietes_du_schema_acceptees` (`mcp_outils_e2e.rs:234`),
+  `TEMOINS` (`mcp_pieges.rs:186`), `depuis_app_error` (`textes.rs:311`). L : `mcp_enveloppe_e2e` ne lit pas l'argument
+  « complet » de `TEMOINS` (seulement ses jeux) — l'affirmation de la P2 retirée ; « 31 comptes de bilan » précisé
+  (feuilles) ; descriptions de l'AC-5 (b) complétées à T3. Rapport : `kesh-gate-logs/epic-46/validation/46-4567-P3-ciblee.md`.
