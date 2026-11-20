@@ -59,7 +59,7 @@ versement, aucune règle.
   compte est **accepté** et signalé en écart (`gap`), par la fonction existante `previous_statement_closing`
   (`crates/kesh-db/src/repositories/bank_imports.rs:358`) ; un fichier dont le **premier jour** est couvert par un relevé du compte
   (`overlapping_statements(…, first_date, first_date)`) ne l'est pas — les doublons ne sont pas stockés ; le premier jour, et
-  non toute la période, pour qu'un relevé postérieur ne masque pas, à la revue, l'écart du début ; à la revue, l'état présent des relevés (un relevé importé ou saisi après coup peut changer la réponse, comme en 39-11c AC-6).
+  non toute la période, pour qu'un relevé postérieur ne masque pas l'écart du début ; l'import juge à son instant, la revue (39-11c AC-6) relit la même règle sur l'état présent des relevés : un relevé importé ou saisi depuis peut changer sa réponse, rien n'est stocké.
 - **G5 — Règles : critères existants, filtres de 38-11b, rien de neuf pour Wise** (décision (3) de l'orchestrateur).
   Contrepartie = `Merchant` pour une carte, `Payee Name` pour un débit, `Payer Name` pour un crédit
   (`counterparty_contains`, `counterparty_exact`) ; IBAN du bénéficiaire (`iban_exact`, colonne `counterparty_iban`
@@ -773,3 +773,4 @@ attendent le test de Beat sur l'API des relevés Wise (Q-39-1) :
   fiches) ; ligne « Release : un epic = une release ; 7 stories » ajoutée, qui **dépasse la borne de six** — admis
   pour une fonctionnalité nouvelle si on le dit au kickoff, repli de fusion décrit.
 - Rappel en tête : les fiches attendent la recette de 39-0 (Q-39-1).
+- 2026-11-20 — Validation P5 ciblée (Claude Sonnet 5.5, passe ciblée, contexte frais, rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P5-ciblee.md`) : 0 C/H/M, 2 LOW remédiés — G4, 39-11b AC-5 et 39-11c AC-6 disent la même chose (l'import juge à son instant, la revue relit la même règle sur l'état présent) ; 39-11c AC-3 : 40-7c n'écrit le texte qu'en dernier recours.

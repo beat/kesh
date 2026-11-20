@@ -105,7 +105,7 @@ afin que chaque ligne attende son rapprochement (39-11c).
    jugé. Sinon, par la fonction
    existante `previous_statement_closing` (`bank_imports.rs:358` : le relevé à solde du compte dont `period_to` <
    `first_date`, le plus tardif) : si elle en rend un et que sa clôture diffère de `opening_balance` du fichier →
-   avertissement `gap` au compte rendu (l'import passe) ; aucun relevé antérieur → rien. La clôture lue est celle d'un
+   avertissement `gap` au compte rendu (l'import passe) ; aucun relevé antérieur → rien. Le jugement est celui de l'instant de l'import : la revue de 39-11c (AC-6) relit la même règle sur l'état présent des relevés du compte, un relevé importé ou saisi depuis peut donc changer sa réponse, rien n'est stocké. La clôture lue est celle d'un
    relevé à solde : les imports Wise en ont toujours une, un relevé saisi sans solde est ignoré par la fonction. Réponse `201` : `{ account, files: [{ filename, currency, bankAccountId,
    importId | null, inserted, duplicates, openingBalance, closingBalance, warnings: [ { code: "gap", expected, found,
    previousImportId } ] }] }`.
@@ -178,3 +178,4 @@ bancaire ni règlement de facture.
   postérieur chevauchant la fin d'un import masquait à la revue l'écart du début, et un import rattrapé après coup n'était
   jamais jugé → chevauchement du **premier jour** seul (`overlapping_statements(…, first_date, first_date)`, l'import jugé
   exclu à la revue), complémentaire de `previous_statement_closing` (`period_to < first_date`) ; test ajouté.
+- 2026-11-20 — Validation P5 ciblée (Claude Sonnet 5.5, passe ciblée, contexte frais, rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P5-ciblee.md`) : 0 C/H/M, 2 LOW remédiés — G4, 39-11b AC-5 et 39-11c AC-6 disent la même chose (l'import juge à son instant, la revue relit la même règle sur l'état présent) ; 39-11c AC-3 : 40-7c n'écrit le texte qu'en dernier recours.

@@ -96,7 +96,7 @@ ce qu'il ne sait pas rapprocher, afin de tenir mon compte Wise sans saisie et sa
      bancaire n'est en devise (seuls les comptes prestataires peuvent l'être, C-37-9), toute transaction liée est en CHF
      (condition 1) et la seconde branche ne s'active jamais — tests existants verts sans changement d'assertion.
      ⚠️ **Texte unique, porté par la 38-11c pour les trois prestataires** (décision de l'orchestrateur du 2026-11-20 ;
-     40-7c écrit ce même texte et n'ajoute aucune condition de devise isolée, kesh-wt40 `c8924cfd`) : `(bt.bank_account_id
+     40-7c ne l'écrit qu'en dernier recours, si ni 38-11c ni 39-11c ne l'ont écrit, sans condition de devise isolée, kesh-wt40 fiche 40-7c AC-1) : `(bt.bank_account_id
      <> ? AND ((bt.currency = ? AND bt.amount = -(M)) OR (bt.currency <> ? AND SIGN(bt.amount) = -SIGN(M))) AND
      exclusions)` — première branche : même devise et montant opposé exact (virement, versement Stripe) ; seconde : les
      deux côtés d'une conversion. Cette story le **réutilise** et en teste les cas Wise ; elle ne l'écrit qu'à défaut (T0 :
@@ -144,8 +144,8 @@ ce qu'il ne sait pas rapprocher, afin de tenir mon compte Wise sans saisie et sa
    import des comptes du libellé dont la période tombe dans l'exercice et dont `opening_balance` n'est pas `NULL`, **la règle
    de 39-11b AC-5, telle quelle** : aucun autre relevé du compte ne couvre son **premier jour** (`overlapping_statements(…,
    period_from, period_from)`, hors lui-même) et `previous_statement_closing` (`crates/kesh-db/src/repositories/bank_imports.rs:358`,
-   relevé à solde dont `period_to` < `period_from`) en rend un dont la clôture diffère de l'ouverture — à la revue, sur
-   l'état présent des relevés (un relevé saisi depuis l'import peut changer la réponse, rien n'est stocké) ; les doublons ne se relisent pas, ils ne sont pas stockés). Chaque écart et chaque « à examiner » : transaction, date, montant, devise, motif.
+   relevé à solde dont `period_to` < `period_from`) en rend un dont la clôture diffère de l'ouverture — l'import juge à son instant, la revue relit cette règle sur
+   l'état présent des relevés du compte (un relevé importé ou saisi depuis peut changer la réponse de l'import, rien n'est stocké) ; les doublons ne se relisent pas, ils ne sont pas stockés). Chaque écart et chaque « à examiner » : transaction, date, montant, devise, motif.
 7. **AC-7 — Acceptation.** Corps `{ account, proposals: [ {type, …} ] }` (`fee`, `conversion`, `link_entry`, `rule`) ;
    chaque proposition **rejuge** son classement sous verrou (transaction encore `pending`, même genre, même paire, même
    candidate, règle qui correspond toujours), sinon `failed[]` périmée ; refus du contrôle central des lignes en devise
@@ -247,3 +247,4 @@ depuis votre banque, versement Stripe), le reste par vos règles ; ce qui ne se 
   Rectificatif P3 (même passe) : LOW de plus — AC-4 disait « 40-7c propose le même rattachement depuis l'autre côté, le
   premier accepté rend l'autre périmé », faux depuis la P2 de la 40-7c (aucune réception proposée, écart
   `payout_without_receipt`) → la 39-11c seule propose le rattachement de la réception Wise à l'écriture du versement.
+- 2026-11-20 — Validation P5 ciblée (Claude Sonnet 5.5, passe ciblée, contexte frais, rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P5-ciblee.md`) : 0 C/H/M, 2 LOW remédiés — G4, 39-11b AC-5 et 39-11c AC-6 disent la même chose (l'import juge à son instant, la revue relit la même règle sur l'état présent) ; 39-11c AC-3 : 40-7c n'écrit le texte qu'en dernier recours.
