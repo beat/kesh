@@ -1,6 +1,6 @@
 # Story 46-5 : aide à la création des groupes d'un plan existant (conditionnelle)
 
-Status: drafted
+Status: ready-for-dev
 
 *Revue de Beat (2026-11-19) : approuvée ; **proposition d'interface (maquette) avant de décider** de la story (Q9) ; approuvée par Guy le 2026-11-19 (revue 1).*
 
