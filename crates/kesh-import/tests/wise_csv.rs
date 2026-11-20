@@ -210,6 +210,29 @@ fn rows_with_unordered_text_dates_are_sorted_by_time() {
 }
 
 #[test]
+fn rows_are_sorted_on_the_read_timestamp_not_on_file_order() {
+    // Deux lignes de données échangées dans le fichier : l'ordre inverse du
+    // fichier ne se suit plus, l'horodatage lu, si.
+    let swapped = {
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(CHF);
+        let mut records: Vec<csv::StringRecord> = reader.records().map(|r| r.unwrap()).collect();
+        records.swap(2, 7);
+        let mut writer = csv::WriterBuilder::new().from_writer(Vec::new());
+        for r in &records {
+            writer.write_record(r).unwrap();
+        }
+        writer.into_inner().unwrap()
+    };
+    let ids = |s: kesh_import::WiseCsv| s.rows.into_iter().map(|r| r.id).collect::<Vec<_>>();
+    assert_eq!(
+        ids(parse_wise_csv(&swapped).unwrap()),
+        ids(parse_wise_csv(CHF).unwrap())
+    );
+}
+
+#[test]
 fn columns_in_another_order_are_read_the_same() {
     // Colonnes inversées, en-tête compris.
     let reversed = rewrite(CHF, |_, mut cells| {
@@ -354,6 +377,12 @@ fn sign_and_fee_sign_are_checked() {
     assert_eq!(
         line_codes(parse_wise_csv(&wrong).unwrap_err()),
         vec![(2, WiseLineErrorCode::SignMismatch)]
+    );
+    // Crédit à montant négatif (ligne de données 3 : un débit relevé « CREDIT »).
+    let credit = set(CHF, 2, "Transaction Type", "CREDIT");
+    assert_eq!(
+        line_codes(parse_wise_csv(&credit).unwrap_err()),
+        vec![(4, WiseLineErrorCode::SignMismatch)]
     );
     // Ligne de frais créditée (ligne de données 5 : FEE-TRANSFER).
     let fee = rewrite(CHF, |i, mut cells| {
