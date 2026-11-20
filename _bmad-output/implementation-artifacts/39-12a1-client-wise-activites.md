@@ -74,8 +74,12 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      à Beat, et la phase 2 attend.
    - **(b) Recette finale, après 39-12a2, avant que Beat s'y fie** : les réponses brutes sauvées en (a) passent par
      `rows_from_activities` (39-12a2), **dans un test local non versionné**, **comme si l'on était le 2024-12-31** :
-     `read_until` = fin de 2024, soldes actuels = clôtures 2024-12-31 du CSV de chaque devise, activités de 2024
-     seules, `checkpoints` = clôtures du CSV à chaque fin de mois (le CSV porte un solde courant à chaque ligne). Chaque
+     `period` = 2024, soldes actuels = clôtures 2024-12-31 du CSV de chaque devise, activités de 2024
+     seules, `transfer_fees` = les devis sauvés en (a) pour les 27 virements qu'ils couvrent et, **pour les autres
+     virements sortants de 2024**, les frais du CSV (ligne `FEE-TRANSFER-…` ou zéro) — seule entrée qui ne vient pas de
+     l'API, écrite au compte rendu : 39-12a2 exige un frais par virement sortant (`MissingTransferFee`), et lire le devis
+     des quelque 130 virements de 2024 dépasserait le quota (65 + ≈ 150 > 200) ; les 27 devis éprouvent la correspondance
+     dans les deux cas (avec et sans frais), `checkpoints` = clôtures du CSV à chaque fin de mois (le CSV porte un solde courant à chaque ligne). Chaque
      ligne rendue est comparée à la ligne du CSV de même identifiant (date, heure, montant, devise, sens, **solde
      courant**) ; seules les différences **prévues** sont admises (frais de conversion inclus dans le débit, H2 ;
      conversion automatique si (2) n'a pas trouvé le numéro) ; le solde d'ouverture et de clôture de chaque devise égale
@@ -88,7 +92,10 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
    `is_template_placeholder` `:1538`) : `KESH_WISE_<n>_ACCOUNT` (libellé du compte Wise de 39-11b), `KESH_WISE_<n>_TOKEN`
    (jeton personnel **lecture seule**), `n` de 1 à 9 ; facultatif `KESH_WISE_<n>_PROFILE_ID` (sinon le seul profil
    `business` du jeton, AC-2) ; `KESH_WISE_BASE_URL` (défaut `https://api.wise.com` ; `http` admis vers le seul bouclage,
-   S5) ; `KESH_WISE_PARALLEL` (S1 : 1 à 6, défaut 1 ; employé par 39-12a3). **Le lecteur du socle exige aujourd'hui tous les champs d'une série** (`ProviderSpec.fields` : « tous requis », `provider_env.rs`, 38-12a) : cette story lui donne la notion de **champ facultatif** (liste `optional_fields`, vide pour PayPal, dont le comportement et les tests ne changent pas ; une série reste incomplète sans `ACCOUNT` ou sans `TOKEN`, jamais sans `PROFILE_ID`), au lieu de lire `PROFILE_ID` à part ; la spécification de Wise est `key: "WISE"`, `provider: "wise"`, `fields: ["TOKEN"]`, `optional_fields: ["PROFILE_ID"]`, hôte par défaut `https://api.wise.com`, inscrite à `ALL_PROVIDERS`. **Aucune clé SCA** : la variable
+   S5) ; `KESH_WISE_PARALLEL` (S1 : 1 à 6, défaut 1 ; employé par 39-12a3). **Champ facultatif** : le socle en développement (38-12a, `provider_env.rs`) porte déjà `ProviderSpec.optional_fields`
+   (vide pour PayPal ; une série reste incomplète sans `ACCOUNT` ou sans `TOKEN`, jamais sans `PROFILE_ID` ; test
+   `champ_facultatif`) ; si le socle fusionné ne l'a pas, cette story l'y ajoute ainsi, au lieu de lire `PROFILE_ID` à
+   part ; la spécification de Wise est `key: "WISE"`, `provider: "wise"`, `fields: ["TOKEN"]`, `optional_fields: ["PROFILE_ID"]`, hôte par défaut `https://api.wise.com`, inscrite à `ALL_PROVIDERS`. **Aucune clé SCA** : la variable
    `KESH_WISE_<n>_SCA_KEY_FILE` des versions précédentes de cette fiche n'existe pas et n'est lue nulle part. Série
    ACCOUNT/TOKEN incomplète, libellé en double (sans casse), valeur de la forme `<…>` (une valeur **vide vaut absente**,
    `env_nonempty`, `config.rs:1406` : sans aucune variable Wise, Kesh démarre) → refus au **démarrage**, message qui nomme
@@ -96,10 +103,11 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
    `KESH_WISE_3_*` (ACCOUNT, TOKEN, PROFILE_ID), `KESH_WISE_BASE_URL` et `KESH_WISE_PARALLEL` s'ajoutent à
    `docker-compose.yml` et `docker-compose.prod.yml` en `${NOM:-}` (patron `KESH_SMTP_*`, `docker-compose.yml:117-122`)
    et à `.env.example` (commentées, avec `<EDIT: …>`, patron `:302-340`). **Garde `configuration_transmise.rs` (#550)** :
-   cette story **inscrit la famille `KESH_WISE_<n>_*`** (ACCOUNT, TOKEN, PROFILE_ID ; séries 1 à 3 exigées, 4 à 9 admises
-   absentes avec raison) à la famille indexée générique de 38-12a, sans relâcher aucune liste ; `KESH_WISE_BASE_URL` et
-   `KESH_WISE_PARALLEL` (noms **sans numéro**, construits par `format!`, lus par le parcours `std::env::vars()`) sont
-   inscrits en forme exacte à `EMPLACEMENTS_AUTORISES` ; leurs lignes de `.env.example` sont commentées ou vides, jamais
+   la famille indexée générique de 38-12a **dérive ses noms d'`ALL_PROVIDERS`** (`noms_familles`,
+   `noms_familles_exiges` : séries 1 à 9 connues, 1 à 3 exigées, tous les champs dont les facultatifs, et les deux noms
+   sans numéro `KESH_WISE_BASE_URL` et `KESH_WISE_PARALLEL`) : inscrire `WISE` à `ALL_PROVIDERS` suffit, sans relâcher
+   aucune liste ni inscription à la main (si le socle fusionné ne les dérivait pas, les deux noms sans numéro
+   s'inscriraient en forme exacte à `EMPLACEMENTS_AUTORISES`) ; leurs lignes de `.env.example` sont commentées ou vides, jamais
    `<…>`.
 2. **AC-2 — Client, profil et soldes** (`crates/kesh-api/src/wise/`, client HTTP du socle S5 : rustls, aucune redirection
    — le jeton ne suit jamais une redirection —, délais bornés, `User-Agent` sans donnée personnelle ; **`reqwest` n'a pas
@@ -204,6 +212,12 @@ l'environnement du serveur (`KESH_WISE_<n>_…`), jamais en base ni dans la sauv
   Conversion en lignes déplacée dans la nouvelle 39-12a2 ; route et import renumérotés 39-12a3. Fiche renommée
   (`39-12a1-client-wise-et-sca` → `39-12a1-client-wise-activites`), statut `deferred` → `drafted`, à revalider.
 
+- 2026-11-20 — validation P2 de la voie activités (Claude Opus 5.5, contexte frais ; commune à 39-12a2, 39-12a3, 39-12b ;
+  rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P2.md`) : 0 C, 1 H, 2 M, 9 L, remédiés. Ici : **M2** — la
+  recette finale (b) exige un frais par virement sortant de 2024 (`MissingTransferFee`) et n'en sauve que 27 : frais du CSV
+  pour les autres, écrit comme seule entrée hors API (lire tous les devis dépasserait le quota) ; `read_until` (retiré en
+  P1) ôté de (b) ; AC-1 mise au niveau du socle en développement (`optional_fields` et famille de la garde dérivée
+  d'`ALL_PROVIDERS` déjà dans 38-12a).
 - 2026-11-20 — validation P1 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3,
   39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P1.md`) : 0 C, 2 H, 10 M, 7 L, remédiés. Ici :
   AC-0 réécrit sur **2024** (décision de l'orchestrateur : CSV local, budget 45 appels, réponses brutes sauvées,

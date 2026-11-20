@@ -50,13 +50,15 @@ lecture seule, poser les variables et ce que le téléchargement ne sait pas fai
    Wise (refusé par Wise aux jetons personnels hors de six pays) ; les frais de conversion sont **compris** dans le montant
    débité (le relevé CSV les met sur une ligne à part : les deux se mélangent sans doublon, 39-12a3 AC-4) ; un type de
    mouvement inconnu de Kesh refuse le téléchargement (importer le CSV de la période) ; le solde reconstruit est contrôlé
-   contre le dernier relevé de Kesh, d'où le conseil : **un premier relevé importé en CSV**, puis des téléchargements.
+   contre le dernier relevé de Kesh, d'où le conseil : **un premier relevé importé en CSV**, puis des téléchargements ;
+   Kesh relit le dernier jour du relevé précédent (`importFrom`, 39-12a3 AC-3) et accepte un relevé arrêté en cours de
+   journée, si bien que télécharger « jusqu'à aujourd'hui » plusieurs fois ne perd ni ne double rien.
    *Éprouvé sur 2024 seulement* : le manuel dit que la voie a été comparée au relevé CSV de 2024 et que 2025 et la suite se vérifient sur le premier téléchargement réel (39-12a1 AC-0 c) ; conseil : comparer le solde de clôture au site de Wise. *Volume* : un devis par virement sortant lu, de `readFrom` à aujourd'hui, donc un téléchargement ancien est long (progression par étape, `KESH_WISE_PARALLEL`). *Comptabilité des conversions* : les frais de conversion étant compris dans le montant débité, l'écriture d'une conversion téléchargée ne les passe pas à part en charge ; importés du CSV d'abord, ils se proposent au compte de frais — le traitement dépend de l'ordre. *Type inconnu* : un mouvement d'un type non pris en charge, **même postérieur à la période demandée**, refuse tout téléchargement qui remonte avant sa date ; importer alors le CSV de la période. *Utilisateur* : le bouton, la période, la progression, ce qu'un échec veut dire (rien n'est enregistré), le contrôle de
    solde, le mélange sans doublon avec les CSV. `docs/api-external.md` : la route de 39-12a3 (sessions seules, 403
    `API_KEY_OPERATION_FORBIDDEN`), avec ses codes. Les deux phrases du registre des routes sont déjà relevées par 39-12a3 :
    ne pas les retoucher ici.
 4. **AC-4 — E2E** `frontend/tests/e2e/wise-download.spec.ts`, **serveur de prestataire simulé de 38-12b (socle S8)**, port lu
-   de `KESH_E2E_PROVIDER_MOCK_PORT`, **le serveur simulé commun gagne les routes de Wise** (`provider-mock.ts`, que 38-12b ne fait jouer qu'à PayPal, en CHF : profils, soldes, activités paginées, transferts, devis ; un seul solde CHF, avec le compte lié créé par la spec ; un 401 et un solde décalé commandés par la spec), backend d'E2E démarré avec `KESH_WISE_1_*` (jeton fictif) et `KESH_WISE_BASE_URL` vers
+   de `KESH_E2E_PROVIDER_MOCK_PORT`, **le serveur simulé commun gagne les routes de Wise** (`frontend/tests/e2e/support/provider-mock.ts`, que 38-12b ne fait jouer qu'à PayPal, en CHF : profils, soldes, activités paginées, transferts, devis ; un seul solde CHF, avec le compte lié créé par la spec ; un 401 et un solde décalé commandés par la spec), backend d'E2E démarré avec `KESH_WISE_1_*` (jeton fictif) et `KESH_WISE_BASE_URL` vers
    lui (ajout au montage de `docs/testing.md` ; le bloc de `CLAUDE.md` n'est pas touché) : sans variables, bouton absent ;
    période → progression → compte rendu (activités fictives de 39-12a2, une page de soldes, de transferts et un devis) ;
    second téléchargement → « 0 insérée » ; solde qui ne concorde pas (la spec a d'abord posé un relevé à solde par l'import CSV de 39-11d, dont la clôture diffère de ce que reconstruit le serveur simulé) → message de `WISE_API_BALANCE_MISMATCH` ; 401 simulé
@@ -91,6 +93,9 @@ décrit le jeton en lecture seule et ce que le téléchargement lit.
 
 ## Change Log
 
+- 2026-11-20 — validation P2 de la voie activités (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3 ;
+  rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P2.md`) : 0 C, 1 H, 2 M, 9 L, remédiés. Ici : manuel —
+  relevé arrêté en cours de journée et dernier jour relu (H1 de 39-12a2/39-12a3) ; chemin du serveur simulé commun.
 - 2026-11-20 — validation P1 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3 ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P1.md`) : routes de Wise ajoutées au serveur simulé commun (E2E
   sans elles ne tournait pas), relevé préalable pour le cas du solde qui ne concorde pas, manuel — éprouvé sur 2024 seulement,

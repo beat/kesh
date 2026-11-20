@@ -30,15 +30,17 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
 
 1. **AC-1 — Entrée et sortie.** Module neuf `crates/kesh-import/src/wise_api.rs` (`pub mod wise_api;` à côté de
    `pub mod wise;`, `crates/kesh-import/src/lib.rs`), **à part de `wise.rs`** (39-11a) pour ne pas grossir le lecteur CSV ;
-   les aides de 39-11a dont il a besoin (contrôle de l'identifiant, calcul de `id_prefix`) passent `pub(crate)`, sans
-   changement de comportement ni d'assertion. Fonction `rows_from_activities(input: &WiseApiInput) ->
+   les aides de 39-11a dont il a besoin (contrôle de l'identifiant `parse_id`, calcul de `id_prefix`) passent `pub(crate)`,
+   et le calcul de `is_fee`/`fee_of`, écrit en ligne dans `read_row` de 39-11a, en sort en une petite aide `pub(crate)`
+   appelée des deux côtés — sans changement de comportement ni d'assertion. Fonction `rows_from_activities(input: &WiseApiInput) ->
    Result<WiseApiOutput, WiseApiError>`. **Entrée neutre** (types propres au module, aucun type de `kesh-api`) :
    `activities: Vec<WiseApiActivity { id, activity_type, resource_type, resource_id, title, description, primary_amount,
    secondary_amount, status, created_on: NaiveDateTime, updated_on: NaiveDateTime }>` (**instants déjà ramenés au fuseau que la recette 39-12a1 AC-0 (a)(1) a retenu — UTC ou Zurich — par 39-12a3, qui a `kesh_core::horloge::heure_suisse` : `kesh-import` n'a aucune dépendance interne et ne connaît aucun fuseau**) ; `transfer_fees:
    Vec<WiseApiTransferFee { transfer_id, fee_currency, fee_total: Decimal, reference: Option<String> }>` (un par virement
    sortant de la période lue, rempli par 39-12a3 depuis les transferts et devis de 39-12a1) ; `balances: Vec<(currency,
    Decimal)>` (soldes actuels, lus **avant** les activités, 39-12a3) ; `period: (from: NaiveDate,
-   to: NaiveDate)` (période demandée) ; `checkpoints: Vec<WiseApiCheckpoint { currency, date: NaiveDate, closing: Decimal }>`
+   to: NaiveDate)` (période à rendre : la période demandée, son début avancé par 39-12a3 au dernier jour du
+   relevé précédent, `importFrom`) ; `checkpoints: Vec<WiseApiCheckpoint { currency, date: NaiveDate, closing: Decimal }>`
    (AC-5). **Sortie** : `WiseApiOutput { statements: Vec<WiseCsv>, ignored: { not_completed, card_checks } }` — **un
    `WiseCsv` de 39-11a par devise** ayant au moins une ligne dans la période (`currency`, `rows` chronologiques, `opening_balance`,
    `closing_balance`, `first_date`, `last_date`), si bien que 39-12a3 le passe au cœur d'import exactement comme un fichier
@@ -65,12 +67,14 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    | `INTERBALANCE` | crédit `primary` dans sa devise, débit `secondary` dans la sienne (**frais de conversion inclus**) | `BALANCE-<resource_id>` sur les **deux** lignes |
    | `AUTO_CONVERSION` | comme `INTERBALANCE` | **provisoire** `AUTO_CONVERSION-<resource_id>` ; `CONVERSION_ORDER-<n>` si AC-0 (a)(2) trouve le numéro du CSV dans l'API |
    | `CARD_CHECK` | aucune (vérification de carte, sans mouvement) ; comptée dans `ignored.card_checks` | — |
-   | tout autre type `COMPLETED` (`BALANCE_INTEREST`, `BALANCE_CASHBACK`, `FEE_REFUND`, `DIRECT_DEBIT_TRANSACTION`, `CASH_WITHDRAWAL`, …) | **refus de l'ensemble** : `UnsupportedActivity { activity_type, date }`, **même si son `date` est hors de `period`** (postérieure à `to` ou antérieure à `from`) : le solde se reconstruit depuis aujourd'hui, un mouvement inconnu n'importe où entre `readFrom` et maintenant fausse tous les soldes ; le refus dit donc la date du mouvement et que **tout** téléchargement qui remonte avant cette date est refusé tant que le type n'est pas pris en charge (le manuel, 39-12b : importer le CSV) | — |
+   | tout autre type `COMPLETED` (`BALANCE_INTEREST`, `BALANCE_CASHBACK`, `FEE_REFUND`, `DIRECT_DEBIT_TRANSACTION`, `CASH_WITHDRAWAL`, …) | **refus de l'ensemble** : `UnsupportedActivity { activity_type, date }` (`activity_type` rendu tel quel s'il a la forme `^[A-Z_]{1,40}$`,
+   sinon `UNKNOWN` : c'est un texte de Wise, borné avant d'entrer dans une erreur), **même si son `date` est hors de `period`** (postérieure à `to` ou antérieure à `from`) : le solde se reconstruit depuis aujourd'hui, un mouvement inconnu n'importe où entre `readFrom` et maintenant fausse tous les soldes ; le refus dit donc la date du mouvement et que **tout** téléchargement qui remonte avant cette date est refusé tant que le type n'est pas pris en charge (le manuel, 39-12b : importer le CSV) | — |
    **Montant d'un débit simple** : `primary` si `secondary` est absent ; sinon celui des deux dont la devise est un solde du
    profil (`balances`) ; les deux ou aucun → `AmbiguousAmount { activity_id }`. Une ligne dans une devise sans solde au
-   profil → `UnknownCurrency { currency }`. Un même identifiant deux fois dans une devise → `DuplicateId { id, currency }`.
+   profil → `UnknownCurrency { currency }` (limite assumée : un solde **fermé** chez Wise, absent de `balances`, fait
+   refuser tout téléchargement qui remonte à ses mouvements ; importer alors le CSV). Un même identifiant deux fois dans une devise → `DuplicateId { id, currency }`.
    Les identifiants passent le contrôle de 39-11a (ASCII `[A-Z0-9_-]`, ≤ 64) ; `id_prefix`, `is_fee`, `fee_of` sont calculés
-   par la même aide. **Autres champs** de `WiseRow` : `date` et `date_time` = l'horodatage tranché par AC-0 (a)(1)
+   par les mêmes aides (AC-1). **Autres champs** de `WiseRow` : `date` et `date_time` = l'horodatage tranché par AC-0 (a)(1)
    (`created_on` ou `updated_on`, en UTC ou à Zurich), le même pour toutes les lignes ; `description` = `title` sans
    balises ; la contrepartie = le texte du premier `<strong>…</strong>` de `title`, en `payer_name` (crédit), `merchant`
    (`CARD_PAYMENT`) ou `payee_name` (débit `TRANSFER`) ; `payment_reference` = `reference` du transfert (AC-0 (a)(6)) ;
@@ -92,8 +96,13 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    origine ; le solde courant de la **dernière** ligne = le solde actuel de la devise (`balances`), puis, en remontant,
    `running_balance[i−1] = running_balance[i] − amount[i]`. **Contrôle** : pour chaque `checkpoint` (le solde de clôture
    d'un relevé déjà connu de Kesh pour ce compte, à sa date de fin, fourni par 39-12a3), le solde reconstruit à la fin de
-   ce jour (dernière ligne de date ≤ `date`, ou, sans ligne, le solde précédant la première ligne) doit égaler `closing` ;
-   sinon `BalanceMismatch { currency, date, expected, found }` — **un format de montant qui aurait changé, une activité
+   ce jour (dernière ligne de date ≤ `date`, ou, sans ligne, le solde précédant la première ligne) doit égaler `closing`
+   — **ou**, parce qu'un relevé a pu être arrêté **en cours de journée** (téléchargement jusqu'à l'instant de la lecture,
+   CSV exporté dans la journée, téléchargement dont les dernières lignes étaient des doublons : la clôture du cœur est
+   celle de la dernière ligne **insérée**), le solde reconstruit à **l'un des instants du jour `date`** (avant sa première
+   ligne, ou après l'une de ses lignes) ; sans cette tolérance, un mouvement survenu le même jour après la coupure ferait
+   refuser **tout** téléchargement suivant, durablement (relancer n'y change rien) — ; sinon
+   `BalanceMismatch { currency, date, expected, found }` (`found` = le solde reconstruit à la fin du jour) — **un format de montant qui aurait changé, une activité
    manquée ou une activité en cours déjà portée au solde se voient ici** ; rien n'est importé. Puis seules les lignes dont
    `date` ∈ `period` sont rendues (une ligne de frais suit son origine) ; `opening_balance` = solde courant de la première rendue − son montant ;
    `closing_balance` = solde courant de la dernière ; une devise sans ligne dans la période n'a pas de `WiseCsv`. Sans
@@ -112,7 +121,8 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    inclus), écarts assertés un par un. Cas : une ligne de frais à `date` égale à celle de son origine alors que son horodatage passe sous minuit (période qui coupe entre les deux : les deux lignes suivent l'origine) ; un type inconnu hors de `period` refuse quand même ; chaque forme de montant admise (milliers, sans décimale, espace insécable,
    balises) et refusée (`1.234,56 USD`, `1,23 USD`, trois décimales, balise inconnue, signe contradictoire) ; chaque ligne du
    tableau de l'AC-3 ; activité non `COMPLETED` et `CARD_CHECK` comptées ; type non pris en charge ; débit ambigu ; frais
-   manquant, nul, d'une autre devise ; contrôle juste, faux (`BalanceMismatch`), absent ; période qui ne garde qu'une partie
+   manquant, nul, d'une autre devise ; contrôle juste, faux (`BalanceMismatch`), absent, **juste à un instant du jour
+   seulement** (relevé coupé en cours de journée, un mouvement plus tard le même jour : accepté) ; période qui ne garde qu'une partie
    des lignes lues (solde d'ouverture exact) ; devise sans ligne dans la période. Aucune dépendance neuve ni interne ;
    `cargo publish --dry-run -p kesh-import` vert ; tests de 39-11a inchangés en assertions.
 
@@ -135,7 +145,7 @@ dernier commit. Aucune migration.
 
 ## Fichiers communs
 
-`crates/kesh-import/src/lib.rs` (une ligne), `crates/kesh-import/src/wise.rs` (visibilité de deux aides seulement),
+`crates/kesh-import/src/lib.rs` (une ligne), `crates/kesh-import/src/wise.rs` (visibilité de deux aides, une troisième extraite de `read_row`, AC-1),
 `tests/fixtures/README.md` : à relire à la reprise de `main`.
 
 ## Note de version
@@ -162,6 +172,12 @@ importés.
 
 ## Change Log
 
+- 2026-11-20 — validation P2 de la voie activités (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a3, 39-12b ;
+  rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P2.md`) : 0 C, 1 H, 2 M, 9 L, remédiés. Ici : **H1** — le
+  contrôle « solde à la fin du jour » refusait durablement tout téléchargement après un relevé arrêté en cours de journée
+  (téléchargement jusqu'à l'instant, CSV du jour, dernières lignes en doublon) : tolérance « à l'un des instants du jour »,
+  test ; `is_fee`/`fee_of` extraits de `read_row` (aucune aide n'existait) ; `activity_type` borné ; solde fermé
+  (`UnknownCurrency`) écrit en limite.
 - 2026-11-20 — validation P1 de la voie activités (Claude Sonnet 5.5, contexte frais ; commune à 39-12a1, 39-12a3, 39-12b ;
   rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P1.md`) : horodatages en `NaiveDateTime` ramenés par 39-12a3
   (`kesh-import` sans fuseau, la recette (a)(1) pouvait retenir l'heure de Zurich), `read_until` retiré (sans emploi dans la
