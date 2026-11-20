@@ -1,6 +1,6 @@
 # Story 39-12a2 : activités Wise en lignes de relevé — montants, sens, frais, soldes reconstruits et contrôlés (`kesh-import`)
 
-Status: drafted
+Status: ready-for-dev
 
 *Fiche rédigée le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement). Le numéro 39-12a2 désignait jusqu'à ce jour la route et l'import, renumérotés **39-12a3**

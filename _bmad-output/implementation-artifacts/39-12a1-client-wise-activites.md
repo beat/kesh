@@ -1,6 +1,6 @@
 # Story 39-12a1 : client de l'API Wise — configuration, profil, soldes, activités, transferts, devis
 
-Status: drafted
+Status: ready-for-dev
 
 *Fiche réécrite le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement) ; elle remplace la fiche « client de l'API Wise — configuration, signature SCA, profil, soldes et

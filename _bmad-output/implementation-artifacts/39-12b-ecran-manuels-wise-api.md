@@ -1,6 +1,6 @@
 # Story 39-12b : bouton « Télécharger depuis Wise », manuels, E2E
 
-Status: drafted
+Status: ready-for-dev
 
 *Fiche réécrite le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement) : plus de clé de signature SCA. Branche `epic/39-wise`. Epic 39, **phase 2** ; **socle S7 et S8**
