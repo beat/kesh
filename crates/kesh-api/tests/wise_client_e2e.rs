@@ -826,3 +826,212 @@ async fn le_jeton_n_apparait_dans_aucune_erreur_reponse_ni_journal() {
     aucun_secret(rendus.iter().map(String::as_str));
     aucun_secret(evenements.iter().map(String::as_str));
 }
+
+// ---------------------------------------------------------------------------
+// Revue P1 : montants au texte brut, activités d'une même ressource, statut
+// classé avant le corps
+// ---------------------------------------------------------------------------
+
+/// Un client sur une adresse donnée (serveur écrit à la main).
+fn client_sur(url: &str) -> (WiseClient, Arc<Notee>) {
+    let jeton = secret("jeton");
+    let serie = ProviderSeries::for_tests(1, "Wise CHF", &[("TOKEN", jeton.as_str())]);
+    let config = ProviderApiConfig::for_tests(WISE, url, 1, vec![serie.clone()]);
+    let attente = Arc::new(Notee::default());
+    let client = WiseClient::new(
+        &config,
+        &serie,
+        Arc::new(ProviderGate::new(1)),
+        attente.clone(),
+        None,
+    )
+    .unwrap();
+    (client, attente)
+}
+
+/// Un serveur qui annonce 100 octets de corps, en envoie 3 et coupe : la
+/// lecture du corps échoue sur une erreur de transport. Rend l'adresse et le
+/// nombre de requêtes reçues.
+async fn serveur_coupe(statut: &'static str) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let compte = Arc::new(AtomicUsize::new(0));
+    let c = compte.clone();
+    tokio::spawn(async move {
+        loop {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut tampon = [0u8; 4096];
+            let _ = sock.read(&mut tampon).await;
+            c.fetch_add(1, Ordering::SeqCst);
+            let rep = format!("HTTP/1.1 {statut}\r\nContent-Length: 100\r\n\r\nabc");
+            let _ = sock.write_all(rep.as_bytes()).await;
+            let _ = sock.shutdown().await;
+        }
+    });
+    (format!("http://{addr}"), compte)
+}
+
+#[tokio::test]
+async fn soldes_au_texte_brut_du_corps_sans_perte() {
+    let b = banc().await;
+    // Corps écrit en texte : aucun passage par `json!` ni par `f64`.
+    b.sim.repondre(|_| {
+        Rep::Statut(
+            200,
+            None,
+            false,
+            r#"[{"id":11,"currency":"CHF","amount":{"value":99999999999999.99,"currency":"CHF"}},
+                {"id":12,"currency":"EUR","amount":{"value":123456789012345.67,"currency":"EUR"}},
+                {"id":13,"currency":"USD","amount":{"value":0.123456789012345678,"currency":"USD"}}]"#
+                .into(),
+        )
+    });
+    let s = b.client.balances(&profil()).await.unwrap();
+    assert_eq!(s[0].amount.to_string(), "99999999999999.99");
+    assert_eq!(s[1].amount.to_string(), "123456789012345.67");
+    assert_eq!(s[2].amount.to_string(), "0.123456789012345678");
+}
+
+#[tokio::test]
+async fn frais_du_devis_au_texte_brut_du_corps_sans_perte() {
+    let b = banc().await;
+    b.sim.repondre(|_| {
+        Rep::Statut(
+            200,
+            None,
+            false,
+            r#"{"id":"q","sourceCurrency":"CHF","payOut":"BANK_TRANSFER","paymentOptions":[
+                {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"CHF","fee":{"total":123456789012345.67}}]}"#
+                .into(),
+        )
+    });
+    let f = b.client.quote_fee(&profil(), "q").await.unwrap();
+    assert_eq!(f.total.to_string(), "123456789012345.67");
+}
+
+#[tokio::test]
+async fn devis_sans_pay_out_est_refuse() {
+    let b = banc().await;
+    b.sim.repondre(|_| {
+        Rep::Json(json!({"sourceCurrency": "CHF", "paymentOptions": [
+            {"payIn": "BALANCE", "sourceCurrency": "CHF", "fee": {"total": 1.0}}]}))
+    });
+    match b.client.quote_fee(&profil(), "q").await {
+        Err(AppError::ProviderResponseInvalid { details, .. }) => {
+            assert_eq!(details["reason"], "quote_fee");
+        }
+        autre => panic!("{autre:?}"),
+    }
+}
+
+#[tokio::test]
+async fn transfert_sans_repli_sur_le_champ_quote_numerique() {
+    let b = banc().await;
+    b.sim
+        .repondre(|_| Rep::Json(json!({"id": 5, "quote": 123456, "sourceCurrency": "CHF"})));
+    assert_eq!(b.client.transfer("5").await.unwrap().quote_uuid, None);
+}
+
+#[tokio::test]
+async fn deux_activites_de_meme_ressource_donnent_deux_activites() {
+    let b = banc().await;
+    // Un virement et son remboursement : même `resource.id`, `id` d'activité différents.
+    b.sim.repondre(|_| {
+        let mut remboursement = activite(7, "COMPLETED");
+        remboursement["id"] = json!("ACT-FICTIVE-7-REMB");
+        Rep::Json(json!({"cursor": null, "activities": [activite(7, "COMPLETED"), remboursement]}))
+    });
+    let w = &windows(jour(2024, 1, 1), jour(2024, 1, 31), MAX_DAYS, maintenant())[0];
+    let v = b
+        .client
+        .activities_window(&profil(), w, maintenant())
+        .await
+        .unwrap();
+    assert_eq!(v.len(), 2);
+    assert!(v.iter().all(|a| a.resource_id == "7"));
+}
+
+#[tokio::test]
+async fn meme_activite_sur_deux_pages_une_fois_derniere_version() {
+    let b = banc().await;
+    b.sim.repondre(|r| match r.query.get("nextCursor") {
+        None => Rep::Json(json!({"cursor": "c", "activities": [activite(1, "PENDING")]})),
+        Some(_) => Rep::Json(json!({"cursor": null, "activities": [activite(1, "COMPLETED")]})),
+    });
+    let w = &windows(jour(2024, 1, 1), jour(2024, 1, 31), MAX_DAYS, maintenant())[0];
+    let v = b
+        .client
+        .activities_window(&profil(), w, maintenant())
+        .await
+        .unwrap();
+    assert_eq!(v.len(), 1);
+    assert_eq!(v[0].status, "COMPLETED");
+}
+
+#[tokio::test]
+async fn refus_401_et_403_a_corps_trop_grand_gardent_leur_code() {
+    let enorme = "x".repeat(9 * 1024 * 1024);
+    let b = banc().await;
+    b.sim
+        .repondre(move |_| Rep::Statut(401, None, false, enorme.clone()));
+    assert!(matches!(
+        b.client.profiles().await,
+        Err(AppError::ProviderAuthFailed { provider: "wise" })
+    ));
+    let enorme = "x".repeat(9 * 1024 * 1024);
+    let b = banc().await;
+    b.sim
+        .repondre(move |_| Rep::Statut(403, None, true, enorme.clone()));
+    assert!(matches!(
+        b.client.balances(&profil()).await,
+        Err(AppError::ProviderPermissionDenied { provider: "wise" })
+    ));
+    assert_eq!(b.sim.compte("/v4/profiles"), 1, "aucun rejeu");
+}
+
+#[tokio::test]
+async fn reponse_200_a_corps_trop_grand_est_une_reponse_invalide() {
+    let b = banc().await;
+    let enorme = "x".repeat(9 * 1024 * 1024);
+    b.sim
+        .repondre(move |_| Rep::Statut(200, None, false, enorme.clone()));
+    match b.client.profiles().await {
+        Err(AppError::ProviderResponseInvalid { details, .. }) => {
+            assert_eq!(details["reason"], "too_large");
+        }
+        autre => panic!("{autre:?}"),
+    }
+    assert_eq!(b.sim.compte("/v1/profiles"), 1, "pas de rejeu");
+}
+
+#[tokio::test]
+async fn corps_coupe_d_un_401_ou_403_n_est_ni_lu_ni_rejoue() {
+    for (statut, attendu) in [("401 Unauthorized", 401), ("403 Forbidden", 403)] {
+        let (url, compte) = serveur_coupe(statut).await;
+        let (client, attente) = client_sur(&url);
+        match client.profiles().await {
+            Err(AppError::ProviderAuthFailed { .. }) if attendu == 401 => {}
+            Err(AppError::ProviderPermissionDenied { .. }) if attendu == 403 => {}
+            autre => panic!("{statut} : {autre:?}"),
+        }
+        assert_eq!(
+            compte.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "{statut}"
+        );
+        assert!(attente.secondes().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn corps_coupe_d_un_200_est_passager_et_rejoue() {
+    let (url, compte) = serveur_coupe("200 OK").await;
+    let (client, _) = client_sur(&url);
+    assert!(matches!(
+        client.profiles().await,
+        Err(AppError::ProviderUnavailable { .. })
+    ));
+    assert_eq!(compte.load(std::sync::atomic::Ordering::SeqCst), 6);
+}

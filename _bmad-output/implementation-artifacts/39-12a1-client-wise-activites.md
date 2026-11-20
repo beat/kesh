@@ -124,8 +124,8 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      ignorée) ; zéro ou plusieurs → `WISE_PROFILE_AMBIGUOUS` (`details: { count }`) ; avec l'identifiant, il doit figurer
      dans la liste.
    - **Soldes** : `GET /v4/profiles/{p}/balances?types=STANDARD` ; un solde = `id`, `currency` et le **champ de solde**
-     `amount.value` (AC-0 (a)(3), égal à `cashAmount.value`), lu comme nombre décimal JSON (jamais `f64` : texte du
-     nombre lu en `Decimal`).
+     `amount.value` (AC-0 (a)(3), égal à `cashAmount.value`), lu comme nombre décimal JSON (jamais `f64` : le
+     **texte exact reçu**, lu par `serde_json::value::RawValue` puis `Decimal::from_str` ; de même `fee.total` du devis).
 3. **AC-3 — Activités, transferts, devis.**
    - **Activités** : `GET /v1/profiles/{p}/activities?since=…&until=…&size=100`, puis `&nextCursor=<cursor>` tant que
      `cursor` n'est pas nul ; `since`/`until` en ISO 8601 UTC à la milliseconde. **Fenêtres** : fonction du socle S2,
@@ -136,7 +136,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      (l'API de PayPal les veut ainsi) et **ne servent pas ici**, sans quoi une activité de la dernière seconde d'une
      fenêtre n'appartiendrait à aucune ; un chevauchement éventuel des bornes est sans effet, la déduplication par clé
      (ci-dessous) le résorbe ; une activité vue dans
-     deux pages ou deux fenêtres (frontière) n'est gardée qu'une fois (clé : `resource.type` + `resource.id`). Rendu brut :
+     deux pages ou deux fenêtres (frontière) n'est gardée qu'une fois, **dans sa dernière version lue** (clé : l'`id` **d'activité**, non `resource.type` + `resource.id` : deux activités distinctes d'une même ressource — un virement et son remboursement, seconde activité de même `resource_id` — restent deux, 39-12a2 AC-3 en tire une ligne chacune ; revue de code P1, M2). Rendu brut :
      `WiseActivity { id, activity_type, resource_type, resource_id, title, description, primary_amount, secondary_amount,
      status, created_on, updated_on }` (textes tels quels ; l'analyse est celle de 39-12a2). Plafond de garde : 200 pages
      par fenêtre, sinon `PROVIDER_RESPONSE_INVALID` (`details.reason = "too_many_pages"`).
@@ -221,7 +221,7 @@ Aucune migration, aucun paquet neuf (`Cargo.lock` inchangé).
 
 **⚠️ La branche ne compile pas seule : elle dépend du socle S1 à S9, écrit par 38-12a** (commit `d64688fc`, branche
 `story/38-12a`, non fusionné à `epic/39-wise`). Il n'a pas été recopié. Code compilé et testé dans un **bac d'essai** (clone
-`--shared`, `story/39-12a1` + fusion de `d64688fc`, sans conflit). **À la fusion de `story/38-12a`, se raccordent** :
+`--shared`, `story/39-12a1` + fusion de `d64688fc` : la fusion produit trois conflits de texte, `.env.example` et les deux `docker-compose*.yml`, blocs Wise et PayPal voisins, résolus en gardant les deux blocs). **À la fusion de `story/38-12a`, se raccordent** :
 1. `provider_env.rs` : `ALL_PROVIDERS` devient `&[PAYPAL, crate::wise::WISE]` (une ligne ; sans elle, la série Wise n'est pas
    lue au démarrage, et le test `wise_est_inscrit_a_la_liste_des_prestataires` rougit) ;
 2. la garde `configuration_transmise.rs` dérive ses noms d'`ALL_PROVIDERS` : aucune liste à toucher (à confirmer au gate
@@ -258,6 +258,7 @@ par Wise en deçà l'arrêterait silencieusement à la première page). (d) Aucu
 ## Change Log
 
 - 2026-11-20 — **développée** (Claude Sonnet 5.5, Dev Agent Record ci-dessus) : client, serveur simulé, transmission ; statut `review` ; revue P1 à lancer (`kesh-gate-logs/s39-12a1/revue-p1-prompt.md`).
+- 2026-11-20 — **remédiation de la revue de code P1** (Claude Sonnet 5.5 ; rapport `kesh-gate-logs/s39-12a1/revue-p1-rapport.md` : 0 C, 0 H, 2 M, 6 L). M1 : `amount.value` et `fee.total` lus par `RawValue` (fonctionnalité `raw_value` déclarée, `Cargo.lock` inchangé), tests au corps en texte brut (`99999999999999.99`, `123456789012345.67`, `0.123456789012345678`). M2 : déduplication sur l'`id` d'activité, dernière version gardée (aussi L6), AC-3 aligné sur 39-12a2. L1 : statut classé avant la lecture du corps. L2 : repli `quote` retiré. L3 : devis sans `payOut` refusé. L4 : tests du corps trop grand et du corps coupé. L5 : Dev Agent Record corrigé (trois conflits à la fusion). Revue P2 à lancer (`kesh-gate-logs/s39-12a1/revue-p2-prompt.md`).
 - 2026-11-20 — validation ciblée AC-0 (a) « décisions » P2 sur le commit `b2d272e0` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee-2.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici : (b) ne compare plus l'heure (l'écart d'une heure l'été entre Zurich et l'UTC+1 du CSV est dit prévu, sans test dessus) ; (a)(1) ne pose plus « Date Time » comme question ouverte, (a)(2) ne parle plus de règle provisoire.
 - 2026-11-20 — validation ciblée AC-0 (a) « décisions » sur le commit `d0cfeda7` (Claude Haiku 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee.md`) : 0 C, 0 H, 1 M, 1 L, remédiés. Ici : (a)(7) « option absente » tranché en « option `BALANCE` présente » ; (b) ne compte plus l'heure du CSV (UTC+1 fixe) comme identique à l'heure de Zurich de Kesh, écart d'une heure l'été prévu.
 - 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (recette réelle sur 2024, 34 appels ; source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : AC-0 (a) marquée faite et T0 cochée ; concordance exacte (176/177 identifiants, 22/22 frais, soldes égaux en clôture, 12/12 fins de mois, 163/163 fins de jour, 230/230 soldes courants). Règles tranchées, reportées dans 39-12a2 : date = jour de Zurich de `createdOn` (débits, conversions) ou de `updatedOn` (entrants), jamais d'heure comme clé ; heure du CSV en UTC+1 constant ; `AUTO_CONVERSION-<resource_id>` définitif ; solde `amount.value` ; sens et devise débitée confirmés ; table des types de détail ; `reference` = `Payment Reference` ; virement sans frais = option `BALANCE` à 0 ; virement remboursé non relevé (suffixe provisoire maintenu) ; cartes en devise étrangère non relevées. Restent AC-0 (b) et (c). Les mentions « à trancher à la recette » de la fiche sont devenues caduques ; aucun code touché.

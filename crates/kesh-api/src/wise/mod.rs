@@ -48,7 +48,9 @@ use std::time::Duration;
 use chrono::{DateTime, Days, NaiveDate, Utc};
 use kesh_core::horloge::{debut_du_jour_suisse, fin_du_jour_suisse};
 use rust_decimal::Decimal;
+use serde::Deserialize;
 use serde_json::Value;
+use serde_json::value::RawValue;
 
 use crate::errors::AppError;
 use crate::http_client::{BodyError, build_client, read_body_bounded};
@@ -261,17 +263,18 @@ fn text_of(v: &Value) -> Option<String> {
     }
 }
 
-/// Un nombre décimal JSON lu en [`Decimal`] par son **texte** (jamais par
-/// `f64`) ; la forme à exposant est admise.
-fn decimal_of(v: &Value) -> Option<Decimal> {
-    let text = match v {
-        Value::Number(n) => n.to_string(),
-        Value::String(s) => s.trim().to_string(),
-        _ => return None,
-    };
+/// Un montant lu en [`Decimal`] par le **texte exact reçu** (`RawValue`) :
+/// aucun passage par `f64`, qui altère dès seize chiffres significatifs. Un
+/// nombre (`1234.50`, forme à exposant admise) ou une chaîne de chiffres.
+fn decimal_of_raw(raw: &RawValue) -> Option<Decimal> {
+    let text = raw.get().trim();
+    let text = text
+        .strip_prefix('"')
+        .and_then(|t| t.strip_suffix('"'))
+        .map_or(text, str::trim);
     text.parse::<Decimal>()
         .ok()
-        .or_else(|| Decimal::from_scientific(&text).ok())
+        .or_else(|| Decimal::from_scientific(text).ok())
 }
 
 /// Encode un composant de requête : tout octet hors `A-Za-z0-9-._~` en `%XX`.
@@ -356,8 +359,10 @@ impl WiseClient {
         })
     }
 
-    /// Un essai d'une requête `GET` : statut classé, corps lu et analysé.
-    async fn once(&self, path_and_query: &str, locus: &Locus) -> Attempt<Value, AppError> {
+    /// Un essai d'une requête `GET` : statut classé **avant** toute lecture du
+    /// corps (un refus 401 ou 403 ne se rejoue jamais, quel que soit son
+    /// corps), puis, sur 2xx seulement, corps lu borné et vérifié comme JSON.
+    async fn once(&self, path_and_query: &str, locus: &Locus) -> Attempt<Vec<u8>, AppError> {
         let transient = |kind, retry_after| Attempt::Transient { kind, retry_after };
         let sent = self
             .http
@@ -373,16 +378,20 @@ impl WiseClient {
         };
         let status = response.status().as_u16();
         let retry = retry_after(&response);
-        let body = match read_body_bounded(response, MAX_BODY_BYTES).await {
-            Ok(b) => b,
-            Err(BodyError::TooLarge) => return Attempt::Fatal(invalid(locus.step, "too_large")),
-            Err(BodyError::Transport(_)) => return transient(Transient::Unavailable, None),
-        };
         match status {
-            200..=299 => match serde_json::from_slice::<Value>(&body) {
-                Ok(v) => Attempt::Done(v),
-                Err(_) => Attempt::Fatal(invalid(locus.step, "json")),
-            },
+            200..=299 => {
+                let body = match read_body_bounded(response, MAX_BODY_BYTES).await {
+                    Ok(b) => b,
+                    Err(BodyError::TooLarge) => {
+                        return Attempt::Fatal(invalid(locus.step, "too_large"));
+                    }
+                    Err(BodyError::Transport(_)) => return transient(Transient::Unavailable, None),
+                };
+                match serde_json::from_slice::<serde::de::IgnoredAny>(&body) {
+                    Ok(_) => Attempt::Done(body),
+                    Err(_) => Attempt::Fatal(invalid(locus.step, "json")),
+                }
+            }
             401 => Attempt::Fatal(AppError::ProviderAuthFailed { provider: PROVIDER }),
             403 => {
                 tracing::warn!(
@@ -411,7 +420,9 @@ impl WiseClient {
     }
 
     /// Une requête `GET`, reprise comprise (six essais sur 429, 5xx et délai).
-    async fn get(&self, path_and_query: &str, locus: &Locus) -> Result<Value, AppError> {
+    /// Le corps reçu, JSON vérifié, non interprété (les montants s'y lisent
+    /// par leur texte).
+    async fn get_bytes(&self, path_and_query: &str, locus: &Locus) -> Result<Vec<u8>, AppError> {
         match with_retry(&self.gate, self.wait.as_ref(), || {
             self.once(path_and_query, locus)
         })
@@ -421,6 +432,12 @@ impl WiseClient {
             Err(RetryError::Fatal(e)) => Err(e),
             Err(RetryError::Exhausted(kind)) => Err(exhausted(kind, locus)),
         }
+    }
+
+    /// Une requête `GET` dont la réponse n'a pas de montant : lue en [`Value`].
+    async fn get(&self, path_and_query: &str, locus: &Locus) -> Result<Value, AppError> {
+        let body = self.get_bytes(path_and_query, locus).await?;
+        serde_json::from_slice(&body).map_err(|_| invalid(locus.step, "json"))
     }
 
     /// `GET /v1/profiles`.
@@ -475,21 +492,8 @@ impl WiseClient {
             "/v4/profiles/{}/balances?types=STANDARD",
             encode_component(&profile.id)
         );
-        let v = self.get(&path, &Locus::new(Step::Balances)).await?;
-        let array = v
-            .as_array()
-            .ok_or_else(|| invalid(Step::Balances, "shape"))?;
-        array
-            .iter()
-            .map(|b| {
-                Some(WiseBalance {
-                    id: text_of(b.get("id")?)?,
-                    currency: b.get("currency")?.as_str()?.to_string(),
-                    amount: decimal_of(b.get("amount")?.get("value")?)?,
-                })
-            })
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(|| invalid(Step::Balances, "shape"))
+        let body = self.get_bytes(&path, &Locus::new(Step::Balances)).await?;
+        parse_balances(&body).ok_or_else(|| invalid(Step::Balances, "shape"))
     }
 
     /// Les activités d'une fenêtre, **toutes ses pages** : `since` = premier
@@ -497,7 +501,8 @@ impl WiseClient {
     /// jour `window.to` borné à `now`, **à la milliseconde** (`Window.start` et
     /// `Window.end` sont tronqués à la seconde et ne servent pas ici : une
     /// activité de la dernière seconde n'appartiendrait à aucune fenêtre).
-    /// Une activité vue dans deux pages n'est gardée qu'une fois.
+    /// Une activité (même `id` d'activité) vue dans deux pages n'est gardée qu'une
+    /// fois, dans sa dernière version lue ([`dedup_activities`]).
     pub async fn activities_window(
         &self,
         profile: &WiseProfile,
@@ -549,7 +554,7 @@ impl WiseClient {
 
     /// Les activités de la période `from..=to` (jours de Zurich) : fenêtres du
     /// socle de [`MAX_DAYS`] jours, lues l'une après l'autre ; une activité vue
-    /// dans deux fenêtres n'est gardée qu'une fois. 39-12a3 emploie
+    /// dans deux fenêtres n'est gardée qu'une fois ([`dedup_activities`]). 39-12a3 emploie
     /// [`Self::activities_window`] pour lire plusieurs fenêtres de front.
     pub async fn activities(
         &self,
@@ -634,19 +639,30 @@ impl WiseClient {
             encode_component(&profile.id),
             encode_component(quote_uuid)
         );
-        let v = self.get(&path, &Locus::new(Step::Quote)).await?;
-        pick_quote_fee(&v).ok_or_else(|| invalid(Step::Quote, "quote_fee"))
+        let body = self.get_bytes(&path, &Locus::new(Step::Quote)).await?;
+        pick_quote_fee(&body).ok_or_else(|| invalid(Step::Quote, "quote_fee"))
     }
 }
 
-/// Garde la première occurrence de chaque ressource (clé : `resource.type` et
-/// `resource.id`), dans l'ordre de lecture.
+/// Une même activité lue deux fois (deux pages, ou deux fenêtres dont l'une la
+/// voit mise à jour : le filtre porte sur `updatedOn`) n'est gardée qu'une
+/// fois, **dans sa dernière version lue**, à la place de sa première lecture.
+/// La clé est l'`id` **d'activité** : deux activités distinctes d'une même
+/// ressource (un virement et son remboursement) restent deux, 39-12a2 les
+/// distingue.
 pub fn dedup_activities(activities: Vec<WiseActivity>) -> Vec<WiseActivity> {
-    let mut seen = std::collections::HashSet::new();
-    activities
-        .into_iter()
-        .filter(|a| seen.insert((a.resource_type.clone(), a.resource_id.clone())))
-        .collect()
+    let mut place: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut out: Vec<WiseActivity> = Vec::new();
+    for a in activities {
+        match place.get(&a.id) {
+            Some(&i) => out[i] = a,
+            None => {
+                place.insert(a.id.clone(), out.len());
+                out.push(a);
+            }
+        }
+    }
+    out
 }
 
 /// Une activité de la liste ; `None` si un champ attendu manque.
@@ -678,33 +694,73 @@ fn parse_transfer(v: &Value) -> Option<WiseTransfer> {
     let opt = |key: &str| v.get(key).and_then(text_of).filter(|s| !s.is_empty());
     Some(WiseTransfer {
         id: text_of(v.get("id")?)?,
-        quote_uuid: opt("quoteUuid").or_else(|| opt("quote")),
+        quote_uuid: opt("quoteUuid"),
         source_currency: opt("sourceCurrency"),
         reference: opt("reference"),
     })
 }
 
-/// L'option de devis retenue (fonction pure) : `payIn` = `BALANCE` et `payOut`
-/// égal à celui du devis ; exactement une, avec `fee.total` lisible.
-fn pick_quote_fee(quote: &Value) -> Option<WiseQuoteFee> {
-    let pay_out = quote.get("payOut").and_then(Value::as_str);
-    let options = quote.get("paymentOptions")?.as_array()?;
-    let mut chosen = options.iter().filter(|o| {
-        o.get("payIn").and_then(Value::as_str) == Some("BALANCE")
-            && o.get("payOut").and_then(Value::as_str) == pay_out
+/// Les soldes d'une réponse `balances` (fonction pure) : chaque `amount.value`
+/// est lu par son texte exact ; `None` si un champ attendu manque.
+fn parse_balances(body: &[u8]) -> Option<Vec<WiseBalance>> {
+    #[derive(Deserialize)]
+    struct Amount {
+        value: Box<RawValue>,
+    }
+    #[derive(Deserialize)]
+    struct Balance {
+        id: Value,
+        currency: String,
+        amount: Amount,
+    }
+    let all: Vec<Balance> = serde_json::from_slice(body).ok()?;
+    all.into_iter()
+        .map(|b| {
+            Some(WiseBalance {
+                id: text_of(&b.id)?,
+                currency: b.currency,
+                amount: decimal_of_raw(&b.amount.value)?,
+            })
+        })
+        .collect()
+}
+
+/// L'option de devis retenue (fonction pure) : le devis porte un `payOut`,
+/// `payIn` vaut `BALANCE` et `payOut` est celui du devis ; exactement une
+/// option, avec `fee.total` lu par son texte exact.
+fn pick_quote_fee(body: &[u8]) -> Option<WiseQuoteFee> {
+    #[derive(Deserialize)]
+    struct Fee {
+        total: Option<Box<RawValue>>,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct QuoteOption {
+        pay_in: Option<String>,
+        pay_out: Option<String>,
+        source_currency: Option<String>,
+        fee: Option<Fee>,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Quote {
+        pay_out: Option<String>,
+        source_currency: Option<String>,
+        payment_options: Vec<QuoteOption>,
+    }
+    let quote: Quote = serde_json::from_slice(body).ok()?;
+    let pay_out = quote.pay_out?;
+    let mut chosen = quote.payment_options.into_iter().filter(|o| {
+        o.pay_in.as_deref() == Some("BALANCE") && o.pay_out.as_deref() == Some(pay_out.as_str())
     });
     let option = chosen.next()?;
     if chosen.next().is_some() {
         return None;
     }
-    let currency = option
-        .get("sourceCurrency")
-        .or_else(|| quote.get("sourceCurrency"))?
-        .as_str()?
-        .to_string();
+    let currency = option.source_currency.or(quote.source_currency)?;
     Some(WiseQuoteFee {
         currency,
-        total: decimal_of(option.get("fee")?.get("total")?)?,
+        total: decimal_of_raw(option.fee?.total?.as_ref())?,
     })
 }
 
@@ -869,23 +925,49 @@ mod tests {
         assert_eq!(api_instant(t), "2024-01-30T22%3A59%3A59.999Z");
     }
 
+    /// Le texte brut d'un nombre, tel qu'un serveur l'écrit (jamais passé par
+    /// `json!`, qui le ferait transiter par `f64`).
+    fn brut(texte: &str) -> Box<RawValue> {
+        serde_json::from_str(texte).unwrap()
+    }
+
     #[test]
-    fn nombres_lus_par_le_texte() {
+    fn nombres_lus_par_le_texte_recu() {
+        let lire = |t: &str| decimal_of_raw(&brut(t)).map(|d| d.to_string());
+        assert_eq!(lire("1234.50").as_deref(), Some("1234.50"));
+        assert_eq!(lire("0").as_deref(), Some("0"));
+        assert_eq!(lire("0.0").as_deref(), Some("0.0"));
+        assert_eq!(lire("\"12.30\"").as_deref(), Some("12.30"));
+        assert_eq!(lire("1e-7").as_deref(), Some("0.0000001"));
+        // Les cas que `f64` altère (revue P1, M1).
         assert_eq!(
-            decimal_of(&json!(1234.5)),
-            Some("1234.5".parse::<Decimal>().unwrap())
-        );
-        assert_eq!(decimal_of(&json!(0)), Some(Decimal::ZERO));
-        assert_eq!(
-            decimal_of(&json!(0.0)),
-            Some("0.0".parse::<Decimal>().unwrap())
+            lire("99999999999999.99").as_deref(),
+            Some("99999999999999.99")
         );
         assert_eq!(
-            decimal_of(&json!("12.30")),
-            Some("12.30".parse::<Decimal>().unwrap())
+            lire("123456789012345.67").as_deref(),
+            Some("123456789012345.67")
         );
-        assert_eq!(decimal_of(&json!(null)), None);
-        assert_eq!(decimal_of(&json!("abc")), None);
+        assert_eq!(
+            lire("0.123456789012345678").as_deref(),
+            Some("0.123456789012345678")
+        );
+        assert_eq!(lire("null"), None);
+        assert_eq!(lire("\"abc\""), None);
+    }
+
+    #[test]
+    fn soldes_au_texte_brut_sans_perte() {
+        let corps =
+            br#"[{"id":1,"currency":"CHF","amount":{"value":99999999999999.99,"currency":"CHF"}},
+            {"id":2,"currency":"EUR","amount":{"value":123456789012345.67}},
+            {"id":3,"currency":"USD","amount":{"value":0.123456789012345678}}]"#;
+        let s = parse_balances(corps).unwrap();
+        assert_eq!(s[0].amount.to_string(), "99999999999999.99");
+        assert_eq!(s[1].amount.to_string(), "123456789012345.67");
+        assert_eq!(s[2].amount.to_string(), "0.123456789012345678");
+        assert!(parse_balances(br#"[{"id":1,"currency":"CHF","amount":{}}]"#).is_none());
+        assert!(parse_balances(br#"[{"id":1,"currency":"CHF"}]"#).is_none());
     }
 
     #[test]
@@ -928,27 +1010,59 @@ mod tests {
         ));
     }
 
-    fn activite(rt: &str, rid: &str) -> WiseActivity {
+    fn activite_id(id: &str, rt: &str, rid: &str, statut: &str) -> WiseActivity {
         parse_activity(&json!({
-            "id": format!("{rt}-{rid}"), "type": "TRANSFER",
+            "id": id, "type": "TRANSFER",
             "resource": {"type": rt, "id": rid},
-            "status": "COMPLETED", "createdOn": "2024-01-02T10:00:00Z",
+            "status": statut, "createdOn": "2024-01-02T10:00:00Z",
             "updatedOn": "2024-01-02T10:00:01.123Z"
         }))
         .unwrap()
     }
 
     #[test]
-    fn deduplication_par_type_et_identifiant_de_ressource() {
+    fn deduplication_par_identifiant_d_activite_derniere_version() {
         let v = dedup_activities(vec![
-            activite("TRANSFER", "1"),
-            activite("TRANSFER", "2"),
-            activite("TRANSFER", "1"),
-            activite("BALANCE_TRANSACTION", "1"),
+            activite_id("A1", "TRANSFER", "1", "PENDING"),
+            activite_id("A2", "TRANSFER", "2", "COMPLETED"),
+            activite_id("A1", "TRANSFER", "1", "COMPLETED"),
         ]);
-        assert_eq!(v.len(), 3);
-        assert_eq!(v[0].resource_id, "1");
-        assert_eq!(v[2].resource_type, "BALANCE_TRANSACTION");
+        assert_eq!(v.len(), 2);
+        // La place de la première lecture, le contenu de la dernière.
+        assert_eq!(v[0].id, "A1");
+        assert_eq!(v[0].status, "COMPLETED");
+        assert_eq!(v[1].id, "A2");
+    }
+
+    #[test]
+    fn deux_activites_de_meme_ressource_restent_deux() {
+        // Un virement remboursé : seconde activité de même `resource_id`.
+        let v = dedup_activities(vec![
+            activite_id("A1", "TRANSFER", "7", "COMPLETED"),
+            activite_id("A2", "TRANSFER", "7", "COMPLETED"),
+        ]);
+        assert_eq!(v.len(), 2);
+    }
+
+    fn octets(v: &Value) -> Vec<u8> {
+        v.to_string().into_bytes()
+    }
+
+    #[test]
+    fn devis_sans_pay_out_refuse() {
+        let q = json!({"paymentOptions":[
+            {"payIn":"BALANCE","sourceCurrency":"CHF","fee":{"total":1.0}}]});
+        assert!(pick_quote_fee(&octets(&q)).is_none());
+    }
+
+    #[test]
+    fn frais_du_devis_au_texte_brut_sans_perte() {
+        let corps = br#"{"payOut":"BANK_TRANSFER","paymentOptions":[
+            {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"CHF","fee":{"total":99999999999999.99}}]}"#;
+        assert_eq!(
+            pick_quote_fee(corps).unwrap().total.to_string(),
+            "99999999999999.99"
+        );
     }
 
     #[test]
@@ -957,25 +1071,25 @@ mod tests {
             {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"EUR","fee":{"total":1.25}},
             {"payIn":"BANK_TRANSFER","payOut":"BANK_TRANSFER","sourceCurrency":"EUR","fee":{"total":9.0}},
             {"payIn":"BALANCE","payOut":"SWIFT","sourceCurrency":"EUR","fee":{"total":7.0}}]});
-        let f = pick_quote_fee(&q).unwrap();
+        let f = pick_quote_fee(&octets(&q)).unwrap();
         assert_eq!(f.currency, "EUR");
         assert_eq!(f.total, "1.25".parse::<Decimal>().unwrap());
         // Frais nuls : l'option est présente, le total vaut zéro.
         let q0 = json!({"payOut":"BANK_TRANSFER","paymentOptions":[
             {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"CHF","fee":{"total":0.0}}]});
-        assert_eq!(pick_quote_fee(&q0).unwrap().total, Decimal::ZERO);
+        assert_eq!(pick_quote_fee(&octets(&q0)).unwrap().total, Decimal::ZERO);
     }
 
     #[test]
     fn devis_sans_option_ou_a_deux_options_refuse() {
         let sans = json!({"payOut":"BANK_TRANSFER","paymentOptions":[
             {"payIn":"BANK_TRANSFER","payOut":"BANK_TRANSFER","sourceCurrency":"CHF","fee":{"total":1.0}}]});
-        assert!(pick_quote_fee(&sans).is_none());
+        assert!(pick_quote_fee(&octets(&sans)).is_none());
         let deux = json!({"payOut":"BANK_TRANSFER","paymentOptions":[
             {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"CHF","fee":{"total":1.0}},
             {"payIn":"BALANCE","payOut":"BANK_TRANSFER","sourceCurrency":"CHF","fee":{"total":2.0}}]});
-        assert!(pick_quote_fee(&deux).is_none());
-        assert!(pick_quote_fee(&json!({"payOut":"X"})).is_none());
+        assert!(pick_quote_fee(&octets(&deux)).is_none());
+        assert!(pick_quote_fee(&octets(&json!({"payOut":"X"}))).is_none());
     }
 
     #[test]
