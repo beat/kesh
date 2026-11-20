@@ -59,7 +59,7 @@ versement, aucune règle.
   compte est **accepté** et signalé en écart (`gap`), par la fonction existante `previous_statement_closing`
   (`crates/kesh-db/src/repositories/bank_imports.rs:358`) ; un fichier dont le **premier jour** est couvert par un relevé du compte
   (`overlapping_statements(…, first_date, first_date)`) ne l'est pas — les doublons ne sont pas stockés ; le premier jour, et
-  non toute la période, pour que la revue réponde comme l'import (un relevé postérieur ne masque pas l'écart du début).
+  non toute la période, pour qu'un relevé postérieur ne masque pas, à la revue, l'écart du début ; à la revue, l'état présent des relevés (un relevé importé ou saisi après coup peut changer la réponse, comme en 39-11c AC-6).
 - **G5 — Règles : critères existants, filtres de 38-11b, rien de neuf pour Wise** (décision (3) de l'orchestrateur).
   Contrepartie = `Merchant` pour une carte, `Payee Name` pour un débit, `Payer Name` pour un crédit
   (`counterparty_contains`, `counterparty_exact`) ; IBAN du bénéficiaire (`iban_exact`, colonne `counterparty_iban`
@@ -231,7 +231,7 @@ documentée) ; la profondeur d'historique servie ; le mécanisme de signature du
   (`find_matched_elsewhere`) puis les règles ; continuité par `previous_statement_closing` ; demandes à l'Epic 38.
 - 2026-11-20 — Validation P3 ciblée du commit `02ed58c6` (Claude Opus 5.5, contexte frais ; rapport
   `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P3-ciblee.md`) : G4, continuité jugée sur le **premier jour** du fichier
-  (`overlapping_statements(…, first_date, first_date)`), non sur toute sa période, pour que la revue réponde comme l'import.
+  (`overlapping_statements(…, first_date, first_date)`), non sur toute sa période, pour que la revue réponde comme l'import ; à la revue, l'état présent des relevés (un relevé importé après coup peut changer la réponse, comme en 39-11c AC-6). Validation P4 ciblée (Claude Opus 5.5, contexte frais) : « réponde comme l'import » retiré, il était faux pour un relevé importé après coup.
   Rectificatif du même jour : G8, la 39-11c seule propose le rattachement de la réception Wise au versement (40-7c ne
   propose plus de réception depuis sa P2, écart `payout_without_receipt`).
 
