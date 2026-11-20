@@ -308,6 +308,53 @@ Les principales ressources accessibles via l'API (liste non exhaustive — toute
 
 **Le bilan et son résultat reporté calculé** *(depuis le correctif du résultat reporté nul, prochaine release planifiée)* : `GET /reports/balance-sheet` rend **toujours** `retainedEarnings` (cumul des résultats des exercices antérieurs tenus dans Kesh, qu'aucun compte ne porte), **zéro compris** — le champ ne change pas, et l'outil MCP `kesh_bilan` garde de même `report`. L'export `GET /reports/balance-sheet/export`, lui, suit l'écran : la ligne « Résultat reporté (calculé) » n'y figure **que si elle n'est pas nulle une fois arrondie au centime** (l'équidistant loin de zéro ; écrite arrondie de même), au PDF comme au **CSV**, où la ligne `CapitauxPropres;;Résultat reporté (calculé);0.00` disparaît (le CSV est la présentation du bilan, dont les lignes varient déjà avec les comptes à solde non nul ; `Total capitaux propres` et `Total passifs + capitaux propres` sont inchangés). Un lecteur qui cherchait cette ligne dans le CSV la tient pour nulle quand elle manque, ou lit le JSON. La balance (`trial-balance`) garde sa ligne à zéro : elle entre dans son contrôle d'ouverture.
 
+**Le bilan et le compte de résultat par groupes de comptes** *(Story 46-1, release prévue 0.21.0)* : `GET /reports/balance-sheet` et `GET /reports/income-statement` acceptent quatre paramètres **facultatifs** ; **sans `detailLevel`, la réponse est celle d'avant, à l'octet** (ni `grouping` ni `groupedRows`).
+
+| Paramètre | Valeurs | Absent |
+|---|---|---|
+| `detailLevel` | entier de `1` à `20`, ou `all` | réponse d'avant |
+| `subtotalPosition` | `header` (sous-total sur la ligne du titre du groupe) ou `footer` (ligne de sous-total sous les comptes du groupe) | `header` |
+| `open` | identifiants de comptes de groupe ouverts à la main, séparés par des virgules | aucun |
+| `closed` | identifiants de comptes de groupe fermés à la main, séparés par des virgules | aucun |
+
+Refus `400 VALIDATION_ERROR`, message qui nomme le paramètre : `detailLevel` qui n'est ni un entier de `1` à `20` ni `all` (`0`, `-1`, `21`, `2.5`, `ALL`, vide) ; `subtotalPosition`, `open` ou `closed` **sans** `detailLevel` ; `subtotalPosition` autre que `header` ou `footer` ; un élément de liste qui n'est pas un entier (élément vide compris, `open=` aussi) ; un même identifiant dans `open` **et** dans `closed` ; plus de 500 identifiants dans une liste. Un identifiant inconnu, d'une autre société, ou qui n'est pas un groupe affiché du rapport est **ignoré** sans erreur, et retiré de l'écho. `GET /reports/trial-balance` ignore ces paramètres.
+
+Les groupes sont ceux de l'arbre du plan comptable (le compte parent de chaque compte, jamais son numéro), **dans** chaque section légale : Actifs, Dettes, Fonds propres au bilan, Produits, Charges au compte de résultat. Un groupe dont les comptes à solde tombent dans **plusieurs** sections n'est affiché dans **aucune** : ses enfants remontent d'un cran (au plan PME, `2 Passifs` dès qu'un compte de fonds propres a un solde ; au compte de résultat, `6`, `7`, `70`, `8` et `80` dès que produits et charges y ont un solde). La profondeur `1` est donc celle des racines de chaque section.
+
+**Règle d'ouverture** : le niveau fixe l'état de départ, les listes priment ensuite. Un groupe de profondeur `p` est ouvert si son identifiant est dans `open`, ou bien s'il n'est pas dans `closed` et que `detailLevel` vaut `all` ou dépasse `p`. Un groupe fermé montre son sous-total et cache sa descendance ; un groupe ouvert sous un ancêtre fermé n'est pas montré. Un groupe fermé par le niveau dont le sous-total est nul (en CHF et en devise) n'est pas affiché — son zéro reste dans le sous-total de son parent ; fermé à la main, il reste affiché.
+
+**Réponse**, avec `detailLevel` seulement : les champs d'avant inchangés (les sections à plat restent rendues), puis
+
+- `grouping` : `{ detailLevel, subtotalPosition, maxDepth, open, closed }` — l'écho des choix **retenus** (listes triées, identifiants ignorés retirés) ; `maxDepth`, la plus grande profondeur de l'arbre affiché, quel que soit l'état d'ouverture (`0` pour un rapport vide, `1` pour un plan sans groupe) ;
+- `groupedRows` : `{ assets, liabilities, equity }` au bilan, `{ revenues, expenses }` au compte de résultat. Chaque ligne, déjà dans l'ordre d'affichage : `kind`, `depth`, `accountId`, `accountNumber`, `accountName`, `balance`, et selon le cas `currency`, `balanceCurrency`, `open`, `active`, `role`. `kind` vaut `group` (un compte de groupe ; `balance` est son sous-total exact ; `open` toujours présent), `account` (un compte de la section ; `active` et `role` présents), `own` (le solde propre d'un compte de groupe qui porte lui-même des écritures, premier enfant de son groupe) ou `subtotal` (en `footer` seulement, pour un groupe ouvert : après sa descendance, mêmes `accountId`, `depth` et `balance` que sa ligne `group`). Un groupe porte `currency` et `balanceCurrency` seulement si tous ses comptes à solde sont dans **la même** devise étrangère ; sinon il est en CHF seul. Les totaux de section restent en CHF.
+
+**Règle de rendu** (écran, PDF et CSV la suivent) : une ligne `group` porte son montant si `subtotalPosition` vaut `header` **ou** si le groupe est fermé ; sinon le montant va à sa ligne `subtotal`. La somme des `balance` des lignes de profondeur `1` d'une section, **lignes `subtotal` exclues**, égale le total de la section, à tout niveau et pour tout état d'ouverture. Les lignes calculées du bilan (`retainedEarnings`, `equityResult`) restent hors des groupes. En mode groupé, les fonds propres suivent l'arbre, non l'ordre des rôles.
+
+Le niveau et l'ouverture sont des choix de présentation : chaque demande écrit sa trace `report.generated` comme avant, sans détail de plus. La conformité à l'art. 959a CO tient aux sections légales, que les groupes ne changent pas ; **une présentation à un niveau qui replie les comptes (le niveau 1 en particulier) est un affichage de travail, non des comptes annuels**.
+
+Exemple — bilan du plan PME au niveau 2 (`GET /reports/balance-sheet?fiscalYearId=1&detailLevel=2`), champs ajoutés seulement ; `2 Passifs` y est dissous, si bien que `20`, `24` et `28`, de profondeur 1, sont ouverts :
+
+```json
+"grouping": { "detailLevel": 2, "subtotalPosition": "header", "maxDepth": 3, "open": [], "closed": [] },
+"groupedRows": {
+  "assets": [
+    { "kind": "group", "depth": 1, "accountId": 1, "accountNumber": "1", "accountName": "Actifs", "balance": "31050.0000", "open": true },
+    { "kind": "group", "depth": 2, "accountId": 10, "accountNumber": "10", "accountName": "Actifs circulants", "balance": "27050.0000", "open": false },
+    { "kind": "group", "depth": 2, "accountId": 11, "accountNumber": "14", "accountName": "Actifs immobilisés", "balance": "4000.0000", "open": false }
+  ],
+  "liabilities": [
+    { "kind": "group", "depth": 1, "accountId": 12, "accountNumber": "20", "accountName": "Capitaux étrangers à court terme", "balance": "3000.0000", "open": true },
+    { "kind": "account", "depth": 2, "accountId": 40, "accountNumber": "2000", "accountName": "Créanciers", "balance": "3000.0000", "active": true, "role": "Payable" },
+    { "kind": "group", "depth": 1, "accountId": 13, "accountNumber": "24", "accountName": "Capitaux étrangers à long terme", "balance": "4000.0000", "open": true },
+    { "kind": "account", "depth": 2, "accountId": 47, "accountNumber": "2400", "accountName": "Emprunts bancaires", "balance": "4000.0000", "active": true, "role": null }
+  ],
+  "equity": [
+    { "kind": "group", "depth": 1, "accountId": 14, "accountNumber": "28", "accountName": "Capitaux propres", "balance": "20000.0000", "open": true },
+    { "kind": "account", "depth": 2, "accountId": 49, "accountNumber": "2800", "accountName": "Capital social", "balance": "20000.0000", "active": true, "role": "EquityCapital" }
+  ]
+}
+```
+
 **Les lignes d'une écriture portent leur lettrage** *(depuis la v0.13.0)* : dans toute réponse qui expose les lignes (`GET /journal-entries`, `GET /journal-entries/{id}`, et les réponses de `POST`, `PUT` et de la contre-passation), chaque ligne porte trois champs, **toujours présents** : `letteringKey` (la clé du groupe de lettrage), `letteringCode` (son code affiché, `AA` pour la clé 27) et `letteringOrigin` (`manual`, posé par les routes du lettrage, ou `reversal`, posé par la contre-passation, ou `document`, posé par Kesh sur les lignes d'une facture client soldée — il suit ses règlements et son avoir, voir « Lettrer des lignes ») — tous trois `null` quand la ligne est **ouverte**.
 
 ### Modifier une écriture — `PUT /api/v1/journal-entries/{id}`

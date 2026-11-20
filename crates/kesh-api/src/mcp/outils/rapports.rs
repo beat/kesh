@@ -305,7 +305,8 @@ impl McpTool for KeshBilan {
             let rapport = rapports::bilan(ctx.acces(), ctx.lecture(), demande(&a), Affichage)
                 .await
                 .map_err(depuis_app_error)?;
-            let r = ctx.afficher(rapport).await;
+            // Sans groupes jusqu'à la Story 46-4 : le bilan seul.
+            let r = ctx.afficher(rapport).await.rapport;
             let sortie = Bilan {
                 periode: periode(r.period),
                 actifs: lignes(r.assets),
@@ -357,7 +358,8 @@ impl McpTool for KeshCompteDeResultat {
                 rapports::compte_de_resultat(ctx.acces(), ctx.lecture(), demande(&a), Affichage)
                     .await
                     .map_err(depuis_app_error)?;
-            let r = ctx.afficher(rapport).await;
+            // Sans groupes jusqu'à la Story 46-4 : le compte de résultat seul.
+            let r = ctx.afficher(rapport).await.rapport;
             let sortie = CompteDeResultat {
                 periode: periode(r.period),
                 produits: lignes(r.revenues),
