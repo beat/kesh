@@ -122,8 +122,8 @@ seulement si le solde reconstruit concorde avec mes relevés.
      doublon est **ignoré** (sans cette exemption, le mélange CSV puis téléchargement des conversions échouerait à chaque
      fois, en contradiction avec cette AC) ; sans ligne de frais en base ou avec un autre écart, `amount_mismatch`. L'import
      CSV, lui, garde le comportement de 39-11b (doublon ignoré).
-   - **(R3) Conversion automatique, tant que son identifiant est provisoire** (39-12a2 AC-3 ; **définitive** : la recette 39-12a1
-     AC-0 (a)(2) n'a trouvé le numéro du CSV nulle part dans l'API) : une ligne `AUTO_CONVERSION-y` est un doublon si le compte porte une ligne
+   - **(R3) Conversion automatique, faute de numéro commun** (39-12a2 AC-3 : l'identifiant `AUTO_CONVERSION-y` est **définitif** ;
+     la recette 39-12a1 AC-0 (a)(2) n'a trouvé le numéro du CSV nulle part dans l'API) : une ligne `AUTO_CONVERSION-y` est un doublon si le compte porte une ligne
      `CONVERSION_ORDER-n` de date à un jour près et de même montant (crédit), ou dont le montant plus celui de
      `FEE-CONVERSION_ORDER-n` égale le sien (débit) ; symétriquement, une ligne CSV `CONVERSION_ORDER-n` (et sa ligne de
      frais, par R1) est un doublon d'une ligne `AUTO_CONVERSION-y` en base qui remplit la même condition. Plusieurs
@@ -202,6 +202,7 @@ CSV, sans doublon dans un sens comme dans l'autre ; tout ou rien en cas d'échec
 
 ## Change Log
 
+- 2026-11-20 — validation ciblée AC-0 (a) « décisions » sur le commit `d0cfeda7` (Claude Haiku 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié : libellé de R3 « tant que son identifiant est provisoire » retiré (identifiant définitif, doublon cherché par montant et date).
 - 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : horodatages ramenés à l'heure de Zurich (plus de fuseau « à retenir ») ; `since` de `/activities` porte sur `updatedOn`, donc la reprise à `readFrom` ne perd rien ; un débit terminé après un relevé arrive à une date antérieure et le contrôle de l'AC-5 le refuse, voulu (manuel 39-12b) ; la règle R3 de la conversion automatique devient définitive (numéro du CSV introuvable dans l'API). Aucun code touché.
 - 2026-11-20 — validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : rien à changer ; point d'accroche et `readFrom` non touchés par le commit.
 - 2026-11-20 — validation P4 ciblée sur le commit `a98da37a` (Claude Opus 5.5, contexte frais ; commune à 39-12a1, 39-12a2, 39-12a3, 39-12b ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P4-ciblee.md`) : 0 C, 0 H, 1 M, 2 L, remédiés. Ici : rien à changer (point d'accroche avant `kept.is_empty()`, la période et la clôture, relu au cœur de 38-12a ; cœur de 40-7b = celui de 38-12a plus `value_date` et des aides de formulaire ; `readFrom` = `importFrom` vérifié contre `previous_statement_closing` et `overlapping_statements`).
