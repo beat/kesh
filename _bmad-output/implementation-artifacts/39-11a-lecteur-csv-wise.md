@@ -32,7 +32,7 @@ Wise, afin que l'import (39-11b) n'ait plus qu'à ranger ces lignes au compte ba
    de `parse_csv`, `crates/kesh-import/src/lib.rs:45-55`). `detect_encoding(bytes)` rend `(encodage, bom_len)` ;
    `decode_bytes` (`crates/kesh-import/src/csv/encoding.rs:48`, `:107`) reçoit `&bytes[bom_len..]` (le relevé de
    Wise n'a pas de BOM — relevé sur les fichiers 2024 —, mais un BOM est admis et retranché). Crate `csv` déjà en
-   dépendance : `has_headers(false)`, virgule, guillemets doubles, `flexible(false)` (nombre de cellules ≠ en-tête →
+   dépendance : `has_headers(false)`, virgule, guillemets doubles, `flexible(true)` en réalité (la largeur se contrôle à la main dans `read_records`, ce qui permet de sauter la ligne vide de fin avant de la compter fausse ; même refus `FIELD_COUNT`) — `flexible(false)` à l'écriture de la fiche (nombre de cellules ≠ en-tête →
    erreur de ligne `FIELD_COUNT`) ; le numéro de ligne d'une erreur est celui du fichier (`record.position().line()`,
    1 = l'en-tête) ; lignes entièrement vides sautées. Fichier vide ou en-tête seul → `WiseCsvError::Empty`.
    **Type d'erreur fermé** : `WiseCsvError` = `Empty`, `Encoding(CsvError)`, `MissingColumns(Vec<String>)`,
@@ -67,10 +67,10 @@ Wise, afin que l'import (39-11b) n'ait plus qu'à ranger ces lignes au compte ba
    classe rien d'autre** : conversions, virements, versements Stripe sont l'affaire de 39-11c.
 4. **AC-4 — Dates, montants, signes.** `Date` au format `JJ-MM-AAAA` (relevés 2024) ou `AAAA-MM-JJ` ; autre → erreur de
    ligne `DATE` ; année hors `ANNEE_MIN..=ANNEE_MAX` (`lib.rs:35-43`, `annee_recevable`) → erreur. `Date Time` au
-   format `JJ-MM-AAAA HH:MM:SS` suivi ou non de `.fff` (relevés : millisecondes), lu en `NaiveDateTime` **sans
+   format `JJ-MM-AAAA HH:MM:SS` suivi ou non de `.fff` (exactement trois décimales ; relevés : millisecondes ; seconde intercalaire `:60` et forme ISO refusées, remédiation P1 L3), lu en `NaiveDateTime` **sans
    conversion de fuseau** (limite au manuel par 39-11d) ; autre forme → erreur `DATE_TIME`. **Montants** : la forme
    fermée de 38-11a AC-5 (`^-?(\d+|\d{1,3}(,\d{3})+)(\.\d{1,2})?$`, virgule seulement en séparateur de milliers),
-   par la **même fonction**, déplacée dans `csv/by_name.rs` avec l'aide d'en-tête (⚠️ **pas** `parse_amount`,
+   par la **même fonction**, restée dans `csv/amount.rs` (venue de 38-11a ; l'aide d'en-tête est dans `csv/by_name.rs`) (⚠️ **pas** `parse_amount`,
    `csv/parser.rs:816`, privé, qui retire toute virgule sans la contrôler : 38-11a AC-5 l'écarte pour cette raison,
    et ne le rend pas `pub(crate)`) — pour `Amount`, `Running Balance`, `Total fees`, `Exchange To Amount` (les
    relevés portent `-9.99`, `9.99` et des entiers sans décimale) ; `Exchange Rate` : `^\d+(\.\d{1,10})?$` (cinq
@@ -113,7 +113,7 @@ Wise, afin que l'import (39-11b) n'ait plus qu'à ranger ces lignes au compte ba
 
 ## Stratégie de tests
 
-Unitaires dans `wise.rs` ; intégration `crates/kesh-import/tests/wise_csv.rs` sur les fixtures : nombre de lignes,
+Un unitaire dans `wise.rs` (débordement du chaînage du solde, devenu inatteignable par un fichier) ; le reste en intégration `crates/kesh-import/tests/wise_csv.rs` sur les fixtures : nombre de lignes,
 valeurs de chacune, préfixes, `fee_of`, soldes d'ouverture et de clôture ; colonnes dans un autre ordre ; colonnes
 de carte absentes du résultat ; requises manquantes ; doublon de colonne ; deux devises ; identifiant en double ;
 rupture du solde courant ; tri sur l'horodatage lu (cas des deux jours de la fixture) ; signe contraire ; date
@@ -209,3 +209,22 @@ nommant les colonnes qui manquent, et un relevé dont le solde courant ne se sui
 ## Change Log (développement)
 
 - 2026-11-20 — développement : lecteur Wise, extraction de `read_records` et de la troncature, fixtures fictives, 28 tests.
+- 2026-11-20 — remédiation de la revue P1 (`kesh-gate-logs/s39-11a/revue-p1-rapport.md` : 0 CRITICAL, 0 HIGH, 1 MEDIUM, 9 LOW) :
+  - M1 : `check_unique_ids` linéaire (`HashMap` identifiant -> ligne, même message, premier doublon de l'ordre du fichier, toutes ses
+    lignes) ; tests `first_duplicate_in_file_order_is_cited_with_all_its_lines` et `a_large_file_is_checked_in_linear_time`
+    (100 000 lignes synthétiques, deux lectures en 4,3 s au total, borne 20 s ; la sonde n'a pas été rejouée contre la version
+    quadratique : estimation de son coût, non mesure).
+  - L1 : `epic/38-paypal` reprise (borne de 15 chiffres, `ff5b690e`), sans conflit ; `extreme_amounts_are_refused_without_panicking`
+    attend désormais deux `AMOUNT` ; le chemin `OVERFLOW` du chaînage garde un test unitaire (`wise.rs`,
+    `running_balance_overflow_is_a_line_error`) ; le débordement de `opening_balance` (`checked_sub`, inline) n'a pas de preuve : inatteignable par fichier.
+  - L3 : `Date Time` strict — `JJ-MM-AAAA`, exactement trois décimales, `:60` refusé, forme ISO refusée (les trois relevés réels :
+    uniquement `JJ-MM-AAAA HH:MM:SS.fff`, formes comptées sans valeur). L4 : cas ajoutés (heure sur un chiffre, décimales non chiffres, deux ou
+    quatre décimales, `:60`, ISO, devise `C1F`). L5 : test du tri inexpugnable retiré, son commentaire versé à l'autre. L6 : le
+    test `#[ignore]` échoue sans variable ou sans fichier lu, imprime `e.code()` et le nombre de fichiers (3 lus : 64, 68, 129 lignes).
+    L7 : test d'un fichier à toutes cellules guillemetées avec une virgule dans une description. L9 : `read_records` et
+    `RawRecords` en `pub(crate)` ; fiche alignée (`flexible(true)`, emplacement des montants, tests unitaires).
+  - L2 et L8 : à ouvrir en issues (`kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md`, nos 12 et 13), sans code.
+  - Gate ciblé (cible propre `kesh-wt39`) : fmt `--check` vert, clippy workspace `-D warnings` vert, `cargo test -p kesh-import` vert
+    (lib 140, `wise_csv` 29 passés + 1 ignoré, `paypal_csv` 11, doctests 0), `cargo publish --dry-run -p kesh-import` vert (journaux `g4-*.log`).
+    Le gate backend complet du 18:25 (`gate-backend.log`) est **non joué** (disque de `kesh-mariadb-dev2` plein, arrêté par l'orchestrateur) ;
+    la fusion ne touche que `kesh-import` et des fiches.
