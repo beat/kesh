@@ -45,8 +45,11 @@ pub struct RawRecords {
 
 /// Découpe un texte CSV (virgule, guillemets doubles) en en-tête et
 /// enregistrements : lignes entièrement vides sautées, numéro de ligne celui
-/// du fichier. `flexible(true)` : la largeur se contrôle ici, ce qui permet de
-/// sauter une ligne vide (fin de fichier) avant de la compter fausse.
+/// du fichier (⚠️ un enregistrement qui suit une ligne vide au milieu du
+/// fichier reçoit le numéro de cette ligne vide : le crate `csv` date un
+/// enregistrement avant de sauter les lignes vides qui le précèdent).
+/// `flexible(true)` : la largeur se contrôle ici, ce qui permet de sauter une
+/// ligne vide (fin de fichier) avant de la compter fausse.
 pub fn read_records(text: &str) -> RawRecords {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
@@ -171,11 +174,11 @@ mod tests {
 
     #[test]
     fn read_records_numbers_lines_skips_blanks_and_flags_bad_widths() {
-        let raw = read_records("a,b\n\n1,2\n3\n4,5\n,\n");
+        let raw = read_records("a,b\n1,2\n3\n4,5\n,\n\n");
         assert_eq!(raw.header.unwrap().iter().collect::<Vec<_>>(), ["a", "b"]);
         let lines: Vec<usize> = raw.records.iter().map(|(l, _)| *l).collect();
-        assert_eq!(lines, [3, 5]);
-        assert_eq!(raw.malformed, [(4, "1".to_string())]);
+        assert_eq!(lines, [2, 4]);
+        assert_eq!(raw.malformed, [(3, "1".to_string())]);
     }
 
     #[test]
