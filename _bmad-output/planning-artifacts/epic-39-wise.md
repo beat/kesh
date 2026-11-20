@@ -192,7 +192,7 @@ documentée) ; la profondeur d'historique servie ; le mécanisme de signature du
 `X-Signature`, clé publique déposée chez Wise ; vu le 2026-11-20 par le seul résumé de recherche de la page *Personal Token
 SCA* — pipeline OpenSSL, base64 RFC 4648 —, page 404 au chargement direct) ; la date de dépréciation des jetons personnels pour les PME.
 
-### Socle commun de la phase 2 (Epics 38, 39, 40) — contrat S1 à S9
+## Socle commun de la phase 2 (Epics 38, 39, 40) — contrat S1 à S9
 
 *Texte identique au fichier de l'Epic 40 ; décidé à la validation P1 des phases 2 de Wise et de Stripe (2026-11-20, rapport
 `39-12-P1.md`), amendé à la validation P2 du même jour (S1 : vide = absente, séries 1 à 3 au compose ; S2 à S4 : `max_days` par prestataire, 409 avec `jobId`, un
