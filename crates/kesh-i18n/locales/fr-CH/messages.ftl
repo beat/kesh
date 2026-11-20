@@ -261,6 +261,11 @@ accounts-retype-closed-years = Exercices clos concernés : { $years }. Leur rés
 accounts-retype-confirm = Changer le type quand même
 account-field-parent-optional = Compte parent (optionnel)
 accounts-parent-none = Aucun
+# Story 47-2 — compte miroir au dialogue d'un compte
+accounts-mirror-label = Compte miroir
+accounts-mirror-none = Aucun
+accounts-mirror-help = Le compte miroir est un compte de présentation : non postable, sans rôle ni écriture. Le solde de ce compte, s’il est de sens inverse, y paraît dans le bilan ou le compte de résultat.
+accounts-mirror-of = Ce compte est le compte miroir de { $numbers }.
 accounts-parent-archived = Le compte parent { $number } est archivé. Réactivez-le d'abord.
 error-account-parent-cycle = Le compte { $number } est ce compte ou l'un de ses sous-comptes : un compte ne peut pas être rangé sous lui-même.
 error-account-parent-has-entries = Le compte { $number } porte des écritures : y ranger ce compte le rendrait non imputable avec un solde qu'aucune saisie ne pourrait plus corriger. Choisissez un compte de groupe sans écriture.

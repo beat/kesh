@@ -261,6 +261,11 @@ accounts-retype-closed-years = Esercizi chiusi interessati: { $years }. Il loro 
 accounts-retype-confirm = Cambia comunque il tipo
 account-field-parent-optional = Conto padre (facoltativo)
 accounts-parent-none = Nessuno
+# Story 47-2 — compte miroir au dialogue d'un compte
+accounts-mirror-label = Conto specchio
+accounts-mirror-none = Nessuno
+accounts-mirror-help = Il conto specchio è un conto di presentazione: non registrabile, senza ruolo né registrazioni. Il saldo di questo conto, se di segno inverso, vi figura nel bilancio o nel conto economico.
+accounts-mirror-of = Questo conto è il conto specchio di { $numbers }.
 accounts-parent-archived = Il conto padre { $number } è archiviato. Riattivatelo prima.
 error-account-parent-cycle = Il conto { $number } è questo conto stesso o uno dei suoi sottoconti: un conto non può essere collocato sotto sé stesso.
 error-account-parent-has-entries = Il conto { $number } porta delle registrazioni: collocandovi sotto questo conto, diventerebbe non imputabile con un saldo che nessuna registrazione potrebbe più correggere. Scegliete un conto di gruppo senza registrazioni.

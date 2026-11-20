@@ -1158,7 +1158,11 @@ const ATTENDU = {
 	// garde après la fusion : **3499** (« expected 3499 to be +0 »,
 	// `kesh-gate-logs/fix-api-parent-compte/reprise-v0190-i18n-1.log`), non additionné — il égale
 	// 3495 (0.19.0) + 4 (le champ parent du dialogue de modification), les deux côtés gardés.
-	sitesTotal: 3499,
+	// Story 47-2 (2026-11-20), après la reprise de `origin/main` (garde non rejouée entre les deux) : **3499 → 3504**,
+	// relevé par la garde (« expected 3504 to be 3499 ») — le champ « Compte miroir »
+	// (`AccountMirrorField.svelte`) : `accounts-mirror-label` deux fois (phrase et `<select>`),
+	// `accounts-mirror-none`, `accounts-mirror-help`, `accounts-mirror-of`.
+	sitesTotal: 3504,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/

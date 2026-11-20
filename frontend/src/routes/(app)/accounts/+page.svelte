@@ -26,6 +26,12 @@
 		type RetypeImpact,
 	} from '$lib/features/accounts/accounts.types';
 	import AccountCurrencyFields from '$lib/features/accounts/AccountCurrencyFields.svelte';
+	import AccountMirrorField from '$lib/features/accounts/AccountMirrorField.svelte';
+	import {
+		mirrorFieldErrorOf,
+		mirrorFieldForCreate,
+		mirrorFieldForUpdate,
+	} from '$lib/features/accounts/mirror';
 	import { parentCandidates, parentFieldForUpdate } from '$lib/features/accounts/account-options';
 	import {
 		currencyFieldsForCreate,
@@ -96,6 +102,9 @@
 	let createParentId = $state('');
 	let createRole = $state<string>(NO_ROLE);
 	let createPostable = $state(true);
+	// Story 47-2 — compte miroir : `''` = « Aucun » ; refus du serveur sous le champ.
+	let createMirrorId = $state('');
+	let createMirrorError = $state('');
 	let createSubmitting = $state(false);
 	let createError = $state('');
 
@@ -108,6 +117,9 @@
 	let editPostable = $state(true);
 	// Correctif `fix-api-parent-compte` — `''` = « Aucun » (racine).
 	let editParentId = $state('');
+	// Story 47-2 — compte miroir : `''` = « Aucun » ; refus du serveur sous le champ.
+	let editMirrorId = $state('');
+	let editMirrorError = $state('');
 	let editSubmitting = $state(false);
 	let editError = $state('');
 
@@ -119,6 +131,10 @@
 	// `null` tant que le serveur n'a rien signalé.
 	let archiveDesignated = $state<string[] | null>(null);
 	let archiveDesignatedMessage = $state('');
+	// Story 47-2 (AC-3) — refus `ACCOUNT_IS_MIRROR` de l'archivage, affiché dans le
+	// dialogue (le message du serveur nomme les sources et le remède) : rien à
+	// confirmer, seul *Annuler* reste. Vide tant que le serveur n'a rien refusé.
+	let archiveMirrorMessage = $state('');
 
 	// Réactivation (Story 14-3a, #269) — action directe idempotente.
 	//
@@ -238,6 +254,8 @@
 		createParentId = '';
 		createRole = NO_ROLE;
 		createPostable = true;
+		createMirrorId = '';
+		createMirrorError = '';
 		createError = '';
 		createCurrency = initialCurrencyForm(null);
 		createFxErrors = {};
@@ -258,6 +276,7 @@
 		}
 		createSubmitting = true;
 		createError = '';
+		createMirrorError = '';
 		createFxErrors = {};
 		try {
 			await createAccount({
@@ -269,6 +288,8 @@
 				postable: createPostable,
 				// Story 37-1 : rien en mono-devise ni pour un compte CHF.
 				...currencyFieldsForCreate(createCurrency, multiCurrency),
+				// Story 47-2 : seulement si un miroir est choisi.
+				...mirrorFieldForCreate(createMirrorId),
 			});
 			toast.success(
 				i18nMsg('accounts-created', 'Compte { $number } créé', { number: createNumber.trim() })
@@ -277,8 +298,11 @@
 			await loadAccounts();
 		} catch (err) {
 			const fxErrors = fxFieldErrorOf(err);
+			const mirrorError = mirrorFieldErrorOf(err);
 			if (fxErrors) {
 				createFxErrors = fxErrors;
+			} else if (mirrorError) {
+				createMirrorError = mirrorError;
 			} else if (isApiError(err)) {
 				if (err.code === 'RESOURCE_CONFLICT') {
 					createError = i18nMsg('accounts-error-number-exists', 'Ce numéro de compte existe déjà.');
@@ -303,6 +327,8 @@
 		editRole = account.role ?? NO_ROLE;
 		editPostable = account.postable;
 		editParentId = account.parentId !== null ? String(account.parentId) : '';
+		editMirrorId = account.mirrorAccountId != null ? String(account.mirrorAccountId) : '';
+		editMirrorError = '';
 		editError = '';
 		editCurrency = initialCurrencyForm(account);
 		editFxErrors = {};
@@ -345,6 +371,9 @@
 			...parentFieldForUpdate(editAccount, editParentId),
 			// Story 37-1 : seulement ce qui change (absent = inchangé), rien en mono-devise.
 			...currencyFieldsForUpdate(editAccount, editCurrency, multiCurrency),
+			// Story 47-2 : seulement s'il change (absent = inchangé) ; jamais pour un
+			// compte miroir, dont le dialogue ne montre pas le `<select>`.
+			...mirrorFieldForUpdate(editAccount, editMirrorId),
 		});
 	}
 
@@ -366,6 +395,7 @@
 		}
 		editSubmitting = true;
 		editError = '';
+		editMirrorError = '';
 		editFxErrors = {};
 		try {
 			await putAccount(false);
@@ -373,8 +403,11 @@
 			await loadAccounts();
 		} catch (err) {
 			const fxErrors = fxFieldErrorOf(err);
+			const mirrorError = mirrorFieldErrorOf(err);
 			if (fxErrors) {
 				editFxErrors = fxErrors;
+			} else if (mirrorError) {
+				editMirrorError = mirrorError;
 			} else if (isApiError(err)) {
 				if (err.code === 'OPTIMISTIC_LOCK_CONFLICT') {
 					editError = i18nMsg('accounts-error-stale', 'Les données ont été modifiées. Rechargez la page.');
@@ -410,8 +443,12 @@
 		} catch (err) {
 			retypeWarnOpen = false;
 			const fxErrors = fxFieldErrorOf(err);
+			// Story 47-2 (AC-3) : la raison `accountType` d'un retypage tombe ici.
+			const mirrorError = mirrorFieldErrorOf(err);
 			if (fxErrors) {
 				editFxErrors = fxErrors;
+			} else if (mirrorError) {
+				editMirrorError = mirrorError;
 			} else {
 				editError = isApiError(err)
 					? err.message
@@ -426,6 +463,7 @@
 	function openArchive(account: AccountResponse) {
 		archiveTarget = account;
 		archiveDesignated = null;
+		archiveMirrorMessage = '';
 		archiveOpen = true;
 	}
 
@@ -477,6 +515,11 @@
 					// illisible : la même question sans liste, le Comptable n'étant jamais enfermé.
 					archiveDesignated = readDesignatedSettings(err.details) ?? [];
 					archiveDesignatedMessage = err.message;
+				} else if (err.code === 'ACCOUNT_IS_MIRROR') {
+					// Story 47-2 (AC-3) : un refus, non une question — dans le dialogue,
+					// sans toast ; le message du serveur nomme les sources et le remède.
+					archiveDesignated = null;
+					archiveMirrorMessage = err.message;
 				} else if (err.code === 'OPTIMISTIC_LOCK_CONFLICT') {
 					toast.error(i18nMsg('accounts-error-stale', 'Les données ont été modifiées. Rechargez la page.'));
 				} else {
@@ -661,7 +704,7 @@
 
 <!-- Dialog : Créer un compte -->
 <Dialog.Root bind:open={createOpen}>
-	<Dialog.Content>
+	<Dialog.Content class="max-h-[90vh] overflow-y-auto">
 		<Dialog.Header>
 			<Dialog.Title>{i18nMsg('accounts-add', 'Nouveau compte')}</Dialog.Title>
 			<Dialog.Description>{i18nMsg('accounts-create-description', 'Ajoutez un compte au plan comptable.')}</Dialog.Description>
@@ -739,6 +782,14 @@
 					fieldErrors={createFxErrors}
 				/>
 			{/if}
+			<AccountMirrorField
+				bind:value={createMirrorId}
+				{accounts}
+				account={null}
+				accountType={createType}
+				idPrefix="account-create"
+				error={createMirrorError}
+			/>
 			{#if createError}
 				<p class="text-sm text-red-600" role="alert">{createError}</p>
 			{/if}
@@ -756,7 +807,7 @@
 
 <!-- Dialog : Modifier un compte -->
 <Dialog.Root bind:open={editOpen}>
-	<Dialog.Content>
+	<Dialog.Content class="max-h-[90vh] overflow-y-auto">
 		<Dialog.Header>
 			<Dialog.Title>{i18nMsg('accounts-edit-title', 'Modifier le compte { $number }', { number: editAccount?.number ?? '' })}</Dialog.Title>
 			<Dialog.Description>{i18nMsg('accounts-edit-description', "Le numéro n'est pas modifiable après création.")}</Dialog.Description>
@@ -836,6 +887,14 @@
 					accountId={editAccount?.id}
 				/>
 			{/if}
+			<AccountMirrorField
+				bind:value={editMirrorId}
+				{accounts}
+				account={editAccount}
+				accountType={editType}
+				idPrefix="account-edit"
+				error={editMirrorError}
+			/>
 			{#if editError}
 				<p class="text-sm text-red-600" role="alert">{editError}</p>
 			{/if}
@@ -939,11 +998,18 @@
 				{/if}
 			</div>
 		{/if}
+		{#if archiveMirrorMessage}
+			<p class="mt-2 text-sm text-destructive" role="alert" data-testid="account-archive-mirror">
+				{archiveMirrorMessage}
+			</p>
+		{/if}
 		<Dialog.Footer class="mt-4">
 			<Dialog.Close>
 				<Button variant="outline" type="button" autofocus data-testid="account-archive-dialog-cancel">{i18nMsg('common-cancel', 'Annuler')}</Button>
 			</Dialog.Close>
-			{#if archiveDesignated}
+			{#if archiveMirrorMessage}
+				<!-- Story 47-2 (AC-3) : rien à confirmer, ni « Archiver quand même » ni « Archiver ». -->
+			{:else if archiveDesignated}
 				<Button variant="destructive" disabled={archiveSubmitting} onclick={() => submitArchive(true)} data-testid="account-archive-dialog-anyway">
 					{archiveSubmitting ? i18nMsg('accounts-archiving', 'Archivage…') : i18nMsg('accounts-archive-anyway', 'Archiver quand même')}
 				</Button>
