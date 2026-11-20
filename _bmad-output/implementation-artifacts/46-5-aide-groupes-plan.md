@@ -34,6 +34,28 @@ de mes comptes, afin de structurer mon plan (une banque = un groupe, puis les li
    contrôles que `POST /accounts` et `PUT /accounts/{id}`, dans une transaction ; audit.
 4. **AC-4 — Tests et manuel.** Tests d'intégration ; E2E ; captures ; manuel FR (`.tex`).
 
+## Points à trancher avec la maquette (validation P1, allégée — la fiche est conditionnelle)
+
+La fiche n'est **pas validée en boucle** (Q9) : cette passe ne la confronte qu'au code de `origin/main` et lui
+inscrit ce que la maquette doit trancher ; elle se **revalide en entier** après la décision de Beat et de Guy.
+
+1. **Atomicité (AC-3).** `accounts::create` (`:189`) et `accounts::update` (`:1079`) prennent le **pool** et ouvrent
+   chacun leur transaction (`pool.begin()`, `:192`, `:1091`) ; les enchaîner n'est donc **pas** « dans une transaction ».
+   Soit on extrait des variantes `_in_tx` (précédent : `bulk_create_from_chart_in_tx`, `:1847`) que les fonctions
+   actuelles appellent — touche `kesh-db`, **gate complet même en boucle de revue** (`CLAUDE.md` § *Exception
+   `kesh-db`*) ; soit on admet un enchaînement non atomique avec reprise et on le dit à l'aperçu. À décider.
+2. **Le compte de groupe a un type, une devise, une postabilité.** `NewAccount` exige un `account_type` : la
+   proposition le **déduit** des comptes sélectionnés quand ils sont tous du même type, et **refuse** une sélection
+   de types mêlés (le groupe serait, de toute façon, dissous par le bilan, 46-1 D4) ; devise `None` ; `postable`
+   normalisé par le dépôt (un compte qui a des sous-comptes actifs n'est pas imputable, `entities/account.rs:233`).
+   `PUT /accounts/{id}` remplace tous les champs et exige la `version` du compte : un déplacement = un `PUT` par
+   compte, `version` relue à l'aperçu ; un parent archivé est refusé (`routes/accounts.rs:83`).
+3. **Numéro d'un groupe qui existe déjà.** Le cas de Beat (10 numéros par banque, groupe = numéro sans son dernier
+   chiffre) tombe sur un numéro **déjà pris** quand le plan est celui de la PME (`1020 Banque`, mouvementé : refusé
+   comme parent, #1351). L'aperçu doit le dire et laisser saisir un autre numéro.
+4. **Modules** : cinq (`routes/accounts` ou appels enchaînés, `repositories/accounts`, frontend, `kesh-i18n`, manuel) ;
+   un point 1 « extraction » ajoute des tests de `kesh-db`, non un module. Recompter après la maquette.
+
 ## Tâches principales
 
 - [ ] Calcul de la proposition (pur, testé) ; aperçu à l'écran du plan
@@ -56,3 +78,8 @@ de mes comptes, afin de structurer mon plan (une banque = un groupe, puis les li
 
 - 2026-11-20 — Reprise : #1351 fusionnée, refus d'un parent mouvementé rappelé, modules déclarés, statut `drafted`
   (conditionnelle, maquette avant décision).
+- 2026-11-20 — validation P1 (Sonnet 5.5), **allégée** (fiche conditionnelle) : 0 C, 0 H, 1 M, 1 L. M : l'AC-3
+  « dans une transaction » n'est pas réalisable en enchaînant `create` et `update`, qui ouvrent chacun la leur — section
+  « Points à trancher » (extraction `_in_tx`, type et devise du groupe, `version`, numéro déjà pris). L : le statut
+  reste `drafted` (conditionnelle), à relire entièrement après la maquette. Axes exercés : `repositories/accounts.rs`,
+  `routes/accounts.rs`, `entities/account.rs` ; non exercés : maquette (absente), manuel, i18n.
