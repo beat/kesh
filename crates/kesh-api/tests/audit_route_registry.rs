@@ -161,7 +161,7 @@
 //!   `post`, `put`, `delete` et `patch`. Aucune route `GET` n'écrit au journal
 //!   aujourd'hui (remontée de l'AC1 : des `POST` et un `DELETE`) ; l'angle mort
 //!   est du même ordre que celui de l'audit (`GET /invoices/{id}/pdf`, plus bas).
-//! - **(vi)** **trente-trois routes `SansEcritureAuJournal` sont rejouées quand
+//! - **(vi)** **trente-quatre routes `SansEcritureAuJournal` sont rejouées quand
 //!   même** : `fiscal_years::update_fiscal_year` (enveloppe `DbError`, opération
 //!   `fiscal_years::update_name`, Story 34-7, #945 : le renommage tient l'exercice
 //!   puis son homonyme par la lecture de doublon, alors que la clôture tient ses
@@ -360,10 +360,18 @@
 //!   alors qu'un `POST`, `PUT`, `PATCH` ou archivage de compte bancaire tient
 //!   la sentinelle `companies` en exclusif puis demande une de ces lignes ;
 //!   tenue par `import_rejoue_un_interblocage_avec_un_geste_de_compte`
-//!   (`paypal_import_e2e.rs`).
+//!   (`paypal_import_e2e.rs`). Et — Story 39-11b — `wise_imports::create`
+//!   (opération `wise_imports::create`), pour la même raison : depuis la 39-11b,
+//!   les deux imports de prestataire passent par le cœur commun
+//!   `paypal_imports::run_provider_import`, qui porte l'enveloppe (et non plus
+//!   le corps du handler) ; tenue par
+//!   `import_wise_rejoue_un_interblocage_avec_un_geste_de_compte`
+//!   (`wise_import_e2e.rs`).
 //!
-//!   **Décompte : trente-trois** le 2026-11-20 (Story 38-11c1), par ajout de
-//!   `paypal_imports::create` au décompte qui suit, **non recompté en entier**.
+//!   **Décompte : trente-quatre** le 2026-11-20 (Story 39-11b), par ajout de
+//!   `wise_imports::create`, **non recompté en entier** ; **trente-trois** le
+//!   2026-11-20 (Story 38-11c1), par ajout de `paypal_imports::create` au
+//!   décompte qui suit, **non recompté en entier**.
 //!   **Trente-deux**, recompté le 2026-11-16 à la Story 37-2 depuis
 //!   la table et le corps de chaque route : vingt-neuf handlers
 //!   `SansEcritureAuJournal` de `src/routes/` portent une enveloppe, plus
@@ -647,6 +655,10 @@ const LIB_ROUTES: &[(&str, &str, Status, Rejeu)] = &[
     // ventilé par devise : `bank_import.created` par devise et
     // `paypal_import.created`, dans sa transaction ; aucune écriture au journal.
     ("post", "paypal_imports::create", Traced, SansEcritureAuJournal),
+    // Story 39-11b (Epic 39) — l'import des relevés CSV d'un compte Wise, un
+    // fichier par devise : `bank_import.created` par fichier et
+    // `wise_import.created`, dans sa transaction ; aucune écriture au journal.
+    ("post", "wise_imports::create", Traced, SansEcritureAuJournal),
     ("post", "bank_profiles::create", Traced, SansEcritureAuJournal),
     ("put", "bank_profiles::update", Traced, SansEcritureAuJournal),
     ("delete", "bank_profiles::delete", Traced, SansEcritureAuJournal),
@@ -1114,8 +1126,8 @@ fn the_registry_partition_is_what_the_story_declares() {
 
     assert_eq!(
         LIB_ROUTES.len(),
-        158,
-        "l'inventaire porte sur 158 routes (+ 1 : l'import du CSV PayPal, 38-11b ; + 1 : le changement de compte analytique d'une facture, 36-16a ; + 1 : le nom de la société, v0190-nom-societe ; + 2 : l'aperçu et la passation de la réévaluation de fin d'exercice, 37-5 ; + 1 : la conversion entre devises, 37-3b ; + 5 : la récupération des cours de change, la saisie et le ↑ d'un cours retenu, l'acquittement des corrections et les genres d'un exercice, 37-2 ; + 1 : le réglage multi-devises de la société, 37-1 ; + 1 : le solde d'ouverture d'un compte bancaire existant, 34-2 ; + 1 : l'adresse de la société, 33-5 ; + 1 : `/mcp`, 32-6a ; + 1 : la décision d'un \
+        159,
+        "l'inventaire porte sur 159 routes (+ 1 : l'import des relevés Wise, 39-11b ; + 1 : l'import du CSV PayPal, 38-11b ; + 1 : le changement de compte analytique d'une facture, 36-16a ; + 1 : le nom de la société, v0190-nom-societe ; + 2 : l'aperçu et la passation de la réévaluation de fin d'exercice, 37-5 ; + 1 : la conversion entre devises, 37-3b ; + 5 : la récupération des cours de change, la saisie et le ↑ d'un cours retenu, l'acquittement des corrections et les genres d'un exercice, 37-2 ; + 1 : le réglage multi-devises de la société, 37-1 ; + 1 : le solde d'ouverture d'un compte bancaire existant, 34-2 ; + 1 : l'adresse de la société, 33-5 ; + 1 : `/mcp`, 32-6a ; + 1 : la décision d'un \
          envoi MCP, 32-8b ; + 5 : les routes mutantes des prompts du serveur MCP, 32-10a-iii ; \
          + 1 : le rattachement d'une transaction à une écriture, v017-3a ; + 2 : l'aperçu et \
          la création d'un relevé saisi à la main, v016-2a ; + 4 : le `PUT`, le `DELETE`, la \
@@ -1151,8 +1163,10 @@ fn the_registry_partition_is_what_the_story_declares() {
     // `invoice.project_reassigned`).
     // Story 38-11b (Epic 38) : 149 → 150 (l'import du CSV PayPal, tracé par
     // `bank_import.created` et `paypal_import.created`).
+    // Story 39-11b (Epic 39) : 150 → 151 (l'import des relevés Wise, tracé par
+    // `bank_import.created` et `wise_import.created`).
     assert_eq!(
-        traced, 150,
+        traced, 151,
         "73 tracées avant la 25-1b, plus ses 14, plus la dévalidation (25-2-b-1, #440), \
          plus l'annulation d'un règlement client (25-3-a-1) et fournisseur (25-3-a-2, #414), \
          plus l'annulation d'un rapprochement (25-3-b, #418), plus le solde du reste \
@@ -1184,7 +1198,8 @@ fn the_registry_partition_is_what_the_story_declares() {
          exercice (37-2), plus la conversion entre devises (37-3b), plus la passation de la \
          réévaluation de fin d'exercice (37-5), plus la correction du nom de la société \
          (v0190-nom-societe, refs #1097), plus le changement de compte analytique d'une \
-         facture (36-16a, refs #1167)"
+         facture (36-16a, refs #1167), plus l'import du CSV PayPal (38-11b), plus l'import \
+         des relevés Wise (39-11b)"
     );
     assert_eq!(
         exempt, 4,

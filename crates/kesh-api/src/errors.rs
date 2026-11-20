@@ -996,6 +996,28 @@ pub enum AppError {
         details: serde_json::Value,
     },
 
+    // ----- Story 39-11b (Epic 39) — l'import des relevés Wise -----
+    /// Import Wise : un fichier est refusé par le lecteur (39-11a) → `422
+    /// WISE_CSV_INVALID`, `details: { filename, reason, … }` — `reason` est le
+    /// code fermé du lecteur (`WISE_CSV_MISSING_COLUMNS`, `WISE_CSV_LINES`, …),
+    /// avec `columns`, `lines` (forme `{ line, field, code, value }`),
+    /// `currencies`, `id` et `lines`, ou `line`, `expected`, `found` selon le
+    /// motif. Rien n'est importé, d'aucun fichier.
+    #[error("Fichier Wise {filename} refusé : {reason}")]
+    WiseCsvInvalid {
+        filename: String,
+        reason: &'static str,
+        details: serde_json::Value,
+    },
+
+    /// Import Wise : deux fichiers portent la même devise → `422
+    /// WISE_DUPLICATE_CURRENCY_FILE`, `details: { currency, filenames }`.
+    #[error("Deux fichiers Wise en {currency}")]
+    WiseDuplicateCurrencyFile {
+        currency: String,
+        filenames: Vec<String>,
+    },
+
     // ----- Story 34-11a2 (#972) — la carte de crédit -----
     /// Le nom ou la description d'un compte bancaire porte un **numéro de carte
     /// complet** (`kesh_core::card_number`, C-e341-15) → `400
@@ -3687,6 +3709,48 @@ impl IntoResponse for AppError {
                             "Ce fichier n'est pas un relevé PayPal « Balance affecting transactions » lisible. Rien n'a été importé.",
                         ),
                         "details": details,
+                    }
+                });
+                (StatusCode::UNPROCESSABLE_ENTITY, Json(body)).into_response()
+            }
+            AppError::WiseCsvInvalid {
+                filename,
+                reason,
+                details,
+            } => {
+                let mut details = details.clone();
+                if let serde_json::Value::Object(map) = &mut details {
+                    map.insert("filename".into(), serde_json::json!(filename));
+                    map.insert("reason".into(), serde_json::json!(reason));
+                }
+                let mut args = FluentArgs::new();
+                args.set("filename", filename.clone());
+                let fallback = format!(
+                    "Le fichier « {filename} » n'est pas un relevé CSV de Wise lisible. Rien n'a été importé."
+                );
+                let body = serde_json::json!({
+                    "error": {
+                        "code": "WISE_CSV_INVALID",
+                        "message": t_args("error-wise-csv-invalid", &fallback, &args),
+                        "details": details,
+                    }
+                });
+                (StatusCode::UNPROCESSABLE_ENTITY, Json(body)).into_response()
+            }
+            AppError::WiseDuplicateCurrencyFile {
+                currency,
+                filenames,
+            } => {
+                let mut args = FluentArgs::new();
+                args.set("currency", currency.clone());
+                let fallback = format!(
+                    "Plusieurs fichiers portent le relevé en {currency} : un seul fichier par devise. Rien n'a été importé."
+                );
+                let body = serde_json::json!({
+                    "error": {
+                        "code": "WISE_DUPLICATE_CURRENCY_FILE",
+                        "message": t_args("error-wise-duplicate-currency-file", &fallback, &args),
+                        "details": { "currency": currency, "filenames": filenames },
                     }
                 });
                 (StatusCode::UNPROCESSABLE_ENTITY, Json(body)).into_response()
