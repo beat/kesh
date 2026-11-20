@@ -50,7 +50,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    (une seule source de la règle : la 46-1 ; aucun repli calculé dans le navigateur). Requêtes concurrentes : seule la
    réponse de la dernière demande s'affiche ; pendant le chargement, l'écran garde l'affichage précédent (sans
    clignotement, `aria-busy`). Chaque redemande écrit une trace `report.generated` au journal d'audit, comme un
-   changement de période aujourd'hui (46-1 AC-11) : assumé (C-46-2-1), **à condition que la vue soit mémorisée** (AC-10).
+   changement de période aujourd'hui (46-1 AC-11) : assumé (C-46-2-1), **quel que soit l'état du stockage** du navigateur ; la vue est mémorisée dans la mesure où le navigateur le permet (AC-10).
 4. **AC-4 — Rendu (D5, Q2, Q3).** Lignes rendues dans l'ordre de `groupedRows` : retrait par `depth` ; `group` en gras,
    son montant **selon la règle de rendu de la 46-1** (sur le titre en `header` ou si fermé ; sinon sur la ligne
    `subtotal`, en gras, libellé « Total <nom du groupe> ») ; `own` libellée « <numéro> <nom> (solde propre) » ; solde en
@@ -82,8 +82,8 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    (thème clair) de chaque état au Dev Agent Record ; manuel utilisateur FR, § *Bilan* et *Compte de résultat*
    (`docs/manual/fr/user-manual.tex:3923`, `:3954`), `.tex` seul, PDF non commité.
 10. **AC-10 — Vue retrouvée au retour (décision de Beat du 2026-11-20).** Le rechargement à chaque clic (C-46-2-1)
-    n'est accepté que si l'écran retrouve sa vue : en revenant sur la page (même rapport, même société, même
-    navigateur), il rétablit le niveau choisi et les groupes ouverts ou fermés à la main (ainsi que
+    est accepté **quel que soit l'état du stockage** ; l'écran retrouve sa vue **dans la mesure où le navigateur le permet** (stockage refusé ou vide : vue par défaut, sans erreur, rechargement et trace inchangés). En revenant sur la page (même rapport, même société, même
+    navigateur), l'écran rétablit le niveau choisi et les groupes ouverts ou fermés à la main (ainsi que
     montrée/masquée et la position, AC-5). Choix KISS : mémorisation côté navigateur en `localStorage`, **clé par
     société et par rapport** (par navigateur, non par utilisateur, comme `kesh-mode` ; l'identifiant de société est
     `company.id` de `fetchCompanyCurrent`, que `+page.ts` doit renvoyer à côté du nom aujourd'hui seul chargé), sous la
@@ -93,7 +93,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
     les groupes mémorisés qui n'existent plus dans le plan (compte archivé, groupe dissous) **sont transmis tels
     quels** : la première requête part avant que le plan soit connu, donc le client ne peut pas les filtrer ; l'API les
     ignore sans erreur et les retire de l'écho `grouping` (46-1, § *Le contrat*) ; après chaque réponse, la mémoire
-    reprend les listes de l'écho, et ces identifiants disparaissent au prochain enregistrement. Tests : Vitest de la
+    reprend les listes de l'écho, et ces identifiants disparaissent au prochain enregistrement ; une liste mémorisée de plus de 500 identifiants (limite de la 46-1, `400` au-delà) est ignorée à la lecture comme toute valeur invalide (AC-5). Tests : Vitest de la
     persistance (écriture au changement de niveau, de position, de hiérarchie montrée/masquée et au clic, relecture au
     montage, clé distincte par société et par rapport, stockage vide, illisible et refusé, groupe disparu retiré de la
     mémoire après la réponse de l'API, première requête déjà munie de la vue) ; E2E (`reports-groupes.spec.ts`) :
@@ -194,3 +194,4 @@ l'affichage d'avant.
   par rapport, restaurée avant la première requête, groupes disparus ignorés), AC-5, AC-3, T4 et les tests de l'AC-9
   réalignés ; convention réutilisée : `mode.svelte.ts`.
 - 2026-11-20 — Validation P-ciblée des décisions de Beat (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `644b9e55` ; au code de `origin/main`) : 0 C / 0 H / 1 M / 3 L, remédiés. M : AC-10 se contredisait — « restaurée avant la première requête » et « groupes disparus ignorés, non transmis » ne tiennent pas ensemble, le client ne connaissant pas le plan avant la première réponse ; remédié : les identifiants sont transmis, l'API les ignore et les retire de l'écho (46-1 § *Le contrat*), la mémoire reprend l'écho. L : « même utilisateur » promis sans que la clé porte l'utilisateur (clé par navigateur, comme `kesh-mode`) ; identifiant de société non chargé par `+page.ts` (`company.id` de `fetchCompanyCurrent`) ; tests de l'AC-10 n'écrivant pas position ni montrée/masquée, pourtant retenues (AC-5). Non remédié, à trancher par Beat : AC-3 dit le rechargement accepté « à condition que la vue soit mémorisée », condition sans objet si le stockage est refusé (la vue n'est alors pas retenue, le rechargement reste). Boucle non close (un M remédié). Rapport : `kesh-gate-logs/epic-46/validation/46-2-decisions-ciblee.md`.
+- 2026-11-20 — Validation P-ciblée n°2 (Claude Sonnet 5.5, contexte frais, lentille sur le seul commit `935be28e`, au code de `origin/main`) : 0 C / 0 H / 0 M / 1 L, remédié. Décision de l'orchestrateur appliquée : AC-3 et AC-10 acceptent le rechargement et la trace **quel que soit l'état du stockage**, la vue étant mémorisée dans la mesure où le navigateur le permet (stockage refusé ou vide : vue par défaut, sans erreur) ; la condition « à condition que la vue soit mémorisée » est retirée des AC vivants (les entrées datées ci-dessus restent un relevé). L : une liste mémorisée de plus de 500 identifiants aurait fait répondre `400` (46-1) ; ignorée à la lecture (AC-10). Vérifié : contrat 46-1 (inconnus ignorés et retirés de l'écho, `400` au-delà de 500, `open`/`closed` sans `detailLevel` refusés), `+page.ts` ne renvoie que `companyName` et `company.id` vient de `fetchCompanyCurrent` (`settings.types.ts:10`, `:127`), cohérence AC-2, AC-5, AC-9, T4 et 46-3 (PDF de la requête affichée). Rapport : `kesh-gate-logs/epic-46/validation/46-2-decisions-ciblee-2.md`.
