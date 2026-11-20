@@ -256,6 +256,6 @@ nommant les colonnes qui manquent, et un relevé dont le solde courant ne se sui
 - Modèles : validation P1 Opus 5.5, P2 Sonnet 5.5 ; revue de code P1 Opus, P2 Sonnet.
 - Mutations de la remédiation L1 (copie hors dépôt, `dates_are_strict` seul) : base verte ; `b.len() == 8` -> `>= 8` : ROUGE ;
   retrait du contrôle des six chiffres ASCII : ROUGE ; chacune rougit grâce aux deux cas ajoutés.
-- Gate ciblé de la remédiation P2 : `cargo fmt --all -- --check` vert (lancé directement) ; clippy, `cargo test -p kesh-import` et
-  `publish --dry-run` mis en file de `heavy.sh` (journal `kesh-gate-logs/s39-11a/g5-cible.log`, file saturée, non rendus à la
-  clôture de cette fiche : à relever dans ce journal).
+- Gate ciblé de la remédiation P2 (cible `kesh-targets/kesh-wt39`, journal `kesh-gate-logs/s39-11a/g5-cible.log`, relevé après le commit
+  de remédiation) : fmt `--check` vert, clippy workspace `-D warnings` vert, `cargo test -p kesh-import` vert (lib 140, `wise_csv` 29 passés
+  et 1 ignoré, `paypal_csv` 11, 0 échec), `cargo publish --dry-run -p kesh-import` vert (« aborting upload due to dry run »).
