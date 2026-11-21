@@ -1,6 +1,6 @@
 # Story 39-12a1 : client de l'API Wise — configuration, profil, soldes, activités, transferts, devis
 
-Status: review
+Status: done
 
 *Fiche réécrite le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement) ; elle remplace la fiche « client de l'API Wise — configuration, signature SCA, profil, soldes et
@@ -43,7 +43,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
 ## Critères d'acceptation
 
 0. **AC-0 — Recettes réelles, hors de Kesh puis par Kesh, sur 2024** (décision de l'orchestrateur : la recette n'attend
-   pas le CSV 2025 de Beat). Chaque appel réel est précédé de `kesh-gate-logs/appel-reel.sh wise "<motif>"` (plafond 200
+   pas le CSV 2025 de l'utilisateur). Chaque appel réel est précédé de `kesh-gate-logs/appel-reel.sh wise "<motif>"` (plafond 200
    pour Wise, rafales de 4 ; **relire le journal `appels-reels/wise.log` avant** : 65 appels comptés au quota à la fin de
    la recherche du 2026-11-20, le fichier portant 73 lignes dont 8 `REJEU`, qui ne comptent pas). Jeton, réponses brutes
    et CSV restent dans `data-not-committed/` ; seules des **métadonnées** (comptes, égalités, formes) s'écrivent au
@@ -76,9 +76,9 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      `reference` des transferts face à la colonne `Payment Reference` ; (7) **quand les frais d'un virement sont nuls**,
      ce que rend le devis (`fee.total` = 0 ; tranché : option `BALANCE` présente, non absente, voir le statut de (a)) : les cinq virements sans frais le disent ; (8) un **virement remboursé** (s'il s'en trouve en 2024, sinon noté « non relevé », la règle de suffixe de 39-12a2 AC-3 valant alors) : comment l'API le rend — seconde activité de même `resource_id`, autre `activity_type`, ou statut du virement d'origine —, sous quel identifiant et quel `Payment Reference` le CSV porte la ligne de remboursement, et que le solde reconstruit reste juste ; **sans cette ligne relevée, un téléchargement qui couvre un remboursement reste possible** (suffixe provisoire), mais le manuel avertit de ne pas mélanger CSV et téléchargement sur ce virement. Une règle
      **contredite** par 2024 se corrige dans la fiche concernée avant le développement ; un écart qui ne se règle pas va
-     à Beat, et la phase 2 attend.
+     à l'utilisateur, et la phase 2 attend.
    - **Statut de (a) : faite le 2026-11-20** (profil business, jeton personnel lecture seule, 34 appels sur 80 permis, activités 2024 rejouées sans appel ; décisions : `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`, détail hors dépôt dans `data-not-committed/wise-recette-ac0-activites.md`). Concordance exacte sur 2024 : 176 identifiants sur 177 (le 177e est la conversion automatique, absente sous son numéro), 22 frais de virement sur 22 par le devis, soldes reconstruits égaux à ceux du CSV en clôture dans les trois devises, 12 fins de mois sur 12, 163 fins de jour sur 163, 230 soldes courants sur 230. Les huit points sont tranchés et reportés dans 39-12a2 (règles définitives), 39-12a3 et l'epic (Q-39-17). **Restent AC-0 (b) (après 39-12a2) et AC-0 (c) (un mois 2025, non bloquant).**
-- **(b) Recette finale, après 39-12a2, avant que Beat s'y fie** : les réponses brutes sauvées en (a) passent par
+- **(b) Recette finale, après 39-12a2, avant que l'utilisateur s'y fie** : les réponses brutes sauvées en (a) passent par
      `rows_from_activities` (39-12a2), **dans un test local non versionné**, **comme si l'on était le 2024-12-31** :
      `period` = 2024, soldes actuels = clôtures 2024-12-31 du CSV de chaque devise, activités de 2024
      seules, `transfer_fees` = les devis sauvés en (a) pour les 27 virements qu'ils couvrent et, **pour les autres
@@ -90,7 +90,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
      courant** ; **l'heure n'est pas comparée** : Kesh l'écrit à l'heure de Zurich, le CSV en UTC+1 toute l'année, d'où un écart prévu d'une heure l'été) ; seules les différences **prévues** sont admises (frais de conversion inclus dans le débit, H2 ;
      conversion automatique si (2) n'a pas trouvé le numéro) ; le solde d'ouverture et de clôture de chaque devise égale
      celui du CSV. Le compte rendu (métadonnées) s'écrit au fichier d'epic. Aucun appel de plus.
-   - **(c) Comparaison d'un mois 2025, plus tard, non bloquante** : quand Beat dépose le CSV 2025 du site d'un mois, la
+   - **(c) Comparaison d'un mois 2025, plus tard, non bloquante** : quand l'utilisateur dépose le CSV 2025 du site d'un mois, la
      même comparaison (a)(1)(4) et (b) se rejoue sur ce mois, avec les soldes **réels** d'aujourd'hui ; aucune ligne de
      la phase 2 n'attend. Tant qu'elle n'est pas faite, le manuel (39-12b) dit que la voie n'a été éprouvée que sur 2024.
 1. **AC-1 — Configuration**, par le **lecteur unique du socle S1** (`provider_env`, écrit par 38-12a ; patron
@@ -175,7 +175,7 @@ signature, et sans que le jeton soit jamais en base ni dans une sauvegarde.
 - [x] T1 — Configuration par le lecteur du socle, transmission, garde (AC-1).
 - [x] T2 — Client : profil, soldes, activités paginées, transferts, devis, erreurs (AC-2 à AC-4).
 - [x] T3 — Serveur simulé et tests (AC-5).
-- [ ] T4 — Recette finale sur 2024 (AC-0 b), après 39-12a2 ; comparaison d'un mois 2025 (AC-0 c) quand Beat dépose son CSV, hors chemin critique.
+- [ ] T4 — Recette finale sur 2024 (AC-0 b), après 39-12a2 ; comparaison d'un mois 2025 (AC-0 c) quand l'utilisateur dépose son CSV, hors chemin critique.
 
 ## Stratégie de tests
 
@@ -232,7 +232,7 @@ Aucune migration, aucun paquet neuf (`Cargo.lock` inchangé).
 
 **Écarts avec la fiche, dits** : (a) `details: { provider, step, from?, to? }` n'est pas exprimable avec les variantes
 `AppError::Provider*` du socle (`window`, `page`) : `step` n'est porté que par `PROVIDER_RESPONSE_INVALID`, ailleurs `window`
-(`2024-01-01…2024-12-31`) et `page` situent l'échec ; à reprendre en 39-12a3 si Guy veut `step` partout (variantes du socle à
+(`2024-01-01…2024-12-31`) et `page` situent l'échec ; à reprendre en 39-12a3 si le Project Lead veut `step` partout (variantes du socle à
 étendre). (b) `WISE_PROFILE_AMBIGUOUS` n'est pas une variante d'`AppError` : `WiseProfileError::Ambiguous { count }` la porte,
 39-12a3 la rend (variante, texte aux quatre locales) ; un `PROFILE_ID` absent de la liste donne `count: 0`. (c) Transferts :
 `limit=100` et non 200 (relevés réels faits à 100 ; une page plus courte que `limit` terminant la lecture, une limite plafonnée
@@ -253,13 +253,14 @@ par Wise en deçà l'arrêterait silencieusement à la première page). (d) Aucu
   `aucune_requete_ne_porte_de_signature_…` ; restauré, 25 verts. Aucune mutation n'a été jouée sur les remédiations P1 et P2.
 - `cargo fmt --all -- --check` vert (après `84940f05`) ; `cargo clippy --workspace --all-targets -- -D warnings` vert, 0
   avertissement (`clippy.log`).
-- **Non fait** : `scripts/test-fast.sh --ci` (gate complet) — **il se jouera après la fusion de 38-12a dans `epic/39-wise`**, la branche ne compile pas seule ; `scripts/gate-ci.sh` ; E2E
-  Playwright (**sans objet** : aucun écran, route ni texte touché) ; Vitest (sans objet). **Ne rien en déduire pour ce qui n'a pas tourné.**
+- **Gates complets après la fusion de `epic/39-wise` (commit de fusion `0fa89812`, puis `b37fde92`, dernier commit de code ; journaux `kesh-gate-logs/s39-12a1/final-*`)** : conflits de la fusion (`.env.example`, `docker-compose.yml`, `docker-compose.prod.yml`) résolus en gardant les deux blocs ; `ALL_PROVIDERS = &[PAYPAL, crate::wise::WISE]`. `scripts/test-fast.sh --ci` (base `kesh_s3912a1` remise à zéro, migrations, seed) : **6463 exécutés, 6463 passés, 16 ignorés**, fmt et clippy compris. Frontend : `npm run check`, `lint-i18n-ownership`, `test:unit` (**4828** passés), `build`, tous verts. `scripts/gate-ci.sh` (copie propre du commit `b37fde92` hors de l'arbre, car le script refuse un `.env` atteignable depuis le dépôt ; `cargo test --workspace -j1`) : **6482 passés, 0 échoué, 20 ignorés**, jusqu'au bout, sans échec instable. **Non fait** : E2E Playwright (**sans objet** : aucun écran, route ni texte de l'interface touché) ; aucun appel réel à Wise.
+- Le dernier commit de code (`b37fde92`) ne touche que des doc-comments et un commentaire de `wise/mod.rs` (passe ciblée P4 : 0 C, 0 H, 0 M, 2 L, remédiés) ; aucune ligne exécutable ne change.
 
 **Recette AC-0** : (a) faite avant la story ; (b) recette finale **après 39-12a2** (T4) ; (c) mois 2025, plus tard.
 
 ## Change Log
 
+- 2026-11-21 — fusion de `epic/39-wise` (38-12a, `main` 0.19.1, 39-11b), gates complets verts (Dev Agent Record), LOW de la passe ciblée P4 remédiés (doc-comments seuls : devise des frais, lecture brute sans décodage d'échappements) ; **boucle de revue close** (P1 Opus 0/0/2 M/6 L, P2 Sonnet 0/0/0/5 L, P3 Haiku 0/0/1 M/2 L, P4 0/0/0/2 L) ; statut `done`.
 - 2026-11-20 — **développée** (Claude Sonnet 5.5, Dev Agent Record ci-dessus) : client, serveur simulé, transmission ; statut `review` ; revue P1 à lancer (`kesh-gate-logs/s39-12a1/revue-p1-prompt.md`).
 - 2026-11-20 — **remédiation de la revue de code P1** (Claude Sonnet 5.5 ; rapport `kesh-gate-logs/s39-12a1/revue-p1-rapport.md` : 0 C, 0 H, 2 M, 6 L). M1 : `amount.value` et `fee.total` lus par `RawValue` (fonctionnalité `raw_value` déclarée, `Cargo.lock` inchangé), tests au corps en texte brut (`99999999999999.99`, `123456789012345.67`, `0.123456789012345678`). M2 : déduplication sur l'`id` d'activité, dernière version gardée (aussi L6), AC-3 aligné sur 39-12a2. L1 : statut classé avant la lecture du corps. L2 : repli `quote` retiré. L3 : devis sans `payOut` refusé. L4 : tests du corps trop grand et du corps coupé. L5 : Dev Agent Record corrigé (trois conflits à la fusion). Revue P2 à lancer (`kesh-gate-logs/s39-12a1/revue-p2-prompt.md`).
 - 2026-11-20 — **remédiation de la revue de code P2** (Claude Sonnet 5.5, commit `b7dd76fd` ; revue P2 Sonnet : 0 C, 0 H, 0 M, 5 L). L3 (décision de l'orchestrateur) : la devise des frais est la devise source du **devis**, l'option en repli seulement ; test corrigé, cas inverse ajouté. L4 : `decimal_of_raw` refuse les chaînes hors `-?chiffres(.chiffres)?` et tout montant à plus de 28 décimales (arrondi silencieux de `Decimal`), doc-comment dit. L5 : test e2e `value: null` / `fee.total: null` → `PROVIDER_RESPONSE_INVALID`. L2 : phrase ajoutée à 39-12a2 (répétition d'un même `id` déjà fondue par le client). L1 : Dev Agent Record recompté, AC-3 `limit=100` motivé. Boucle de revue : P1 Opus 0 C / 0 H / 2 M / 6 L → P2 Sonnet 0 / 0 / 0 / 5 L. Passe ciblée P3 sur ce seul commit : `kesh-gate-logs/s39-12a1/revue-p3-prompt.md`. Gate complet après la fusion de 38-12a ; statut `review`.
