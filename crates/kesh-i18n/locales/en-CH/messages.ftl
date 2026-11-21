@@ -2039,6 +2039,10 @@ reports-retained-earnings-loss = Accumulated loss
 reports-equation-warning = ⚠️ Balance sheet equation unbalanced (verify source data).
 reports-archived-label = archived
 
+# Story 47-4 — under the line of a mirror account.
+reports-mirror-of-one = Balance of { $sources }
+reports-mirror-of-other = Balances of { $sources }
+
 # Reports page — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Accounting Reports
 reports-instruction-select-and-generate = Select a fiscal year and click Generate.
@@ -3403,9 +3407,6 @@ reports-fx-line = { $amount } × { $rate }
 reports-fx-totals = debit { $debit } · credit { $credit }
 reports-fx-trial-balance = opening { $opening } · debit { $debit } · credit { $credit } · closing { $closing }
 reports-ledger-include-zero = Include accounts with no movement
-# Story 47-4 — under the line of a mirror account.
-reports-mirror-of-one = Balance of { $sources }
-reports-mirror-of-other = Balances of { $sources }
 reports-ledger-instruction = Pick a period, then click Generate. The account is optional.
 
 # --- Journal d'audit — route, vocabulaire et export (Story 25-1c-a) ---

@@ -2039,6 +2039,10 @@ reports-retained-earnings-loss = Verlustvortrag
 reports-equation-warning = ⚠️ Bilanzgleichung ungültig (Quelldaten prüfen).
 reports-archived-label = archiviert
 
+# Story 47-4 — unter der Zeile eines Spiegelkontos.
+reports-mirror-of-one = Saldo von { $sources }
+reports-mirror-of-other = Salden von { $sources }
+
 # Berichte-Seite — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Buchhaltungsberichte
 reports-instruction-select-and-generate = Wählen Sie ein Geschäftsjahr aus und klicken Sie auf Generieren.
@@ -3397,9 +3401,6 @@ reports-fx-line = { $amount } × { $rate }
 reports-fx-totals = Soll { $debit } · Haben { $credit }
 reports-fx-trial-balance = Eröffnung { $opening } · Soll { $debit } · Haben { $credit } · Abschluss { $closing }
 reports-ledger-include-zero = Konten ohne Bewegung einschliessen
-# Story 47-4 — unter der Zeile eines Spiegelkontos.
-reports-mirror-of-one = Saldo von { $sources }
-reports-mirror-of-other = Salden von { $sources }
 reports-ledger-instruction = Wählen Sie einen Zeitraum und klicken Sie auf Erstellen. Das Konto ist optional.
 
 # --- Journal d'audit — route, vocabulaire et export (Story 25-1c-a) ---

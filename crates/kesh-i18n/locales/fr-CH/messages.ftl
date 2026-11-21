@@ -2129,6 +2129,10 @@ reports-retained-earnings-loss = Perte reportée
 reports-equation-warning = ⚠️ Équation bilan déséquilibrée (vérifier données source).
 reports-archived-label = archivé
 
+# Story 47-4 — sous la ligne d’un compte miroir (bilan, compte de résultat) : le ou les comptes dont le solde y est présenté ; numéros et noms déjà joints.
+reports-mirror-of-one = Solde de { $sources }
+reports-mirror-of-other = Soldes de { $sources }
+
 # Page rapports — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Rapports comptables
 reports-instruction-select-and-generate = Sélectionnez un exercice et cliquez sur Générer.
@@ -3475,9 +3479,6 @@ reports-fx-line = { $amount } × { $rate }
 reports-fx-totals = débit { $debit } · crédit { $credit }
 reports-fx-trial-balance = ouverture { $opening } · débit { $debit } · crédit { $credit } · clôture { $closing }
 reports-ledger-include-zero = Inclure les comptes sans mouvement
-# Story 47-4 — sous la ligne d’un compte miroir (bilan, compte de résultat) : le ou les comptes dont le solde y est présenté ; numéros et noms déjà joints.
-reports-mirror-of-one = Solde de { $sources }
-reports-mirror-of-other = Soldes de { $sources }
 reports-ledger-instruction = Choisissez une période, puis cliquez sur Générer. Le compte est facultatif.
 
 # --- Journal d'audit — route, vocabulaire et export (Story 25-1c-a) ---

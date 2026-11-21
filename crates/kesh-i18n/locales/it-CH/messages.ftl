@@ -2039,6 +2039,10 @@ reports-retained-earnings-loss = Perdita riportata
 reports-equation-warning = ⚠️ Equazione di bilancio non bilanciata (verificare i dati sorgente).
 reports-archived-label = archiviato
 
+# Story 47-4 — sotto la riga di un conto specchio.
+reports-mirror-of-one = Saldo di { $sources }
+reports-mirror-of-other = Saldi di { $sources }
+
 # Pagina rapporti — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Rapporti contabili
 reports-instruction-select-and-generate = Seleziona un esercizio contabile e clicca su Genera.
@@ -3398,9 +3402,6 @@ reports-fx-line = { $amount } × { $rate }
 reports-fx-totals = dare { $debit } · avere { $credit }
 reports-fx-trial-balance = apertura { $opening } · dare { $debit } · avere { $credit } · chiusura { $closing }
 reports-ledger-include-zero = Includere i conti senza movimenti
-# Story 47-4 — sotto la riga di un conto specchio.
-reports-mirror-of-one = Saldo di { $sources }
-reports-mirror-of-other = Saldi di { $sources }
 reports-ledger-instruction = Scegliete un periodo, poi cliccate su Genera. Il conto è facoltativo.
 
 # --- Journal d'audit — route, vocabulaire et export (Story 25-1c-a) ---
