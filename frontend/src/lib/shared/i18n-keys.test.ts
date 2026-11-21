@@ -1184,7 +1184,9 @@ const ATTENDU = {
 	// (`AccountMirrorField.svelte`) : `accounts-mirror-label` deux fois (phrase et `<select>`),
 	// `accounts-mirror-none`, `accounts-mirror-help`, `accounts-mirror-of`.
 	// Reprise de main (0.19.1) dans epic/47 : les deux côtés gardés, total à relever par la garde, non additionné.
-	sitesTotal: 3513,
+	// Story 47-4 (2026-11-21) : **3513 → 3515**, relevé par la garde (« expected 3515 to be 3513 ») — la mention
+	// sous un compte miroir (`MirrorOfNote.svelte`) : `reports-mirror-of-one`, `reports-mirror-of-other`.
+	sitesTotal: 3515,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/

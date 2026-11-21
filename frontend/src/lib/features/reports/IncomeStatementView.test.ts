@@ -6,7 +6,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/svelte';
 
 vi.mock('$lib/shared/utils/i18n.svelte', () => ({
-	i18nMsg: (_key: string, fallback: string) => fallback,
+	// Story 47-4 — le repli, ses variables `{ $x }` remplacées (mention « Solde de … »).
+	i18nMsg: (_key: string, fallback: string, args?: Record<string, string | number>) =>
+		args ? fallback.replace(/\{\s*\$(\w+)\s*\}/g, (_m, k) => String(args[k] ?? '')) : fallback,
 }));
 
 import IncomeStatementView from './IncomeStatementView.svelte';
@@ -84,5 +86,54 @@ describe('IncomeStatementView', () => {
 		const { container } = render(IncomeStatementView, { dto: makeDto() });
 		expect(container.innerHTML).not.toContain('account-fx-');
 		expect(container.textContent).not.toContain('USD');
+	});
+});
+
+describe('IncomeStatementView — Story 47-4, mention « Solde de … » sous un compte miroir', () => {
+	it('charges : « Solde de 6950.1 … » sous 6900.1 ; produits sans mention', () => {
+		const miroir = compte({
+			accountId: 9,
+			accountNumber: '6900.1',
+			accountName: 'Pertes de change',
+			accountType: 'Expense',
+			balance: '250.00',
+			mirrorOf: [
+				{ accountId: 8, accountNumber: '6950.1', accountName: 'Résultat de change', balance: '-250.00' },
+			],
+		});
+		const dto = makeDto();
+		const { getByTestId, queryByTestId } = render(IncomeStatementView, {
+			dto: { ...dto, expenses: [...dto.expenses, miroir] },
+		});
+		const note = getByTestId('mirror-of-6900.1');
+		expect(note.textContent).toBe('Solde de 6950.1 Résultat de change');
+		expect(note.closest('tr')?.getAttribute('data-testid')).toBe('report-row-6900.1');
+		expect(note.closest('a')).toBeNull();
+		expect(queryByTestId('mirror-of-3000')).toBeNull();
+		expect(queryByTestId('mirror-of-4000')).toBeNull();
+		expect(getByTestId('report-row-3000')).toBeTruthy();
+		expect(getByTestId('report-row-4000')).toBeTruthy();
+	});
+
+	it('produits : plusieurs sources, « Soldes de … »', () => {
+		const miroir = compte({
+			accountId: 7,
+			accountNumber: '3900.1',
+			accountName: 'Produits divers',
+			balance: '30.00',
+			mirrorOf: [
+				{ accountId: 5, accountNumber: '4900', accountName: 'Escomptes', balance: '-10.00' },
+				{ accountId: 6, accountNumber: '4901', accountName: 'Rabais', balance: '-20.00' },
+			],
+		});
+		const { getByTestId } = render(IncomeStatementView, {
+			dto: makeDto({ revenues: [compte(), miroir] }),
+		});
+		expect(getByTestId('mirror-of-3900.1').textContent).toBe('Soldes de 4900 Escomptes, 4901 Rabais');
+	});
+
+	it('sans miroir : aucune mention', () => {
+		const { container } = render(IncomeStatementView, { dto: makeDto() });
+		expect(container.querySelector('[data-testid^="mirror-of-"]')).toBeNull();
 	});
 });
