@@ -603,6 +603,86 @@ async fn import_continuite_et_doublons_de_lignes(pool: MySqlPool) {
     );
 }
 
+/// Story 39-11a2 — un même identifiant au débit puis au crédit (réserve de
+/// carte expirée puis recréditée, vérification de carte) : les deux lignes
+/// s'importent ; la clé de doublon est (identifiant, sens), si bien qu'un
+/// relevé qui ne porte que le recrédit l'importe après le débit, et que le
+/// réimport du même contenu n'insère rien. Identifiants et montants inventés.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn import_meme_identifiant_au_debit_puis_au_credit(pool: MySqlPool) {
+    let ctx = monter(&pool).await;
+    let (c, _, _) = ctx.trois_soldes().await;
+    let virement = ligne("TRANSFER-92000001", "01-12-2020", "150.00", "CHF", "150.00");
+    let debit = ligne("CARD-92000002", "20-12-2020", "-32.10", "CHF", "117.90");
+    let recredit = ligne("CARD-92000002", "27-12-2020", "32.10", "CHF", "150.00");
+    let verif_debit = ligne("CARD-92000003", "28-12-2020", "-0.50", "CHF", "149.50");
+    let verif_credit = ligne("CARD-92000003", "28-12-2020", "0.50", "CHF", "150.00");
+    let rapport = |b: &Value, nom: &str| {
+        let f = par_fichier(b, nom);
+        (f["inserted"].clone(), f["duplicates"].clone())
+    };
+
+    // 1 — jusqu'au débit de la réserve.
+    let un = releve(&[debit.clone(), virement.clone()]);
+    let (s, b) = ctx.importer(&[("1.csv", un.as_slice())]).await;
+    assert_eq!(s, 201, "{b}");
+    assert_eq!(rapport(&b, "1.csv"), (json!(2), json!(0)));
+
+    // 2 — le recrédit seul : même identifiant, l'autre sens → importé.
+    let deux = releve(std::slice::from_ref(&recredit));
+    let (s, b) = ctx.importer(&[("2.csv", deux.as_slice())]).await;
+    assert_eq!(s, 201, "{b}");
+    assert_eq!(rapport(&b, "2.csv"), (json!(1), json!(0)));
+    assert_eq!(par_fichier(&b, "2.csv")["warnings"], json!([]), "{b}");
+
+    // 3 — tout le mois, plus une vérification de carte : seules les deux
+    // lignes de la vérification sont neuves.
+    let tout = [verif_credit, verif_debit, recredit, debit, virement];
+    let trois = releve(&tout);
+    let (s, b) = ctx.importer(&[("3.csv", trois.as_slice())]).await;
+    assert_eq!(s, 201, "{b}");
+    assert_eq!(rapport(&b, "3.csv"), (json!(2), json!(3)));
+
+    // 4 — le même contenu (autres octets) : rien d'inséré, aucune entrée.
+    let quatre = String::from_utf8(trois)
+        .unwrap()
+        .replace("Mouvement", "Mvt")
+        .into_bytes();
+    let avant = ctx.ecrit().await;
+    let (s, b) = ctx.importer(&[("4.csv", quatre.as_slice())]).await;
+    assert_eq!(s, 201, "{b}");
+    assert_eq!(rapport(&b, "4.csv"), (json!(0), json!(5)));
+    assert_eq!(par_fichier(&b, "4.csv")["importId"], Value::Null);
+    assert_eq!(ctx.ecrit().await, (avant.0, avant.1, avant.2 + 1));
+
+    // Les deux sens de chaque identifiant sont en base, et le solde est juste.
+    let lignes: Vec<(String, Decimal)> = sqlx::query_as(
+        "SELECT transaction_id, amount FROM bank_transactions \
+         WHERE bank_account_id = ? AND transaction_id LIKE 'CARD-%' \
+         ORDER BY transaction_id, amount",
+    )
+    .bind(c)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        lignes,
+        vec![
+            ("CARD-92000002".to_string(), dec!(-32.10)),
+            ("CARD-92000002".to_string(), dec!(32.10)),
+            ("CARD-92000003".to_string(), dec!(-0.50)),
+            ("CARD-92000003".to_string(), dec!(0.50)),
+        ]
+    );
+    let total: Decimal =
+        sqlx::query_scalar("SELECT SUM(amount) FROM bank_transactions WHERE bank_account_id = ?")
+            .bind(c)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(total, dec!(150.00));
+}
+
 /// AC-3 — ordre des refus, rien d'écrit : champ manquant ou aucun fichier
 /// (400), compte inconnu (404), fichier illisible (422, nommé), deux fichiers
 /// de même devise (422), devise sans compte (422), deux comptes pour une

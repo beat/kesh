@@ -116,6 +116,67 @@ where
     .map_err(map_db_error)
 }
 
+/// Une transaction déjà sur le compte, vue par son identifiant de prestataire
+/// ([`existing_transactions_by_ids`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExistingTransaction {
+    /// Identifiant de transaction, tel que stocké.
+    pub transaction_id: String,
+    /// Montant signé.
+    pub amount: rust_decimal::Decimal,
+    /// Date de comptabilisation.
+    pub booking_date: NaiveDate,
+}
+
+/// Story 39-11a2 — les transactions du compte bancaire dont l'identifiant est
+/// parmi `transaction_ids`, avec leur montant et leur date : un même
+/// identifiant Wise peut porter un débit **et** un crédit (réserve de carte
+/// expirée, vérification de carte), si bien que l'import Wise juge un doublon
+/// sur (identifiant, sens), le sens se lisant au signe du montant. La forme
+/// `(transaction_id, amount, booking_date)` est celle que 39-12a3 prévoit pour
+/// ses règles de doublons.
+///
+/// Même contrat que [`existing_transaction_ids`] : lecture dans la
+/// transaction de l'import, sous ses verrous ; comparaison selon la collation
+/// de la colonne ; valeurs telles que stockées ; par paquets de 500
+/// identifiants ; une ligne rendue par transaction (un identifiant peut donc
+/// revenir plusieurs fois). Ordre non garanti.
+pub async fn existing_transactions_by_ids(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    bank_account_id: i64,
+    transaction_ids: &[String],
+) -> Result<Vec<ExistingTransaction>, DbError> {
+    let mut found = Vec::new();
+    for chunk in transaction_ids.chunks(500) {
+        let mut qb: sqlx::QueryBuilder<MySql> = sqlx::QueryBuilder::new(
+            "SELECT transaction_id, amount, booking_date FROM bank_transactions WHERE company_id = ",
+        );
+        qb.push_bind(company_id)
+            .push(" AND bank_account_id = ")
+            .push_bind(bank_account_id)
+            .push(" AND transaction_id IN (");
+        let mut separated = qb.separated(", ");
+        for id in chunk {
+            separated.push_bind(id);
+        }
+        separated.push_unseparated(")");
+        let rows: Vec<(Option<String>, rust_decimal::Decimal, NaiveDate)> = qb
+            .build_query_as()
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(map_db_error)?;
+        found.extend(rows.into_iter().filter_map(|(id, amount, booking_date)| {
+            id.map(|transaction_id| ExistingTransaction {
+                transaction_id,
+                amount,
+                booking_date,
+            })
+        }));
+    }
+    Ok(found)
+}
+
 /// Story 38-11b (AC-6) — les identifiants de transaction, parmi
 /// `transaction_ids`, que le compte bancaire porte déjà (recherche de doublon
 /// de l'import PayPal, par l'index `idx_bank_transactions_account_txid`).

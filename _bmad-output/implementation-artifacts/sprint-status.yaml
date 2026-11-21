@@ -1178,6 +1178,7 @@ development_status:
   39-6-ecrans-et-manuels: superseded  # 2026-11-20 : remplacée par 39-11d et 39-12b
   39-11a-lecteur-csv-wise: done  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; revues de code P1 (Opus) et P2 (Sonnet) closes, gate backend complet vert (6254 passés)
   39-11b-compte-wise-et-import: done  # 2026-11-21, boucle close sur la passe ciblée P3 (0 au-dessus de LOW, 3 LOW en issues) ; gates verts à 385adfaf ; aucune migration
+  39-11a2-wise-csv-meme-identifiant-debit-credit: done  # 2026-11-22 revue P1 close (0/0/0/5) ; gates à 9199975d verts — 2026-11-21 : gates verts à 9199975d (backend 6348, gate-ci 6367), revue P1 à lancer ; correctif prioritaire, les relevés CSV CHF réels 2025 et 2026 portent un même CARD-<id> au débit puis au crédit ; clé (identifiant, sens) au lecteur et à l'import ; aucune migration
   39-11c-rapprochement-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20 ; dépend de 38-11c
   39-11d-ecrans-manuel-e2e-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20
   39-12a-telechargement-api-wise: split  # 2026-11-20 : scindée en 39-12a1 et 39-12a2 (recette 1 : défi SCA)
