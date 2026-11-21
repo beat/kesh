@@ -1694,7 +1694,8 @@ fn the_replay_partition_is_what_the_story_declares() {
     // Story 38-12a (Epic 38, phase 2) : 163 → 164 (le téléchargement par l'API
     // PayPal).
     // Story 38-11c2 (Epic 38) : 164 → 165 (l'acceptation de la revue PayPal).
-    assert_eq!(tout.len(), 165);
+    // Story 39-11c (Epic 39) : 165 → 166 (l'acceptation de la revue Wise).
+    assert_eq!(tout.len(), 166);
 }
 
 /// Visiteur `syn` d'un fichier de routes : relève chaque appel à la primitive
