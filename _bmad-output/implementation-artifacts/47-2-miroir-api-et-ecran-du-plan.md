@@ -1,6 +1,6 @@
 # Story 47-2 : compte miroir — API des comptes et écran du plan comptable
 
-Status: review
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R2 à R4, R7 ; Q10 ; FR-47-1, FR-47-2, FR-47-5 (manuels). **Refonte du 2026-11-19 (miroir seul, KISS)** : fusion
@@ -511,3 +511,15 @@ Journaux hors dépôt, `kesh-gate-logs/s47-2/` : `pipeline-1.log` (première sé
 - Reprise de `main` (`aef10456`) : `crates/kesh-db/src/entities/{account,mod}.rs`, `crates/kesh-db/src/repositories/accounts.rs`,
   `crates/kesh-api/src/routes/accounts.rs`, `crates/kesh-db/tests/{account_mirror,account_parent_change,account_currency_repository,credit_card_repository,invoice_write_off,invoices_validate_vat,letterings,supplier_invoices_repository}.rs`,
   `crates/kesh-api/tests/journal_entry_reversal_e2e.rs`
+
+
+### Clôture (2026-11-21, orchestrateur)
+
+Boucle de revue : P1 complète Opus (0/0/0/8 LOW, corrigés en `9f2ae083`) → P2 ciblée Haiku sur `9f2ae083` (0/0/0/3 LOW,
+`kesh-gate-logs/s47-2/revue-p2-rapport.md`). Gates au dernier commit de code `9f2ae083` : backend complet 6193 passés /
+14 ignorés, frontend 281 fichiers / 4658, E2E 480 passés / 10 échecs attendus / 18 ignorés, gate-ci 6212 / 0 / 18.
+LOW de la P2 laissés en dette (aucun comportement faux) : P2-L1 commentaire de l'archivage (`routes/accounts.rs:598-606`,
+la raison « sans cycle » est `guard_mirror_update`, non l'absence de verrou sur A) ; P2-L2 doc publique de `create`
+(refus du miroir et verrou de la cible) ; P2-L3 ordre des refus à la création non fixé par un test. À reprendre à la
+story de solde de l'Epic 47. ⚠️ Un gate de cette story a tourné sans plafond mémoire (`KESH_NO_MEMGUARD=1`) pendant la
+panne du bus systemd de la nuit ; rejoué depuis sous plafond.
