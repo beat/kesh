@@ -1,10 +1,10 @@
 # Story 39-12b : bouton « Télécharger depuis Wise », manuels, E2E
 
-Status: ready-for-dev
+Status: drafted
 
 *Fiche réécrite le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement) : plus de clé de signature SCA. Branche `epic/39-wise`. Epic 39, **phase 2** ; **socle S7 et S8**
-(fichier d'epic). **Dépend de** : 39-12a3, 39-11d, du composant d'écran générique de 38-12b (socle S7).*
+(fichier d'epic). **Dépend de** : 39-12a3, 39-12a2b, 39-12a3b, 39-12a4a1, 39-12a4a2, 39-12a4b (vient après elle), 39-11d, du composant d'écran générique de 38-12b (socle S7) ; amendée le 2026-11-21 (section « Amendement du 21.11 »).*
 
 ## Story
 
@@ -37,7 +37,7 @@ lecture seule, poser les variables et ce que le téléchargement ne sait pas fai
    téléchargement »), avertissement `conversion_ambiguous` ; refus par code `PROVIDER_*`, `WISE_PROFILE_AMBIGUOUS`,
    `WISE_ACTIVITY_UNSUPPORTED` (« un mouvement de type … du … n'est pas pris en charge ; le téléchargement ne peut pas remonter avant cette date : importez le relevé CSV », la date pouvant être **hors de la période demandée**) et les raisons de `PROVIDER_RESPONSE_INVALID`
    (`WISE_API_BALANCE_MISMATCH` : « le solde reconstruit ne concorde pas avec votre relevé du … ; rien n'a été enregistré ; si un mouvement vient d'avoir lieu ou est en cours chez Wise, relancez quand il sera terminé ; si le refus persiste ensuite, voir le manuel », `amount_mismatch`) en clair aux quatre locales (409 : reprise du suivi par `details.jobId`), « rien n'a été
-   enregistré, relancez » sur échec. **Aucun composant propre à Wise** : les libellés propres sont des paramètres. Le compte rendu de l'**import CSV** d'un compte Wise (39-11d) affiche aussi `feesIncluded` quand la clé est présente (39-12a3 AC-4, R1), avec le même libellé.
+   enregistré, relancez » sur échec. **Aucun composant propre à Wise** : les libellés propres sont des paramètres. Le compte rendu de l'**import CSV** d'un compte Wise (39-11d) affiche aussi `feesIncluded` quand la clé est présente (39-12a3b AC-1, R1), avec le même libellé.
 3. **AC-3 — Manuels** (`.tex` seul, aucun PDF commité ; PDF contrôlé à la régénération, `pdftotext … | tr '\n' ' '`).
    *Administration* : créer un jeton personnel **lecture seule** (profil d'entreprise) ; aucune authentification forte ni
    clé à déposer ; variables `KESH_WISE_<n>_ACCOUNT` (le libellé **identique** à celui du compte Wise de Kesh — **propre à
@@ -48,7 +48,7 @@ lecture seule, poser les variables et ce que le téléchargement ne sait pas fai
    rotation du jeton (redémarrage) ; refus de démarrage et leurs messages. **Ce que Kesh lit et ne lit pas** : les
    mouvements terminés des soldes (activités), les frais des virements sortants (par leur devis) ; **pas** le relevé de
    Wise (refusé par Wise aux jetons personnels hors de six pays) ; les frais de conversion sont **compris** dans le montant
-   débité (le relevé CSV les met sur une ligne à part : les deux se mélangent sans doublon, 39-12a3 AC-4) ; un type de
+   débité (le relevé CSV les met sur une ligne à part : les deux se mélangent sans doublon, 39-12a3b AC-1) ; un type de
    mouvement inconnu de Kesh refuse le téléchargement (importer le CSV de la période) ; le solde reconstruit est contrôlé
    contre le dernier relevé de Kesh, d'où le conseil : **un premier relevé importé en CSV**, puis des téléchargements ;
    Kesh relit le dernier jour du relevé précédent (`importFrom`, 39-12a3 AC-3) et accepte un relevé arrêté en cours de
@@ -64,6 +64,37 @@ lecture seule, poser les variables et ce que le téléchargement ne sait pas fai
    second téléchargement → « 0 insérée » ; solde qui ne concorde pas (la spec a d'abord posé un relevé à solde par l'import CSV de 39-11d, dont la clôture diffère de ce que reconstruit le serveur simulé) → message de `WISE_API_BALANCE_MISMATCH` ; 401 simulé
    affiché. Sans la variable du port, ignoré avec son motif écrit (jamais compté vert). Vitest : indicateur `providerApi`
    (configuré, non configuré), libellés propres à Wise. Captures hors du dépôt.
+
+## Amendement du 21.11 (validation P1 des fiches 39-12a, finding M14)
+
+Sources : fiches 39-12a2 (amendements A-1 à A-5), 39-12a2b, 39-12a3b, 39-12a4a1, 39-12a4a2, 39-12a4b ; rapport
+`kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md`. Il l'emporte sur les AC ci-dessus là où elles diffèrent.
+
+- **A-1 — Liste « à vérifier » au compte rendu.** Le dialogue affiche `cardSplitsToVerify` (date, montant et devise du
+  marchand, parts : devise, montant ou « inconnu », exacte ou estimée, couverture ; raison en clair) et `splitGroups`
+  (devise, du … au …, somme exacte, paiements concernés). C'est une section neuve, absente du composant générique de
+  38-12b : elle passe par un **emplacement de rendu paramétrable** de ce composant (à demander à 38-12b, ou à ajouter
+  ici à ce composant, fichier commun) — l'exception assumée à « aucun composant propre à Wise » est ce seul
+  sous-composant de section, sans logique.
+- **A-2 — Codes et raisons neufs, aux quatre locales** : `WISE_CARD_PARTIAL_CONVERSION` (si 39-12a4b n'est pas livrée
+  dans la même release), `WISE_BALANCE_GAP` (`currency`, `from`, `to` ; trois causes : mouvement absent de l'API,
+  mouvement en cours déjà porté au solde, ordre de prélèvement des soldes réglé autrement chez Wise ; sortie : le CSV de
+  la période), `WISE_CARD_SPLIT_UNRESOLVED` (`unanchored`, `period_boundary`), les raisons `rate`,
+  `WISE_API_MISSING_RATE`, `WISE_API_TRANSFER_FEE_MISMATCH` de `PROVIDER_RESPONSE_INVALID`, et les motifs « à vérifier »
+  (`split_group`, `rate_mismatch`, `no_calibration`, `part_already_booked`, `unsupported_shape`).
+- **A-3 — Manuel** (en plus de l'AC-3) : le relevé CSV à donner est celui **avec** « frais indiqués séparément » ; les
+  frais de conversion des paiements par carte sont, comme ceux des conversions de solde, compris dans le montant
+  téléchargé ; un paiement par carte payé avec plusieurs soldes : importé quand Kesh en établit exactement la
+  répartition, sinon « à vérifier », réglé par l'import du relevé CSV de sa période — jamais par un relevé saisi à la
+  main, refusé sur un compte Wise — ; importer **ensemble** les fichiers des trois soldes d'une période (sinon une ligne
+  rapprochée seule fait `part_already_booked`) ; la règle de la reconstitution est **observée** sur un compte, non
+  documentée par Wise ; un téléchargement mensuel est celui qui rend les répartitions exactes ; volume : un appel
+  `/v1/rates` par devise convertie de chaque paiement par carte converti ; approvisionnements et prélèvements repris
+  (la référence d'un prélèvement manque à l'API) ; *réserve de carte expirée* : un relevé arrêté entre l'autorisation et
+  la fin de la réserve fait refuser le téléchargement (`WISE_API_BALANCE_MISMATCH`), sortie : importer le CSV d'une
+  période qui va au-delà de la capture, puis télécharger à partir d'elle, jamais supprimer le relevé (39-12a2 A-2).
+- **A-4 — E2E** : le serveur simulé commun gagne aussi `GET /v1/rates` ; un cas partielle « à vérifier » (liste et somme
+  affichées) et un cas `WISE_BALANCE_GAP` (message). Vitest : libellés des motifs et codes neufs.
 
 ## Tâches
 
@@ -92,6 +123,13 @@ Vitest ; `npm run check`, `lint-i18n-ownership`, `build` ; E2E **complet au dern
 décrit le jeton en lecture seule et ce que le téléchargement lit.
 
 ## Change Log
+
+- 2026-11-21 — **amendement du 21.11** (validation P1 des fiches 39-12a, Claude Sonnet 5.5, rapport
+  `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md`, finding M14 et question Q4) : dépendances complétées (vient
+  après 39-12a4b) ; renvois « 39-12a3 AC-4 » corrigés en 39-12a3b AC-1 ; liste « à vérifier » par un emplacement de
+  rendu du composant générique ; codes et motifs neufs ; manuel (CSV « avec », frais des cartes, voies d'une partielle,
+  fichiers ensemble, règle observée, `/v1/rates`, réserve expirée) ; E2E `GET /v1/rates`. Statut `drafted` (à
+  revalider), validation P2 à lancer.
 
 - 2026-11-20 — validation ciblée AC-0 (a) « décisions » sur le commit `d0cfeda7` (Claude Haiku 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee.md`) : 1 H, remédié : le paragraphe « Débit terminé après un relevé » faisait supprimer un relevé juste (qui ne contenait pas encore le mouvement) sans la garde de rapprochement du point (ii) ; il renvoie désormais au point (ii) : suppression seulement si le relevé diffère du site de Wise et qu'aucune de ses transactions n'est rapprochée, sinon import du CSV.
 - 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : le manuel utilisateur dit désormais qu'un débit terminé après un relevé fait refuser le téléchargement (voulu), que l'heure du CSV du site est en UTC+1 toute l'année, et que le suffixe du virement remboursé reste provisoire faute de cas relevé ; aucun autre changement de la fiche.

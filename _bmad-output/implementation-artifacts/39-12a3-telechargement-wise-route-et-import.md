@@ -1,13 +1,13 @@
 # Story 39-12a3 : téléchargement des mouvements Wise — route, tâche en fond, import, doublons avec le CSV, audit
 
-Status: ready-for-dev
+Status: drafted
 
 *Fiche réécrite le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement) ; elle portait le numéro **39-12a2** (« téléchargement des relevés Wise — route, tâche en fond,
 import et audit »), renumérotée 39-12a3 parce que la conversion des activités en lignes prend la 39-12a2. Branche
 `epic/39-wise`. Epic 39, **phase 2** ; **socle commun S1 à S9** (fichier d'epic). **Dépend de** : 39-12a1 (client),
-39-12a2 (conversion), 39-11b (import CSV), 39-11c (rapprochement), du **cœur commun `ProviderLine`**
-(`provider_imports.rs`) extrait par 38-12a — ou par 39-11b s'il passe avant (socle S6) —, du **socle S2, S3, S4, S6**
+39-12a2 (conversion), 39-12a2b (types d'activité de 2026), 39-11b (import CSV), 39-11c (rapprochement), du **cœur commun `ProviderLine`**
+(`provider_imports.rs`) extrait par 38-12a — ou par 39-11b s'il passe avant (socle S6) ; dans cette branche, où `epic/38-paypal` est fusionnée, le raccord de 39-11b à ce cœur est la story **39-14** —, du **socle S2, S3, S4, S6**
 écrit par 38-12a (ou, à défaut, par la première fiche de phase 2 développée : C-40-K6). **Suivie par** : 39-12b.*
 
 ## Story
@@ -58,7 +58,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
    (`now`) ; (3) **points de contrôle** dans Kesh, pour chaque devise liée : la clôture du relevé à solde antérieur à `from`
    (`previous_statement_closing`, `crates/kesh-db/src/repositories/bank_imports.rs:358`) et celle de chaque relevé à solde
    du compte qui se termine entre `from` et aujourd'hui (`overlapping_statements`, `:386`) — relevés importés (CSV ou
-   téléchargement) ou saisis ; (4) **début d'import** `importFrom` = le plus tôt de `from` et du dernier jour (`period_to`) du relevé
+   téléchargement) ; un relevé saisi à la main est refusé sur un compte Wise (`BANK_ACCOUNT_IS_PROVIDER`) ; (4) **début d'import** `importFrom` = le plus tôt de `from` et du dernier jour (`period_to`) du relevé
    de `previous_statement_closing` — un relevé arrêté en cours de journée (téléchargement jusqu'à l'instant, CSV exporté
    dans la journée) laisse en dehors de Kesh les mouvements de la fin de ce jour ; les relire, doublons ignorés par
    identifiant, les rattrape, alors qu'une période commencée au lendemain les perdrait sans rien dire —, et **début de
@@ -81,7 +81,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
    `inserted: 0`). La continuité avec l'import précédent (39-11b AC-5) se juge comme pour le CSV ; elle est ici garantie par
    le contrôle de 39-12a2 AC-5 quand un point de contrôle existe.
 4. **AC-4 — Déplacée en 39-12a3b** (amendement du 21.11, A-2) : les doublons propres à Wise entre un CSV et un
-   téléchargement (règles R1 à R3, point d'accroche `rules` du cœur commun, deux lectures du dépôt, préfixe
+   téléchargement (règles R1 à R3, point d'accroche `rules` du cœur commun, lectures du dépôt, préfixe
    `AUTO_CONVERSION` du rapprochement). Ici, le cœur applique sa seule règle de base (39-11b AC-5) : même `transaction_id`
    sur le même compte bancaire → ligne ignorée.
 5. **AC-5 — Parallélisme.** `KESH_WISE_PARALLEL` (socle S2, lue par 39-12a1) borne les requêtes de devis faites en même
@@ -90,7 +90,9 @@ seulement si le solde reconstruit concorde avec mes relevés.
    pause fixe** entre deux requêtes. Résultat **identique** à 1 et à 3 en parallèle (test qui compare les lignes importées).
 6. **AC-6 — Audit, secrets, i18n.** Trace `wise_download.created` (`details` : libellé, période, `readFrom`, étapes, compte rendu) sous l'acteur (`NewAuditLogEntry::for_actor`), **écrite dans la même transaction que l'import** (comme `paypal_download.created`, 38-12a AC-7), plus `bank_import.created` par devise comme à l'import CSV, jamais `wise_import.created` ; l'action est **déclarée à `ACTIONS` de `crates/kesh-api/src/audit_labels.rs` avec son libellé dans les quatre catalogues** (la garde `audit_label_registry.rs` rougit sinon) ; **aucun secret** (jeton) ni `KESH_WISE_BASE_URL`
    dans une réponse ou une trace. Codes `PROVIDER_*` du socle S4, `WISE_PROFILE_AMBIGUOUS` et **`WISE_ACTIVITY_UNSUPPORTED`** (`details: { activityType, date }` : un mouvement de ce type, daté de `date`, se trouve entre le début de lecture et maintenant, même hors de la période demandée, et le solde ne peut plus se reconstruire : le message le dit, et que le téléchargement ne remontera pas avant cette date ; le manuel dit d'importer le CSV) ; les autres refus de 39-12a2
-   deviennent `PROVIDER_RESPONSE_INVALID` avec `details.reason` = leur code (`WISE_API_BALANCE_MISMATCH` porte aussi
+   (tous sauf `UnsupportedActivity` et, amendement A-1, `PartialCardConversion`, qui devient
+   **`WISE_CARD_PARTIAL_CONVERSION`**) deviennent `PROVIDER_RESPONSE_INVALID` avec `details.reason` = leur code (dont
+   `WISE_API_TRANSFER_FEE_MISMATCH`, 39-12a2 A-5) (`WISE_API_BALANCE_MISMATCH` porte aussi
    `currency`, `date`, `expected`, `found`) ; **la panique de la tâche** → `INTERNAL_ERROR` (socle S4). `errors.rs` et
    messages aux quatre locales (`crates/kesh-i18n/locales/*`) — les `PROVIDER_*` du socle sont posés par 38-12a, seuls les
    `WISE_*` et les raisons le sont ici ; garde d'audit `audit_acteur_garde.rs` verte.
@@ -168,6 +170,14 @@ AC ci-dessus là où elles diffèrent.
   l'ordre n'est que celui du développement (39-12a3, puis 39-12a3b).
 
 ## Change Log
+
+- 2026-11-21 — **remédiation de la validation P1 des fiches 39-12a** (Claude Sonnet 5.5, contexte frais ; rapport
+  `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md` ; ici 0 C, 0 H, 0 M, 3 L, plus des propagations). **L4** —
+  l'AC-6 nomme les deux refus qui ne deviennent pas `PROVIDER_RESPONSE_INVALID` (`WISE_ACTIVITY_UNSUPPORTED`,
+  `WISE_CARD_PARTIAL_CONVERSION`) ; **L5** — statut `drafted` (amendée, à revalider) ; dépend de la fiche neuve 39-12a2b
+  (approvisionnement, prélèvement) ; relevé saisi à la main retiré des points de contrôle (refusé sur un compte Wise,
+  finding M11) ; le point de contrôle reçoit l'identifiant de son relevé par le raccord de 39-12a4a1 (AC-1, sans effet
+  ici) ; dépendance à 39-14 (raccord du cœur commun) écrite (finding M13). Statut `drafted`, validation P2 à lancer.
 
 - 2026-11-21 — **amendement du 21.11** (section ci-dessus) : partielle refusée en `WISE_CARD_PARTIAL_CONVERSION`
   (décision (a)), levé par 39-12a4b ; AC-4 (doublons R1 à R3) et ses tests déplacés en 39-12a3b, renvois de l'AC-2, de

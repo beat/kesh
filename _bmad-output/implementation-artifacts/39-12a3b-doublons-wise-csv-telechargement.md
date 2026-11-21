@@ -7,8 +7,10 @@ l'AC-4 de 39-12a3, **reprise telle quelle** (validée en P1 à P5 et aux passes 
 2026-11-20) ; l'AC-2 est neuve (paiement par carte converti, formes relevées le 2026-11-21 sur les relevés réels :
 `kesh-gate-logs/epic-39-40-kiss/wise-conversion-partielle-recherche.md`, § « Mesure contre les relevés réels »).
 Branche `epic/39-wise`. Epic 39, **phase 2**. **Dépend de** : 39-12a3 (téléchargement), 39-12a2 (amendement A-1 :
-totale par carte, frais inclus dans le débit), 39-11b (import CSV), 39-11a2 (clé (identifiant, sens) à l'import CSV),
-39-11c (rapprochement, écriture groupée d'un paiement par carte converti). **Suivie par** : 39-12a4b, 39-12b.*
+totale par carte, frais inclus dans le débit), 39-11b (import CSV), **39-11a2** (clé (identifiant, sens) à l'import CSV,
+et la lecture `existing_transactions_by_ids` que cette story réutilise ; branche `story/39-11a2`), **39-14** (raccord de
+39-11b au cœur commun de 38-12a : le point d'accroche `rules` se pose dans ce cœur), 39-11c (rapprochement, écriture
+groupée d'un paiement par carte converti). **Suivie par** : 39-12a4b, 39-12b.*
 
 ## Story
 
@@ -49,9 +51,14 @@ automatiques et les paiements par carte payés dans une autre devise.
    `ProviderLine`, `ImportRequest`, `import_lines` — et n'y ajoute que `ProviderLine.value_date` (`None` pour Wise), plus des
    aides de formulaire ; il n'y a plus qu'une forme, au contraire de ce que la P2 avait relevé. `dedupe_lines` garde sa
    signature et ses tests : les lignes écartées pour le point d'accroche se déduisent des lignes gardées. Les copies
-   privées de PayPal que 40-7b dit « à replier » ne concernent pas Wise.)* Le dépôt des transactions bancaires gagne **deux lectures** (`existing_transaction_ids` ne rend que des
-   identifiants) : `existing_transactions_by_ids(company, compte, ids)` et `transactions_by_prefix_window(company, compte,
-   préfixe, du, au)`, rendant `(transaction_id, amount, booking_date)`. Les tests de 39-11b restent verts sans changement
+   privées de PayPal que 40-7b dit « à replier » ne concernent pas Wise.)* **Lectures du dépôt des transactions bancaires** (amendé à la validation P1, finding M13 : aucune lecture en double) :
+   cette story **réutilise** `existing_transactions_by_ids(conn, company, compte, ids) -> Vec<ExistingTransaction {
+   transaction_id, amount, booking_date }>` qu'ajoute 39-11a2 (même nom, même forme : ne pas la recréer), et n'ajoute
+   que `transactions_by_prefix_window(company, compte, préfixe, du, au)`, rendant la même `ExistingTransaction` ;
+   39-12a4b étend cette structure d'un champ (`import_id`) au lieu d'écrire une troisième lecture. *Point d'accroche*
+   : dans cette branche, le dédoublonnage Wise est encore fait par `WiseWriter` (`routes/wise_imports.rs`) et le
+   `dedupe_groups` du cœur est celui de PayPal (`provider_imports.rs`) ; le point d'accroche se pose dans le cœur que
+   39-14 raccorde à Wise — sans 39-14 faite, cette story ne commence pas. Les tests de 39-11b restent verts sans changement
    d'assertion (un ré-import à l'identique ne remplit aucune condition ci-dessous).
    - **(R1) Frais de conversion inclus.** Une ligne de frais `FEE-BALANCE-x` ou `FEE-CONVERSION_ORDER-x` d'un CSV dont la
      ligne d'origine `x` est un doublon, et dont l'origine en base a pour montant `montant de x dans le fichier + montant
@@ -84,7 +91,7 @@ automatiques et les paiements par carte payés dans une autre devise.
    autre devise que celle du marchand, une ligne `CARD-x` **hors frais** (*Exchange From* = la devise du solde,
    *Exchange To* = celle du marchand) et, une milliseconde avant, une ligne `FEE-CARD-x` ; la part payée dans la devise du
    marchand, sans conversion, n'a pas de ligne de frais. Le téléchargement porte une ligne `CARD-x` par solde débité,
-   **frais compris** (39-12a2, amendement A-1 ; 39-12a4a pour les partielles). Les règles de l'AC-1 s'étendent ainsi,
+   **frais compris** (39-12a2, amendement A-1 ; 39-12a4a1 et 39-12a4a2 pour les partielles). Les règles de l'AC-1 s'étendent ainsi,
    sans autre changement :
    - **(R1)** une ligne `FEE-CARD-x` d'un CSV dont l'origine `CARD-x` **de la même devise** est en base avec le montant
      `montant de CARD-x dans le fichier + montant des frais` est ignorée et comptée dans `feesIncluded` ;
@@ -116,7 +123,7 @@ automatiques et les paiements par carte payés dans une autre devise.
 
 - [ ] T1 — Point d'accroche `rules` du cœur commun ; appelants PayPal et Stripe à `None` (AC-1).
 - [ ] T2 — `wise_duplicates.rs` : R1 à R3, préfixes `BALANCE`, `CONVERSION_ORDER`, `AUTO_CONVERSION`, `CARD` (AC-1, AC-2).
-- [ ] T3 — Deux lectures du dépôt des transactions bancaires ; `feesIncluded` aux deux routes (AC-1).
+- [ ] T3 — Lecture `transactions_by_prefix_window` (celle par identifiants vient de 39-11a2) ; `feesIncluded` aux deux routes (AC-1).
 - [ ] T4 — Préfixe `AUTO_CONVERSION` au rapprochement (AC-1).
 - [ ] T5 — Tests (AC-3).
 
@@ -129,8 +136,8 @@ commit. Aucune migration : P5 à P8 sans objet.
 ## Modules touchés (3)
 
 `kesh-api` (`routes/provider_imports.rs`, `wise_duplicates.rs`, routes CSV et téléchargement de Wise, une ligne aux
-appelants PayPal et Stripe), `kesh-db` (deux lectures du dépôt des transactions bancaires), `kesh-reconciliation` (un
-préfixe de conversion).
+appelants PayPal et Stripe), `kesh-db` (une lecture du dépôt des transactions bancaires ; l'autre est celle de 39-11a2),
+`kesh-reconciliation` (un préfixe de conversion).
 
 ## Fichiers communs
 
@@ -147,10 +154,20 @@ conversion compris, y compris pour les paiements par carte payés dans une autre
 
 - Les règles R1 à R3 ne touchent que des identifiants Wise et vivent côté Wise ; le cœur commun ne gagne qu'un point
   d'accroche, que PayPal et Stripe laissent à `None`.
+- À vérifier à l'étape 0, au code de 39-11a2 (`existing_keys`) : la ligne de **capture** d'un `CARD-x` (second débit
+  du CSV après une réserve expirée et recréditée) a la même clé (identifiant, sens débit) que le premier débit : elle est
+  elle-même un doublon du premier à l'import CSV ; R1 et R2 la comparent comme toute ligne de débit.
 - Le CSV « sans frais indiqués séparément » porte les frais dans la ligne d'origine (même montant que le téléchargement) :
   il se dédoublonne par la règle de base, sans R1 ni R2. Le manuel (39-12b) recommande le CSV « avec ».
 
 ## Change Log
+
+- 2026-11-21 — **remédiation de la validation P1 des fiches 39-12a** (Claude Sonnet 5.5, contexte frais ; rapport
+  `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md` ; ici 0 C, 0 H, 1 M, 2 L). **M13** — dépend de 39-14 (raccord
+  du cœur commun, où se pose le point d'accroche) et de 39-11a2, dont elle réutilise `existing_transactions_by_ids` (une
+  seule lecture neuve, `transactions_by_prefix_window` ; 39-12a4b étend la structure au lieu d'une troisième lecture) ;
+  **L8** — ligne de capture d'un `CARD-x` à vérifier contre `existing_keys` de 39-11a2. Statut `drafted`, validation P2
+  à lancer.
 
 - 2026-11-21 — fiche née du découpage de 39-12a3 (amendement du 21.11) : AC-1 = AC-4 de 39-12a3 reprise telle quelle ;
   AC-2 neuve (`CARD-`/`FEE-CARD-`, clé (identifiant, sens) de 39-11a2) ; tests de l'AC-7 de 39-12a3 qui en relevaient

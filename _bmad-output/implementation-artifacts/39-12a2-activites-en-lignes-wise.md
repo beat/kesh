@@ -1,12 +1,12 @@
 # Story 39-12a2 : activités Wise en lignes de relevé — montants, sens, frais, soldes reconstruits et contrôlés (`kesh-import`)
 
-Status: ready-for-dev
+Status: drafted
 
 *Fiche rédigée le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement). Le numéro 39-12a2 désignait jusqu'à ce jour la route et l'import, renumérotés **39-12a3**
 (même contenu, adapté). Branche `epic/39-wise`. Epic 39, **phase 2** (H2 du fichier d'epic). **Dépend de** : 39-11a
 (`WiseRow`, `WiseCsv`, contrôle des identifiants), la **recette préalable 39-12a1 AC-0 (a)** (faite le 2026-11-20 : règles de l'AC-3 devenues définitives).
-**Suivie par** : 39-12a3 (qui l'appelle), la recette finale 39-12a1 AC-0 (b). Indépendante du client HTTP de 39-12a1 :
+**Suivie par** : 39-12a2b (types d'activité de 2026), 39-12a3 (qui l'appelle), la recette finale 39-12a1 AC-0 (b). Indépendante du client HTTP de 39-12a1 :
 elle ne lit que des structures neutres.*
 
 ## Story
@@ -66,7 +66,7 @@ courant —, afin qu'un relevé importé à la main et un téléchargement se d�
    | `INTERBALANCE` | crédit `primary` dans sa devise, débit `secondary` dans la sienne (**frais de conversion inclus**) | `BALANCE-<resource_id>` sur les **deux** lignes |
    | `AUTO_CONVERSION` | comme `INTERBALANCE` | `AUTO_CONVERSION-<resource_id>`, **définitif** : le numéro `CONVERSION_ORDER-<n>` du CSV n'est nulle part dans l'API (AC-0 (a)(2)) ; le doublon avec un CSV déjà importé ne se détecte pas par identifiant (39-12a3 R3) |
    | `CARD_CHECK` | aucune (vérification de carte, sans mouvement) ; comptée dans `ignored.card_checks` | — |
-   | tout autre type `COMPLETED` (`BALANCE_INTEREST`, `BALANCE_CASHBACK`, `FEE_REFUND`, `DIRECT_DEBIT_TRANSACTION`, `CASH_WITHDRAWAL`, …) | **refus de l'ensemble** : `UnsupportedActivity { activity_type, date }` (`activity_type` rendu tel quel s'il a la forme `^[A-Z_]{1,40}$`,
+   | tout autre type `COMPLETED` (`BALANCE_INTEREST`, `BALANCE_CASHBACK`, `FEE_REFUND`, `CASH_WITHDRAWAL`, … ; `BALANCE_DEPOSIT` et `DIRECT_DEBIT_TRANSACTION` sont pris en charge par 39-12a2b) | **refus de l'ensemble** : `UnsupportedActivity { activity_type, date }` (`activity_type` rendu tel quel s'il a la forme `^[A-Z_]{1,40}$`,
    sinon `UNKNOWN` : c'est un texte de Wise, borné avant d'entrer dans une erreur), **même si son `date` est hors de `period`** (postérieure à `to` ou antérieure à `from`) : le solde se reconstruit depuis aujourd'hui, un mouvement inconnu n'importe où entre `readFrom` et maintenant fausse tous les soldes ; le refus dit donc la date du mouvement et que **tout** téléchargement qui remonte avant cette date est refusé tant que le type n'est pas pris en charge (le manuel, 39-12b : importer le CSV) | — |
    **Montant d'un débit simple** : `primary` si `secondary` est absent ; sinon celui des deux dont la devise est un solde du
    profil (`balances`) ; si les deux le sont et que l'activité est un **débit `TRANSFER`**, celui qui est dans la devise `fee_currency` de son entrée `transfer_fees` (la devise source du devis, donc la devise débitée : un virement du solde CHF vers un bénéficiaire en EUR, alors que le profil porte aussi un solde EUR, est le cas courant ; cette entrée est exigée, AC-4 : absente, c'est `MissingTransferFee`, jamais `AmbiguousAmount`) ; sinon, les deux ou aucun → `AmbiguousAmount { activity_id }`. Une ligne dans une devise sans solde au
@@ -176,7 +176,7 @@ convertis, 2025–2026) et `wise-conversion-partielle-recherche.md` (§ « Recon
 « Mesure contre les relevés réels » : relevés CSV, CAMT et PDF du site, 2025 et 2026) ; décisions du responsable de
 l'epic du 21.11 (journal des décisions de signature des epics du 21.11, sous `kesh-gate-logs/`, (a) et (b)). Elles l'emportent sur les AC ci-dessus
 là où elles diffèrent. La répartition d'une conversion **partielle** par continuité des soldes, suivi de la décision
-(a), n'est **pas** ici : elle forme les stories **39-12a4a** (moteur, `kesh-import`) et **39-12a4b** (téléchargement),
+(a), n'est **pas** ici : elle forme les stories **39-12a4a1** et **39-12a4a2** (moteur, `kesh-import` ; ex-39-12a4a, scindée à la validation P1) et **39-12a4b** (téléchargement),
 qui lèvent le refus de A-3 ; cette story livre le refus seul, pour qu'un téléchargement sûr existe sans elles.
 
 - **A-1 — Paiement par carte à conversion totale** (écart 1 de la note des écarts). Un `CARD_PAYMENT` dont le
@@ -194,11 +194,19 @@ qui lèvent le refus de A-3 ; cette story livre le refus seul, pour qu'un télé
 - **A-2 — Réserve de carte expirée puis capturée.** Un `CARD_PAYMENT` dont `updated_on − created_on` dépasse **7
   jours** est daté et ordonné à `updated_on` (date = jour de Zurich de `updated_on`, `date_time` et place dans l'ordre
   de l'AC-5 au même instant), non à `created_on` : la réserve a expiré, le solde a été recrédité, et le débit a lieu à
-  la capture, sur les soldes du jour de la capture (cas réel : achat du 2025-12-20 capturé le 2026-01-06 sur l'EUR ;
+  la capture, sur les soldes du jour de la capture (cas relevé : achat capturé dix-sept jours plus tard sur un autre solde ;
   ordonné à la création, il tombait sur un solde qui ne pouvait pas le payer). Le relevé du site porte trois lignes
-  (débit, recrédit, débit à la capture), l'API l'état final seul : une ligne. L'écart est sans effet sur les soldes ;
-  un CSV importé après le téléchargement apporte le débit et le recrédit du premier solde (39-11a2 : même identifiant,
-  sens opposés), de somme nulle.
+  (débit, recrédit à l'expiration de la réserve, débit à la capture), l'API l'état final seul : une ligne. Un CSV
+  importé après le téléchargement apporte le débit et le recrédit du premier solde (39-11a2 : même identifiant, sens
+  opposés), de somme nulle. **Limite** (finding M2 de la validation P1) : l'écart est sans effet sur les soldes **hors**
+  de la fenêtre de la réserve ; un point de contrôle daté **entre** l'autorisation et le recrédit (un relevé arrêté dans
+  ces quelques jours) porte le débit de réserve, que le solde reconstruit n'a pas : `BalanceMismatch` à ce point (AC-5),
+  qui dure tant qu'un téléchargement relit ce relevé. Le relevé n'est pas faux : la sortie est d'importer le CSV d'une
+  période qui va au-delà de la capture, puis de télécharger à partir d'elle (le point de contrôle devient ce relevé
+  plus récent) — jamais de supprimer le relevé ; dit au manuel (39-12b). Le seuil de 7 jours se compare sur les instants
+  ramenés à l'heure de Zurich (39-12a3) : à cheval sur un changement d'heure, l'écart réel diffère d'une heure ; les
+  captures tardives vues sont à plus de deux semaines, le test « 7 jours tout juste » se construit hors d'un changement
+  d'heure.
 - **A-3 — Paiement par carte à conversion partielle : refus fermé dédié** (écart 2 ; décision (a) du 21.11). Un
   `CARD_PAYMENT` dont le `secondary_amount`, balises retirées et `trim` faits, a la forme
   `^[A-Z]{3}(, [A-Z]{3})+$` (« USD, CHF », « USD, CHF, EUR » : une **liste de devises sans montant**) est une
@@ -208,22 +216,41 @@ qui lèvent le refus de A-3 ; cette story livre le refus seul, pour qu'un télé
   (renvoi au CSV de la période). Comme `UnsupportedActivity`, le refus vaut **même hors de `period`** (le solde se
   reconstruit depuis aujourd'hui) ; avec plusieurs partielles, la date rendue est celle de la **plus récente**, qui
   borne tout téléchargement : il ne peut pas remonter avant elle. Un `CARD_PAYMENT` non `COMPLETED` reste compté dans
-  `ignored.not_completed`, quelle que soit sa forme. 39-12a4a remplace ce refus par la répartition.
-- **A-4 — Erreurs et tests.** `WiseApiError` gagne `PartialCardConversion` (AC-6 : neuf variantes) ; l'AC-7 gagne :
-  une totale CHF ← USD et une CHF ← EUR, devises toutes deux soldes du profil (débit du secondaire, champs d'échange,
-  aucune ligne de frais, aucun `AmbiguousAmount`) ; une capture à plus de 7 jours (date et ordre à `updated_on`, solde
+  `ignored.not_completed`, quelle que soit sa forme. 39-12a4a1 et 39-12a4a2 remplacent ce refus par la répartition (quand l'appelant passe `split: Some`, 39-12a4b).
+- **A-4 — Erreurs et tests.** `WiseApiError` gagne `PartialCardConversion` et `TransferFeeMismatch` (A-5) (AC-6 :
+  dix variantes) ; l'AC-7 gagne : une totale CHF ← USD et une CHF ← EUR, devises toutes deux soldes du profil (débit du
+  secondaire, champs d'échange, aucune ligne de frais, aucun `AmbiguousAmount`) ; une totale à marchand USD payée en EUR
+  (débit EUR, `exchange_to` = USD, aucun côté CHF) ; une capture à plus de 7 jours (date et ordre à `updated_on`, solde
   reconstruit juste) et une à 7 jours tout juste (date à `created_on`) ; une partielle à deux et à trois devises →
   `PartialCardConversion` avec la date de la plus récente, y compris hors de `period` ; une liste de devises mal formée
   (« USD,CHF », « usd, chf ») → `AmountFormat`. Fixtures fictives seulement (modèle :
   `kesh-gate-logs/epic-39-40-kiss/wise-fixtures-conversion-carte/`, à recopier sous `tests/fixtures/` avec sa ligne au
   catalogue).
-- **Hors de cet amendement, relevé** (note des écarts, § 3 et § 4) : un virement sortant dont le secondaire est dans la
-  **même devise**, frais compris (31 virements sur 46 en 2025–2026 ; débit = `primary`, contrôle `secondary − primary =
-  fee_total`) ; deux types `COMPLETED` refusés par l'AC-3, `DIRECT_DEBIT_TRANSACTION` et `BALANCE_DEPOSIT`, présents en
-  2026 — tant qu'ils sont refusés, aucun téléchargement ne remonte avant le dernier d'entre eux. À trancher avant la
-  recette 39-12a1 AC-0 (c) ; non traités ici.
+- **A-5 — Virement sortant à secondaire de même devise** (note des écarts, § 3 ; finding H2 de la validation P1 :
+  sans cette règle, l'AC-3 rendait `AmbiguousAmount` et refusait presque tout téléchargement de 2025–2026). Un débit
+  `TRANSFER` dont `primary` et `secondary` sont deux montants de **la même devise** (« montant envoyé | montant débité,
+  frais compris ») : la ligne est un débit de `primary` (hors frais) ; la ligne `FEE-TRANSFER-<id>` vient du devis
+  (AC-4, inchangé) ; **contrôle** : `secondary − primary = fee_total` et devise = `fee_currency`, sinon
+  `TransferFeeMismatch { transfer_id }` (code `WISE_API_TRANSFER_FEE_MISMATCH`, que 39-12a3 place dans `details.reason`
+  de `PROVIDER_RESPONSE_INVALID`). Cette règle précède « Montant d'un débit simple » de l'AC-3 pour ce cas. Mesuré sur
+  les relevés CSV 2025–2026 du site : 31 virements sortants à secondaire, tous de même devise ; pour les 30 que couvrent
+  les relevés, débit du CSV = `primary` et ligne de frais = `secondary − primary` (30 sur 30). Tests de l'AC-7 :
+  virement de même devise avec frais (débit, ligne de frais), sans frais (`secondary = primary`, aucune ligne), écart
+  entre `secondary − primary` et le devis → `TransferFeeMismatch`.
+- **Renvoyé à 39-12a2b** (finding M1) : les deux types `COMPLETED` de 2026 refusés par l'AC-3, `BALANCE_DEPOSIT`
+  (approvisionnement, `TRANSFER-<id>` au CSV) et `DIRECT_DEBIT_TRANSACTION` (prélèvement, `DIRECT_DEBIT-<id>`), préfixes
+  relevés sur les relevés CSV 2026 ; fiche voisine, avant 39-12a3.
 
 ## Change Log
+
+- 2026-11-21 — **remédiation de la validation P1 des fiches 39-12a** (Claude Sonnet 5.5, contexte frais ; rapport
+  `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md` : 0 C, 2 H, 15 M, 18 L sur six fiches ; ici 1 H, 2 M, 3 L).
+  **H2** — virement sortant à secondaire de même devise pris en charge (A-5 : débit du primaire, frais du devis,
+  contrôle `TransferFeeMismatch`, mesuré 30 sur 30) ; **M1** — `BALANCE_DEPOSIT` et `DIRECT_DEBIT_TRANSACTION` renvoyés à
+  la fiche neuve 39-12a2b ; **M2** — A-2 : point de contrôle dans la fenêtre d'une réserve, limite écrite et sortie
+  (manuel 39-12b) ; **L1** — test d'une totale à marchand USD payée en EUR ; **L2** — seuil de 7 jours sur des instants
+  de Zurich, écrit ; **L3** — dates réelles retirées ; **L5** — statut `drafted` (amendée, à revalider). Statut
+  `drafted`, validation P2 à lancer.
 
 - 2026-11-21 — **amendement du 21.11** (section ci-dessus) : totale par carte (débit du secondaire), capture tardive,
   refus dédié d'une partielle (décision (a)) ; la répartition par continuité va aux stories neuves 39-12a4a et 39-12a4b.
