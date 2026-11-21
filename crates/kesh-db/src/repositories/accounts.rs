@@ -208,6 +208,26 @@ pub async fn create(pool: &MySqlPool, user_id: i64, new: NewAccount) -> Result<A
         });
     }
 
+    // Story 47-1 (AC-4, AC-7) : un miroir posé dès la création — la cible seule
+    // se verrouille (le compte n'existe pas encore, rien ne le désigne).
+    //
+    // ⚠️ **Ordre des verrous : la cible du miroir, puis le parent** — le même
+    // qu'`update` (`guard_mirror_update`, puis `guard_parent_change_in_tx`).
+    // Deux gestes concurrents « créer sous P avec miroir T » et « modifier A :
+    // miroir T, parent P » prendraient sinon P et T en ordre inverse
+    // (interblocage ; revue P1 de la 47-2, L6). Garder cet ordre à tout ajout.
+    if let Some(target_id) = new.mirror_account_id {
+        guard_mirror_set_in_tx(
+            &mut tx,
+            new.company_id,
+            None,
+            new.account_type,
+            new.role,
+            target_id,
+        )
+        .await?;
+    }
+
     // Le parent, verrouillé avant d'être passé non imputable plus bas : un
     // compte de différence de change ne reçoit pas de sous-compte.
     if let Some(parent_id) = new.parent_id {
@@ -262,20 +282,6 @@ pub async fn create(pool: &MySqlPool, user_id: i64, new: NewAccount) -> Result<A
         new.own_fx_accounts,
     )
     .await?;
-
-    // Story 47-1 (AC-4, AC-7) : un miroir posé dès la création — la cible seule
-    // se verrouille (le compte n'existe pas encore, rien ne le désigne).
-    if let Some(target_id) = new.mirror_account_id {
-        guard_mirror_set_in_tx(
-            &mut tx,
-            new.company_id,
-            None,
-            new.account_type,
-            new.role,
-            target_id,
-        )
-        .await?;
-    }
 
     // Un compte neuf n'a pas encore d'enfants : seule la règle « résultat de
     // l'exercice » peut s'appliquer ici.

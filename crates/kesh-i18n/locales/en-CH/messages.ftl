@@ -261,6 +261,11 @@ accounts-retype-closed-years = Closed fiscal years affected: { $years }. Their r
 accounts-retype-confirm = Change the type anyway
 account-field-parent-optional = Parent account (optional)
 accounts-parent-none = None
+# Story 47-2 — compte miroir au dialogue d'un compte
+accounts-mirror-label = Mirror account
+accounts-mirror-none = None
+accounts-mirror-help = The mirror account is a presentation account: not postable, with no role and no entries. This account’s balance, when of opposite sign, appears there in the balance sheet or income statement.
+accounts-mirror-of = This account is the mirror account of { $numbers }.
 accounts-parent-archived = Parent account { $number } is archived. Reactivate it first.
 error-account-parent-cycle = Account { $number } is this account itself or one of its sub-accounts: an account cannot be placed under itself.
 error-account-parent-has-entries = Account { $number } carries entries: placing this account under it would make it non-postable with a balance that no entry could correct any more. Choose a group account without entries.

@@ -996,6 +996,8 @@ async fn consultation_role_cannot_write(pool: MySqlPool) {
     for (method, path) in [
         ("POST", "/api/v1/accounts".to_string()),
         ("PUT", format!("/api/v1/accounts/{id}/reactivate")),
+        // Story 47-2 (AC-1) : le `PUT` d'un compte, corps portant `mirrorAccountId`.
+        ("PUT", format!("/api/v1/accounts/{id}")),
     ] {
         let req = if method == "POST" {
             app.client.post(app.url(&path))
@@ -1004,7 +1006,10 @@ async fn consultation_role_cannot_write(pool: MySqlPool) {
         };
         let res = req
             .bearer_auth(&viewer_token)
-            .json(&json!({ "number": "9", "name": "X", "accountType": "Asset", "version": 1 }))
+            .json(&json!({
+                "number": "9", "name": "X", "accountType": "Asset", "version": 1,
+                "role": null, "postable": true, "mirrorAccountId": id,
+            }))
             .send()
             .await
             .unwrap();
@@ -1354,4 +1359,440 @@ async fn put_parent_refuse_ce_que_la_creation_refuse_et_le_cycle(pool: MySqlPool
     assert_eq!(pe.parent_id, Some(enfant));
     let g = accounts::find_by_id(&pool, groupe).await.unwrap().unwrap();
     assert_eq!(g.parent_id, None);
+}
+
+// ============================================================
+// Story 47-2 (AC-1) — `mirrorAccountId` à l'API des comptes
+// ============================================================
+
+/// Un compte de type et de postabilité donnés, sans rôle ni parent.
+async fn mk_mirror_account(
+    pool: &MySqlPool,
+    company_id: i64,
+    user_id: i64,
+    number: &str,
+    account_type: AccountType,
+    postable: bool,
+) -> i64 {
+    accounts::create(
+        pool,
+        user_id,
+        NewAccount::new(
+            company_id,
+            number,
+            format!("Compte {number}"),
+            account_type,
+            None,
+        )
+        .with_role(None, postable),
+    )
+    .await
+    .unwrap()
+    .id
+}
+
+/// Les entrées d'audit d'un compte, de la plus récente à la plus ancienne.
+async fn audit_of(pool: &MySqlPool, id: i64) -> Vec<kesh_db::entities::AuditLogEntry> {
+    kesh_db::repositories::audit_log::find_by_entity(pool, "account", id, 50)
+        .await
+        .unwrap()
+}
+
+/// Les trois états du `PUT` (absent = inchangé, entier = posé, `null` =
+/// retiré), le miroir reposé sans changement de version, l'audit de la source
+/// qui porte `mirrorAccountId`, la cible ni versionnée ni auditée, et la liste
+/// qui rend le lien (le sens inverse s'en déduit).
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn put_mirror_trois_etats_audit_et_liste(pool: MySqlPool) {
+    let app = spawn_app(pool.clone()).await;
+    let (company_id, admin_id, token) = setup(&pool).await;
+    let source = mk_mirror_account(
+        &pool,
+        company_id,
+        admin_id,
+        "2270",
+        AccountType::Liability,
+        true,
+    )
+    .await;
+    let cible = mk_mirror_account(
+        &pool,
+        company_id,
+        admin_id,
+        "1179",
+        AccountType::Asset,
+        false,
+    )
+    .await;
+    let cible_avant = accounts::find_by_id(&pool, cible).await.unwrap().unwrap();
+    let audit_cible_avant = audit_of(&pool, cible).await.len();
+
+    // Sans miroir : la clé est absente de la réponse.
+    let (status, body) = put_parent(&app, &token, &pool, source, json!({})).await;
+    assert_eq!(status, 200, "{body}");
+    assert!(body.get("mirrorAccountId").is_none(), "{body}");
+
+    // Posé.
+    let (status, body) = put_parent(
+        &app,
+        &token,
+        &pool,
+        source,
+        json!({ "mirrorAccountId": cible }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["mirrorAccountId"], cible);
+    let version = body["version"].clone();
+    let audit = audit_of(&pool, source).await;
+    assert_eq!(audit[0].action, "account.updated");
+    let details = audit[0].details_json.as_ref().unwrap();
+    assert_eq!(details["after"]["mirrorAccountId"], cible, "{details}");
+    assert_eq!(
+        details["before"]["mirrorAccountId"],
+        Value::Null,
+        "{details}"
+    );
+
+    // Absent : inchangé, sans changement de version.
+    let (status, body) = put_parent(&app, &token, &pool, source, json!({})).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["mirrorAccountId"], cible);
+    assert_eq!(body["version"], version);
+
+    // Reposé : ni refus ni changement de version.
+    let (status, body) = put_parent(
+        &app,
+        &token,
+        &pool,
+        source,
+        json!({ "mirrorAccountId": cible }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["version"], version);
+
+    // La liste rend le lien sur la source, rien sur la cible.
+    let res = app
+        .client
+        .get(app.url("/api/v1/accounts"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    let list: Vec<Value> = res.json().await.unwrap();
+    let ligne = |id: i64| list.iter().find(|a| a["id"] == id).unwrap().clone();
+    assert_eq!(ligne(source)["mirrorAccountId"], cible);
+    assert!(ligne(cible).get("mirrorAccountId").is_none());
+
+    // Retiré.
+    let (status, body) = put_parent(
+        &app,
+        &token,
+        &pool,
+        source,
+        json!({ "mirrorAccountId": null }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert!(body.get("mirrorAccountId").is_none(), "{body}");
+    let details = audit_of(&pool, source).await[0]
+        .details_json
+        .clone()
+        .unwrap();
+    assert_eq!(details["before"]["mirrorAccountId"], cible, "{details}");
+    assert_eq!(
+        details["after"]["mirrorAccountId"],
+        Value::Null,
+        "{details}"
+    );
+
+    // La cible : ni version touchée, ni entrée d'audit.
+    let cible_apres = accounts::find_by_id(&pool, cible).await.unwrap().unwrap();
+    assert_eq!(cible_apres.version, cible_avant.version);
+    assert_eq!(audit_of(&pool, cible).await.len(), audit_cible_avant);
+}
+
+/// `POST` : un entier pose le miroir (et l'audit `account.created` le porte) ;
+/// `null` ou absent, aucun miroir.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn post_avec_miroir(pool: MySqlPool) {
+    let app = spawn_app(pool.clone()).await;
+    let (company_id, admin_id, token) = setup(&pool).await;
+    let cible = mk_mirror_account(
+        &pool,
+        company_id,
+        admin_id,
+        "1179",
+        AccountType::Asset,
+        false,
+    )
+    .await;
+
+    let post = |body: Value| {
+        let req = app
+            .client
+            .post(app.url("/api/v1/accounts"))
+            .bearer_auth(&token)
+            .json(&body);
+        async move {
+            let res = req.send().await.unwrap();
+            let status = res.status().as_u16();
+            (status, res.json::<Value>().await.unwrap())
+        }
+    };
+    let (status, body) = post(json!({
+        "number": "2270", "name": "Dettes sociales", "accountType": "Liability",
+        "mirrorAccountId": cible,
+    }))
+    .await;
+    assert_eq!(status, 201, "{body}");
+    assert_eq!(body["mirrorAccountId"], cible);
+    let id = body["id"].as_i64().unwrap();
+    let audit = audit_of(&pool, id).await;
+    assert_eq!(audit[0].action, "account.created");
+    assert_eq!(
+        audit[0].details_json.as_ref().unwrap()["mirrorAccountId"],
+        cible,
+        "{:?}",
+        audit[0].details_json
+    );
+
+    for (numero, extra) in [
+        ("2271", json!({ "mirrorAccountId": null })),
+        ("2273", json!({})),
+    ] {
+        let mut body = json!({ "number": numero, "name": "Autre", "accountType": "Liability" });
+        for (k, v) in extra.as_object().unwrap() {
+            body[k] = v.clone();
+        }
+        let (status, rendu) = post(body).await;
+        assert_eq!(status, 201, "{rendu}");
+        assert!(rendu.get("mirrorAccountId").is_none(), "{rendu}");
+    }
+
+    // Création refusée : la raison et son message.
+    let (status, body) = post(json!({
+        "number": "2272", "name": "X", "accountType": "Asset", "mirrorAccountId": cible,
+    }))
+    .await;
+    assert_eq!(status, 400, "{body}");
+    assert_eq!(body["error"]["code"], "MIRROR_ACCOUNT_INVALID");
+    assert_eq!(body["error"]["details"]["reason"], "accountType");
+}
+
+/// Chaque refus du `PUT`, avec son code, sa raison et un message traduit ; une
+/// cible d'une autre société rend la même `unknown` qu'une cible inexistante ;
+/// la version périmée rend `OPTIMISTIC_LOCK_CONFLICT`.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn put_mirror_refus_et_details(pool: MySqlPool) {
+    let app = spawn_app(pool.clone()).await;
+    let (company_id, admin_id, token) = setup(&pool).await;
+    let mk = |n: &'static str, t: AccountType, p: bool| {
+        let pool = pool.clone();
+        async move { mk_mirror_account(&pool, company_id, admin_id, n, t, p).await }
+    };
+    let source = mk("2270", AccountType::Liability, true).await;
+    let cible = mk("1179", AccountType::Asset, false).await;
+    let imputable = mk("1170", AccountType::Asset, true).await;
+    let passif = mk("2279", AccountType::Liability, false).await;
+    let archivee = mk("1178", AccountType::Asset, false).await;
+    accounts::archive(&pool, archivee, 1, admin_id)
+        .await
+        .unwrap();
+    // Une cible qui a elle-même un miroir (2100 → 2101 n'est pas possible :
+    // même côté) : 1177 (actif, non imputable) désigne 2278.
+    let chaine = mk("1177", AccountType::Asset, false).await;
+    let au_bout = mk("2278", AccountType::Liability, false).await;
+    let (status, body) = put_parent(
+        &app,
+        &token,
+        &pool,
+        chaine,
+        json!({ "mirrorAccountId": au_bout }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let fonds_propres = accounts::create(
+        &pool,
+        admin_id,
+        NewAccount::new(company_id, "2800", "Capital", AccountType::Liability, None)
+            .with_role(Some(AccountRole::EquityCapital), true),
+    )
+    .await
+    .unwrap()
+    .id;
+    let autre = create_company(&pool, "Autre SA").await;
+    let admin_b = create_user(&pool, "admin_b", Role::Admin, autre).await;
+    let etrangere =
+        mk_mirror_account(&pool, autre, admin_b, "1179", AccountType::Asset, false).await;
+
+    let refus = |status: u16, body: &Value, reason: &str| {
+        assert_eq!(status, 400, "{body}");
+        assert_eq!(body["error"]["code"], "MIRROR_ACCOUNT_INVALID", "{body}");
+        assert_eq!(body["error"]["details"]["reason"], reason, "{body}");
+        assert!(
+            !body["error"]["message"].as_str().unwrap().is_empty(),
+            "{body}"
+        );
+    };
+    for (compte, cible_demandee, reason) in [
+        (source, source, "self"),
+        (source, 999_999_999, "unknown"),
+        (source, etrangere, "unknown"),
+        (source, archivee, "archived"),
+        (source, passif, "accountType"),
+        (fonds_propres, cible, "equity"),
+        (source, imputable, "notPresentationAccount"),
+        (source, chaine, "chain"),
+    ] {
+        let (status, body) = put_parent(
+            &app,
+            &token,
+            &pool,
+            compte,
+            json!({ "mirrorAccountId": cible_demandee }),
+        )
+        .await;
+        refus(status, &body, reason);
+        if reason == "chain" {
+            assert_eq!(
+                body["error"]["details"]["linkedAccountNumber"], "1177",
+                "{body}"
+            );
+            assert!(
+                body["error"]["message"].as_str().unwrap().contains("1177"),
+                "{body}"
+            );
+        }
+    }
+    // Inexistante et étrangère : le même corps (anti-énumération).
+    let (_, inexistante) = put_parent(
+        &app,
+        &token,
+        &pool,
+        source,
+        json!({ "mirrorAccountId": 999_999_999 }),
+    )
+    .await;
+    let (_, etranger) = put_parent(
+        &app,
+        &token,
+        &pool,
+        source,
+        json!({ "mirrorAccountId": etrangere }),
+    )
+    .await;
+    assert_eq!(inexistante, etranger);
+
+    // Version périmée.
+    let a = accounts::find_by_id(&pool, source).await.unwrap().unwrap();
+    let res = app
+        .client
+        .put(app.url(&format!("/api/v1/accounts/{source}")))
+        .bearer_auth(&token)
+        .json(&json!({
+            "name": a.name, "accountType": "Liability", "role": null, "postable": true,
+            "version": a.version + 7, "mirrorAccountId": cible,
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 409);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "OPTIMISTIC_LOCK_CONFLICT", "{body}");
+
+    // Rien n'a été posé.
+    let a = accounts::find_by_id(&pool, source).await.unwrap().unwrap();
+    assert_eq!(a.mirror_account_id, None);
+}
+
+/// `ACCOUNT_IS_MIRROR` : rendre le miroir imputable, le retyper, lui poser un
+/// rôle, l'archiver — chaque refus nomme la source ; une source archivée
+/// ajoute le remède au message de l'archivage.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn account_is_mirror_par_l_api(pool: MySqlPool) {
+    let app = spawn_app(pool.clone()).await;
+    let (company_id, admin_id, token) = setup(&pool).await;
+    let source = mk_mirror_account(
+        &pool,
+        company_id,
+        admin_id,
+        "2270",
+        AccountType::Liability,
+        true,
+    )
+    .await;
+    let cible = mk_mirror_account(
+        &pool,
+        company_id,
+        admin_id,
+        "1179",
+        AccountType::Asset,
+        false,
+    )
+    .await;
+    let (status, body) = put_parent(
+        &app,
+        &token,
+        &pool,
+        source,
+        json!({ "mirrorAccountId": cible }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+
+    for (extra, reason) in [
+        (json!({ "postable": true }), "postable"),
+        (json!({ "accountType": "Expense" }), "accountType"),
+        (json!({ "role": "Receivable" }), "role"),
+    ] {
+        let (status, body) = put_parent(&app, &token, &pool, cible, extra).await;
+        assert_eq!(status, 409, "{body}");
+        assert_eq!(body["error"]["code"], "ACCOUNT_IS_MIRROR", "{body}");
+        assert_eq!(body["error"]["details"]["reason"], reason, "{body}");
+        assert!(
+            body["error"]["message"].as_str().unwrap().contains("2270"),
+            "{body}"
+        );
+    }
+
+    let archive = |id: i64| {
+        let req = app
+            .client
+            .put(app.url(&format!("/api/v1/accounts/{id}/archive")));
+        let token = token.clone();
+        let pool = pool.clone();
+        async move {
+            let v = accounts::find_by_id(&pool, id)
+                .await
+                .unwrap()
+                .unwrap()
+                .version;
+            let res = req
+                .bearer_auth(&token)
+                .json(&json!({ "version": v, "confirmDesignated": true }))
+                .send()
+                .await
+                .unwrap();
+            let status = res.status().as_u16();
+            (status, res.json::<Value>().await.unwrap())
+        }
+    };
+    let (status, body) = archive(cible).await;
+    assert_eq!(status, 409, "{body}");
+    assert_eq!(body["error"]["code"], "ACCOUNT_IS_MIRROR");
+    assert_eq!(body["error"]["details"]["reason"], "archive");
+    assert_eq!(body["error"]["details"]["sources"][0]["number"], "2270");
+    let message_actif = body["error"]["message"].as_str().unwrap().to_string();
+
+    // Source archivée : le refus dit de la réactiver d'abord.
+    let (status, body) = archive(source).await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = archive(cible).await;
+    assert_eq!(status, 409, "{body}");
+    assert_eq!(body["error"]["details"]["sources"][0]["active"], false);
+    let message = body["error"]["message"].as_str().unwrap();
+    assert!(message.len() > message_actif.len(), "{message}");
+    assert!(message.starts_with(&message_actif), "{message}");
 }

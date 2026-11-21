@@ -261,6 +261,11 @@ accounts-retype-closed-years = Betroffene abgeschlossene Geschäftsjahre: { $yea
 accounts-retype-confirm = Kontotyp trotzdem ändern
 account-field-parent-optional = Übergeordnetes Konto (optional)
 accounts-parent-none = Keines
+# Story 47-2 — compte miroir au dialogue d'un compte
+accounts-mirror-label = Spiegelkonto
+accounts-mirror-none = Keines
+accounts-mirror-help = Das Spiegelkonto ist ein Darstellungskonto: nicht buchbar, ohne Rolle und ohne Buchung. Ein Saldo dieses Kontos mit umgekehrtem Vorzeichen erscheint dort in der Bilanz oder der Erfolgsrechnung.
+accounts-mirror-of = Dieses Konto ist das Spiegelkonto von { $numbers }.
 accounts-parent-archived = Das übergeordnete Konto { $number } ist archiviert. Reaktivieren Sie es zuerst.
 error-account-parent-cycle = Das Konto { $number } ist dieses Konto selbst oder eines seiner Unterkonten: Ein Konto kann nicht unter sich selbst eingeordnet werden.
 error-account-parent-has-entries = Das Konto { $number } enthält Buchungen: Würde dieses Konto darunter eingeordnet, würde es mit einem Saldo nicht bebuchbar, den keine Erfassung mehr korrigieren könnte. Wählen Sie ein Gruppenkonto ohne Buchungen.
