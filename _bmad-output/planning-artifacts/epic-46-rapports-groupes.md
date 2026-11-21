@@ -283,3 +283,10 @@ La page pour Guy (`data-not-committed/epic-46-revue-pour-guy.html`) porte ces r�
   « hiérarchie masquée » = vue à plat : **décidé par Beat le 2026-11-20** (46-2 C-46-2-2).
 - 2026-11-20 — **P3 ciblée** (Claude Haiku 5.5, contexte frais, commit `8a7f0f73`) des fiches 46-1, 46-2, 46-3 : 0 C / 0 H / 1 M / 1 L, remédiés. M : la table des fichiers communs gardait `AvecGroupes<T>` (propagation du P2 incomplète) → `AvecGroupes<T, S>` ; L : les noms de champs de D8 renvoient désormais au contrat de la 46-1. **Hors périmètre de cette passe, à propager à la 46-6a et à la 46-6b (fiches d'un autre agent, non touchées)** : `AvecGroupes<T>` à un paramètre aux lignes 24, 40, 69 et 106 de la 46-6a, `AvecGroupes<TrialBalance>` à la ligne 45 de la 46-6b ; à lire `AvecGroupes<T, S>` (C-46-1-4). Rapport : `kesh-gate-logs/epic-46/validation/46-123-P3-ciblee.md`.
 - 2026-11-20 — **Décisions de Beat** : (1) « hiérarchie masquée » = la liste à plat des comptes, comme l'écran d'aujourd'hui ; (2) le rechargement à chaque clic de la 46-2 (aller-retour API, trace d'audit `report.generated`) est accepté **quel que soit l'état du stockage** (précisé le même jour : la vue est mémorisée dans la mesure où le navigateur le permet) — niveau et groupes ouverts ou fermés retrouvés au retour sur la page : 46-2 AC-10 (`localStorage`, clé par société et par rapport, restaurée avant la première requête).
+- 2026-11-21 — **Corrections des fiches 46-3 et 46-6a avant développement**, sur l'API réelle de la 46-1 (`story/46-1`,
+  `de0a582f`) et ses revues (P1 L-4, L-5 ; P2 L-6 : paramètres de groupes lus par `groupes_de`, jamais par des champs
+  ajoutés à `ExportQuery` ou `ReportQuery`), et sur la 47-3 (point d'insertion de la présentation miroir ; un miroir
+  sous un groupe d'un autre type, avertissement non bloquant, décision du responsable de l'Epic 47 du 2026-11-21). Choix
+  neuf à confirmer en validation : **à la balance, une ligne nulle ne compte pas pour la dissolution par nature**
+  (46-6a C-46-6a-3), d'où une phrase propagée à la 46-6b. Les deux fiches repassent `drafted` ; nouvelle boucle de
+  validation (prompt `kesh-gate-logs/s46-specs/validation-p1-prompt.md`).

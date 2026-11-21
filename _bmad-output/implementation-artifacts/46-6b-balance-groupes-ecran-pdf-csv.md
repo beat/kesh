@@ -65,8 +65,9 @@ extensions ci-dessous portent sur ces quatre colonnes ; aucune cinquième n'est 
    d'assertion** (comme la 46-2 AC-1) ; `opening-balances.spec.ts` ne lit que l'API sans paramètre (`:227`) et ne
    change pas ; E2E neuf (niveau 1, ouverture manuelle, export CSV aux mêmes paramètres) ; captures (thème clair)
    au Dev Agent Record ; manuel utilisateur FR, § *Balance des comptes* (`user-manual.tex:3972`), `.tex` seul : il dit
-   aussi qu'à la balance les groupes qui mêlent des comptes de natures contraires sont dissous (plan PME : classes 6
-   à 8, 46-6a AC-2), que `2 Passifs` y reste un groupe, et qu'un compte de groupe sans solde ni mouvement n'y a pas
+   aussi qu'à la balance les groupes qui mêlent des comptes de natures contraires sont dissous dès que des comptes des
+   deux natures y portent un montant non nul (plan PME : classes 6 à 8 ; un compte à zéro, un compte miroir par
+   exemple, ne dissout rien : 46-6a AC-2, C-46-6a-3), que `2 Passifs` y reste un groupe, et qu'un compte de groupe sans solde ni mouvement n'y a pas
    de ligne propre (46-6a AC-3 (d) : un groupe dissous à zéro, `6`, `7`, `70`, `8`, `80` du plan PME, n'y paraît pas).
 
 ## Tâches / sous-tâches
@@ -117,3 +118,5 @@ Fiches 46-1, 46-2, 46-3, 46-6a.
   (`csv.rs:364`) pour un groupe en devise unique, et garde « rapport vide » (`tb.rows.is_empty()`) des rendus groupés,
   comme la 46-3 ; `opening-balances.spec.ts` ne lit que l'API sans paramètre (`:227`), il ne change pas ; manuel : les
   groupes à zéro sans ligne propre (46-6a AC-3 (d)). Rapport : `kesh-gate-logs/epic-46/validation/46-6b-P2.md`.
+- 2026-11-21 — Propagation de la correction de la 46-6a (C-46-6a-3 : une ligne nulle ne compte pas pour la
+  dissolution par nature) à l'AC-6 (phrase du manuel). Aucune autre modification.
