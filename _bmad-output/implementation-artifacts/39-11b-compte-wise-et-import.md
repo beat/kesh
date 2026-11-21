@@ -182,6 +182,9 @@ bancaire ni règlement de facture.
 - 2026-11-20 — Validation P5 ciblée (Claude Sonnet 5.5, passe ciblée, contexte frais, rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P5-ciblee.md`) : 0 C/H/M, 2 LOW remédiés — G4, 39-11b AC-5 et 39-11c AC-6 disent la même chose (l'import juge à son instant, la revue relit la même règle sur l'état présent) ; 39-11c AC-3 : 40-7c n'écrit le texte qu'en dernier recours.
 - 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : codes d'erreur de 38-11b génériques `PROVIDER_*` (liste nommée), plus de branche `PAYPAL_*` ; note finale sur les noms de 38-11b mise à jour. Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.
 
+- 2026-11-21 — développée (Claude Opus 5.5) : T0 à T3, AC-1 à AC-6 ; gates au Dev Agent Record ; passée en `review`, prompt de
+  la revue P1 : `kesh-gate-logs/s39-11b/revue-p1-prompt.md`.
+
 ## Dev Agent Record
 
 ### Agent
@@ -319,7 +322,3 @@ qui retire tout prestataire (`modifier_un_solde_wise`) ; changement de prestatai
   mémoire sur la station** avant de démarrer, et n'a pas été relancé. Les mêmes tests sont verts au gate complet
   (nextest). À rejouer à la reprise, en cherchant qui supprime la base sur dev2 pendant le gate.
 
-### Change Log
-
-- 2026-11-21 — développée (Claude Opus 5.5) : T0 à T3, AC-1 à AC-6 ; gates ci-dessus ; passée en `review`, prompt de
-  la revue P1 : `kesh-gate-logs/s39-11b/revue-p1-prompt.md`.
