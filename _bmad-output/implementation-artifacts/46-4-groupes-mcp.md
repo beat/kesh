@@ -1,6 +1,6 @@
 # Story 46-4 : outils MCP du bilan et du compte de résultat par groupes
 
-Status: review
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D8, Q5 ; FR-46-4, FR-46-11 ; NFR-46-6. Release
 visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1, 2026-11-19) ; fiche écrite le 2026-11-20, à
@@ -48,7 +48,7 @@ schéma et la fonction de conversion posés ici (validation P1).
    - *Schéma* : `SCHEMA_PERIODE` ne sert qu'à ces deux outils (la balance a son schéma en ligne,
      `rapports.rs:208-209`) ; il est remplacé par `SCHEMA_PERIODE_GROUPES`, `additionalProperties: false` gardé :
      `detailLevel` = `{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]}`,
-     `subtotalPosition` = enum, `open` / `closed` = `{"type":"array","items":{"type":"integer","minimum":1},"maxItems":500}`.
+     `subtotalPosition` = enum, `open` / `closed` = `{"type":"array","items":{"type":"integer","minimum":1},"maxItems":500}`. *(Amendé le 2026-11-22, revue de code P1 L1 : le `minimum: 1` des éléments de `open` et `closed` est retiré du schéma ; un identifiant nul, négatif ou inconnu est ignoré.)*
 2. **AC-2 — Sans argument neuf.** La réponse est celle d'aujourd'hui **au seul champ `groupes: null` près** (AC-3 ;
    `sortie!` n'omet aucun champ, C-37-9 ; décision C-46-4-5) : un test compare le texte rendu à un **littéral écrit au
    commit de base** (avant T1) sur la société d'essai, pour chacun des deux outils — non à la sortie de la fonction qui
@@ -325,5 +325,12 @@ Journaux hors dépôt, `kesh-gate-logs/s46-4/` : `t0-capture.log` (littéral de 
   `9223372036854775808`, `18446744073709551616` ajoutés aux refus de `lecture_de_detail_level`. L5 : doc de module
   réécrite en deux paragraphes (plan PME, fixture synthétique). **Gates** : fmt, clippy workspace `-D warnings`, nextest
   `-p kesh-api` sur `mcp_*`, `textes_coherents` et les tests de lib `mcp::` : 292 passés, 0 échoué (`p1-nextest.log`).
-  **Non rejoués** : backend complet et `gate-ci.sh` — le seul changement de production est une chaîne de schéma indicative
-  (non appliquée à l'exécution) et de la documentation ; à rejouer au push. `review`.
+  **Gate complet rejoué ensuite** (voir l'entrée suivante).
+- 2026-11-22 — **gate complet au dernier commit de code `e94b391a`** (HEAD `4145cb04`, plus la fiche seule) : `scripts/test-fast.sh --ci`
+  (fmt, clippy workspace `-D warnings`, nextest) via `heavy.sh` : **6196 exécutés, 6196 passés (3 lents), 14 ignorés**, rc 0
+  (`gate-backend.log`). **`gate-ci.sh` : à la fin de l'epic** (règle des gates de l'epic, 2026-11-22) ; pas d'E2E (aucun
+  écran). **Passe P2 ciblée (Haiku, sur `e94b391a` seul) : 0 C, 0 H, 0 M, 2 L** (`revue-p2-rapport.md`). F1 : AC-1 annotée
+  (`minimum: 1` retiré). F2 : le test de fidélité ne couvre que les lignes de compte, non les groupes ni les sous-totaux ;
+  tracé dans `issues-a-ouvrir.md` (`technical-debt`, P4). **Tendance : P1 (Sonnet) 0 C / 0 H / 1 M / 5 L → P2 ciblée
+  (Haiku) 0 / 0 / 0 / 2** ; remédiation P1 sans MEDIUM résiduel. **Story `done`.**
+
