@@ -1,6 +1,6 @@
 # Story 47-4 : compte miroir — écrans des rapports, parcours E2E, manuel utilisateur
 
-Status: review
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R5 à R7 ; D4 ; FR-47-3 (écran), FR-47-4, FR-47-5 (manuel utilisateur) ; NFR-47-4. **Refonte du 2026-11-19
@@ -343,3 +343,14 @@ captures `captures/` ; PDF contrôlé `manuel-pdf/fr/user-manual.pdf` (copie, no
 - `frontend/tests/e2e/invoice-qr-caracteres.spec.ts`
 - `_bmad-output/implementation-artifacts/47-4-miroir-ecrans-rapports-manuel-e2e.md`,
   `_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+### Clôture (2026-11-21)
+
+Revue de code **P1** (Sonnet, complète) : **0 CRITICAL · 0 HIGH · 0 MEDIUM · 7 LOW** (`kesh-gate-logs/s47-4/revue-p1-rapport.md`).
+Boucle close sur P1. L'écart à l'AC-1 (deux clés `reports-mirror-of-one` / `-other` au lieu d'un sélecteur `$count`)
+est jugé justifié par la revue : les messages sont résolus côté serveur sans arguments ; **l'AC-1 se lit donc ainsi :
+« deux clés, une pour une source, une pour plusieurs »** (L2). Les échecs E2E `backup-restore-new-install.spec.ts:262`
+et `:381` sont ceux de la KF-065 (#1282) (L3) ; `bank-import.spec.ts:130` est une course connue, tracée en issue. Les
+autres LOW (L1 phrase de l'accueil non revérifiée au PDF, L4 capture de la balance avec des comptes du seed, L5 deux
+formulations du manuel un peu fortes, L6 détails de forme) vont en issue `documentation` / `technical-debt` ; L7 ne
+relève aucun nom de personne.
