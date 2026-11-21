@@ -162,10 +162,21 @@ pub fn transaction_of_row(
     let iban = account.and_then(iban_shaped);
     let other_account = if iban.is_none() { account } else { None };
     let exchange = match (non_empty(&row.exchange_from), non_empty(&row.exchange_to)) {
-        (Some(from), Some(to)) => Some(match row.exchange_rate {
-            Some(rate) => format!("{from}→{to} au cours {rate}"),
-            None => format!("{from}→{to}"),
-        }),
+        (Some(from), Some(to)) => {
+            // Segment fixe et relisible (Story 39-11c) :
+            // « DE→VERS [MONTANT] [au cours COURS] », le montant étant celui
+            // reçu dans la devise VERS (`Exchange To Amount`). Aucun champ
+            // structuré de `bank_transactions` ne le porte ; il n'existe qu'au
+            // CSV, qui n'est pas conservé.
+            let mut segment = format!("{from}→{to}");
+            if let Some(to_amount) = row.exchange_to_amount {
+                segment.push_str(&format!(" {to_amount}"));
+            }
+            if let Some(rate) = row.exchange_rate {
+                segment.push_str(&format!(" au cours {rate}"));
+            }
+            Some(segment)
+        }
         _ => None,
     };
     let details = [
@@ -644,13 +655,31 @@ mod tests {
     }
 
     #[test]
-    fn une_conversion_porte_son_cours() {
+    fn une_conversion_porte_son_montant_et_son_cours() {
         let t = transaction_of_row(&row(EUR, "CONVERSION_ORDER-90000011"), 1, 1);
         assert_eq!(
             t.details,
-            "Converti 100.00 EUR en 109.00 USD · CONVERSION · EUR→USD au cours 1.09"
+            "Converti 100.00 EUR en 109.00 USD · CONVERSION · EUR→USD 109.00 au cours 1.09"
         );
         assert_eq!(t.provider_type.as_deref(), Some("CONVERSION_ORDER"));
+    }
+
+    /// Revue P1, M1 — le montant de l'autre devise (`Exchange To Amount`)
+    /// est écrit au segment de conversion ; sans lui ni cours, le segment
+    /// reste « DE→VERS ».
+    #[test]
+    fn le_segment_de_conversion_a_une_forme_fixe() {
+        let mut r = row(EUR, "CONVERSION_ORDER-90000011");
+        r.exchange_to_amount = Some(dec!(41.85));
+        r.exchange_rate = Some(dec!(0.9329));
+        let t = transaction_of_row(&r, 1, 1);
+        assert!(t.details.contains(" · EUR→USD 41.85 au cours 0.9329"));
+        r.exchange_rate = None;
+        let t = transaction_of_row(&r, 1, 1);
+        assert!(t.details.ends_with(" · EUR→USD 41.85"), "{}", t.details);
+        r.exchange_to_amount = None;
+        let t = transaction_of_row(&r, 1, 1);
+        assert!(t.details.ends_with(" · EUR→USD"), "{}", t.details);
     }
 
     /// AC-4 — la somme des transactions d'un fichier est sa clôture moins son

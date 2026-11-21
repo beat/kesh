@@ -67,7 +67,7 @@ afin que chaque ligne attende son rapprochement (39-11c).
    même devise, `details: { currency, filenames }`) → 422 devise sans compte (`details: { currencies }`, jamais de
    solde créé d'office) → 409 doublon par devise (deux comptes bancaires non archivés de ce libellé pour une devise :
    la course de 38-11b AC-2) → 409 `BANK_ACCOUNT_CLOSED` → 422 `BANK_IMPORT_DUPLICATE_FILE` (empreinte de l'AC-5).
-4. **AC-4 — Rangement**, par le **cœur commun de 38-11b** (AC-5 et AC-6 de 38-11b : `with_account_locks` neuf de
+4. **AC-4 — Rangement** *(amendé le 2026-11-21, revue P1 M1 : le montant de l'autre devise est écrit au segment de conversion du libellé, voir le Change Log)*, par le **cœur commun de 38-11b** (AC-5 et AC-6 de 38-11b : `with_account_locks` neuf de
    `crates/kesh-reconciliation/src/mutex.rs`, à côté de `with_account_lock` `:75`, verrous pris par identifiant
    croissant ; une transaction de base, tout ou rien ; recherche de doublon par identifiant ; empreinte). Par fichier,
    **une** entrée `bank_imports` (`create_with_transactions`, `crates/kesh-db/src/repositories/bank_imports.rs:72`)
@@ -273,6 +273,26 @@ Claude Opus 5.5 (`bmad-dev-story`), worktree `kesh-wt3911b`, branche `story/39-1
    compte des routes, des tracées et phrase du manuel (`151 des 159`, `151 + 4 + 4 = 159`) **recomptés** après la
    fusion (la 38-12a ajoute les routes de téléchargement PayPal).
 5. Catalogues i18n : les deux branches écrivent après `error-paypal-csv-invalid` — garder les deux blocs.
+6. *(revue P1, M2)* **Registre fermé des actions de trace** : `provider_imports::AUDIT_ACTIONS` (la 38-12a refuse en
+   `AppError::Internal` une action inconnue) doit recevoir `wise_import.created`, qui s'inscrit aussi à
+   `audit_labels::ACTIONS`, aux quatre `.ftl` et à l'inventaire `SITES_INDIRECTS` d'`audit_label_registry.rs` ; sans cela
+   tout import Wise rend 500 après le raccord.
+7. **Forme de la trace** : le cœur de la 38-12a écrit lui-même `currencies` (ses `CurrencyReport`) aux `audit_details` ;
+   la trace `wise_import.created` porte ici `files` (nom, soldes, avertissements). `CurrencyReport` n'a ni `filename`,
+   ni `openingBalance`/`closingBalance`, ni `warnings` : décider ce que devient la clé `files` (le point 3 ne le dit pas).
+8. **Entrée `bank_imports`** : la 38-12a prend la période des lignes **gardées** et `opening_balance: None` ; la règle de
+   continuité de la 39-11c relit `period_from` et `opening_balance` **stockés**. Contrainte : période et ouverture du
+   **fichier entier**, tenues par un test (fichier à doublons partiels).
+9. **Conflits de texte attendus** (inventaire) : `lib.rs` (routes), `errors.rs` (variantes), `audit_labels.rs`,
+   `audit_route_registry.rs`, et dans `kesh-import` : `csv/amount.rs`, `lib.rs`, `paypal.rs` (touchés par la 38-12a et
+   la 39-11a).
+10. **Épic 40** : `BankAccountProvider::served()` est la liste unique des prestataires servis (`PROVIDER_PAYPAL`,
+    `PROVIDER_WISE`) ; un prestataire réservé (`stripe`) voit aujourd'hui un `PUT` effacer ses réglages (`provider =
+    NULL`) — inatteignable par l'API aujourd'hui (revue P1, L1), à étendre avec la 40-x. Et la désérialisation
+    `json.paypal.or(json.wise)` ne contrôle pas `provider` (L2) : prendre l'objet nommé par `provider`.
+
+Le raccord est porté par la story **`39-14-raccord-epic-38`** (registre `sprint-status.yaml`, `backlog`), à la fusion
+d'`epic/38` dans `epic/39`.
 
 ### Tests ajoutés (recomptés, `epic/39-wise` → dernier commit de code `368369e3`)
 
@@ -322,3 +342,19 @@ qui retire tout prestataire (`modifier_un_solde_wise`) ; changement de prestatai
   mémoire sur la station** avant de démarrer, et n'a pas été relancé. Les mêmes tests sont verts au gate complet
   (nextest). À rejouer à la reprise, en cherchant qui supprime la base sur dev2 pendant le gate.
 
+### Revue de code P1 (Claude Opus 5.5, 2026-11-21) — remédiation
+
+- **M1** : `Exchange To Amount` est écrit au segment de conversion du libellé, forme fixe `DE→VERS [MONTANT]
+  [au cours COURS]` (le montant est celui reçu dans la devise VERS ; sans montant ni cours : `DE→VERS`). Aucun champ
+  structuré de `bank_transactions`/`NewBankTransaction` ne convient (ni montant d'origine, ni contre-valeur) ; aucune
+  migration. Test `le_segment_de_conversion_a_une_forme_fixe`, attente de `une_conversion_porte_son_montant_et_son_cours`
+  mise à jour (« EUR→USD 109.00 au cours 1.09 »).
+- **M2** : liste « À raccorder » complétée (points 6 à 10) ; story `39-14-raccord-epic-38` au registre.
+- **L1, L2** : notés au point 10 pour l'Epic 40. **L3** : paiement fournisseur et lot pain.001 ajoutés à
+  `les_autres_chemins_refusent_un_compte_wise`. **L4** : deux lignes d'`api-external.md` (« ou Wise »). **L6** :
+  `is_paypal()` supprimé (aucun appelant). **L7** : `gate-ci.sh` à rejouer avant le push (voir plus haut).
+- **L5 — textes du journal changés, déclarés** : le message de journal serveur « import PayPal : libération des verrous
+  en échec » devient « import de prestataire : … » (avec champ `provider`), idem « verrous des comptes non acquis », et
+  l'erreur interne « import PayPal : trop de transactions » devient « import {provider} : trop de transactions ». Ni
+  réponse, ni trace d'audit, ni ordre des refus ne changent ; « PayPal inchangé » s'entend hors ces textes.
+- Gate ciblé de la remédiation : fmt, clippy workspace, nextest de `wise_import_e2e`, `paypal_import_e2e`, `audit_route_registry`, des tests `wise_imports` et `bank_account` : 58 verts sur 59, le rouge (facture fournisseur sans compte fournisseur par défaut dans le test neuf, corrigé) puis rejoué vert (`cible-p1-rem.log`, `cible-p1-rem-2.log`). Gate complet au push.

@@ -1142,4 +1142,94 @@ async fn les_autres_chemins_refusent_un_compte_wise(pool: MySqlPool) {
         )
         .await;
     assert_eq!((s, code(&b)), (409, "BANK_ACCOUNT_IS_PROVIDER"), "{b}");
+
+    // Paiement d'une facture fournisseur, puis lot pain.001 (revue P1, L3) :
+    // refusés, rien d'écrit.
+    let fournisseur = kesh_db::repositories::contacts::create(
+        &ctx.pool,
+        ctx.seeded.admin_user_id,
+        kesh_db::entities::contact::NewContact {
+            company_id: ctx.seeded.company_id,
+            contact_type: kesh_db::entities::contact::ContactType::Entreprise,
+            name: "Fournisseur SA".into(),
+            first_name: None,
+            last_name: None,
+            is_client: false,
+            is_supplier: true,
+            address: Some("Rue 2\n1000 Lausanne".into()),
+            address_street: None,
+            address_building: None,
+            address_postal_code: None,
+            address_city: None,
+            address_country: None,
+            email: None,
+            phone: None,
+            ide_number: None,
+            client_number: None,
+            default_payment_terms: None,
+            default_payment_terms_days: None,
+            language: None,
+            salutation: kesh_db::entities::contact::Salutation::Neutre,
+        },
+    )
+    .await
+    .unwrap()
+    .id;
+    sqlx::query(
+        "UPDATE company_invoice_settings SET default_payable_account_id = ? WHERE company_id = ?",
+    )
+    .bind(ctx.seeded.accounts["2000"])
+    .bind(ctx.seeded.company_id)
+    .execute(&ctx.pool)
+    .await
+    .unwrap();
+    let ff = kesh_db::repositories::supplier_invoices::create_validated(
+        &ctx.pool,
+        kesh_db::entities::NewSupplierInvoice {
+            company_id: ctx.seeded.company_id,
+            contact_id: fournisseur,
+            supplier_invoice_number: Some("FF-1".into()),
+            invoice_date: NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(),
+            due_date: None,
+            creditor_iban: None,
+            creditor_qr_iban: None,
+            payment_reference: None,
+            expected_payment_amount: None,
+            project_id: None,
+            lines: vec![kesh_db::entities::NewSupplierInvoiceLine {
+                description: "Prestation".into(),
+                quantity: dec!(1),
+                unit_price: dec!(100.00),
+                vat_rate: dec!(0),
+                expense_account_id: ctx.seeded.accounts["4000"],
+            }],
+        },
+        ctx.seeded.admin_user_id,
+    )
+    .await
+    .expect("facture fournisseur")
+    .invoice
+    .id;
+    let ecritures = ctx.count("SELECT COUNT(*) FROM journal_entries").await;
+    let (s, b) = ctx
+        .post(
+            &format!("/api/v1/supplier-invoices/{ff}/pay"),
+            json!({ "settlementType": "bank_transfer", "bankAccountId": chf, "paymentDate": "2026-06-20" }),
+        )
+        .await;
+    assert_eq!((s, code(&b)), (409, "BANK_ACCOUNT_IS_PROVIDER"), "{b}");
+    assert_eq!(
+        ctx.count("SELECT COUNT(*) FROM journal_entries").await,
+        ecritures,
+        "paiement : rien d'écrit"
+    );
+    let (s, b) = ctx
+        .post(
+            "/api/v1/payment-batches",
+            json!({ "bankAccountId": chf, "requestedExecutionDate": "2026-06-25",
+                "supplierInvoiceIds": [ff] }),
+        )
+        .await;
+    assert_eq!((s, code(&b)), (409, "BANK_ACCOUNT_IS_PROVIDER"), "{b}");
+    assert_eq!(ctx.count("SELECT COUNT(*) FROM payment_batches").await, 0);
 }

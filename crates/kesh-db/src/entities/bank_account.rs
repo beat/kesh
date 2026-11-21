@@ -136,11 +136,6 @@ pub struct BankAccountProvider {
 }
 
 impl BankAccountProvider {
-    /// `true` si le compte est le solde d'un compte PayPal.
-    pub fn is_paypal(&self) -> bool {
-        self.provider.as_deref() == Some(PROVIDER_PAYPAL)
-    }
-
     /// `true` si le compte porte un prestataire, quel qu'il soit.
     pub fn is_provider(&self) -> bool {
         self.provider.is_some()
@@ -505,7 +500,7 @@ mod tests {
             serde_json::from_value::<BankAccountProvider>(json).unwrap(),
             wise
         );
-        assert!(wise.is_provider() && !wise.is_paypal());
+        assert!(wise.is_provider());
         assert_eq!(wise.served().map(|(p, _)| p), Some(PROVIDER_WISE));
         // Un prestataire réservé (Stripe) n'a ni `paypal` ni `wise`.
         let reserve = BankAccountProvider {
