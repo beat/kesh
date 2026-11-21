@@ -211,6 +211,21 @@ colonne `mirror_account_id` en fin de ligne de `accounts.csv`.
 
 ## Change Log
 
+- 2026-11-21 — remédiation de la revue de code P1 (Opus 5.5 : 0 C / 0 H / 0 M / 8 L, tous corrigés dans la story, règle
+  « un LOW qui touche la production se corrige dans la story, puis passe ciblée »). Un commit de code, `9f2ae083`. L3 :
+  `AccountMirrorField.svelte` vide `value` quand il sort de `candidates` (un `$effect`) ; test neuf
+  `AccountMirrorField.test.ts` avec son banc `AccountMirrorFieldHarness.svelte` (rouge sans l'effet : mutation
+  `if (false && …)` vérifiée). L6 : `create` verrouille la cible du miroir **avant** le parent, comme `update`
+  (commentaire dans `repositories/accounts.rs`). L5 : commentaire du `catch` de `confirmRetype` et intitulé du Vitest
+  dits « cas de concurrence ». L4 : commentaire du rejeu de l'archivage récrit (rejeu défensif, aucun interblocage
+  établi). L1 : phrase de *Compatibilité* du manuel d'administration écrite « d'après le contrôle de compatibilité du
+  schéma … lecture du code, à confirmer à la recette de montée ». L2 : manuel utilisateur — quand la phrase « compte
+  miroir de … » s'affiche (sources du plan *affiché*), refus du retypage d'une source et son remède (*Aucun* en même
+  temps), paragraphe *Un compte qui a un compte miroir*. L7 : triage E2E reformulé (Completion Notes), deux specs
+  rejouées seules (2 passés). L8 : capture 07 refaite sans toast. Passe ciblée P2 : `kesh-gate-logs/s47-2/revue-p2-prompt.md`
+  (à lancer). ⚠️ Première tentative du commit : un remplacement de commentaire avait dupliqué `archive_account` (clippy
+  rouge), corrigé par amendement avant tout gate rendu.
+
 - 2026-11-20 — développement (Opus 5.5, `bmad-dev-story`) : reprise de `origin/main` (`aef10456`, #1351 fusionné : champ
   *Compte parent* au dialogue, `ParentChange` à côté de `MirrorChange`), route, écran, Vitest, E2E, captures, manuels,
   `api-external.md`, i18n ; gates complets au dernier commit de code `90c4b5aa`, sur la cible propre. Détail au Dev Agent
@@ -443,12 +458,40 @@ Journaux hors dépôt, `kesh-gate-logs/s47-2/` : `pipeline-1.log` (première sé
   - backend `scripts/test-fast.sh --ci` : **6193 exécutés, 6193 passés** (3 lents, 3 instables au premier essai), 14 ignorés
     (`gate-backend.log`) ;
   - frontend : `check`, `lint-i18n-ownership`, `test:unit`, `build` verts (`front-*.log`, première série, sans base) ;
-  - E2E complet : **478 passés, 12 échecs, 18 ignorés** ; les dix attendus (sept KF-029, `backup-restore-new-install:262`,
-    `:381`, `opening-balances:156`) et deux de plus, `invoice-qr-caracteres:90` et `invoices:645`, tous deux à la
-    connexion (`toHaveURL('/')` dépassé, la page reste sur `/login`, station chargée) — sans lien avec le plan comptable ;
-    les deux parcours `accounts-mirror` verts ;
+  - E2E complet : **478 passés, 12 échecs, 18 ignorés** ; échecs jugés contre la liste de `docs/testing.md` (sept de la
+    KF-029 #97 ; KF-065 #1282 : `backup-restore-new-install.spec.ts:262` et `:381` ; KF-067 #1284 :
+    `opening-balances.spec.ts:156` — soit les dix attendus), plus **deux échecs de connexion**, `invoice-qr-caracteres:90`
+    et `invoices:645` (`toHaveURL('/')` dépassé, la page reste sur `/login`, station chargée), hors de cette liste, sans
+    lien avec le plan comptable ; les deux parcours `accounts-mirror` verts. *(Annoté le 2026-11-21, revue P1 L7 : ces
+    deux-là ont été rejoués seuls par `heavy.sh` — backend E2E sur la base de la place — : 2 passés, `e2e-rejeu.log`.
+    Le rapport de la P1 notait aussi que la liste de `docs/testing.md` de cette branche ne porte pas encore KF-065 et
+    KF-067 : le rattachement des trois échecs vient de la liste de l'orchestrateur, non relu ici.)* ;
   - `scripts/gate-ci.sh` (copie `git archive`, base recréée) : **6212 passés, 0 échec, 18 ignorés** (`gate-ci.log`) ; sa
     cible supprimée.
+- **Gates de la remédiation P1 — dernier commit de code `9f2ae083`**, cible propre `kesh-targets/kesh-wt47`,
+  `CARGO_INCREMENTAL=0`, par `heavy.sh` (journaux `kesh-gate-logs/s47-2/`, `pipeline3.log`) ; les gates ci-dessus (à
+  `90c4b5aa`) sont rejoués, non repris :
+  - ciblé (`cible2-*.log`) : `fmt` vert, `clippy --workspace --all-targets -D warnings` vert, nextest `accounts_e2e`,
+    `textes_coherents`, `account_mirror` : **67 passés** ; Vitest `src/lib/features/accounts` et `src/routes/(app)/accounts` +
+    `i18n-keys` : 11 fichiers, **134 passés** ; `npm run check` 0 erreur (29 avertissements, hors de ces fichiers) ;
+    `lint-i18n-ownership` vert ;
+  - backend `scripts/test-fast.sh --ci` : **6193 exécutés, 6193 passés** (2 lents), 14 ignorés (`gate-backend-p3.log` ;
+    inchangé à 6193 : aucun test Rust neuf). ⚠️ Le premier essai (dans `pipeline3`) est mort à l'instant, `mem-guard`
+    n'atteignant pas le bus utilisateur de systemd (« Failed to connect to user scope bus ») ; rejoué avec
+    `KESH_NO_MEMGUARD=1` (le plafond mémoire étant déjà posé par `heavy.sh`) ;
+  - frontend : `check` 0 erreur, `lint-i18n-ownership`, `test:unit` **281 fichiers, 4658 passés**, `build` verts ;
+  - E2E complet : **480 passés, 10 échecs, 18 ignorés** (`e2e-p3.log`) : les dix attendus de la liste — sept de la
+    KF-029 (`mode-expert` ×2, `onboarding-path-b` ×2, `onboarding` ×3), `backup-restore-new-install.spec.ts:262` et `:381`,
+    `opening-balances.spec.ts:156` — et **aucun échec de connexion** cette fois ; `invoice-qr-caracteres.spec.ts:90` et
+    `invoices.spec.ts:645` ont aussi été rejoués seuls (`e2e-rejeu.log`) : **2 passés** ; les deux parcours
+    `accounts-mirror` verts ;
+  - `scripts/gate-ci.sh` : **6212 passés, 0 échec, 18 ignorés** (`gate-ci.log`). Deux essais précédents rendus invalides
+    et conservés (`gate-ci-1-echec-place.log`, `gate-ci-2-collision-sqlx-test.log`) : le premier visait un serveur de
+    test d'une autre place que celui de son URL (le script de gate ferme l'environnement et perd `KESH_DB_PORT` ; serveur
+    et port fixés sur `kesh-mariadb-dev2` dans l'enveloppe) ; le second est tombé sur « Unknown database '_sqlx_test_… » (4
+    tests de `users_e2e`, collision de harnais décrite aux consignes), rejoué en entier. Sa cible a été supprimée ;
+  - capture 07 refaite sans toast (`captures-p3.log`, `captures/07-dialogue-390x844.png` : le dialogue du compte 2800,
+    refus des fonds propres sous le champ, *Annuler* visible).
 
 ### File List
 
