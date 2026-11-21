@@ -574,23 +574,26 @@ impl McpTool for KeshBilan {
                 rapports::bilan_par_groupes(ctx.acces(), ctx.lecture(), demande(&a), g, Affichage)
                     .await
                     .map_err(depuis_app_error)?;
-            let env = ctx.afficher(rapport).await;
-            let r = env.rapport;
+            let enveloppe = ctx.afficher(rapport).await;
+            let r = enveloppe.rapport;
             // Par groupes : les listes plates vides (C-46-4-1, taille).
-            let groupes = env.grouping.zip(env.grouped_rows).map(|(g, s)| {
-                let e = echo(g);
-                GroupesBilan {
-                    niveau: e.niveau,
-                    tous_les_niveaux: e.tous_les_niveaux,
-                    position_sous_totaux: e.position_sous_totaux,
-                    profondeur_max: e.profondeur_max,
-                    ouverts: e.ouverts,
-                    fermes: e.fermes,
-                    actifs: lignes_groupees(s.assets),
-                    passifs: lignes_groupees(s.liabilities),
-                    fonds_propres: lignes_groupees(s.equity),
-                }
-            });
+            let groupes = enveloppe
+                .grouping
+                .zip(enveloppe.grouped_rows)
+                .map(|(g, s)| {
+                    let e = echo(g);
+                    GroupesBilan {
+                        niveau: e.niveau,
+                        tous_les_niveaux: e.tous_les_niveaux,
+                        position_sous_totaux: e.position_sous_totaux,
+                        profondeur_max: e.profondeur_max,
+                        ouverts: e.ouverts,
+                        fermes: e.fermes,
+                        actifs: lignes_groupees(s.assets),
+                        passifs: lignes_groupees(s.liabilities),
+                        fonds_propres: lignes_groupees(s.equity),
+                    }
+                });
             let plates = |v| {
                 if groupes.is_some() {
                     Vec::new()
@@ -659,22 +662,25 @@ impl McpTool for KeshCompteDeResultat {
             )
             .await
             .map_err(depuis_app_error)?;
-            let env = ctx.afficher(rapport).await;
-            let r = env.rapport;
+            let enveloppe = ctx.afficher(rapport).await;
+            let r = enveloppe.rapport;
             // Par groupes : les listes plates vides (C-46-4-1, taille).
-            let groupes = env.grouping.zip(env.grouped_rows).map(|(g, s)| {
-                let e = echo(g);
-                GroupesResultat {
-                    niveau: e.niveau,
-                    tous_les_niveaux: e.tous_les_niveaux,
-                    position_sous_totaux: e.position_sous_totaux,
-                    profondeur_max: e.profondeur_max,
-                    ouverts: e.ouverts,
-                    fermes: e.fermes,
-                    produits: lignes_groupees(s.revenues),
-                    charges: lignes_groupees(s.expenses),
-                }
-            });
+            let groupes = enveloppe
+                .grouping
+                .zip(enveloppe.grouped_rows)
+                .map(|(g, s)| {
+                    let e = echo(g);
+                    GroupesResultat {
+                        niveau: e.niveau,
+                        tous_les_niveaux: e.tous_les_niveaux,
+                        position_sous_totaux: e.position_sous_totaux,
+                        profondeur_max: e.profondeur_max,
+                        ouverts: e.ouverts,
+                        fermes: e.fermes,
+                        produits: lignes_groupees(s.revenues),
+                        charges: lignes_groupees(s.expenses),
+                    }
+                });
             let plates = |v| {
                 if groupes.is_some() {
                     Vec::new()
