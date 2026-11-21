@@ -1,6 +1,6 @@
 # Story 39-11b : réglages du compte Wise et import des relevés, ventilé par devise
 
-Status: review
+Status: done
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, numéros de ligne relevés au code de `origin/main` (`fd04099f`),
 revérifiés à la validation P1. Epic 39, **phase 1 KISS** (G2, G3, G4, G10, G11). **Dépend de** : 39-11a (lecteur),
@@ -366,3 +366,17 @@ Claude Sonnet 5.5, 2026-11-21. Les gates joués à `368369e3` (avant les remédi
   rejouée), L4 (fmt/clippy de la remédiation P1 sans journal : couverts par le gate ciblé et le gate complet ci-dessus) :
   non corrigés, sans effet sur le code. La relisibilité du segment par la 39-11c (L1, seconde partie) est à fixer dans sa
   fiche.
+
+### Passe ciblée P3 et clôture (2026-11-21)
+
+Passe ciblée P3 sur le seul commit `385adfaf` (correctif L1, une lentille « régression du correctif », Claude Haiku 5.5),
+rapport `kesh-gate-logs/s39-11b/revue-p3-rapport.md` : **0 CRITICAL · 0 HIGH · 0 MEDIUM · 3 LOW**. Sonde par mutation
+(rognage de la tête retiré, `wise_imports.rs:198`) : `une_longue_description_ne_rogne_pas_la_conversion` rougit
+(`mut-p3.log`), tête non mutée 10/10 verte. Les trois LOW (séparateur coupé en bout de tête, segment de conversion
+au-delà de 500 caractères, tête vide avec conversion non testée) ne décrivent aucun comportement faux observé : ils vont
+en issue `technical-debt`, non corrigés ici, pour ne pas rouvrir la boucle sur la production.
+
+**Tendance de la boucle de revue de code** : P1 (Opus, complète) → P2 (Sonnet, complète, 0 au-dessus de LOW, L1 corrigé
+dans la production) → P3 (Haiku, ciblée sur `385adfaf`) : 0 au-dessus de LOW. Boucle close sur P3. Gates du dernier
+commit de code `385adfaf` : backend complet 6271 passés / 15 ignorés ; `gate-ci.sh` 6290 / 0 / 19 (rejoué après un
+« Unknown database » d'environnement) ; E2E 477 passés, les 10 échecs attendus, 18 ignorés.
