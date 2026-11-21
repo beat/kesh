@@ -31,9 +31,12 @@
 //! leurs propres lignes).
 //!
 //! **Doublons** : une ligne dont l'identifiant Wise est déjà sur le compte
-//! bancaire est ignorée et comptée (la fenêtre date-montant-référence des
-//! imports bancaires ne s'applique pas) ; un fichier tout en doublons ne crée
-//! pas d'entrée. **Continuité** : avertissement `gap` quand le relevé ne
+//! bancaire **dans le même sens** est ignorée et comptée (la fenêtre
+//! date-montant-référence des imports bancaires ne s'applique pas) ; un
+//! fichier tout en doublons ne crée pas d'entrée. La clé est (identifiant,
+//! sens), comme au lecteur : Wise écrit sous un même identifiant le débit puis
+//! le recrédit d'une réserve de carte expirée ou d'une vérification de carte
+//! (Story 39-11a2, [`existing_keys`]). **Continuité** : avertissement `gap` quand le relevé ne
 //! prolonge pas le précédent du compte
 //! (`kesh_db::repositories::bank_imports::continuity_gap`, la règle unique
 //! que relit aussi la revue de la Story 39-11c) ; l'import passe.
@@ -42,6 +45,8 @@
 //! conversion automatique) n'ont d'objet qu'avec le téléchargement par l'API
 //! (Story 39-12a3, `wise_duplicates.rs`, point d'accroche `rules` du cœur
 //! commun) : sans ligne téléchargée en base, aucune ne se déclenche.
+
+use std::collections::HashSet;
 
 use axum::extract::{Multipart, State};
 use axum::http::StatusCode;
@@ -435,6 +440,28 @@ pub async fn create(
     ))
 }
 
+/// Les clés (identifiant, sens) des transactions déjà sur le compte (Story
+/// 39-11a2) : le sens d'une transaction en base se lit au signe de son
+/// montant (débit ≤ 0, crédit ≥ 0, garanti par le lecteur). Une transaction de
+/// montant **nul** vaut pour les deux sens : elle ne fait jamais insérer une
+/// seconde ligne, et une ligne nulle ne change pas le solde. Les identifiants
+/// sont comparés exactement : la base les rend tels que stockés, et le
+/// lecteur les écrit en majuscules.
+fn existing_keys(
+    existing: &[bank_transactions::ExistingTransaction],
+) -> HashSet<(&str, WiseDirection)> {
+    let mut keys = HashSet::with_capacity(existing.len());
+    for t in existing {
+        if t.amount <= Decimal::ZERO {
+            keys.insert((t.transaction_id.as_str(), WiseDirection::Debit));
+        }
+        if t.amount >= Decimal::ZERO {
+            keys.insert((t.transaction_id.as_str(), WiseDirection::Credit));
+        }
+    }
+    keys
+}
+
 /// L'écriture propre à Wise, dans la transaction du cœur commun : par fichier,
 /// doublons lus dans la transaction, continuité jugée avant l'insertion, une
 /// entrée `bank_imports` s'il reste au moins une ligne ; puis la trace
@@ -461,17 +488,18 @@ impl ProviderWrite for WiseWriter<'_> {
                 let bank_account_id = target.balance.account.id;
                 let csv = &target.csv;
                 let ids: Vec<String> = csv.rows.iter().map(|r| r.id.clone()).collect();
-                let existing = bank_transactions::existing_transaction_ids(
+                let existing = bank_transactions::existing_transactions_by_ids(
                     tx,
                     company_id,
                     bank_account_id,
                     &ids,
                 )
                 .await?;
+                let existing = existing_keys(&existing);
                 let new_txs: Vec<NewBankTransaction> = csv
                     .rows
                     .iter()
-                    .filter(|r| !existing.contains(&r.id))
+                    .filter(|r| !existing.contains(&(r.id.as_str(), r.direction)))
                     .map(|r| transaction_of_row(r, company_id, bank_account_id))
                     .collect();
                 let duplicates = csv.rows.len() - new_txs.len();
@@ -556,6 +584,31 @@ impl ProviderWrite for WiseWriter<'_> {
 mod tests {
     use super::*;
     use rust_decimal_macros::dec;
+
+    /// Story 39-11a2 — clés (identifiant, sens) des transactions en base : le
+    /// signe du montant donne le sens, un montant nul vaut pour les deux.
+    #[test]
+    fn existing_keys_read_the_direction_from_the_sign() {
+        let t = |id: &str, amount| bank_transactions::ExistingTransaction {
+            transaction_id: id.into(),
+            amount,
+            booking_date: chrono::NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
+        };
+        let existing = [
+            t("CARD-1", dec!(-32.10)),
+            t("CARD-2", dec!(0.50)),
+            t("CARD-3", dec!(0.00)),
+        ];
+        let keys = existing_keys(&existing);
+        let has = |id, d| keys.contains(&(id, d));
+        assert!(has("CARD-1", WiseDirection::Debit));
+        assert!(!has("CARD-1", WiseDirection::Credit));
+        assert!(has("CARD-2", WiseDirection::Credit));
+        assert!(!has("CARD-2", WiseDirection::Debit));
+        assert!(has("CARD-3", WiseDirection::Debit));
+        assert!(has("CARD-3", WiseDirection::Credit));
+        assert_eq!(keys.len(), 4);
+    }
 
     const CHF: &[u8] =
         include_bytes!("../../../kesh-import/tests/fixtures/wise-releve-chf-fictif.csv");
