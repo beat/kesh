@@ -299,7 +299,13 @@ Les revues de chaque story consignent ici, à la clôture de leur boucle (chaque
 
 | Story | Passe | Sévérité | Objet | Issue | Sort |
 |---|---|---|---|---|---|
-| — | — | — | (vide à ce jour) | — | — |
+| 47-1 | P1 (revue de code) | LOW | phrase « réactivez-le d'abord » (`error-account-is-mirror-reactivate-first`, quatre locales) au singulier quand plusieurs sources archivées sont nommées ; liste des sources non bornée (L5) — comportement visible, `bug`, P4 | à ouvrir | reportée (hors plafond) |
+| 47-1 | P1 (revue de code) | LOW ×7 | course « pose contre archivage » qui ne force pas l'ordre annoncé (L1, `account_mirror.rs`) ; doc-comments d'ordre des refus (L2) ; commentaire de `Set(miroir actuel)` sans le cas du lien forgé non revalidé (L3) ; verrous d'intervalle de la garde des lignes, contention non mesurée (L4) ; chemin `update_in_tx` de la garde des lignes sans test (L6) ; sauvegarde 0.20.0 non testée (L8) ; table G9 non étendue (L9) — `technical-debt`, P4 (L7, deux échecs E2E hors liste : depuis identifiés, #1282) | à ouvrir | reportée (hors plafond) |
+| 47-2 | P2 (revue de code, ciblée) | LOW ×3 | commentaire du rejeu de l'archivage (`routes/accounts.rs:598-606`) qui allègue un mécanisme faux (P2-L1) ; doc publique de `create` sans le refus du miroir ni le verrou de sa cible (P2-L2) ; ordre des refus à la création non fixé par un test (P2-L3) — `technical-debt`, P4 | à ouvrir | reportée (hors plafond) |
+| 47-3 | P2 (revue de code, ciblée) | LOW ×3 | `presentation.rs` : repli `ecart_conserve` exercé par aucun test (LOW-1) ; message de repli qui parle de l'équation quand seul l'écart diffère, écart non journalisé (LOW-2) ; filtre `mirror_account_type != section_type` retirable sans test rouge (LOW-3) — une issue `technical-debt`, P4 | non ouverte | corrigée en 47-5 |
+| 47-4 | P1 (revue de code) | LOW ×4 | manuel et E2E : phrase de l'accueil (« solde de sens inverse ») non revérifiée au PDF (L1, L5 b) ; « la présentation que l'art. 959a CO attend » trop forte (L5 a) ; figure `mi-balance.png` avec des comptes du jeu d'essai au lieu du plan PME (L4) ; clés `reports-mirror-of-*` à ranger avec les clés des rapports (L6) — une issue `documentation`, P4 | non ouverte | corrigée en 47-5 (avec la reprise de `tjDe` dans `invoice-qr-caracteres.spec.ts`, L6) |
+| 47-4 | gate E2E | — | `bank-import.spec.ts:130` compte les lignes avant le chargement de la liste (course connue, spec antérieure à l'epic) — `known-failure`, P3 | tracée hors epic | reportée : non retenue en 47-5 (spec antérieure à l'epic, hors de son périmètre) |
+| 47-3 (L-5) | décision du responsable de l'epic du 2026-11-21, point e | — | avertissement non bloquant pour un compte miroir rangé sous un groupe d'un autre type (puis contrôle sur tous les comptes) — `enhancement`, P3 | à ouvrir | reportée : la fiche 47-5 ne la prévoit pas ; dépend des groupes de l'Epic 46 |
 
 ## Dépendance à l'Epic 46
 
