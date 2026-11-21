@@ -1,6 +1,6 @@
 # Story 46-3 : PDF et CSV du bilan et du compte de résultat par groupes
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D8, D9 (étendue), Q2, Q3 ; FR-46-3, FR-46-8,
 FR-46-9, FR-46-11 ; NFR-46-1, NFR-46-2. Release visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1,
@@ -8,7 +8,7 @@ FR-46-9, FR-46-11 ; NFR-46-1, NFR-46-2. Release visée **0.21.0** (prévision). 
 dans `main`** (arrondi au centime, Epic 48, release 0.20.0) — la PR #1327 (PDF aligné) est déjà fusionnée. Aucune
 migration. **Corrigée le 2026-11-21, avant développement**, sur l'API réelle de la 46-1 (relevée sur `story/46-1` à
 `de0a582f` : § *L'API de la 46-1*, Dev Notes) et sur la présentation miroir de la 47-3 (`story/47-3` à `b4d17d70`) ;
-validation à reprendre (nouvelle boucle).
+validation close le 2026-11-21 (P1 Sonnet, P2 Opus ; Change Log).
 
 ## Story
 
@@ -44,7 +44,7 @@ dur, i18n des PDF différée).
    l'export comme pour l'écran. Les exports de la balance, des journaux et de la TVA ne lisent pas ces paramètres
    (inchangés ; la balance groupée exportée est la 46-6b).
 2. **AC-2 — Sans paramètre (NFR-46-1).** CSV **identique octet pour octet** et PDF aux **mêmes lignes de texte**
-   (texte extrait, `pdftotext` ou l'extracteur des tests existants) qu'avant la story, comparés à des fixtures écrites
+   (texte extrait par l'extracteur partagé créé par la story, G3 : voir AC-4) qu'avant la story, comparés à des fixtures écrites
    **au commit de base** (plan PME, compte en devise compris, deux exercices). Les sous-titres de rôle des fonds propres
    restent en mode à plat seulement. Sans `detailLevel`, `groupes_de` rend `None` : le service n'ajoute aucune requête
    (46-1 AC-10) et `grouping` est absent, ce qui fait choisir le rendu à plat.
@@ -73,11 +73,18 @@ dur, i18n des PDF différée).
    lignes de texte du PDF entre le titre de la section et sa ligne de total est exactement celle des
    `groupedRows.<section>` (numéro, nom, montant formaté selon la règle de rendu) ; pour **Capitaux propres**, la
    suite attendue est `groupedRows.equity` **suivie** des lignes calculées que le rendu à plat écrit déjà entre les
-   comptes et le total (`pdf.rs:896-925` : « Résultat reporté (calculé) » si `shows_retained_earnings_line()`, puis
+   comptes et le total (`pdf.rs:896-923` : « Résultat reporté (calculé) » si `shows_retained_earnings_line()`, puis
    « Résultat de l'exercice », toujours ; hors de `groupedRows`, 46-1 D4), puis le total. Comparaison sur le **texte
-   normalisé** : retrait de début de ligne et espaces répétés réduits ; le jeu d'essai n'a que des noms de comptes
-   plus courts que la limite de troncature (`ACCOUNT_NAME_MAX_CHARS_FX`, 34 caractères, `pdf.rs:718`), ce que le test
-   affirme d'abord, si bien qu'aucun « … » n'entre dans la comparaison — sonde négative :
+   normalisé** : retrait de début de ligne et espaces répétés réduits. Le rendu groupé tronque aussi selon le retrait, et
+   les libellés rendus sont plus longs que les noms (« Total <nom> » : +6 caractères, « <nom> (solde propre) » : +15) :
+   le jeu d'essai est **choisi** (ce n'est pas le plan PME brut, dont `40` « Charges de matières et marchandises »
+   compte déjà 35 caractères) pour que **chaque libellé tel que rendu** tienne dans la limite effective à sa profondeur,
+   ce que le test affirme d'abord (sinon il normalise « … » des deux côtés, par la même fonction de troncature) ; aucun
+   « … » n'entre alors dans la comparaison. **Extracteur** : `pdf_text` et `pdf_text_y` sont privés au `mod tests` de
+   `kesh-report` ; la story crée un **extracteur partagé** (fonction de soutien de test exposée par `kesh-report`, ou
+   module commun des tests de `kesh-api`, sans copie), qui reconstitue les lignes en groupant les `Tj` par ordonnée
+   (`pdf_text_y`) ; le PDF n'est lisible que non compressé, c'est-à-dire sous `cargo test` ; pas de `pdftotext`
+   (non garanti en CI). Sonde négative :
    ignorer `open` dans le PDF rougit le test. **Si la 47-3 est dans la branche d'epic au T0**, le même test pose aussi
    un compte miroir (sans parent) qui reçoit un solde, et un second miroir rangé sous un groupe d'**un autre type** que
    le sien (état admis, avertissement non bloquant : décision du responsable de l'Epic 47 du 2026-11-21) : le groupe et
@@ -98,9 +105,9 @@ dur, i18n des PDF différée).
 7. **AC-7 — Pilotable sans écran (FR-46-11).** Tout ce que montre le PDF de l'écran s'obtient par les paramètres de
    l'export seuls ; le MCP (46-4) n'exporte pas de fichier et n'est pas concerné.
 8. **AC-8 — Tests et documentation.** Tests unitaires de rendu (texte extrait) pour `header`, `footer`, groupe fermé,
-   `own`, devise de groupe, saut de page avec titre gardé, rapport vide groupé ; intégration (`reports_export_e2e.rs`)
+   `own`, devise de groupe, saut de page avec titre gardé, rapport vide groupé, et **retrait croissant avec `depth`, borné** (abscisse du nom relevée comme le fait `Pose`, `pdf.rs:3260-3290`) ; intégration (`reports_export_e2e.rs`)
    des refus (ceux de la 46-1, sur les deux exports et les deux formats, **paramètre répété compris**), d'un paramètre
-   de groupes répété **ignoré** par l'export de la balance (inchangé jusqu'à la 46-6b), des fixtures sans paramètre
+   de groupes répété **ignoré** par l'export de la balance (inchangé jusqu'à la 46-6b ; test demandé aussi par la 46-6a AC-9 : écrit par la première des deux stories fusionnée, l'autre le reprend), des fixtures sans paramètre
    (AC-2) et de l'AC-4 ; `docs/api-external.md` (paramètres de l'export, colonnes CSV) ;
    manuel utilisateur FR, § *Visualisation et exports* (`user-manual.tex:4188`) : export groupé, fidélité à l'écran,
    affichage de travail (lecture (a) de l'art. 959a CO), `.tex` seul ; la phrase « Aucun des deux ne perd de ligne,
@@ -151,7 +158,7 @@ dur, i18n des PDF différée).
   `:816-950` bilan (sous-titres de rôle avec garder-avec-la-suite `:870-893`, `ensure_space_for_rows(2.0)` à `:877`,
 lignes calculées, équation en pied),
   `:954` compte de résultat. Montants alignés à droite (`AMOUNT_RIGHT_MM`, `FX_AMOUNT_RIGHT_MM`, #1327).
-- `csv.rs:42` `make_writer` (`;`, CRLF, BOM), `:50` `format_amount_iso` (`{amount:.2}` — site de la 48-11), `:101`
+- `csv.rs:41` `make_writer` (`;`, CRLF, BOM), `:50` `format_amount_iso` (`{amount:.2}` — site de la 48-11), `:101`
   `write_account_balance`, `:143-270` bilan (garde par section, `Total actifs;;;…`), `:277` compte de résultat.
 - `routes/reports.rs`, à `29b9ec27` : `:174` `ExportQuery`, `:374` `export_balance_sheet`, `:504`
   `export_income_statement`, `:942` `PdfContext::fr_ch_default` ; sur `story/46-1` à `de0a582f` : `:203`
@@ -214,7 +221,7 @@ zéro (#1346), l'alignement (#1327).
 
 *(à écrire au développement)* — Les exports PDF et CSV du bilan et du compte de résultat suivent l'écran : niveau,
 groupes ouverts ou fermés, sous-totaux sur le titre ou en pied ; le PDF dit le niveau imprimé. Sans paramètre,
-l'export ne change pas.
+l'export ne change pas (CSV identique à l'octet, PDF aux mêmes lignes de texte).
 
 ## Dev Agent Record
 
@@ -264,3 +271,4 @@ l'export ne change pas.
   troncature (F3, AC-4) ; phrase du manuel « aucun des deux ne perd de ligne » à restreindre à l'export à plat (F4,
   AC-8) ; lignes de `routes/reports.rs` séparées par commit (F5). Rapport :
   `kesh-gate-logs/s46-specs/validation-p1-rapport.md`.
+- 2026-11-21 — **Validation** (boucle close) : P1 (Claude Sonnet 5.5, 0 C / 0 H / 0 M au-dessus de LOW ; tendance 0/0/2/10 → 0/0/0/10) puis P2 (Claude Opus 5.5, contexte frais, à `e61c9029`) 0 C / 0 H / 0 M / 10 L sur les trois fiches (46-3 : 4, 46-6a : 5, 46-4 : 1) ; aucun finding au-dessus de LOW. LOW de la P2 appliqués dans la fiche : G1 (jeu d'essai et libellés rendus), G2 (test du retrait par `depth` ajouté à l'AC-8), G3 (extracteur partagé créé par la story), G4 (`csv.rs:41`), G7 (test d'ignorance demandé une seule fois), G5 (note de version). Rapport : `kesh-gate-logs/s46-specs/validation-p2-rapport.md`. `ready-for-dev`.

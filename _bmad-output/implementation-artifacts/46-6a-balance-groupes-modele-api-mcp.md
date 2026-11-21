@@ -1,14 +1,13 @@
 # Story 46-6a : balance par groupes — modèle, API et MCP
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D11 modifiée (Q6 : la balance dans le
 périmètre), D1 à D7, D10 ; FR-46-6, FR-46-11 ; NFR-46-1 à NFR-46-4, NFR-46-6. Release visée **0.21.0** (prévision).
 Fiche écrite le 2026-11-20 sur la remarque 2 de Guy (« décrire la story de la balance, laisser le solde en dernier »),
 à valider en boucle. **Suit la 46-1** ; en parallèle des 46-2 et 46-3, **après la 46-4** pour le MCP. Aucune migration.
 **Corrigée le 2026-11-21, avant développement**, sur l'API réelle de la 46-1 (relevée sur `story/46-1` à `de0a582f` :
-§ *L'API de la 46-1*, Dev Notes) et sur les comptes miroirs de la 47-3 (`story/47-3` à `b4d17d70`) ; validation à
-reprendre (nouvelle boucle).
+§ *L'API de la 46-1*, Dev Notes) et sur les comptes miroirs de la 47-3 (`story/47-3` à `b4d17d70`) ; validation close le 2026-11-21 (P1 Sonnet, P2 Opus ; Change Log).
 
 **Découpage** : la balance par groupes (la « 46-6 » de la revue 1) touche plus de cinq modules (`kesh-report` modèle
 et rendus, service et route, MCP, écran, i18n, manuel) : règle de splitting préventif, d'où **46-6a** (modèle, API,
@@ -137,7 +136,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    gagne les quatre arguments de la 46-4, **déclarés dans la structure** (pas de `flatten`) et convertis par la
    fonction de la 46-4. La sortie `Balance` gagne un champ `groupes` (`null` sans `detailLevel`, convention C-37-9,
    comme 46-4 AC-3). En mode groupé, `groupes` = l'écho de la 46-4 (`niveau`, `tousLesNiveaux`, `positionSousTotaux`,
-   `profondeurMax`, `ouverts`, `fermes`) et **`groupes.lignes`**, les lignes groupées (genre, profondeur, `compteId`,
+   `profondeurMax`, `ouverts`, `fermes`), **repris par une fonction de construction partagée extraite par la 46-4** (`sortie!` interdit `flatten` : la 46-6a n'en recopie ni les six champs ni leur conversion ; si la 46-4 ne l'a pas extraite, la 46-6a le fait, sans copie) et **`groupes.lignes`**, les lignes groupées (genre, profondeur, `compteId`,
    `numero`, `nom`, les cinq montants `ouverture`, `debit`, `credit`, `solde`, `cloture` et les cinq `…Devise`,
    `devise`, `ouvert`) ; le champ plat existant `lignes` (au niveau supérieur, lu par `mcp_outils_e2e.rs:753`) est
    alors vide ; la **tranche** (`limit`, `offset`,
@@ -189,8 +188,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    `docs/api-external.md` (balance groupée : `groupedRows` en tableau, partition par **nature** et non par section,
    dissolution sur les seules lignes non nulles, ligne propre nulle d'un compte de groupe sans ligne `own` ; aucun
    numéro de compte hors du plan PME, gardes G4-bis et G4-ter de `textes_coherents.rs`), dont la phrase posée par la
-   46-1 « `GET /reports/trial-balance` et `GET /reports/vat` ignorent ces paramètres, même répétés » devient : `vat`
-   et l'export de la balance les ignorent (l'export jusqu'à la 46-6b), la balance les lit et les refuse comme le bilan ; manuel d'administration (tableau MCP, `kesh_balance`), `.tex` seul.
+   46-1 « `GET /reports/trial-balance` et `GET /reports/vat` ignorent ces paramètres, même répétés » devient : les autres routes (`vat`, et les exports de la balance — jusqu'à la 46-6b —, des journaux et de la TVA : `ExportQuery` est commun) les ignorent, la balance les lit et les refuse comme le bilan ; le test de l'ignorance par l'export de la balance est demandé aussi par la 46-3 AC-8 : écrit par la première des deux stories fusionnée, l'autre le reprend ; manuel d'administration (tableau MCP, `kesh_balance`), `.tex` seul.
 
 ## Tâches / sous-tâches
 
@@ -209,7 +207,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
       `&report.rapport` (AC 5, 7).
 - [ ] **T3** — MCP `kesh_balance` (AC 6), **après la 46-4** ; appelle `balance_par_groupes` ; la sortie lit l'enveloppe
       (`.rapport` pour les lignes plates, `grouping` et `grouped_rows` pour `groupes` et `groupes.lignes`) ; littéral de
-      base du témoin sans argument (AC-6) **écrit avant toute modification du MCP**.
+      base du témoin sans argument (AC-6) **écrit au T0**, avant toute modification du MCP (T2 modifie déjà `rapports.rs` du MCP par la lecture de `.rapport`).
 - [ ] **T4** — tests d'intégration, documentation (AC 9) ; **T5** — gate complet, E2E complet au dernier commit de code.
 
 ## Dev Notes
@@ -236,9 +234,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
   toujours ») ; c'est la règle des lignes présentes de la 46-1 (AC-4). *Écarté* : garder les lignes nulles dans la
   dissolution et dire au manuel qu'un miroir mal rangé défait des groupes de la balance.
 - **C-46-6a-5** (validation P1 de la nouvelle boucle, 2026-11-21) : **`groupes: null` est admis** dans la sortie
-  sans argument neuf, au lieu d'omettre le champ. *Pourquoi* : `sortie!` n'admet aucun attribut de champ et n'omet
-  aucun champ (C-37-9) ; omettre `groupes` demanderait de changer la macro partagée par tous les outils, pour un seul
-  champ. Le littéral du commit de base n'est pas réécrit : le test y ajoute la seule clé neuve (AC-6). Même décision
+  sans argument neuf, au lieu d'omettre le champ. *Pourquoi* : la convention C-37-9 veut un champ présent à `null` (précédent de la 37-4 au MCP, `rapports.rs:77-79`). *Écarté* : deux structures de sortie, avec et sans `groupes` (une forme de plus à tenir pour un seul champ). Le littéral du commit de base n'est pas réécrit : le test y ajoute la seule clé neuve (AC-6). Même décision
   à la 46-4 (AC-2), pour `kesh_bilan` et `kesh_compte_de_resultat`. *Écarté* : `skip_serializing_if` (impossible sans
   toucher la macro) ; réécrire le littéral en cours de story (il ne prouverait plus rien).
 - **C-46-6a-4** (correction du 2026-11-21) : **aucun avertissement** pour un miroir rangé sous un groupe d'un autre
@@ -275,7 +271,7 @@ P2 L-6) ; fiche 47-3 (AC-1, § *Recâblage*) et fichier de l'Epic 47 (D7 ; § *D
 ## Note de version
 
 *(à écrire au développement)* — La balance des comptes se demande par groupes (API, MCP), avec les sous-totaux
-d'ouverture, de mouvements et de clôture de chaque groupe ; sans paramètre, rien ne change.
+d'ouverture, de mouvements et de clôture de chaque groupe ; sans paramètre, l'API ne change pas ; au MCP, la sortie de `kesh_balance` gagne seulement `groupes: null`.
 
 ## Dev Agent Record
 
@@ -330,3 +326,4 @@ d'ouverture, de mouvements et de clôture de chaque groupe ; sans paramètre, ri
   d'API de la 46-1 à réécrire et règles propres à la balance nommées (F9, AC-9) ; entrée `kesh_balance` de `TEMOINS`
   (F10) ; bascule du test d'ignorance de l'export de la balance à la 46-6b (F11). Aussi : commentaire de
   `ligne_principale` à mettre à jour (AC-3 (c)). Rapport : `kesh-gate-logs/s46-specs/validation-p1-rapport.md`.
+- 2026-11-21 — **Validation** (boucle close) : P1 (Claude Sonnet 5.5, 0 C / 0 H / 0 M au-dessus de LOW ; tendance 0/0/2/10 → 0/0/0/10) puis P2 (Claude Opus 5.5, contexte frais, à `e61c9029`) 0 C / 0 H / 0 M / 10 L sur les trois fiches (46-3 : 4, 46-6a : 5, 46-4 : 1) ; aucun finding au-dessus de LOW. LOW de la P2 appliqués dans la fiche : G5 (note de version), G6 (littéral du témoin au T0), G7 (phrase du guide d'API complète), G8 (motif de C-46-6a-5 : convention C-37-9), G9 (écho de la 46-4 repris par une fonction partagée). Rapport : `kesh-gate-logs/s46-specs/validation-p2-rapport.md`. `ready-for-dev`.

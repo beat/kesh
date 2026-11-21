@@ -1,11 +1,11 @@
 # Story 46-6b : balance par groupes — écran, PDF et CSV
 
-Status: drafted
+Status: ready-for-dev
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D11 modifiée (Q6), D9 étendue (Q10) ; FR-46-6,
 FR-46-9, FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Fiche écrite le 2026-11-20 (remarque 2
 de Guy), à valider en boucle. **Suit la 46-6a, la 46-2 (composant et contrôles) et la 46-3 (rendu PDF/CSV groupé,
-après la 48-11).** Aucune migration. **Repassée en `drafted` le 2026-11-21** : sa phrase de manuel (AC-6)
+après la 48-11).** Aucune migration. **Repassée en `drafted` le 2026-11-21, redevenue `ready-for-dev` le même jour** : sa phrase de manuel (AC-6)
 s'appuie sur C-46-6a-3, choix neuf de la 46-6a dont la validation est en cours ; elle redevient `ready-for-dev` quand
 la boucle de la 46-6a se clôt, après une passe sur ses propres lignes touchées.
 
@@ -130,3 +130,4 @@ Fiches 46-1, 46-2, 46-3, 46-6a.
   repassée en `drafted` (phrase de manuel de l'AC-6 adossée à C-46-6a-3, en validation) ; AC-2 complété (lecture par
   `groupes_de` et second extracteur, `ExportQuery` inchangé, paramètre répété refusé, ordre des contrôles, appel de
   `balance_par_groupes`, bascule du test « paramètre répété ignoré par l'export de la balance »).
+- 2026-11-21 — Redevient `ready-for-dev` : la boucle de la 46-6a est close (P1 Sonnet, P2 Opus, 0/0/0/10), C-46-6a-3 confirmé ; ses lignes touchées ont été relues à la P2.

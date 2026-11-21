@@ -73,8 +73,7 @@ schéma et la fonction de conversion posés ici (validation P1).
    - La sortie lit l'enveloppe `AvecGroupes<…>` de la 46-1 (C-46-1-4) : `grouping` et `groupedRows` d'elle, les
      listes et totaux plats de `.rapport`.
    - Les lignes de groupée ne portent ni `typeDeCompte`, ni `actif`, ni `role` : le détail d'un compte se lit sans
-     `detailLevel` (listes plates). *Si la 47-3 est fusionnée*, une ligne de compte miroir porte le champ de miroir de
-     `LigneDeSolde` sous le même nom (à relever à T0).
+     `detailLevel` (listes plates). La 47-3 n'ajoute aucun champ au MCP (C-47-3-3) : elle ne change que des descriptions ; une ligne de compte miroir n'a donc rien de propre.
    - Les listes plates (`actifs`, `passifs`, `fondsPropres`, `produits`, `charges`) sont alors **vides** (`[]`) : la
      réponse reste sous le plafond de taille (C-32-9-8) ; la description de l'outil le dit, dit que la règle de rendu
      (montant sur le titre ou sur le sous-total) est celle de l'écran, et énonce les contraintes des arguments (AC-1).
@@ -142,7 +141,7 @@ une (`:225-229`) depuis `ArgumentsBalance` pour réutiliser `resume_periode` et 
 `ArgumentsPeriode` oblige donc à les poser à `None` à `:225` dans cette story ; à la 46-6a, la balance y recopie ses
 quatre champs, et la fonction de conversion unique (T1), qui lit `&ArgumentsPeriode`, la sert sans autre code (KISS). Les erreurs de service passent par `depuis_app_error` (`mcp/textes.rs:311`), dont `Validation` rend un
 texte sans l'argument. La 47-3, si fusionnée, ne change que les descriptions de ces deux outils (une phrase sur le
-miroir) et ajoute un champ de miroir : garder les deux phrases.
+miroir) et n'ajoute aucun champ (C-47-3-3) : garder les deux phrases.
 
 ### Choix et écarts
 
@@ -156,8 +155,7 @@ miroir) et ajoute un champ de miroir : garder les deux phrases.
   une réponse qui reste petite aux niveaux utiles. (La balance, dont la ligne pèse 540 o, est tranchée : 46-6a.)
 - **C-46-4-4** : le genre de ligne reprend les codes de l'API, non le français du CSV.
 - **C-46-4-5** (2026-11-21, validation P1 de la 46-6a, F2) : **`groupes: null` est admis** sans argument neuf, au lieu
-  d'omettre le champ : `sortie!` n'admet aucun attribut de champ et n'omet aucun champ (C-37-9), et changer la macro
-  partagée par tous les outils pour un champ n'en vaut pas la peine. Le littéral du commit de base n'est pas réécrit :
+  d'omettre le champ : la convention C-37-9 veut un champ présent à `null` (précédent de la 37-4 au MCP). *Écarté* : deux structures de sortie, avec et sans `groupes` (une forme de plus à tenir pour un seul champ). Le littéral du commit de base n'est pas réécrit :
   le test y ajoute la seule clé neuve (AC-2). Même décision à la 46-6a (C-46-6a-5).
 
 ### References
@@ -167,7 +165,7 @@ Fiche 46-1 (§ *Le contrat*) ; `CLAUDE.md` § *Le prompt d'une passe doit nommer
 ## Note de version
 
 *(à écrire au développement)* — Les outils MCP `kesh_bilan` et `kesh_compte_de_resultat` acceptent le niveau de
-détail, les groupes ouverts ou fermés et la place des sous-totaux.
+détail, les groupes ouverts ou fermés et la place des sous-totaux ; sans argument, leur sortie gagne seulement `groupes: null`.
 
 ## Dev Agent Record
 
@@ -215,3 +213,4 @@ détail, les groupes ouverts ou fermés et la place des sous-totaux.
   l'AC-2 (« réponse identique ») contredisait l'AC-3 (« `groupes` à `null` sinon ») → C-46-4-5 : `groupes: null`
   admis, littéral de base inchangé, la clé ajoutée par le test avant comparaison ; entrées de `TEMOINS` citées
   (F10). Statut inchangé ; la passe P2 de la 46-6a relit ces lignes.
+- 2026-11-21 — **Validation** (boucle close) : P1 (Claude Sonnet 5.5, 0 C / 0 H / 0 M au-dessus de LOW ; tendance 0/0/2/10 → 0/0/0/10) puis P2 (Claude Opus 5.5, contexte frais, à `e61c9029`) 0 C / 0 H / 0 M / 10 L sur les trois fiches (46-3 : 4, 46-6a : 5, 46-4 : 1) ; aucun finding au-dessus de LOW. LOW de la P2 appliqués dans la fiche : G5 (note de version), G8 (motif de C-46-4-5), G10 (aucun champ de miroir au MCP, C-47-3-3). Rapport : `kesh-gate-logs/s46-specs/validation-p2-rapport.md`. `ready-for-dev`.
