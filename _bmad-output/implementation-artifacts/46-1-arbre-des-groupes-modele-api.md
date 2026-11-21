@@ -1,6 +1,6 @@
 # Story 46-1 : arbre des groupes — modèle et API
 
-Status: in-progress
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D1 à D10, Q2, Q3, Q4, Q5, Q7 ; FR-46-1, FR-46-7,
 FR-46-8, FR-46-9 (contrat), FR-46-11 ; NFR-46-1 à NFR-46-4, NFR-46-7. Release visée **0.21.0** (prévision). Approuvée
@@ -192,7 +192,7 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
       *(Annotation du 2026-11-21, revue P2 L-1 : description de tâche périmée — la remédiation P1 a retiré ces quatre champs de `ReportQuery` ; les paramètres se lisent dans `groupes_de` (`routes/reports.rs`) par `Query<Vec<(String, String)>>`, qui refuse un paramètre répété par un 400 `VALIDATION_ERROR`.)*
 - [x] **T4 — tests d'intégration** (AC 14) dans `crates/kesh-api/tests/reports_e2e.rs`.
 - [x] **T5 — documentation** (AC 12, 15).
-- [ ] **T6 — gate complet** (fmt, clippy, nextest, `scripts/gate-ci.sh`) ; frontend non touché ; E2E complet au
+- [x] **T6 — gate complet** (fmt, clippy, nextest, `scripts/gate-ci.sh`) ; frontend non touché ; E2E complet au
       dernier commit de code (règle du dépôt, même sans écran).
 
 ## Dev Notes
@@ -299,11 +299,23 @@ Journaux hors dépôt, `/home/beat/claude/kesh-gate-logs/s46-1/`, tous sur la ci
 - `front-check.log`, `front-lint-i18n-ownership.log`, `front-build.log` verts ; `front-test-unit-2.log` : Vitest
   278 fichiers, 4627 tests verts (`front-test-unit.log`, premier passage : un délai dépassé sous charge, frontend non
   touché) ;
-- `mutations.log` : journal du premier jeu de sondes (`b3ea6fc0`) remplacé par le second, **arrêté par la station
-  (mémoire basse) avant sa première mutation** — à relancer ;
+- `mutations.log` : relancé et complet, voir ci-dessous ;
 - `gate-ci-essai1.log`, `gate-ci-essai2.log`, `gate-ci.log` : trois essais en échec d'environnement (cause plus bas) ;
-  **à rejouer** ;
-- E2E complet : **pas encore joué**.
+  rejoué avec succès, voir ci-dessous ;
+- **Gates finaux (2026-11-21), dernier commit de code `14230aa3`** (les commits suivants ne portent que des fiches et
+  des comptes rendus), tous par `heavy.sh` :
+  - `mutations.log` : six sondes, chacune rougit des tests (sans mutation : 20 passés) — « ne pas dissoudre » 8 rouges ;
+    M1 « solde propre hors de sa partition » 2 ; M2 « sous-total faux sous la profondeur 1 » 8 ; « groupe nul fermé à
+    la main masqué » 1 ; « solde propre oublié » 11 ; « fermes ignorés » 2 ;
+  - `gate-backend-final.log` : `scripts/test-fast.sh --ci`, **6186 passés**, 14 ignorés, fmt et clippy verts ;
+  - `gate-ci.log` (`scripts/gate-ci.sh`, `cargo test` comme la CI) : **portée entière du workspace, code 0**, 6205 passés,
+    18 ignorés. Un premier passage (`gate-ci-run1-zip.log`) s'était arrêté au premier binaire rouge,
+    `admin_auto_backup_e2e::disque_sature_pendant_l_ecriture` (panique de `zip` 2.6.1, instabilité connue, fichiers non
+    touchés par la branche ; rejoué 3 fois seul, `diag-sature.log`, vert) : `cargo test` s'arrête alors et le reste du
+    workspace n'avait pas tourné ; le second passage, complet, est vert ;
+  - `e2e.log` : E2E complet, **478 passés, 10 échecs, 18 ignorés** — les dix attendus : sept de la KF-029 (#97 : deux
+    `mode-expert`, cinq `onboarding*`), `backup-restore-new-install.spec.ts:262` et `:381` (KF-065, #1282),
+    `opening-balances.spec.ts:156` (KF-067, #1284). Aucune autre régression.
 
 ### Completion Notes List
 
@@ -454,3 +466,4 @@ la 46-1 ne tournait (vérifié au `ps`). Aucun défaut du code de la story.
   comptes rendus, `mutations.sh` dans une copie hors dépôt. Interaction avec la 47-3 (miroir de passif sous un groupe
   d'actif) écrite au Dev Agent Record et versée aux issues à ouvrir, sans code. La remédiation touche la production
   (L-4, L-5) : passe ciblée P2 à suivre (`kesh-gate-logs/s46-1/revue-p2-prompt.md`).
+- 2026-11-21 : LOW de la revue P2 (L-1, L-2, L-6) corrigés dans les fiches 46-1, 46-3 et 46-6a (texte seulement) ; mutations, gate backend, gate-ci complet (second passage) et E2E complets verts au dernier commit de code ; statut `done`.
