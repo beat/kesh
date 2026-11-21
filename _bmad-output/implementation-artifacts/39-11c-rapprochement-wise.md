@@ -153,6 +153,48 @@ ce qu'il ne sait pas rapprocher, afin de tenir mon compte Wise sans saisie et sa
 8. **AC-8 — Aucune migration, i18n.** Genres et motifs calculés ; libellés des motifs et codes neufs aux quatre
    locales (`crates/kesh-i18n/locales/*`), `crates/kesh-api/src/errors.rs`.
 
+## Amendement du 21.11
+
+Décisions du responsable de l'epic du 21.11 (signature des epics), intégrées avant le développement ; elles
+l'emportent sur les AC ci-dessus là où elles diffèrent.
+
+- **A-1 — Paiement par carte converti : une écriture groupée** (décision (b)). Le CSV importé est celui « avec frais
+  indiqués séparément », un fichier par solde. Un paiement par carte `CARD-<id>` est **converti** quand au moins une de
+  ses lignes porte le segment de conversion écrit par l'import (`DE→CHF <montant> au cours <cours>`, 39-11b) ; ses
+  lignes `CARD-<id>` (une par solde débité) et `FEE-CARD-<id>` **en attente**, sur tous les soldes du libellé, sont
+  regroupées avant toute proposition et sortent du classement ligne à ligne (ni frais, ni règle). Proposition
+  `card_group { bankTransactionIds, ruleId, counterpartyAccountId }` : la règle est la première qui correspond à la
+  ligne principale (celle en CHF, à défaut la `CARD-<id>` de plus petit identifiant), de contrepartie **en CHF**.
+  Écriture unique du journal *Banque* : **la charge au montant du marchand** (somme des lignes en CHF et des montants
+  CHF des segments de conversion, frais exclus), **chaque solde Wise crédité de sa part** (ses lignes `CARD-` et
+  `FEE-CARD-`, au cours mensuel retenu pour un solde en devise), **la différence de change sur sa ligne** (compte de
+  perte ou de gain de change de la société ; absent → `failed[]` `FX_ACCOUNT_INVALID`). Toutes les transactions du
+  groupe passent `reconciled` sur cette écriture ; la règle compte une application. Refus de forme (une ligne
+  positive, un segment vers une autre devise que le CHF, un segment absent sur une ligne en devise) → « à examiner »,
+  motif `card_group_unsupported` ; aucune règle → `card_group_no_rule`. Le marchand en devise étrangère (segment vers
+  une autre devise que le CHF) n'est pas un groupe : sa ligne suit les règles, ses frais le compte de frais (jamais vu
+  en partielle). Rejugement à l'acceptation : l'ensemble des lignes en attente du paiement, relu sous les verrous, est
+  celui de la proposition (sinon périmée, `card_group_changed`).
+- **A-2 — Annuler une ligne d'un paiement groupé** : l'écriture est contre-passée (aucune ligne n'est « l'autre
+  côté » d'une autre : toutes au débit) et **toutes** les transactions encore rattachées à l'écriture redeviennent en
+  attente avec elle, dans le même geste (`reconciliation_cancel::cancel_in_tx`, étape (5)), au lieu de rester
+  rapprochées d'une écriture contre-passée. Inerte pour l'existant : hors groupe, une écriture qui n'est pas un retrait
+  seul n'a qu'une transaction rattachée. Changement de `kesh-db` : gate complet.
+- **A-3 — Ce qu'on n'accepte pas se traite à la main par l'API** (décision (c)) : une proposition non acceptée reste
+  en attente et reparaît à la revue suivante ; une ligne se traite à la main par une écriture
+  (`POST /api/v1/journal-entries`, ligne en devise comprise) puis son rattachement
+  (`POST /api/v1/reconciliation/transactions/{id}/link-entry`), une écriture par ligne. Un test HTTP le joue sur un paiement
+  groupé. L'écran viendra plus tard.
+- **A-4 — Contrepartie d'une règle** (décision (d)) : en CHF ou dans la devise de la transaction, déjà dans le moteur
+  (`matching_rule`, `COUNTERPARTY_CURRENCY_MISMATCH`) ; en CHF seulement pour un paiement groupé.
+- **A-5 — Classement précisé** (constaté sur les fixtures de 39-11a) : un dépôt porte aussi le préfixe `BALANCE`
+  (« Argent reçu de Stripe », type de détail `DEPOSIT`) ; `Conversion` exige donc, en plus du préfixe `BALANCE` ou
+  `CONVERSION_ORDER`, le segment de conversion ; le versement Stripe se juge **avant** la conversion. Ordre : frais,
+  versement Stripe, conversion, virement (`TRANSFER`), autre. Le virement est un genre propre (`transfer`) : la revue
+  commune le laisse à Wise, qui lit l'autre côté déjà passé puis, à défaut, les règles (AC-4, AC-5).
+- La correction du lecteur pour un même `CARD-<id>` débité puis recrédité (`DuplicateId`) est la story 39-11a2 ; les
+  tests de cette story n'en ont pas besoin.
+
 ## Tâches
 
 - [ ] T0 — Lire 38-11c telle que développée ; noter chaque fonction réutilisée ou généralisée (G10) ; constater si le
