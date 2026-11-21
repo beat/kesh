@@ -2713,3 +2713,44 @@ async fn tailles_mesurees_en_devise(pool: MySqlPool) {
         texte(&r).len()
     );
 }
+
+// ---------------------------------------------------------------------------
+// Story 46-4 — le bilan et le compte de résultat par groupes
+// ---------------------------------------------------------------------------
+
+/// Le littéral de base d'un outil (AC-2), écrit au commit de base de la story,
+/// **avant** les arguments de groupement : la sortie sans argument neuf, sur la
+/// société d'essai, les dates de la période (qui suivent l'horloge de test,
+/// `KESH_TEST_INSTANT`) et l'exercice remplacés par des jetons (`{debut}`,
+/// `{fin}`, `{exercice}`). Les identifiants de compte sont ceux d'une base
+/// éphémère neuve, stables d'un passage à l'autre.
+fn litteral_de_base(outil: &str, p: &kesh_seed::pieges::Pieges) -> String {
+    let chemin = format!(
+        "{}/tests/fixtures/mcp-groupes/{outil}.txt",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let brut = std::fs::read_to_string(&chemin).unwrap_or_else(|e| panic!("{chemin} : {e}"));
+    brut.replace("{debut}", &p.exercice_debut.to_string())
+        .replace("{fin}", &p.exercice_fin.to_string())
+        .replace("{exercice}", &p.exercice_id.to_string())
+}
+
+/// AC-2 — sans argument neuf, le texte rendu égale, octet pour octet, le
+/// littéral du commit de base.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn sans_groupes_sortie_du_commit_de_base(pool: MySqlPool) {
+    let a = societe_piegee(&pool, "Société A 464", 'A').await;
+    let jeton = cle_de(&pool, &a, &LECTURE, SendValidation::Exempt).await;
+    let b = banc(&pool);
+    for outil in ["kesh_bilan", "kesh_compte_de_resultat"] {
+        let r = b
+            .appeler(&jeton, outil, json!({"fiscalYearId": a.p.exercice_id}))
+            .await;
+        let rendu = texte(&r);
+        assert_eq!(
+            rendu,
+            litteral_de_base(outil, &a.p),
+            "{outil} : texte rendu\n{rendu}"
+        );
+    }
+}
