@@ -672,6 +672,14 @@ const LIB_ROUTES: &[(&str, &str, Status, Rejeu)] = &[
     // `retry_app_on_deadlock` (opération `paypal::accept`), jamais
     // `retry_with` : le handler ne s'appelle pas `post_accept`.
     ("post", "paypal::accept_proposals", Traced, Rejouee),
+    // Story 39-11c (Epic 39) — l'acceptation des propositions de la revue
+    // Wise, par le même moteur : écritures au journal (`journal_entry.created`,
+    // dont l'écriture groupée d'un paiement par carte converti),
+    // rattachements, `reconciliation_rule.applied` et
+    // `provider.proposal_accepted` par proposition. Rejouée par l'enveloppe
+    // `retry_app_on_deadlock` (opération `wise::accept`), jamais
+    // `retry_with` : le handler ne s'appelle pas `post_accept`.
+    ("post", "wise::accept_proposals", Traced, Rejouee),
     ("post", "bank_profiles::create", Traced, SansEcritureAuJournal),
     ("put", "bank_profiles::update", Traced, SansEcritureAuJournal),
     ("delete", "bank_profiles::delete", Traced, SansEcritureAuJournal),
@@ -1182,8 +1190,10 @@ fn the_registry_partition_is_what_the_story_declares() {
     // PayPal, tracé par `bank_import.created` et `paypal_download.created`).
     // Story 38-11c2 (Epic 38) : 152 → 153 (l'acceptation de la revue PayPal,
     // tracée par `provider.proposal_accepted` et les traces des écritures).
+    // Story 39-11c (Epic 39) : 153 → 154 (l'acceptation de la revue Wise, même
+    // trace).
     assert_eq!(
-        traced, 153,
+        traced, 154,
         "73 tracées avant la 25-1b, plus ses 14, plus la dévalidation (25-2-b-1, #440), \
          plus l'annulation d'un règlement client (25-3-a-1) et fournisseur (25-3-a-2, #414), \
          plus l'annulation d'un rapprochement (25-3-b, #418), plus le solde du reste \
@@ -1217,7 +1227,7 @@ fn the_registry_partition_is_what_the_story_declares() {
          (v0190-nom-societe, refs #1097), plus le changement de compte analytique d'une \
          facture (36-16a, refs #1167), plus l'import du CSV PayPal (38-11b), plus le \
          téléchargement par l'API PayPal (38-12a), plus l'import des relevés Wise (39-11b), plus l'acceptation de la revue \
-         PayPal (38-11c2)"
+         PayPal (38-11c2), plus l'acceptation de la revue Wise (39-11c)"
     );
     assert_eq!(
         exempt, 4,
@@ -1232,7 +1242,7 @@ fn the_registry_partition_is_what_the_story_declares() {
     );
     assert_eq!(
         LIB_ROUTES.len() + TEST_ENDPOINT_ROUTES.len(),
-        165,
+        166,
         "le registre est plus large que l'inventaire, et c'est voulu"
     );
 }

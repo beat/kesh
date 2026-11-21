@@ -841,6 +841,54 @@ pub async fn cancel_in_tx(
         return Err(DbError::OptimisticLockConflict);
     }
 
+    // (5 bis) Story 39-11c (amendement A-1, A-2) — un paiement par carte Wise
+    //     groupé : **une** écriture, rapprochée de **plusieurs** transactions
+    //     (une par solde débité, et leurs frais), toutes au débit : aucune
+    //     n'est l'autre côté d'une autre (3 bis), l'écriture est donc
+    //     contre-passée. Les autres transactions encore rattachées à l'écriture
+    //     redeviennent en attente avec elle, dans le même geste — jamais
+    //     rapprochées d'une écriture contre-passée. Inerte hors groupe : une
+    //     écriture qui n'est pas un retrait seul n'a qu'une transaction
+    //     rattachée (`linkable_side`, plafond d'un lien ; les acceptations
+    //     n'en posent pas d'autre). Lecture VERROUILLANTE après le verrou de
+    //     l'écriture (3) ; leurs comptes doivent être ouverts (W9). Une
+    //     annulation concurrente d'une autre ligne du groupe tient sa ligne
+    //     (étape 1) et attend l'écriture : InnoDB rompt l'interblocage, la
+    //     route rejoue (`Rejouee`).
+    let siblings: Vec<(i64, i64)> = if unlink_only {
+        Vec::new()
+    } else {
+        sqlx::query_as(
+            "SELECT id, bank_account_id FROM bank_transactions \
+             WHERE company_id = ? AND matched_entry_id = ? AND id <> ? \
+               AND status = 'reconciled' \
+             ORDER BY id FOR UPDATE",
+        )
+        .bind(company_id)
+        .bind(entry_id)
+        .bind(bank_transaction_id)
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(map_db_error)?
+    };
+    for (_, account) in &siblings {
+        super::bank_accounts::ensure_open_in_tx(tx, company_id, *account).await?;
+    }
+    for (sibling, _) in &siblings {
+        sqlx::query(
+            "UPDATE bank_transactions \
+             SET matched_entry_id = NULL, status = 'pending', auto_match_rejected_at = NULL, \
+                 version = version + 1, updated_at = NOW(3) \
+             WHERE id = ? AND company_id = ? AND status = 'reconciled' AND matched_entry_id = ?",
+        )
+        .bind(sibling)
+        .bind(company_id)
+        .bind(entry_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_db_error)?;
+    }
+
     // (6) Le règlement annulé — geste de la 25-3-a-1 (client) ou de la
     //     25-3-a-2 (fournisseur, Story 30-1a), appelé —, ou l'écriture
     //     contre-passée. Rien pour un retrait seul (3 bis) : l'écriture reste
@@ -966,6 +1014,27 @@ pub async fn cancel_in_tx(
         ),
     )
     .await?;
+    // (7 bis) Story 39-11c — les autres lignes d'un paiement groupé, remises en
+    //     attente à l'étape (5 bis), chacune tracée sous le même acteur.
+    for (sibling, _) in &siblings {
+        audit_log::insert_in_tx(
+            tx,
+            NewAuditLogEntry::par(
+                acteur,
+                "reconciliation.cancelled",
+                "bank_transaction",
+                *sibling,
+                Some(serde_json::json!({
+                    "kind": kind.code(),
+                    "matchedEntryId": entry_id,
+                    "reversalJournalEntryId": reversal_journal_entry_id,
+                    "unlinkOnly": false,
+                    "groupedWith": bank_transaction_id,
+                })),
+            ),
+        )
+        .await?;
+    }
 
     let bank_transaction = find(tx, company_id, bank_transaction_id, false).await?;
     Ok(ReconciliationCancellation {
