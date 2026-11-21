@@ -681,3 +681,122 @@ fn quoted_cells_and_a_comma_in_a_description_are_read() {
     expected.rows[last].description = Some(desc.to_string());
     assert_eq!(s, expected);
 }
+
+// ---------------------------------------------------------------------------
+// Story 39-11a2 — un même identifiant au débit puis au crédit
+// ---------------------------------------------------------------------------
+
+/// Une ligne construite (23 colonnes de l'en-tête de la fixture, vides hors
+/// celles données) ; le sens suit le signe du montant. Identifiants, montants
+/// et dates inventés.
+fn wise_line(id: &str, date_time: &str, amount: &str, balance: &str) -> String {
+    let header = std::str::from_utf8(CHF).unwrap().lines().next().unwrap();
+    let mut cells = vec![String::new(); header.split(',').count()];
+    cells[col("TransferWise ID")] = id.into();
+    cells[col("Date")] = date_time[..10].into();
+    cells[col("Date Time")] = date_time.into();
+    cells[col("Amount")] = amount.into();
+    cells[col("Currency")] = "CHF".into();
+    cells[col("Description")] = format!("Mouvement {id}");
+    cells[col("Running Balance")] = balance.into();
+    cells[col("Transaction Type")] = if amount.starts_with('-') {
+        "DEBIT".into()
+    } else {
+        "CREDIT".into()
+    };
+    cells[col("Transaction Details Type")] = "CARD".into();
+    cells.join(",")
+}
+
+/// Un relevé : l'en-tête puis les lignes, **la plus récente en tête**.
+fn statement(lines: &[String]) -> Vec<u8> {
+    let header = std::str::from_utf8(CHF).unwrap().lines().next().unwrap();
+    let mut out = String::from(header);
+    for l in lines {
+        out.push('\n');
+        out.push_str(l);
+    }
+    out.push('\n');
+    out.into_bytes()
+}
+
+#[test]
+fn an_expired_card_reserve_debited_then_recredited_is_read() {
+    // Réserve débitée le 20, recréditée le 27 à son expiration (capturée
+    // ensuite sur un autre solde) : même identifiant, deux sens.
+    let file = statement(&[
+        wise_line("CARD-91000001", "27-12-2020 03:15:00.000", "32.10", "150.00"),
+        wise_line("CARD-91000001", "20-12-2020 18:40:12.000", "-32.10", "117.90"),
+        wise_line("TRANSFER-91000000", "01-12-2020 09:00:00.000", "150.00", "150.00"),
+    ]);
+    let s = parse_wise_csv(&file).unwrap();
+    let got: Vec<(&str, WiseDirection, rust_decimal::Decimal)> = s
+        .rows
+        .iter()
+        .map(|r| (r.id.as_str(), r.direction, r.amount))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            ("TRANSFER-91000000", WiseDirection::Credit, dec!(150.00)),
+            ("CARD-91000001", WiseDirection::Debit, dec!(-32.10)),
+            ("CARD-91000001", WiseDirection::Credit, dec!(32.10)),
+        ]
+    );
+    assert_eq!(
+        (s.opening_balance, s.closing_balance),
+        (dec!(0.00), dec!(150.00))
+    );
+}
+
+#[test]
+fn a_card_check_debited_then_recredited_seconds_later_is_read() {
+    let file = statement(&[
+        wise_line("CARD-91000002", "12-02-2020 10:00:09.000", "0.50", "80.00"),
+        wise_line("CARD-91000002", "12-02-2020 10:00:01.000", "-0.50", "79.50"),
+        wise_line("TRANSFER-91000003", "01-02-2020 09:00:00.000", "80.00", "80.00"),
+    ]);
+    let s = parse_wise_csv(&file).unwrap();
+    assert_eq!(s.rows.len(), 3);
+    assert_eq!(
+        (s.rows[1].direction, s.rows[2].direction),
+        (WiseDirection::Debit, WiseDirection::Credit)
+    );
+    assert_eq!(s.closing_balance, dec!(80.00));
+}
+
+#[test]
+fn a_true_duplicate_same_id_direction_amount_and_date_is_refused() {
+    let file = statement(&[
+        wise_line("CARD-91000004", "05-03-2020 11:00:00.000", "-10.00", "70.00"),
+        wise_line("CARD-91000004", "05-03-2020 11:00:00.000", "-10.00", "80.00"),
+        wise_line("TRANSFER-91000005", "01-03-2020 09:00:00.000", "90.00", "90.00"),
+    ]);
+    assert_eq!(
+        parse_wise_csv(&file).unwrap_err(),
+        WiseCsvError::DuplicateId {
+            id: "CARD-91000004".into(),
+            lines: vec![2, 3],
+        }
+    );
+}
+
+#[test]
+fn a_second_debit_under_the_same_id_is_refused_with_the_debit_lines_only() {
+    // Débit, recrédit, nouveau débit : le recrédit est reçu, le second débit
+    // non ; les lignes citées sont celles du sens en double (limite de la
+    // fiche : refus bruyant, jamais un mouvement perdu).
+    let file = statement(&[
+        wise_line("CARD-91000006", "10-04-2020 08:00:00.000", "-20.00", "80.00"),
+        wise_line("CARD-91000006", "08-04-2020 08:00:00.000", "20.00", "100.00"),
+        wise_line("CARD-91000006", "01-04-2020 08:00:00.000", "-20.00", "80.00"),
+        wise_line("TRANSFER-91000007", "01-03-2020 09:00:00.000", "100.00", "100.00"),
+    ]);
+    assert_eq!(
+        parse_wise_csv(&file).unwrap_err(),
+        WiseCsvError::DuplicateId {
+            id: "CARD-91000006".into(),
+            lines: vec![2, 4],
+        }
+    );
+}

@@ -12,7 +12,10 @@
 //! - les colonnes requises ([`REQUIRED_COLUMNS`]) sont toutes là, sinon
 //!   [`WiseCsvError::MissingColumns`] les nomme toutes ;
 //! - les montants sont à forme fermée ([`crate::csv::parse_dot_decimal_amount`]) ;
-//! - le fichier ne porte qu'une devise, aucun identifiant deux fois ;
+//! - le fichier ne porte qu'une devise, aucun identifiant deux fois **dans le
+//!   même sens** ([`WiseCsvError::DuplicateId`]) : un même identifiant au débit
+//!   puis au crédit est reçu (réserve de carte expirée puis recréditée,
+//!   vérification de carte débitée puis recréditée — Story 39-11a2) ;
 //! - le **solde courant se suit** : chaque `Running Balance` est le précédent
 //!   plus le montant de la ligne ([`WiseCsvError::RunningBalanceBreak`]).
 //!
@@ -104,7 +107,7 @@ pub const OPTIONAL_COLUMNS: [&str; 12] = [
 const MAX_ID_LEN: usize = 64;
 
 /// Sens d'une ligne sur le solde (colonne `Transaction Type`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum WiseDirection {
     /// Entrée (`CREDIT`) : montant positif ou nul.
     Credit,
@@ -292,12 +295,14 @@ pub enum WiseCsvError {
     /// première apparition dans le fichier).
     #[error("plusieurs devises dans le fichier Wise : {}", .0.join(", "))]
     MixedCurrencies(Vec<String>),
-    /// Un identifiant apparaît sur plusieurs lignes du fichier.
+    /// Un identifiant apparaît sur plusieurs lignes **du même sens** du
+    /// fichier (un débit et un crédit du même identifiant sont reçus, Story
+    /// 39-11a2).
     #[error("identifiant Wise en double : {id}")]
     DuplicateId {
         /// L'identifiant.
         id: String,
-        /// Ses lignes, dans l'ordre du fichier.
+        /// Ses lignes dans ce sens, dans l'ordre du fichier.
         lines: Vec<usize>,
     },
     /// Le solde courant d'une ligne n'est pas celui d'avant plus son montant.
@@ -517,17 +522,26 @@ fn check_single_currency(rows: &[WiseRow]) -> Result<(), WiseCsvError> {
     Ok(())
 }
 
-/// Aucun identifiant sur deux lignes ; le premier doublon dans l'ordre du
-/// fichier est cité avec toutes ses lignes.
+/// Aucun identifiant sur deux lignes **du même sens** ; le premier doublon
+/// dans l'ordre du fichier est cité avec toutes ses lignes de ce sens.
+///
+/// La clé est (identifiant, sens) : Wise écrit sous le même identifiant le
+/// débit puis le recrédit d'une réserve de carte expirée, ou d'une
+/// vérification de carte, et les deux lignes mouvementent le solde (le solde
+/// courant le prouve). L'import (39-11b) tient la même clé contre la base.
+/// Un rang d'occurrence aurait dépendu des bornes du fichier (Story 39-11a2).
 fn check_unique_ids(rows: &[WiseRow]) -> Result<(), WiseCsvError> {
-    // Un passage : identifiant -> première ligne ; la liste complète des
-    // lignes du doublon n'est construite qu'une fois, à la sortie.
-    let mut seen: HashMap<&str, usize> = HashMap::with_capacity(rows.len());
+    // Un passage : (identifiant, sens) -> première ligne ; la liste complète
+    // des lignes du doublon n'est construite qu'une fois, à la sortie.
+    let mut seen: HashMap<(&str, WiseDirection), usize> = HashMap::with_capacity(rows.len());
     for row in rows {
-        if seen.insert(row.id.as_str(), row.line).is_some() {
+        if seen
+            .insert((row.id.as_str(), row.direction), row.line)
+            .is_some()
+        {
             let lines = rows
                 .iter()
-                .filter(|r| r.id == row.id)
+                .filter(|r| r.id == row.id && r.direction == row.direction)
                 .map(|r| r.line)
                 .collect();
             return Err(WiseCsvError::DuplicateId {
