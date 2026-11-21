@@ -1,6 +1,6 @@
 # Story 39-11a2 — Wise CSV : un même identifiant au débit puis au crédit
 
-Status: ready-for-dev
+Status: review
 
 Epic 39 (Wise), phase 1 KISS. Correctif de 39-11a (lecteur) et de 39-11b (import), avant toute publication de
 l'Epic 39 (aucune donnée importée à reprendre). Aucune migration, aucun changement d'écran ni de texte.
@@ -91,17 +91,73 @@ base devient (identifiant, sens). Pour 39-11c : une paire débit/crédit de cart
 
 ## Tasks
 
-- [ ] T1 — Lecteur : `check_unique_ids` sur (identifiant, sens) ; doc du module et de `DuplicateId`.
-- [ ] T2 — Tests du lecteur (AC-1, AC-2, AC-7) dans `crates/kesh-import/tests/wise_csv.rs`.
-- [ ] T3 — Dépôt : `existing_transactions_by_ids` et son test.
-- [ ] T4 — Route : doublons par (identifiant, sens) ; test d'import (AC-3) dans `wise_import_e2e.rs`.
-- [ ] T5 — Relevés réels (AC-6) ; sonde par mutation (AC-5).
-- [ ] T6 — Gates.
+- [x] T1 — Lecteur : `check_unique_ids` sur (identifiant, sens) ; doc du module et de `DuplicateId`.
+- [x] T2 — Tests du lecteur (AC-1, AC-2, AC-7) dans `crates/kesh-import/tests/wise_csv.rs`.
+- [x] T3 — Dépôt : `existing_transactions_by_ids` et son test.
+- [x] T4 — Route : doublons par (identifiant, sens) ; test d'import (AC-3) dans `wise_import_e2e.rs`.
+- [x] T5 — Relevés réels (AC-6) ; sonde par mutation (AC-5).
+- [x] T6 — Gates.
 
 ## Dev Agent Record
 
-(à remplir)
+**Commits** (de `epic/39-wise` à `HEAD`, code) : `51c7601e` lecteur et ses tests, `831db611` dépôt, route et leurs
+tests, `9199975d` `cargo fmt` des tests du lecteur (dernier commit de code). Huit fichiers, 577 lignes ajoutées,
+16 retirées (`git diff --stat epic/39-wise...HEAD`, fiche et registre compris).
+
+**Fait.**
+
+- `kesh-import/src/wise.rs` : `check_unique_ids` sur la clé (identifiant, `WiseDirection`) ; `DuplicateId.lines` =
+  les lignes de l'identifiant **dans le sens en double** ; `WiseDirection` dérive `Hash` ; doc du module et de la
+  variante. Forme de l'erreur et code `WISE_CSV_DUPLICATE_ID` inchangés.
+- `kesh-db/src/repositories/bank_transactions.rs` : `ExistingTransaction` et `existing_transactions_by_ids`
+  (`transaction_id, amount, booking_date`, par paquets de 500) ; `existing_transaction_ids` inchangée (PayPal).
+- `kesh-api/src/routes/wise_imports.rs` : `existing_keys` (sens au signe du montant, nul = les deux sens) ; le filtre
+  des doublons de `WiseWriter` sur (identifiant, sens) ; doc du module.
+- Aucune migration, aucun écran, aucun texte i18n, aucun changement de contrat de l'API (le compte rendu garde sa
+  forme ; seul change le comportement : une paire débit/crédit n'est plus refusée). Le manuel ne dit rien des
+  doublons Wise (`grep -i wise docs/manual/fr/*.tex` croisé avec « doublon », « identifiant » : rien) : inchangé.
+
+**Tests ajoutés** (recomptés aux deux bornes, `#[test]` et `#[sqlx::test]`, de `epic/39-wise` à `HEAD`) : sept —
+`wise_csv.rs` 30 → 34 (réserve expirée puis recréditée, vérification de carte, vrai doublon même sens-montant-date,
+second débit sous le même identifiant : lignes du sens en double seules) ; `wise_import_e2e.rs` 7 → 8
+(`import_meme_identifiant_au_debit_puis_au_credit` : débit seul, puis recrédit seul importé, puis le mois entier
+n'insère que la vérification de carte, puis réimport sans effet ; solde et lignes en base) ;
+`bank_transactions_repository.rs` 5 → 6 ; tests unitaires de `wise_imports.rs` 10 → 11 (`existing_keys`).
+Fixtures fabriquées dans les tests (identifiants `CARD-91…`, `CARD-92…`, montants et dates 2020 inventés), aucune
+donnée réelle.
+
+**Relevés réels (AC-6)** : le test ignoré existant `real_statements_are_read` (`KESH_WISE_REAL_DIR`, 39-11a), lancé
+dossier par dossier : 2025 avec frais séparés (CHF 72, USD 134, EUR 87 lignes), 2026 avec (CHF 89, EUR 148, USD 121),
+2025 sans (CHF 61, EUR 72, USD 110) — tous lus ; **avant le correctif** (`wise.rs` d'`epic/39-wise`), 2025 avec :
+`WISE_CSV_DUPLICATE_ID`, le constat. Journal : `kesh-gate-logs/s39-11a2/releves-reels.log` (devises et nombres de
+lignes seulement). Un second test ignoré, écrit d'abord, doublait l'existant : retiré avant commit.
+
+**Sonde par mutation (AC-5)**, copie `git archive 9199975d` hors dépôt, cible cargo à part, témoin vert, six
+mutations, **six rouges** (`kesh-gate-logs/s39-11a2/mutations.log`) : clé du lecteur sans sens (4 tests rouges, dont
+l'import de bout en bout) ; lignes citées sans filtre de sens (1) ; clé de l'import sans sens (1, l'import de bout en
+bout) ; montant nul exclu du crédit (1) ; exclu du débit (1) ; filtre des doublons retiré (2).
+
+**Gates** (tous au commit `9199975d`, dernier commit de code ; par `heavy.sh`, cible
+`/home/beat/claude/kesh-targets/kesh-wt39a2`, `CARGO_INCREMENTAL=0`) :
+
+- ciblé (fmt `--check`, clippy workspace `-D warnings`, nextest des binaires touchés) : 58 passés, au commit
+  `831db611` avant le `fmt` des tests (le `cargo fmt --check` y passait déjà sur l'arbre de travail) —
+  `cible-1.log`, `nextest-cible-1.log` ;
+- backend complet `scripts/test-fast.sh --ci`, base remise à zéro (`kesh-mariadb-dev5`) : **6348 passés, 16 ignorés**
+  — `gate-backend.log` ;
+- `scripts/gate-ci.sh` jusqu'au bout, sur `git archive 9199975d` : **6367 passés, 0 échoué, 20 ignorés**, code 0 —
+  `gate-ci.log` ;
+- frontend et E2E : **non lancés**, aucun fichier du frontend, aucun écran ni aucune forme de route touchés.
+
+**Pour l'orchestrateur.**
+
+- À ouvrir en issue (non ouverte ici, sans `gh`) : la limite assumée — un même identifiant deux fois dans le même
+  sens d'un même solde est refusé en entier (aucun cas dans les relevés 2025–2026).
+- Raccord 39-14 : voir « À raccorder » ; le test `import_meme_identifiant_au_debit_puis_au_credit` est le garde-fou.
+- Les fiches 39-12a3 (AC-4, règle de base des doublons) et 39-11c ne sont pas modifiées par cette story.
 
 ## Change Log
 
 - 2026-11-21 — fiche écrite (correctif prioritaire, constat sur les relevés réels).
+- 2026-11-21 — développée (`51c7601e`, `831db611`, `9199975d`) ; gates verts au `9199975d` ; passée en `review`.
+  Revue de code P1 complète à lancer : prompt `kesh-gate-logs/s39-11a2/revue-p1-prompt.md`.
