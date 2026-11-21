@@ -26,28 +26,13 @@
 //! des imports bancaires ne s'applique pas : deux ventes du même montant le
 //! même jour sont deux transactions.
 //!
-//! **Cœur commun** (Story 39-11b) : la recherche des comptes par devise, les
-//! verrous, la relecture des soldes, l'empreinte et l'entrée `bank_imports`
-//! d'une devise sont paramétrés par le prestataire ([`run_provider_import`],
-//! [`insert_currency_import`]) et servent aussi l'import Wise
-//! (`routes::wise_imports`).
-//!
-//! **Verrous** : ceux de **chaque** compte visé, par identifiant croissant
-//! (`with_account_locks`), sur une connexion dédiée ; l'écriture se fait dans
-//! une **seconde** transaction, une seule pour toutes les devises (tout ou
-//! rien), patron de `create_under_account_lock`.
-//!
-//! **Rejeu sur interblocage** (Story 38-11c1, relevé P2-L1 de la revue de la
-//! 38-11b) : la prise des verrous et l'écriture forment **une** tentative
-//! ([`import_under_locks`]), rejouée par `retry_app_on_deadlock` (opération
-//! `paypal_imports::create`). La relecture verrouillante des soldes
-//! ([`recheck_targets_locked`]) pose ses verrous partagés sur les lignes
-//! `bank_accounts` de la société, puis l'`INSERT bank_imports` demande
-//! `companies` en partage par sa clé étrangère ; un `POST`, `PUT`, `PATCH` ou
-//! archivage de compte bancaire tient la sentinelle `companies` en exclusif
-//! puis demande une de ces lignes : interblocage, dont l'import, victime,
-//! rendait `500`. Rien n'est écrit hors de la transaction annulée : la
-//! tentative suivante relit tout sous les verrous.
+//! **Écriture** : par le **cœur commun** ([`crate::routes::provider_imports`],
+//! Story 38-12a, extrait d'ici) — verrous de chaque compte visé, une seule
+//! transaction pour toutes les devises (tout ou rien), relecture verrouillante
+//! des soldes, empreinte, doublons, traces, rejeu sur interblocage (opération
+//! `paypal_imports::create`). Cette route lit le fichier, le ventile
+//! ([`ventilate`]) et le traduit en lignes neutres ([`provider_lines`]) ; le
+//! téléchargement par l'API ([`crate::routes::paypal_downloads`]) fait de même.
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -57,13 +42,12 @@ use axum::{Extension, Json};
 use chrono::NaiveDate;
 use serde::Serialize;
 
-use kesh_db::entities::audit_log::NewAuditLogEntry;
 use kesh_db::entities::bank_account::PROVIDER_PAYPAL;
 use kesh_db::entities::bank_import::{BankImportSourceFormat, NewBankImport};
 use kesh_db::entities::bank_transaction::NewBankTransaction;
 use kesh_db::errors::DbError;
 use kesh_db::repositories::bank_accounts::{self, ProviderBalance};
-use kesh_db::repositories::{audit_log, bank_imports, bank_transactions};
+use kesh_db::repositories::bank_imports;
 use kesh_import::paypal::{
     BalanceImpact, COL_TRANSACTION_ID, PaypalCsvError, PaypalLineError, PaypalLineErrorCode,
     PaypalRow, parse_paypal_csv,
@@ -78,6 +62,10 @@ use crate::routes::bank_imports::{
     ImportAuditAction, compute_sha256_hex, import_create_error, insert_canonical_audit_log,
 };
 use crate::routes::bank_statements_manual::MANUAL_STATEMENT_LOCK_TIMEOUT_SECS;
+pub use crate::routes::provider_imports::CurrencyReport;
+use crate::routes::provider_imports::{
+    ImportRequest, ImportSource, ProviderGroup, ProviderLine, import_lines, load_balances,
+};
 
 /// Suffixe de l'identifiant de la transaction des **frais** d'une ligne
 /// PayPal : `<id>:FEE`. Un identifiant PayPal n'a jamais de `:` (38-11a,
@@ -144,19 +132,6 @@ pub struct SkippedLines {
     pub memo: usize,
     /// Paires de retenue neutres (une paire = deux lignes).
     pub neutral_pairs: usize,
-}
-
-/// Compte rendu d'une devise : son compte bancaire, l'entrée `bank_imports`
-/// créée (`null` si toutes ses lignes étaient des doublons), et les nombres de
-/// **transactions** insérées et ignorées comme doublons.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CurrencyReport {
-    pub currency: String,
-    pub bank_account_id: i64,
-    pub import_id: Option<i64>,
-    pub inserted: usize,
-    pub duplicates: usize,
 }
 
 /// Réponse `201` de l'import (AC-6).
@@ -309,15 +284,12 @@ pub fn row_transaction_ids(row: &PaypalRow) -> Vec<String> {
     ids
 }
 
-/// Les transactions d'une ligne — Story 38-11b (AC-5) : le **brut** (si non
-/// nul) et les **frais** (si non nuls, quel que soit leur signe : négatifs
-/// d'ordinaire, positifs sur certains remboursements). La somme des deux est le
-/// `Net` de la ligne (contrôlé par 38-11a).
-pub fn transactions_of_row(
-    row: &PaypalRow,
-    company_id: i64,
-    bank_account_id: i64,
-) -> Vec<NewBankTransaction> {
+/// Les lignes neutres d'une ligne PayPal — Story 38-11b (AC-5), traduites pour
+/// le cœur commun par la Story 38-12a : le **brut** (si non nul) et les
+/// **frais** (si non nuls, quel que soit leur signe : négatifs d'ordinaire,
+/// positifs sur certains remboursements, identifiant `<id>:FEE`). La somme des
+/// deux est le `Net` de la ligne (contrôlé par 38-11a). Fonction pure.
+pub fn provider_lines_of_row(row: &PaypalRow) -> Vec<ProviderLine> {
     let opt = |v: &Option<String>, max: usize| {
         v.as_deref()
             .map(str::trim)
@@ -330,21 +302,20 @@ pub fn transactions_of_row(
         opt(&row.from_email, EMAIL_MAX_CHARS)
     };
     let kind = row.kind.trim().to_string();
-    let base = |amount, transaction_id: String, details: String| NewBankTransaction {
-        company_id,
-        bank_account_id,
+    let base = |amount, transaction_id: String, details: String| ProviderLine {
+        group_id: row.transaction_id.clone(),
+        transaction_id,
         booking_date: row.date,
-        value_date: None,
         amount,
         currency: row.currency.clone(),
         reference: Some(format!("{REFERENCE_PREFIX}{}", row.transaction_id)),
         details: truncate_chars(&details, DETAILS_MAX_CHARS),
         end_to_end_id: opt(&row.reference_txn_id, NAME_MAX_CHARS),
-        transaction_id: Some(transaction_id),
-        counterparty_iban: None,
         counterparty_name: opt(&row.name, NAME_MAX_CHARS),
-        provider_type: Some(truncate_chars(&kind, PROVIDER_TYPE_MAX_CHARS)),
         counterparty_email: email.clone(),
+        provider_type: Some(truncate_chars(&kind, PROVIDER_TYPE_MAX_CHARS)),
+        rank: row.line,
+        balance_after: row.balance,
     };
 
     let mut out = Vec::with_capacity(2);
@@ -373,27 +344,35 @@ pub fn transactions_of_row(
     out
 }
 
-/// Écarte les **doublons** d'une devise — Story 38-11b (AC-6) : une ligne dont
-/// l'identifiant a déjà paru plus haut dans le fichier, ou dont une transaction
-/// (brut ou frais) existe déjà sur le compte (`existing`), est ignorée
-/// entière. Rend les lignes gardées et le nombre de **transactions** ignorées.
-pub fn dedupe_rows<'a>(
-    rows: &'a [PaypalRow],
-    existing: &HashSet<String>,
-) -> (Vec<&'a PaypalRow>, usize) {
-    let mut seen: HashSet<&str> = HashSet::new();
-    let mut kept = Vec::new();
-    let mut duplicates = 0;
-    for row in rows {
-        let ids = row_transaction_ids(row);
-        let in_file = !seen.insert(row.transaction_id.as_str());
-        if in_file || ids.iter().any(|id| existing.contains(id)) {
-            duplicates += ids.len();
-        } else {
-            kept.push(row);
-        }
-    }
-    (kept, duplicates)
+/// Les transactions bancaires d'une ligne ([`provider_lines_of_row`]).
+pub fn transactions_of_row(
+    row: &PaypalRow,
+    company_id: i64,
+    bank_account_id: i64,
+) -> Vec<NewBankTransaction> {
+    provider_lines_of_row(row)
+        .into_iter()
+        .map(|l| l.into_new_bank_transaction(company_id, bank_account_id))
+        .collect()
+}
+
+/// Les groupes neutres d'une ventilation (un par ligne du fichier qui produit
+/// une transaction), par devise, dans l'ordre du fichier : l'entrée du cœur
+/// commun (Story 38-12a). Fonction pure.
+pub fn provider_lines(ventilation: &Ventilation) -> BTreeMap<String, Vec<ProviderGroup>> {
+    ventilation
+        .by_currency
+        .iter()
+        .map(|(currency, rows)| {
+            (
+                currency.clone(),
+                rows.iter()
+                    .map(provider_lines_of_row)
+                    .filter(|g| !g.is_empty())
+                    .collect(),
+            )
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -850,14 +829,6 @@ pub(crate) async fn insert_currency_import(
 // Handler
 // ---------------------------------------------------------------------------
 
-/// Une devise du fichier et son compte bancaire.
-struct Target<'a> {
-    currency: String,
-    balance: &'a ProviderBalance,
-    rows: Vec<PaypalRow>,
-    file_hash: String,
-}
-
 /// `POST /api/v1/paypal-imports` — voir l'en-tête du module.
 pub async fn create(
     State(state): State<AppState>,
@@ -865,69 +836,34 @@ pub async fn create(
     multipart: Multipart,
 ) -> Result<(StatusCode, Json<PaypalImportResponse>), AppError> {
     let form = parse_form(multipart).await?;
-    let company_id = current_user.company_id;
-
-    let balances = bank_accounts::list_provider_balances(
+    let balances = load_balances(
         &state.pool,
-        company_id,
+        current_user.company_id,
         PROVIDER_PAYPAL,
         &form.account,
     )
     .await?;
-    if balances.is_empty() {
-        return Err(AppError::ProviderAccountNotFound {
-            account: form.account,
-        });
-    }
 
     let csv = parse_paypal_csv(&form.file_bytes).map_err(csv_error)?;
     check_transaction_id_lengths(&csv.rows).map_err(csv_error)?;
     let ventilation = ventilate(&csv.rows);
 
-    let currencies: Vec<String> = ventilation.by_currency.keys().cloned().collect();
-    let resolved = resolve_currency_balances(&balances, &form.account, &currencies)?;
-    let targets: Vec<Target<'_>> = ventilation
-        .by_currency
-        .iter()
-        .zip(resolved)
-        .map(|((currency, rows), balance)| Target {
-            currency: currency.clone(),
-            balance,
-            rows: rows.clone(),
-            file_hash: file_currency_hash(&form.file_bytes, currency),
-        })
-        .collect();
-
-    let audit_entity_id = balances
-        .iter()
-        .map(|b| b.account.id)
-        .min()
-        .expect("au moins un compte, contrôlé ci-dessus");
-    let locked: Vec<LockedTarget> = targets
-        .iter()
-        .map(|t| LockedTarget {
-            currency: t.currency.clone(),
-            bank_account_id: t.balance.account.id,
-            file_hash: t.file_hash.clone(),
-        })
-        .collect();
-    let writer = PaypalWriter {
-        current_user: &current_user,
-        form: &form,
-        targets: &targets,
-        skipped: &ventilation.skipped,
-        audit_entity_id,
+    let mut audit_details = serde_json::Map::new();
+    audit_details.insert("provider".into(), serde_json::json!(PROVIDER_PAYPAL));
+    audit_details.insert("provider_account".into(), serde_json::json!(form.account));
+    audit_details.insert("filename".into(), serde_json::json!(form.filename));
+    audit_details.insert("skipped".into(), serde_json::json!(ventilation.skipped));
+    let request = ImportRequest {
+        provider: PROVIDER_PAYPAL,
+        account: &form.account,
+        filename: &form.filename,
+        source: ImportSource::File(&form.file_bytes),
+        retry_operation: "paypal_imports::create",
+        audit_action: "paypal_import.created",
+        audit_details,
+        by_currency: provider_lines(&ventilation),
     };
-    let currencies = run_provider_import(
-        &state.pool,
-        &current_user,
-        PROVIDER_PAYPAL,
-        &form.account,
-        &locked,
-        "paypal_imports::create",
-        &writer,
-    )
-    .await?;
+    let currencies = import_lines(&state.pool, &current_user, &balances, &request).await?;
 
     Ok((
         StatusCode::CREATED,
@@ -939,119 +875,10 @@ pub async fn create(
     ))
 }
 
-/// L'écriture propre à PayPal, dans la transaction du cœur : doublons lus dans
-/// la transaction, une entrée `bank_imports` par devise qui insère au moins une
-/// transaction, traces `bank_import.created` (une par entrée) et
-/// `paypal_import.created`.
-struct PaypalWriter<'a> {
-    current_user: &'a CurrentUser,
-    form: &'a PaypalImportForm,
-    targets: &'a [Target<'a>],
-    skipped: &'a SkippedLines,
-    audit_entity_id: i64,
-}
-
-impl ProviderWrite for PaypalWriter<'_> {
-    type Output = Vec<CurrencyReport>;
-
-    fn write<'a>(
-        &'a self,
-        tx: &'a mut sqlx::Transaction<'static, sqlx::MySql>,
-    ) -> WriteFuture<'a, Self::Output> {
-        Box::pin(async move {
-            let current_user = self.current_user;
-            let company_id = current_user.company_id;
-            let mut reports = Vec::with_capacity(self.targets.len());
-            for target in self.targets {
-                let bank_account_id = target.balance.account.id;
-                let candidate_ids: Vec<String> =
-                    target.rows.iter().flat_map(row_transaction_ids).collect();
-                let existing = bank_transactions::existing_transaction_ids(
-                    tx,
-                    company_id,
-                    bank_account_id,
-                    &candidate_ids,
-                )
-                .await?;
-                let (kept, duplicates) = dedupe_rows(&target.rows, &existing);
-                let new_txs: Vec<NewBankTransaction> = kept
-                    .iter()
-                    .flat_map(|row| transactions_of_row(row, company_id, bank_account_id))
-                    .collect();
-                if new_txs.is_empty() {
-                    reports.push(CurrencyReport {
-                        currency: target.currency.clone(),
-                        bank_account_id,
-                        import_id: None,
-                        inserted: 0,
-                        duplicates,
-                    });
-                    continue;
-                }
-                let period_from = kept.iter().map(|r| r.date).min().unwrap_or(NaiveDate::MIN);
-                let period_to = kept.iter().map(|r| r.date).max().unwrap_or(NaiveDate::MIN);
-                // Le solde de la dernière ligne (date la plus tardive ; à date
-                // égale, la dernière du fichier) qui en porte un.
-                let closing_balance = kept
-                    .iter()
-                    .filter(|r| r.balance.is_some())
-                    .max_by_key(|r| (r.date, r.line))
-                    .and_then(|r| r.balance);
-                let inserted = new_txs.len();
-                let import_id = insert_currency_import(
-                    tx,
-                    current_user,
-                    CurrencyImport {
-                        provider: PROVIDER_PAYPAL,
-                        account: &self.form.account,
-                        currency: &target.currency,
-                        bank_account_id,
-                        filename: &self.form.filename,
-                        file_hash: &target.file_hash,
-                        period_from,
-                        period_to,
-                        opening_balance: None,
-                        closing_balance,
-                        transactions: new_txs,
-                        duplicates,
-                    },
-                )
-                .await?;
-                reports.push(CurrencyReport {
-                    currency: target.currency.clone(),
-                    bank_account_id,
-                    import_id: Some(import_id),
-                    inserted,
-                    duplicates,
-                });
-            }
-
-            audit_log::insert_in_tx(
-                tx,
-                NewAuditLogEntry::for_actor(
-                    current_user.user_id,
-                    current_user.api_key_id,
-                    "paypal_import.created",
-                    "bank_account",
-                    self.audit_entity_id,
-                    Some(serde_json::json!({
-                        "provider": PROVIDER_PAYPAL,
-                        "provider_account": self.form.account,
-                        "filename": self.form.filename,
-                        "currencies": reports,
-                        "skipped": self.skipped,
-                    })),
-                ),
-            )
-            .await?;
-            Ok(reports)
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::routes::provider_imports::dedupe_groups;
     use rust_decimal::Decimal;
     use std::str::FromStr;
 
@@ -1273,16 +1100,21 @@ mod tests {
         let b = a.clone();
         let c = row("0TESTNEW", "Website Payment", "EUR", "20.00", "-1.00");
         let d = row("0TESTOLD", "Website Payment", "EUR", "30.00", "0.00");
-        let rows = vec![a, b, c, d];
+        let rows = [a, b, c, d];
+        // Story 38-12a : les doublons se jugent au cœur commun, sur les lignes
+        // neutres groupées par ligne du fichier ; assertions inchangées.
+        let groups: Vec<ProviderGroup> = rows.iter().map(provider_lines_of_row).collect();
         let existing: HashSet<String> = ["0TESTOLD".to_string()].into_iter().collect();
-        let (kept, duplicates) = dedupe_rows(&rows, &existing);
-        let ids: Vec<&str> = kept.iter().map(|r| r.transaction_id.as_str()).collect();
+        let (kept, duplicates) = dedupe_groups(&groups, &existing);
+        let mut ids: Vec<&str> = kept.iter().map(|l| l.group_id.as_str()).collect();
+        ids.dedup();
         assert_eq!(ids, ["0TESTDUP", "0TESTNEW"]);
         // La seconde 0TESTDUP (brut + frais) et 0TESTOLD (brut seul).
         assert_eq!(duplicates, 3);
         // Les frais seuls déjà en base suffisent à écarter la ligne.
         let existing: HashSet<String> = ["0TESTNEW:FEE".to_string()].into_iter().collect();
-        let (kept, duplicates) = dedupe_rows(&rows[2..3], &existing);
+        let new_group = [provider_lines_of_row(&rows[2])];
+        let (kept, duplicates) = dedupe_groups(&new_group, &existing);
         assert!(kept.is_empty());
         assert_eq!(duplicates, 2);
     }
