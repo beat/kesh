@@ -287,9 +287,22 @@ Claude Opus 5.5 (bmad-dev-story), 2026-11-20.
 
 ### Debug Log References
 
-Journaux hors dépôt, `/home/beat/claude/kesh-gate-logs/s46-1/` : `t0-fixture.log` (génération des fixtures),
-`verif-fixtures-base.log` (leur contre-épreuve sur cible propre), `cible-clippy.log`, `cible-nextest.log`,
-`mutations.log`, `gate-backend.log`, `gate-ci.log`, `front-*.log`, `e2e.log`.
+Journaux hors dépôt, `/home/beat/claude/kesh-gate-logs/s46-1/`, tous sur la cible propre `kesh-targets/kesh-wt46s1`
+(`CARGO_INCREMENTAL=0`) sauf mention :
+- `t0-fixture.log` (génération des fixtures, cible partagée abandonnée) et `verif-fixtures-base.log` (contre-épreuve sur
+  l'arbre de base, cible à part : passé) ;
+- `cible-clippy.log`, `cible-nextest.log` : gate ciblé au commit de remédiation `14230aa3` — fmt, clippy workspace
+  verts, **327 passés sur 327**, 1 ignoré (au commit `b3ea6fc0` : 325 sur 325) ;
+- `gate-backend.log` : `scripts/test-fast.sh --ci` **au commit `b3ea6fc0`** (avant la remédiation) — 6184 passés,
+  14 ignorés ; **à rejouer au dernier commit de code** ;
+- `front-check.log`, `front-lint-i18n-ownership.log`, `front-build.log` verts ; `front-test-unit-2.log` : Vitest
+  278 fichiers, 4627 tests verts (`front-test-unit.log`, premier passage : un délai dépassé sous charge, frontend non
+  touché) ;
+- `mutations.log` : journal du premier jeu de sondes (`b3ea6fc0`) remplacé par le second, **arrêté par la station
+  (mémoire basse) avant sa première mutation** — à relancer ;
+- `gate-ci-essai1.log`, `gate-ci-essai2.log`, `gate-ci.log` : trois essais en échec d'environnement (cause plus bas) ;
+  **à rejouer** ;
+- E2E complet : **pas encore joué**.
 
 ### Completion Notes List
 
