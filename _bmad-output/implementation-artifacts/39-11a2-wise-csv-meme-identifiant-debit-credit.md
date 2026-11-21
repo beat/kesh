@@ -1,6 +1,6 @@
 # Story 39-11a2 — Wise CSV : un même identifiant au débit puis au crédit
 
-Status: review
+Status: done
 
 Epic 39 (Wise), phase 1 KISS. Correctif de 39-11a (lecteur) et de 39-11b (import), avant toute publication de
 l'Epic 39 (aucune donnée importée à reprendre). Aucune migration, aucun changement d'écran ni de texte.
@@ -20,7 +20,7 @@ montre pas comme telles » :
 - **vérification de carte** : débit puis crédit du même petit montant, à quelques secondes d'écart.
 
 Les deux lignes ont réellement mouvementé le solde : le *Running Balance* de chacune est le précédent plus son
-montant. Le fichier entier est refusé, et Beat ne peut importer ni son relevé CHF 2025 ni celui de 2026.
+montant. Le fichier entier est refusé, et le relevé CHF 2025 comme celui de 2026 ne peuvent pas s'importer.
 
 ## Décision
 
@@ -101,7 +101,7 @@ base devient (identifiant, sens). Pour 39-11c : une paire débit/crédit de cart
 ## Dev Agent Record
 
 **Commits** (de `epic/39-wise` à `HEAD`, code) : `51c7601e` lecteur et ses tests, `831db611` dépôt, route et leurs
-tests, `9199975d` `cargo fmt` des tests du lecteur (dernier commit de code). Huit fichiers, 577 lignes ajoutées,
+tests, `9199975d` `cargo fmt` des tests du lecteur (dernier commit de code). Huit fichiers, 633 lignes ajoutées et 16 retirées (dont le Dev Agent Record),
 16 retirées (`git diff --stat epic/39-wise...HEAD`, fiche et registre compris).
 
 **Fait.**
@@ -138,7 +138,7 @@ l'import de bout en bout) ; lignes citées sans filtre de sens (1) ; clé de l'i
 bout) ; montant nul exclu du crédit (1) ; exclu du débit (1) ; filtre des doublons retiré (2).
 
 **Gates** (tous au commit `9199975d`, dernier commit de code ; par `heavy.sh`, cible
-`/home/beat/claude/kesh-targets/kesh-wt39a2`, `CARGO_INCREMENTAL=0`) :
+`<station>/kesh-targets/kesh-wt39a2`, `CARGO_INCREMENTAL=0`) :
 
 - ciblé (fmt `--check`, clippy workspace `-D warnings`, nextest des binaires touchés) : 58 passés, au commit
   `831db611` avant le `fmt` des tests (le `cargo fmt --check` y passait déjà sur l'arbre de travail) —
@@ -161,3 +161,13 @@ bout) ; montant nul exclu du crédit (1) ; exclu du débit (1) ; filtre des doub
 - 2026-11-21 — fiche écrite (correctif prioritaire, constat sur les relevés réels).
 - 2026-11-21 — développée (`51c7601e`, `831db611`, `9199975d`) ; gates verts au `9199975d` ; passée en `review`.
   Revue de code P1 complète à lancer : prompt `kesh-gate-logs/s39-11a2/revue-p1-prompt.md`.
+
+### Clôture (2026-11-22)
+
+Revue de code **P1** (Sonnet, complète) : **0 CRITICAL · 0 HIGH · 0 MEDIUM · 5 LOW**
+(`kesh-gate-logs/s39-11a2/revue-p1-rapport.md`). Boucle close sur P1. LOW corrigés ici (texte seul) : nom de personne et
+chemin personnel retirés de la fiche, décompte des lignes recompté. **Limite assumée, complétée (LOW 1)** : une
+transaction déjà en base à 0.00 vaut pour les deux sens ; un mouvement non nul de même identifiant serait alors écarté
+sans signal — cas absent des relevés réels. **Raccords (LOW 3)** : la règle de base de 39-12a3 (AC-4) et l'origine d'un
+`FEE-x` (R1) doivent lire la clé (identifiant, sens) ; à la 39-14, `group_id` = identifiant + sens. LOW 2 (casse au
+`IN (...)`, comportement inchangé) : en issue.
