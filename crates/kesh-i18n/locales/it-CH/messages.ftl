@@ -1200,6 +1200,7 @@ error-account-is-mirror-postable = Questo conto è il conto specchio di { $sourc
 error-account-is-mirror-account-type = Questo conto è il conto specchio di { $sources }: non cambia tipo finché il collegamento rimane.
 error-account-is-mirror-role = Questo conto è il conto specchio di { $sources }: non riceve un ruolo finché il collegamento rimane.
 error-account-is-mirror-reactivate-first = { $archived } è archiviato: riattivatelo prima, poi rimuovete il suo conto specchio.
+error-account-is-mirror-reactivate-first-many = { $archived } sono archiviati: riattivateli prima, poi rimuovete il loro conto specchio.
 # Story 37-3a — registrazioni in valuta.
 error-multi-currency-disabled-fiscal-year = Questo esercizio è monovaluta: questa operazione in valuta non vi è possibile.
 error-fx-multiple-currencies = Una registrazione porta una sola valuta estera (qui: { $currencies }). Registri un cambio tra valute tramite il conto di conversione, in due registrazioni.

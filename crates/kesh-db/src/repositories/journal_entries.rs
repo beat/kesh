@@ -313,6 +313,13 @@ async fn validate_lines_accounts_in_tx(
     // commitée pendant l'attente du verrou sur la cible n'y serait pas vue. La
     // lecture verrouillante lit la dernière version commitée et pose ses
     // verrous d'intervalle, qui font aussi attendre une pose concurrente.
+    // ⚠️ Coût assumé (revue P1 de la 47-1, L4 ; raisonné, non mesuré) : tant
+    // qu'aucun compte de la société n'a de miroir, l'index ne porte que des
+    // `(société, NULL, id)`, et le verrou d'intervalle de cette recherche couvre
+    // l'écart où tombe l'`INSERT` d'un compte neuf de la même société. Une
+    // création de compte peut donc attendre la fin d'une écriture comptable en
+    // cours — attente transitoire, sans interblocage identifié (la création ne
+    // tient rien que l'écriture attende).
     let mirrors_sql = format!(
         "SELECT DISTINCT mirror_account_id FROM accounts \
          WHERE company_id = ? AND mirror_account_id IN ({placeholders}) LOCK IN SHARE MODE"

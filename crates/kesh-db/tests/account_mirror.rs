@@ -22,6 +22,13 @@ use sqlx::MySqlPool;
 
 const ATTENTE: Duration = Duration::from_secs(20);
 
+/// Le texte de la requête par laquelle une pose verrouille la cible du miroir
+/// (`lock_mirror_target_in_tx`) ; la lecture de la source n'a pas `company_id`.
+const CIBLE_DE_LA_POSE: &str = "FROM accounts WHERE id = ? AND company_id = ? FOR UPDATE";
+/// Le texte de la requête par laquelle l'archivage verrouille le compte
+/// (`archive_guarded`).
+const CIBLE_DE_L_ARCHIVAGE: &str = "SELECT company_id FROM accounts WHERE id = ? FOR UPDATE";
+
 // ---------------------------------------------------------------------------
 // Montage
 // ---------------------------------------------------------------------------
@@ -261,6 +268,42 @@ async fn un_miroir_se_pose_a_la_creation_sous_le_meme_controle(pool: MySqlPool) 
     new.mirror_account_id = Some(imputable);
     let (raison, _) = refus(accounts::create(&pool, s.admin_user_id, new).await);
     assert_eq!(raison, MirrorReason::NotPresentationAccount);
+}
+
+/// Story 47-5 (revue P2 de la 47-2, P2-L3) — à la création, le refus du miroir
+/// passe **avant** ceux du parent : un parent compte de différence de change et
+/// une cible imputable rendent `MIRROR_ACCOUNT_INVALID` ; sans le miroir, le même
+/// geste rend `ACCOUNT_IS_FX_DIFFERENCE_ACCOUNT` (le parent est bien refusable).
+#[sqlx::test(migrations = "./test-schema")]
+async fn a_la_creation_le_refus_du_miroir_passe_avant_celui_du_parent(pool: MySqlPool) {
+    let s = seed_accounting_company(&pool).await.unwrap();
+    let gain = compte(&pool, s.company_id, "6950", "Revenue", true, None).await;
+    sqlx::query(
+        "UPDATE companies SET multi_currency_enabled = TRUE, fx_gain_account_id = ? WHERE id = ?",
+    )
+    .bind(gain)
+    .bind(s.company_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let imputable = compte(&pool, s.company_id, "1177", "Asset", true, None).await;
+    let mut new = NewAccount::new(
+        s.company_id,
+        "2271",
+        "Dettes sociales",
+        AccountType::Liability,
+        None,
+    );
+    new.parent_id = Some(gain);
+    new.mirror_account_id = Some(imputable);
+    let (raison, _) = refus(accounts::create(&pool, s.admin_user_id, new.clone()).await);
+    assert_eq!(raison, MirrorReason::NotPresentationAccount);
+
+    new.mirror_account_id = None;
+    assert!(matches!(
+        accounts::create(&pool, s.admin_user_id, new).await,
+        Err(DbError::AccountIsFxDifferenceAccount { .. })
+    ));
 }
 
 // ---------------------------------------------------------------------------
@@ -545,6 +588,27 @@ async fn aucune_ecriture_ne_se_passe_sur_un_compte_miroir(pool: MySqlPool) {
     .await
     .expect_err("deux comptes refusés");
     assert_eq!(nomme(deux), "1170,1179");
+    // Modification d'une écriture (`update_in_tx`, revue P1 de la 47-1, L6) : une
+    // ligne déplacée vers le miroir est refusée au même point de passage.
+    let passee = journal_entries::create(
+        &pool,
+        s.fiscal_year_id,
+        Acteur::utilisateur(s.admin_user_id),
+        ecriture(&s, source, s.accounts["1000"]),
+    )
+    .await
+    .expect("écriture sur la source");
+    let deplacee = journal_entries::update(
+        &pool,
+        s.company_id,
+        passee.entry.id,
+        passee.entry.version,
+        Acteur::utilisateur(s.admin_user_id),
+        ecriture(&s, cible, s.accounts["1000"]),
+    )
+    .await
+    .expect_err("modification vers le miroir refusée");
+    assert_eq!(nomme(deplacee), "1179");
 
     // Le lien retiré : le flux automatique passe ; la saisie manuelle, une fois
     // le compte rendu imputable.
@@ -663,11 +727,10 @@ async fn course_ecriture_contre_pose(pool: MySqlPool) {
 
     let (pool_b, s_b) = (pool.clone(), s.clone());
     let pose = tokio::spawn(async move { poser(&pool_b, &s_b, source, cible).await });
+    // Le verrou de la cible par la pose (`lock_mirror_target_in_tx`), non la
+    // lecture de la source, qui porte aussi « FOR UPDATE » (revue P1 de la 47-1, L1).
     assert!(
-        attendre_une_requete_en_cours(&pool, &["FROM accounts", "FOR UPDATE"], || {
-            pose.is_finished()
-        })
-        .await,
+        attendre_une_requete_en_cours(&pool, &[CIBLE_DE_LA_POSE], || pose.is_finished()).await,
         "la pose doit attendre la cible"
     );
     tx.commit().await.unwrap();
@@ -694,11 +757,18 @@ async fn course_pose_contre_archivage(pool: MySqlPool) {
     let pose = tokio::spawn(async move { poser(&pool_b, &s_b, source, cible).await });
     let (pool_c, s_c) = (pool.clone(), s.clone());
     let archivage = tokio::spawn(async move { archiver(&pool_c, &s_c, cible).await });
+    // Les DEUX attendent la cible, chacune par sa propre requête (revue P1 de la
+    // 47-1, L1) : un seul témoin rendrait vrai avant que la seconde attende.
     assert!(
-        attendre_une_requete_en_cours(&pool, &["FROM accounts", "FOR UPDATE"], || {
-            pose.is_finished() && archivage.is_finished()
+        attendre_une_requete_en_cours(&pool, &[CIBLE_DE_LA_POSE], || pose.is_finished()).await,
+        "la pose doit attendre la cible"
+    );
+    assert!(
+        attendre_une_requete_en_cours(&pool, &[CIBLE_DE_L_ARCHIVAGE], || {
+            archivage.is_finished()
         })
-        .await
+        .await,
+        "l'archivage doit attendre la cible"
     );
     tient.commit().await.unwrap();
     let rp = tokio::time::timeout(ATTENTE, pose).await.unwrap().unwrap();

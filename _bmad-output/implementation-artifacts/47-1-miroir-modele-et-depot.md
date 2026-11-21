@@ -518,6 +518,9 @@ d'instantané (`course_pose_contre_ecriture`).
   échecs, 18 ignorés** (45,6 min, `e2e.log`) ; les neuf jugés un à un, tous attendus : les sept de la KF-029 (#97 :
   `mode-expert.spec.ts:26`, `:41`, `onboarding-path-b.spec.ts:65`, `:92`, `onboarding.spec.ts:57`, `:77`, `:150`) et
   `backup-restore-new-install.spec.ts:262`, `:381` (`opening-balances.spec.ts:156` est passé).
+  *(Annoté le 2026-11-22, story 47-5 — revue P1, L7 : les deux échecs de `backup-restore-new-install.spec.ts` n'étaient
+  pas « attendus par la liste » de `docs/testing.md` à cette date, mais **par récurrence sur la station**, sans rejeu
+  isolé ; ils sont depuis tracés en KF-065, #1282.)*
 - `scripts/gate-ci.sh` (copie `git archive` de `9502e117`, conteneur `kesh-mariadb-dev2`, `cargo test -j1`) : **6183
   passés, 0 échoué, 18 ignorés**, code 0 (`gate-ci.log`) ; sa cible de compilation supprimée ensuite.
 

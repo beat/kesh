@@ -1200,6 +1200,7 @@ error-account-is-mirror-postable = This account is the mirror account of { $sour
 error-account-is-mirror-account-type = This account is the mirror account of { $sources }: its type does not change while the link remains.
 error-account-is-mirror-role = This account is the mirror account of { $sources }: it receives no role while the link remains.
 error-account-is-mirror-reactivate-first = { $archived } is archived: reactivate it first, then remove its mirror account.
+error-account-is-mirror-reactivate-first-many = { $archived } are archived: reactivate them first, then remove their mirror account.
 # Story 37-3a — foreign-currency entries.
 error-multi-currency-disabled-fiscal-year = This fiscal year is single-currency: this foreign-currency operation is not possible in it.
 error-fx-multiple-currencies = An entry carries a single foreign currency (here: { $currencies }). Book a conversion between currencies through the conversion account, in two entries.

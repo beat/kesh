@@ -743,6 +743,9 @@ fn les_replis_rust_suivent_le_catalogue() {
         ("{ $format }", "{format}"),
         ("{ $fiscalYear }", "{fiscal_year_name}"),
     ];
+    // Story 47-5 — les comptes sources d'un compte miroir, et ceux qui sont archivés.
+    const SOURCES: &[(&str, &str)] = &[("{ $sources }", "{sources}")];
+    const ARCHIVEES: &[(&str, &str)] = &[("{ $archived }", "{archived}")];
     type Cles = &'static [(&'static str, usize, &'static [(&'static str, &'static str)])];
     const TABLE: [(&str, Cles); 9] = [
         // Story 31-5 (#469, C-31-5-15) — les six refus du journal d'audit.
@@ -939,6 +942,30 @@ fn les_replis_rust_suivent_le_catalogue() {
                 ("error-source-document-gone", 1, &[]),
                 ("error-data-length-or-range", 1, &[]),
                 ("error-invalid-input-generic", 2, &[]),
+                // Story 47-1 (AC-9), reprises par la 47-5 (revue P1 de la 47-1, L9) —
+                // les refus du compte miroir : sept raisons, quatre gestes, et la
+                // phrase de réactivation au singulier et au pluriel (47-5).
+                ("error-mirror-account-self", 1, &[]),
+                ("error-mirror-account-unknown", 1, &[]),
+                ("error-mirror-account-archived", 1, &[]),
+                ("error-mirror-account-account-type", 1, &[]),
+                ("error-mirror-account-equity", 1, &[]),
+                ("error-mirror-account-not-presentation", 1, &[]),
+                (
+                    "error-mirror-account-chain",
+                    1,
+                    &[("{ $number }", "{number}")],
+                ),
+                ("error-account-is-mirror-archive", 1, SOURCES),
+                ("error-account-is-mirror-postable", 1, SOURCES),
+                ("error-account-is-mirror-account-type", 1, SOURCES),
+                ("error-account-is-mirror-role", 1, SOURCES),
+                ("error-account-is-mirror-reactivate-first", 1, ARCHIVEES),
+                (
+                    "error-account-is-mirror-reactivate-first-many",
+                    1,
+                    ARCHIVEES,
+                ),
             ],
         ),
         (

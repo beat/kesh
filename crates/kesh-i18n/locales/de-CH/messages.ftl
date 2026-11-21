@@ -1200,6 +1200,7 @@ error-account-is-mirror-postable = Dieses Konto ist das Spiegelkonto von { $sour
 error-account-is-mirror-account-type = Dieses Konto ist das Spiegelkonto von { $sources }: Sein Typ ändert sich nicht, solange die Verknüpfung besteht.
 error-account-is-mirror-role = Dieses Konto ist das Spiegelkonto von { $sources }: Es erhält keine Rolle, solange die Verknüpfung besteht.
 error-account-is-mirror-reactivate-first = { $archived } ist archiviert: Reaktivieren Sie es zuerst und entfernen Sie dann sein Spiegelkonto.
+error-account-is-mirror-reactivate-first-many = { $archived } sind archiviert: Reaktivieren Sie sie zuerst und entfernen Sie dann ihr Spiegelkonto.
 # Story 37-3a — Buchungen in Fremdwährung.
 error-multi-currency-disabled-fiscal-year = Dieses Geschäftsjahr ist einwährungsbasiert: Dieser Vorgang in Fremdwährung ist darin nicht möglich.
 error-fx-multiple-currencies = Eine Buchung enthält nur eine Fremdwährung (hier: { $currencies }). Buchen Sie einen Währungswechsel über das Umrechnungskonto, in zwei Buchungen.

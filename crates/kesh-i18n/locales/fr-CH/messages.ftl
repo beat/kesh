@@ -1269,6 +1269,7 @@ error-account-is-mirror-postable = Ce compte est le compte miroir de { $sources 
 error-account-is-mirror-account-type = Ce compte est le compte miroir de { $sources } : il ne change pas de type tant que le lien demeure.
 error-account-is-mirror-role = Ce compte est le compte miroir de { $sources } : il ne reçoit pas de rôle tant que le lien demeure.
 error-account-is-mirror-reactivate-first = { $archived } est archivé : réactivez-le d’abord, puis retirez son compte miroir.
+error-account-is-mirror-reactivate-first-many = { $archived } sont archivés : réactivez-les d’abord, puis retirez leur compte miroir.
 # Story 37-3a — écritures en devise.
 error-multi-currency-disabled-fiscal-year = Cet exercice est mono-devise : cette opération en devise n’y est pas possible.
 error-fx-multiple-currencies = Une écriture ne porte qu’une devise étrangère (ici : { $currencies }). Passez une conversion entre devises par le compte de conversion, en deux écritures.
