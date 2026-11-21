@@ -179,10 +179,28 @@ pub fn transaction_of_row(
         }
         _ => None,
     };
-    let details = [
+    // La tête (description, type de détail, numéro) est rognée avant le segment
+    // de conversion : une longue description ne doit pas faire perdre le
+    // montant de la conversion (revue P2, L1). La note, en queue, reste rognée
+    // la première par la troncature finale.
+    let head = [
         non_empty(&row.description).map(str::to_string),
         Some(row.details_type.trim().to_string()).filter(|s| !s.is_empty()),
         other_account.map(str::to_string),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(DETAILS_SEPARATOR);
+    let head = match &exchange {
+        Some(segment) => {
+            let reserved = DETAILS_SEPARATOR.chars().count() + segment.chars().count();
+            truncate_chars(&head, DETAILS_MAX_CHARS.saturating_sub(reserved))
+        }
+        None => head,
+    };
+    let details = [
+        Some(head).filter(|s| !s.is_empty()),
         exchange,
         non_empty(&row.note).map(str::to_string),
     ]
@@ -712,6 +730,22 @@ mod tests {
         let t = transaction_of_row(&r, 1, 1);
         assert_eq!(t.details.chars().count(), DETAILS_MAX_CHARS);
         assert_eq!(t.counterparty_name.unwrap().chars().count(), NAME_MAX_CHARS);
+    }
+
+    /// Revue P2, L1 — une très longue description ne rogne pas le segment de
+    /// conversion (montant et cours) ; la note, en queue, est rognée la première.
+    #[test]
+    fn une_longue_description_ne_rogne_pas_la_conversion() {
+        let mut r = row(EUR, "CONVERSION_ORDER-90000011");
+        r.description = Some("d".repeat(800));
+        r.note = Some("n".repeat(300));
+        let t = transaction_of_row(&r, 1, 1);
+        assert!(t.details.chars().count() <= DETAILS_MAX_CHARS);
+        assert!(
+            t.details.contains(" · EUR→USD 109.00 au cours 1.09"),
+            "{}",
+            t.details
+        );
     }
 
     #[test]
