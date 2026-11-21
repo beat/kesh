@@ -108,6 +108,53 @@ fn somme(lignes: &[AccountBalance]) -> Decimal {
     lignes.iter().map(|l| l.balance).sum()
 }
 
+/// L'invariant du bilan que la présentation aurait rompu — défaut de code, que
+/// `present_balance_sheet` trace avant de rendre le bilan brut.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DefautBilan {
+    /// L'écart actif − passif diffère du brut (une source retirée d'un côté n'a
+    /// pas été rendue, du même montant, de l'autre).
+    Ecart,
+    /// L'écart est conservé, mais l'équation présentée ne dit pas la même chose que
+    /// celle du brut.
+    Equation,
+}
+
+impl DefautBilan {
+    /// La phrase du journal, propre à l'invariant rompu.
+    fn message(self) -> &'static str {
+        match self {
+            Self::Ecart => {
+                "présentation miroir : l'écart actif − passif diffère du brut, bilan brut rendu"
+            }
+            Self::Equation => {
+                "présentation miroir : l'équation du bilan diffère du brut, bilan brut rendu"
+            }
+        }
+    }
+}
+
+/// Contrôle les totaux présentés contre le bilan brut : rend l'équation présentée
+/// et, s'il y en a un, l'invariant rompu. L'écart actif − passif est invariant par
+/// construction (une source −x retirée d'un côté, +x ajoutée de l'autre), même
+/// quand l'équation brute est fausse ; il se contrôle le premier.
+fn controler_bilan(
+    raw: &BalanceSheet,
+    total_assets: Decimal,
+    total_liabilities: Decimal,
+) -> (bool, Option<DefautBilan>) {
+    let equation_holds = total_assets
+        == total_liabilities + raw.total_equity + raw.retained_earnings + raw.equity_result;
+    let defaut = if total_assets - total_liabilities != raw.total_assets - raw.total_liabilities {
+        Some(DefautBilan::Ecart)
+    } else if equation_holds != raw.equation_holds {
+        Some(DefautBilan::Equation)
+    } else {
+        None
+    };
+    (equation_holds, defaut)
+}
+
 /// Le bilan présenté : les soldes de sens inverse de l'actif et du passif
 /// paraissent sous leur miroir. Rendu **brut** si aucun lien ne s'applique, ou
 /// si les invariants (équation, résultat) ne tenaient plus — défaut de code,
@@ -126,16 +173,15 @@ pub fn present_balance_sheet(raw: BalanceSheet, links: &[MirrorLink]) -> Balance
     };
     let total_assets = somme(&assets);
     let total_liabilities = somme(&liabilities);
-    let equation_holds = total_assets
-        == total_liabilities + raw.total_equity + raw.retained_earnings + raw.equity_result;
-    // L'écart actif − passif est invariant par construction, même quand l'équation brute est fausse.
-    let ecart_conserve =
-        total_assets - total_liabilities == raw.total_assets - raw.total_liabilities;
-    if equation_holds != raw.equation_holds || !ecart_conserve {
+    let (equation_holds, defaut) = controler_bilan(&raw, total_assets, total_liabilities);
+    if let Some(defaut) = defaut {
         tracing::error!(
             equation_brute = raw.equation_holds,
             equation_presentee = equation_holds,
-            "présentation miroir : l'équation du bilan diffère du brut, bilan brut rendu"
+            ecart_brut = %(raw.total_assets - raw.total_liabilities),
+            ecart_presente = %(total_assets - total_liabilities),
+            "{}",
+            defaut.message()
         );
         return raw;
     }
@@ -415,6 +461,77 @@ mod tests {
             .map(|s| s.account_number.as_str())
             .collect();
         assert_eq!(nums, ["1020", "1021"]);
+    }
+
+    /// Le contrôle des totaux présentés (`controler_bilan`) : l'écart rompu se
+    /// signale le premier et sous son nom ; l'équation, quand seul son verdict
+    /// diffère ; rien quand tout tient. Les deux défauts ont chacun leur phrase.
+    #[test]
+    fn controle_du_bilan_nomme_l_invariant_rompu() {
+        // Brut : actif 1000, passif 500, résultat 500, équation vraie.
+        let raw = bilan(
+            vec![ligne(1, "1100", Asset, dec!(1000))],
+            vec![ligne(2, "2000", Liability, dec!(500))],
+        );
+        // Présenté juste : +300 des deux côtés.
+        assert_eq!(controler_bilan(&raw, dec!(1300), dec!(800)), (true, None));
+        // Écart rompu : 300 ajoutés à l'actif seulement.
+        assert_eq!(
+            controler_bilan(&raw, dec!(1300), dec!(500)),
+            (false, Some(DefautBilan::Ecart))
+        );
+        // Écart conservé, mais l'équation brute déclarée fausse ne l'est plus en présenté.
+        let mut faux = raw.clone();
+        faux.equation_holds = false;
+        assert_eq!(
+            controler_bilan(&faux, dec!(1300), dec!(800)),
+            (true, Some(DefautBilan::Equation))
+        );
+        // Équation brute réellement fausse : conservée fausse, sans défaut.
+        let mut desequilibre = raw.clone();
+        desequilibre.equity_result += dec!(1);
+        desequilibre.equation_holds = false;
+        assert_eq!(
+            controler_bilan(&desequilibre, dec!(1300), dec!(800)),
+            (false, None)
+        );
+        assert!(
+            DefautBilan::Ecart
+                .message()
+                .contains("l'écart actif − passif")
+        );
+        assert!(
+            DefautBilan::Equation
+                .message()
+                .contains("l'équation du bilan")
+        );
+    }
+
+    /// Un lien vers un miroir **du même type** que sa source (état que l'API refuse,
+    /// forgé ici) reste sans effet : la source garde sa place, aucun reclassement.
+    #[test]
+    fn miroir_du_meme_type_que_la_source_sans_effet() {
+        let raw = bilan(
+            vec![
+                ligne(1, "1020", Asset, dec!(-300)),
+                ligne(2, "1100", Asset, dec!(1000)),
+            ],
+            vec![],
+        );
+        let links = [lien(1, 9, "1020.1", Asset)];
+        assert!(
+            reclasser(
+                (Asset, raw.assets.clone()),
+                (Liability, raw.liabilities.clone()),
+                &links
+            )
+            .is_none()
+        );
+        let p = present_balance_sheet(raw.clone(), &links);
+        assert_eq!(
+            serde_json::to_string(&p).unwrap(),
+            serde_json::to_string(&raw).unwrap()
+        );
     }
 
     /// Générateur déterministe (graine fixe), sans dépendance.
