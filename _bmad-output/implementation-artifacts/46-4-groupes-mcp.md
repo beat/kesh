@@ -313,3 +313,17 @@ Journaux hors dépôt, `kesh-gate-logs/s46-4/` : `t0-capture.log` (littéral de 
   et `docs/api-external.md` (`9833c5a8`) ; variable `env` renommée pour la garde des lectures d'environnement
   (`9cf82948`). Tests : 5 d'intégration et 4 unitaires ajoutés ; 9 sondes par mutation sur 9 rouges. Gates complets
   verts au dernier commit de code (détail au Dev Agent Record). `review`.
+- 2026-11-22 — **remédiation de la revue de code P1 (Sonnet 5.5 ; 0 C, 0 H, 1 M, 5 L), commit `e94b391a`.** M1 : test
+  `groupes_lignes_fideles_au_plat` (`mcp_outils_e2e.rs`) — chaque ligne de compte groupée (`all`) comparée à la ligne plate
+  de même `compteId` (`numero`, `nom`, `solde`, `devise`, `soldeDevise`), dont un compte en USD (100.00), et `ouvert` vrai
+  pour un groupe ouvert à la main (bilan, niveau 1) ; **sondes par mutation** dans une copie hors dépôt
+  (`kesh-gate-logs/s46-4/mutations-p1.sh`, `mutations-p1.log`) : sans mutation 1 passé ; `solde` mis à zéro dans
+  `lignes_groupees` : test rouge ; `devise: None` : test rouge. L1 : `minimum` retiré des éléments de `open` et `closed` du
+  schéma (indicatif ; le code et l'API REST ignorent un identifiant inconnu, nul ou négatif). L2 : « une trentaine de
+  caractères » écrit à côté du seuil (doc de module) ; la description d'outil est inchangée. L3 : commentaire du test et
+  doc de module disent « hors comptes à rôle » (le plan PME mesuré ne les mouvemente pas). L4 : `1e1`, `-0`, `1.0`,
+  `9223372036854775808`, `18446744073709551616` ajoutés aux refus de `lecture_de_detail_level`. L5 : doc de module
+  réécrite en deux paragraphes (plan PME, fixture synthétique). **Gates** : fmt, clippy workspace `-D warnings`, nextest
+  `-p kesh-api` sur `mcp_*`, `textes_coherents` et les tests de lib `mcp::` : 292 passés, 0 échoué (`p1-nextest.log`).
+  **Non rejoués** : backend complet et `gate-ci.sh` — le seul changement de production est une chaîne de schéma indicative
+  (non appliquée à l'exécution) et de la documentation ; à rejouer au push. `review`.
