@@ -25,8 +25,8 @@ use kesh_db::entities::address::StructuredAddress;
 use kesh_db::entities::audit_log::Acteur;
 use kesh_db::entities::journal_entry::Journal;
 use kesh_db::entities::{
-    Language, NewAccount, NewCompany, NewFiscalYear, NewJournalEntry, NewJournalEntryLine, NewUser,
-    OrgType, Role,
+    AccountUpdate, CurrencyChange, Language, MirrorChange, NewAccount, NewCompany, NewFiscalYear,
+    NewJournalEntry, NewJournalEntryLine, NewUser, OrgType, Role,
 };
 use kesh_db::repositories::{accounts, companies, fiscal_years, journal_entries, users};
 use rust_decimal::Decimal;
@@ -2043,5 +2043,383 @@ async fn a_closed_closing_account_can_be_reopened_by_its_owner(pool: MySqlPool) 
         body["postable"], true,
         "le compte doit etre effectivement rouvert — c'est ce qui rend l'ecrasement \
          de D6 reparable, et donc la decision defendable"
+    );
+}
+
+// ============================================================
+// Story 47-3, AC-10 et AC-11 — l'exemple chiffré des comptes miroirs
+// ============================================================
+
+// exemple-presentation:debut
+/// Les montants de l'exemple chiffré du fichier d'epic (sans signe ni apostrophe),
+/// que le manuel reprend : la garde G26 de la 47-4 les lit entre ces marqueurs.
+const EXEMPLE_PRESENTATION: [&str; 14] = [
+    "13700.00", "11700.00", "3800.00", "1800.00", "9900.00", "8200.00", "1200.00", "800.00",
+    "2000.00", "1750.00", "300.00", "250.00", "50.00", "1700.00",
+];
+// exemple-presentation:fin
+
+async fn get_json(app: &TestApp, jwt: &str, path: &str, fy_id: i64) -> Value {
+    let resp = app
+        .client
+        .get(app.url(&format!("/api/v1/reports/{path}?fiscalYearId={fy_id}")))
+        .bearer_auth(jwt)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "{path}");
+    resp.json().await.unwrap()
+}
+
+fn dec_of(v: &Value) -> Decimal {
+    v.as_str()
+        .unwrap_or_else(|| panic!("montant absent : {v}"))
+        .parse()
+        .unwrap()
+}
+
+/// `(numéro, solde)` des lignes d'une section, dans l'ordre rendu.
+fn lignes_de(section: &Value) -> Vec<(String, Decimal)> {
+    section
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| {
+            (
+                l["accountNumber"].as_str().unwrap().to_string(),
+                dec_of(&l["balance"]),
+            )
+        })
+        .collect()
+}
+
+/// Le solde de la ligne `numero` d'un côté de la balance.
+fn solde_de(rows: &Value, numero: &str) -> Decimal {
+    let r = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["accountNumber"] == numero)
+        .unwrap_or_else(|| panic!("{numero} absent de la balance"));
+    dec_of(&r["closingBalance"])
+}
+
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn mirror_example_is_replayed_by_the_reports(pool: MySqlPool) {
+    let company_id = create_company(&pool, "co_miroir").await;
+    let user_id = create_user(&pool, "miroir_user", Role::Comptable, company_id).await;
+    let fy_id = create_fy(
+        &pool,
+        user_id,
+        company_id,
+        "FY2026",
+        NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+        NaiveDate::from_ymd_opt(2027, 6, 30).unwrap(),
+    )
+    .await;
+    // Le plan PME livré ; les comptes de l'exemple se créent, sans compte parent.
+    let chart = kesh_core::chart_of_accounts::load_chart("pme").unwrap();
+    let created = accounts::bulk_create_from_chart(&pool, company_id, &chart, "fr")
+        .await
+        .unwrap();
+    let id_of = |n: &str| created.iter().find(|a| a.number == n).unwrap().id;
+    let nouveau = |number: &str, name: &str, t: AccountType, postable: bool, mirror| {
+        let pool = pool.clone();
+        let (number, name) = (number.to_string(), name.to_string());
+        async move {
+            accounts::create(
+                &pool,
+                user_id,
+                NewAccount {
+                    company_id,
+                    number,
+                    name,
+                    account_type: t,
+                    parent_id: None,
+                    role: None,
+                    postable,
+                    currency: None,
+                    own_fx_accounts: None,
+                    mirror_account_id: mirror,
+                },
+            )
+            .await
+            .unwrap()
+            .id
+        }
+    };
+    let m6900 = nouveau(
+        "6900.1",
+        "Pertes de change",
+        AccountType::Expense,
+        false,
+        None,
+    )
+    .await;
+    let m1040 = nouveau(
+        "1040.1",
+        "Créances AVS/AI/APG",
+        AccountType::Asset,
+        false,
+        None,
+    )
+    .await;
+    let m2100 = nouveau(
+        "2100.1",
+        "Découvert bancaire",
+        AccountType::Liability,
+        false,
+        None,
+    )
+    .await;
+    let a6950 = nouveau(
+        "6950.1",
+        "Gains de change",
+        AccountType::Revenue,
+        true,
+        Some(m6900),
+    )
+    .await;
+    for (source, mirror) in [(id_of("1020"), m2100), (id_of("2270"), m1040)] {
+        let a = accounts::find_by_id(&pool, source).await.unwrap().unwrap();
+        let changes = AccountUpdate {
+            name: a.name.clone(),
+            account_type: a.account_type,
+            role: a.role,
+            postable: a.postable,
+            currency: CurrencyChange::Unchanged,
+            own_fx_accounts: Default::default(),
+            mirror: MirrorChange::Set(mirror),
+            parent: Default::default(),
+        };
+        accounts::update(&pool, source, a.version, user_id, changes, true)
+            .await
+            .unwrap();
+    }
+
+    // Écritures, chacune contre 2800 « Capital social ».
+    let capital = id_of("2800");
+    let date = NaiveDate::from_ymd_opt(2026, 9, 15).unwrap();
+    // (compte, au débit ?, montant)
+    let ecritures: [(i64, bool, Decimal); 8] = [
+        (id_of("1000"), true, dec!(500.00)),
+        (id_of("1010"), true, dec!(12000.00)),
+        (id_of("1020"), false, dec!(800.00)),
+        (id_of("2000"), false, dec!(3000.00)),
+        (id_of("2270"), true, dec!(1200.00)),
+        (id_of("3200"), false, dec!(2000.00)),
+        (id_of("6900"), true, dec!(50.00)),
+        (a6950, true, dec!(250.00)),
+    ];
+    for (compte, au_debit, montant) in ecritures {
+        let (d, c) = if au_debit {
+            (compte, capital)
+        } else {
+            (capital, compte)
+        };
+        post_entry(
+            &pool,
+            user_id,
+            fy_id,
+            company_id,
+            date,
+            Journal::OD,
+            "Exemple",
+            d,
+            c,
+            montant,
+        )
+        .await;
+    }
+
+    let jwt = forge_jwt(user_id, role_str(Role::Comptable), company_id);
+    let app = spawn_app(pool.clone()).await;
+    let ecritures_avant: (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM journal_entries), (SELECT COUNT(*) FROM journal_entry_lines)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // AC-11 — balance et grand livre lus AVANT les rapports présentés, relus après.
+    let grand_livre = |app: &TestApp, jwt: &str| {
+        let url = app.url("/api/v1/reports/general-ledger?from=2026-07-01&to=2027-06-30");
+        let (client, jwt) = (app.client.clone(), jwt.to_string());
+        async move {
+            let r = client.get(url).bearer_auth(jwt).send().await.unwrap();
+            assert_eq!(r.status(), 200, "general-ledger");
+            r.json::<Value>().await.unwrap()
+        }
+    };
+    let balance_avant = get_json(&app, &jwt, "trial-balance", fy_id).await;
+    let livre_avant = grand_livre(&app, &jwt).await;
+
+    let bilan = get_json(&app, &jwt, "balance-sheet", fy_id).await;
+    let resultat = get_json(&app, &jwt, "income-statement", fy_id).await;
+    let balance = get_json(&app, &jwt, "trial-balance", fy_id).await;
+
+    // Balance : les soldes réels, inchangés (côté naturel du compte).
+    assert_eq!(solde_de(&balance["rows"], "1020"), dec!(-800.00));
+    assert_eq!(solde_de(&balance["rows"], "2270"), dec!(-1200.00));
+    assert_eq!(solde_de(&balance["rows"], "6950.1"), dec!(-250.00));
+    assert!(
+        balance["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r.get("mirrorOf").is_none()),
+        "la balance ne porte aucun champ de miroir"
+    );
+
+    // Bilan présenté.
+    let actif = lignes_de(&bilan["assets"]);
+    let passif = lignes_de(&bilan["liabilities"]);
+    assert_eq!(
+        actif,
+        [
+            ("1000".to_string(), dec!(500.00)),
+            ("1010".to_string(), dec!(12000.00)),
+            ("1040.1".to_string(), dec!(1200.00)),
+        ]
+    );
+    assert_eq!(
+        passif,
+        [
+            ("2000".to_string(), dec!(3000.00)),
+            ("2100.1".to_string(), dec!(800.00))
+        ]
+    );
+    assert_eq!(dec_of(&bilan["totalAssets"]), dec!(13700.00));
+    assert_eq!(dec_of(&bilan["totalLiabilities"]), dec!(3800.00));
+    assert_eq!(dec_of(&bilan["totalEquity"]), dec!(8200.00));
+    assert_eq!(dec_of(&bilan["equityResult"]), dec!(1700.00));
+    assert_eq!(
+        dec_of(&bilan["totalEquity"]) + dec_of(&bilan["equityResult"]),
+        dec!(9900.00)
+    );
+    assert_eq!(bilan["equationHolds"], true);
+    let miroir_actif = &bilan["assets"][2];
+    assert_eq!(miroir_actif["mirrorOf"][0]["accountNumber"], "2270");
+    assert_eq!(
+        dec_of(&miroir_actif["mirrorOf"][0]["balance"]),
+        dec!(-1200.00)
+    );
+    assert!(
+        miroir_actif.get("currency").is_none()
+            && miroir_actif.get("role").is_none_or(Value::is_null)
+    );
+    let miroir_passif = &bilan["liabilities"][1];
+    assert_eq!(miroir_passif["mirrorOf"][0]["accountNumber"], "1020");
+    assert_eq!(
+        dec_of(&miroir_passif["mirrorOf"][0]["balance"]),
+        dec!(-800.00)
+    );
+    assert!(
+        bilan["assets"][0].get("mirrorOf").is_none(),
+        "omis hors miroir"
+    );
+
+    // Les totaux bruts, recomposés depuis la balance (soldes réels).
+    let brut_actif: Decimal = balance["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["accountType"] == "Asset")
+        .map(|r| dec_of(&r["closingBalance"]))
+        .sum();
+    assert_eq!(brut_actif, dec!(11700.00));
+    let brut_passif: Decimal = ["2000", "2270"]
+        .iter()
+        .map(|n| solde_de(&balance["rows"], n))
+        .sum();
+    assert_eq!(brut_passif, dec!(1800.00));
+
+    // Compte de résultat présenté.
+    assert_eq!(dec_of(&resultat["totalRevenues"]), dec!(2000.00));
+    assert_eq!(dec_of(&resultat["totalExpenses"]), dec!(300.00));
+    assert_eq!(dec_of(&resultat["netResult"]), dec!(1700.00));
+    assert_eq!(
+        lignes_de(&resultat["revenues"]),
+        [("3200".to_string(), dec!(2000.00))]
+    );
+    assert_eq!(
+        lignes_de(&resultat["expenses"]),
+        [
+            ("6900".to_string(), dec!(50.00)),
+            ("6900.1".to_string(), dec!(250.00))
+        ]
+    );
+    assert_eq!(
+        resultat["expenses"][1]["mirrorOf"][0]["accountNumber"],
+        "6950.1"
+    );
+    assert_eq!(
+        dec_of(&resultat["expenses"][1]["mirrorOf"][0]["balance"]),
+        dec!(-250.00)
+    );
+    // Produits et charges bruts : 2000 − 250 et 50.
+    let brut_produits = dec_of(&resultat["totalRevenues"]) + solde_de(&balance["rows"], "6950.1");
+    assert_eq!(brut_produits, dec!(1750.00));
+    assert_eq!(dec_of(&resultat["expenses"][0]["balance"]), dec!(50.00));
+
+    // Les quatorze montants de l'exemple, chacun rendu par un des calculs ci-dessus.
+    let mut tous: Vec<Decimal> = vec![
+        dec_of(&bilan["totalAssets"]),
+        brut_actif,
+        dec_of(&bilan["totalLiabilities"]),
+        brut_passif,
+        dec_of(&bilan["totalEquity"]) + dec_of(&bilan["equityResult"]),
+        dec_of(&bilan["totalEquity"]),
+        actif[2].1,
+        passif[1].1,
+        dec_of(&resultat["totalRevenues"]),
+        brut_produits,
+        dec_of(&resultat["totalExpenses"]),
+        solde_de(&balance["rows"], "6950.1").abs(),
+        dec_of(&resultat["expenses"][0]["balance"]),
+        dec_of(&bilan["equityResult"]),
+    ];
+    tous.sort();
+    let mut attendus: Vec<Decimal> = EXEMPLE_PRESENTATION
+        .iter()
+        .map(|m| m.parse().unwrap())
+        .collect();
+    attendus.sort();
+    assert_eq!(tous, attendus, "les quatorze montants de l'exemple");
+
+    // AC-11 — générer les rapports n'a rien écrit.
+    let ecritures_apres: (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM journal_entries), (SELECT COUNT(*) FROM journal_entry_lines)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ecritures_avant, ecritures_apres);
+    assert_eq!(balance_avant, balance, "balance identique avant et après");
+    let balance2 = get_json(&app, &jwt, "trial-balance", fy_id).await;
+    let livre_apres = grand_livre(&app, &jwt).await;
+    assert_eq!(balance_avant, balance2, "balance identique avant et après");
+    assert_eq!(
+        livre_avant, livre_apres,
+        "grand livre identique avant et après"
+    );
+
+    // Sonde négative : une écriture modifiée (équilibrée) entre deux lectures doit se voir aux deux rapports.
+    sqlx::query(
+        "UPDATE journal_entry_lines SET debit = IF(debit > 0, debit + 1, debit), credit = IF(credit > 0, credit + 1, credit) \
+         WHERE entry_id = (SELECT MIN(id) FROM journal_entries)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_ne!(
+        balance_avant,
+        get_json(&app, &jwt, "trial-balance", fy_id).await,
+        "la sonde doit voir la ligne modifiée (balance)"
+    );
+    assert_ne!(
+        livre_avant,
+        grand_livre(&app, &jwt).await,
+        "la sonde doit voir la ligne modifiée (grand livre)"
     );
 }

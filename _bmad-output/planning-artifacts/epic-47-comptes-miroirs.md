@@ -130,6 +130,17 @@ décision rend caduques portent la mention « remplacé par la décision du 2026
 *Stories*), **remises à `drafted`** et à revalider en boucle (`CLAUDE.md` § *Review Iteration Rule*) ; la validation du
 2026-11-19 (§ *Validation des fiches*) ne vaut plus pour elles.
 
+### Décision du responsable de l'epic du 2026-11-21 (point e) : miroir sous un groupe d'un autre type
+
+Un compte miroir rangé sous un groupe d'**un autre type** que le sien donne un **avertissement non bloquant**, non un
+refus : cet état est **admis**. Effet attendu à la fusion avec l'Epic 46 : la ligne du miroir, rangée dans la section du
+type du miroir, remonte sous un groupe de l'autre section ; ce groupe a alors des descendants dans deux sections et est
+dissous avec ses ancêtres (46-1 AC-4) ; les totaux restent justes (NFR-46-2, recalculés sur les sections présentées).
+**Qui porte l'avertissement : personne à ce jour** — la 47-4 (contrôle K10) est `superseded` ; à rouvrir en issue
+`enhancement` (« on trace toujours »), porteur à désigner par le Project Lead. Un cas « miroir sous un groupe d'un autre
+type » est à ajouter au rejeu de l'exemple par niveaux, à la fusion.
+
+
 ## Kickoff du 2026-11-18 et orientation du 2026-11-19 (historique)
 
 **Kickoff : 2026-11-18** (esquisse) ; **orientation approuvée par Guy le 2026-11-19** (§ *Revue de Guy*) **et par Beat le même jour, telle quelle** (§ *Revue de Beat*) : **kickoff accompli le 2026-11-19**. Numéro réservé à Beat (contributeur) par Guy ; responsable : Beat.

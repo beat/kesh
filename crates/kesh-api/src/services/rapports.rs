@@ -24,6 +24,8 @@ use kesh_db::entities::AUDIT_ENTITY_ID_NONE;
 use kesh_db::entities::Role;
 use kesh_db::entities::audit_log::NewAuditLogEntry;
 use kesh_db::entities::journal_entry::Journal;
+use kesh_db::repositories::accounts;
+use kesh_report::presentation::{present_balance_sheet, present_income_statement};
 use kesh_report::project_report::{ProjectPeriodMode, resolve_scope};
 use kesh_report::{
     AgedReceivables, BalanceSheet, GeneralLedger, HomepageSummary, IncomeStatement, JournalReport,
@@ -616,7 +618,11 @@ pub async fn bilan<U: Usage>(
     acces.exiger(EXIGENCES_BILAN.pour(&usage))?;
     validate_fiscal_year_id(demande.fiscal_year_id)?;
     let period = resoudre_periode(acces, lecture, &demande).await?;
-    let contenu = generate_balance_sheet(lecture.pool(), acces.company_id(), &period).await?;
+    let brut = generate_balance_sheet(lecture.pool(), acces.company_id(), &period).await?;
+    // Toujours présenté (Story 47-3, R6) ; liens lus sans instantané commun avec
+    // les soldes : un lien modifié entre les deux ne change qu'une présentation.
+    let liens = accounts::mirror_links(lecture.pool(), acces.company_id()).await?;
+    let contenu = present_balance_sheet(brut, &liens);
     let details = details_periode("balance-sheet", &demande, &period, None);
     Ok(Rapport::nouveau(contenu, details, acces, usage))
 }
@@ -631,7 +637,9 @@ pub async fn compte_de_resultat<U: Usage>(
     acces.exiger(EXIGENCES_COMPTE_DE_RESULTAT.pour(&usage))?;
     validate_fiscal_year_id(demande.fiscal_year_id)?;
     let period = resoudre_periode(acces, lecture, &demande).await?;
-    let contenu = generate_income_statement(lecture.pool(), acces.company_id(), &period).await?;
+    let brut = generate_income_statement(lecture.pool(), acces.company_id(), &period).await?;
+    let liens = accounts::mirror_links(lecture.pool(), acces.company_id()).await?;
+    let contenu = present_income_statement(brut, &liens);
     let details = details_periode("income-statement", &demande, &period, None);
     Ok(Rapport::nouveau(contenu, details, acces, usage))
 }

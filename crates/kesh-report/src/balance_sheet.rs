@@ -195,6 +195,24 @@ pub struct AccountBalance {
     /// principale.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub balance_currency: Option<Decimal>,
+    /// Les comptes dont le solde de sens inverse paraît sur cette ligne, quand
+    /// elle est celle d'un **compte miroir** (Story 47-3, R7) ; vide — et omis du
+    /// JSON — partout ailleurs. Posé par [`crate::presentation`], jamais par SQL.
+    #[sqlx(skip)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub mirror_of: Vec<MirrorSource>,
+}
+
+/// Un compte dont le solde de sens inverse a été présenté sous son miroir
+/// (Story 47-3, R7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MirrorSource {
+    pub account_id: i64,
+    pub account_number: String,
+    pub account_name: String,
+    /// Solde **brut** de la source, signé dans sa nature (donc négatif).
+    pub balance: Decimal,
 }
 
 /// Expressions SQL du solde signé d'un type de compte, en devise principale et
@@ -448,6 +466,7 @@ mod tests {
             role: Some(role),
             currency: None,
             balance_currency: None,
+            mirror_of: Vec::new(),
         }
     }
 

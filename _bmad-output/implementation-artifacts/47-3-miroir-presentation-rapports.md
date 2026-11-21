@@ -1,6 +1,6 @@
 # Story 47-3 : compte miroir — présentation au bilan et au compte de résultat
 
-Status: ready-for-dev
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R5 à R8 ; D4, D5, D7, D8 ; Q2, Q4, Q5, Q7, Q11 ; FR-47-3, FR-47-4 ; NFR-47-1, NFR-47-2, NFR-47-4. **Refonte du
@@ -107,13 +107,13 @@ d'intégration de `kesh-api`. Aucun écran (47-4), aucun rendu PDF ou CSV propre
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** : reprise de `main` ; si l'Epic 46 est fusionnée, appliquer d'emblée le recâblage (§ ci-dessous).
-- [ ] **T1 — types** (AC 3, 12) : `MirrorSource`, champ `mirror_of`, littéraux.
-- [ ] **T2 — fonction** (AC 1, 2, 4, 5, 6) : `presentation.rs`, tests unitaires et de propriété maison.
-- [ ] **T3 — service** (AC 7) et **MCP** (AC 8).
-- [ ] **T4 — tests d'intégration** (AC 9, 10, 11) : `reports_e2e.rs`, `homepage_summary_e2e.rs`, `mcp_outils_e2e.rs`
+- [x] **T0** : reprise de `main` ; si l'Epic 46 est fusionnée, appliquer d'emblée le recâblage (§ ci-dessous).
+- [x] **T1 — types** (AC 3, 12) : `MirrorSource`, champ `mirror_of`, littéraux.
+- [x] **T2 — fonction** (AC 1, 2, 4, 5, 6) : `presentation.rs`, tests unitaires et de propriété maison.
+- [x] **T3 — service** (AC 7) et **MCP** (AC 8).
+- [~] **T4 — tests d'intégration** (AC 9, 10, 11) : `reports_e2e.rs`, `homepage_summary_e2e.rs`, `mcp_outils_e2e.rs`
   (le bilan MCP de l'exemple montre 1040.1).
-- [ ] **T5 — documentation** (AC 13).
+- [x] **T5 — documentation** (AC 13).
 - [ ] **T6 — gate complet**, E2E complet au dernier commit de code.
 
 ## Dev Notes
@@ -195,6 +195,13 @@ restent à `GET /reports/trial-balance`.
 
 ## Change Log
 
+- 2026-11-21 — **remédiation de la revue de code P1** (Opus 5.5 : 0 CRITICAL / 0 HIGH / 3 MEDIUM / 6 LOW ; Sonnet 5.5
+  remédie) : M-1 propriété affirmée sur la sortie de `reclasser` et sur l'application de la présentation (mutation
+  `-=` → `+=` rejouée hors dépôt : propriété rouge, `mut-m1.log`) ; M-2 balance et grand livre lus avant les rapports,
+  relus après, sonde négative (écriture équilibrée modifiée) ; M-3 `gate-ci` rejoué jusqu'au bout (6222 passés) et portée
+  des gates corrigée ; L-1 repli aussi sur l'écart actif − passif (seule ligne de production) ; L-2 test des trois
+  branches ; L-3 exemple JSON à quatre décimales et dit « extrait » ; L-4, L-5, L-6 au Dev Agent Record et au fichier
+  d'epic. Passe ciblée P2 : `s47-3/revue-p2-prompt.md`.
 - 2026-11-19 — retouche de la validation P3 des fiches 47-2 et 47-4 (Sonnet 5.5) : AC-10, les sous-comptes de l'exemple
   se créent **sans parent** (propagation de la 47-2 P2 M1 ; signalé par la P2 de la 47-4). Aucune autre modification.
 - 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : fiche renommée de `47-2a-presentation-fonction-api-mcp` ;
@@ -273,8 +280,83 @@ restent à `GET /reports/trial-balance`.
 
 ### Agent Model Used
 
-### Debug Log References
+Sonnet 5.5.
 
 ### Completion Notes List
 
+**Fait (commits `213c66b7`, `4797ba9c` sur `story/47-3`).**
+- `crates/kesh-report/src/presentation.rs` (neuf) : `present_balance_sheet`, `present_income_statement`, cœur commun
+  `reclasser` (R5 ; sens inverse = `balance < 0` en CHF ; plusieurs sources ; ligne brute forgée du miroir additionnée ;
+  ligne nulle omise ; tri par numéro ; `role`/`currency`/`balance_currency` à `None`). Chemin court : sans lien, ou sans
+  source de sens inverse, le rapport brut est rendu tel quel. Repli sur le brut avec `tracing::error!` si l'équation
+  (`equation_holds`) ou le résultat net recalculés diffèrent. `equity` et lignes calculées jamais lues. Aucun `{:.2}`,
+  aucune fonction d'arrondi ajoutée.
+- `AccountBalance.mirror_of: Vec<MirrorSource>` (`#[sqlx(skip)]`, omis du JSON si vide) ; littéraux des tests de
+  `pdf.rs`, `csv.rs`, `balance_sheet.rs` et de `benches/export.rs` complétés (`Vec::new()`).
+- `services/rapports.rs::bilan` et `::compte_de_resultat` : lecture de `accounts::mirror_links` puis présentation,
+  toujours ; aucune route, paramètre ni trace d'audit neufs. Générateurs inchangés (l'accueil et `equity_result` du bilan
+  restent bruts).
+- MCP : phrase ajoutée aux descriptions de `kesh_bilan` et `kesh_compte_de_resultat`.
+- Docs : `docs/api-external.md` (paragraphe « Les comptes miroirs au bilan et au compte de résultat », changement de
+  contrat, phrase de l'accueil) ; `docs/manual/fr/admin-manual.tex` (tableau MCP) ; PDF non commités.
+- Tests : 7 tests de `presentation::tests` dont la propriété maison (500 tours, graine fixe : équation, résultat net,
+  fonds propres, totaux recomposés, chemin court octet pour octet) ; `reports_e2e::mirror_example_is_replayed_by_the_reports`
+  (exemple chiffré, quatorze montants entre les marqueurs `// exemple-presentation:debut/fin`, balance inchangée, aucune
+  écriture) ; `homepage_summary_e2e::mirror_leaves_the_homepage_on_real_balances`.
+
+**Écarts et réserves honnêtes.**
+- **Aucun test MCP d'intégration** du bilan présenté (T4 partielle) : le MCP passe par le même service, couvert en HTTP ;
+  seules les descriptions changent (contrat MCP à rejouer).
+- Le test de l'exemple monte la société avec `OrgType::Independant` (helper existant) et charge le plan `pme` par
+  `load_chart("pme")` : le plan est celui de l'exemple, le type d'organisation non.
+- **Sondes négatives par mutation, exécutées** : (1) accueil présenté (`homepage_summary`) : rouge sur
+  `homepage_summary_e2e::mirror_leaves_the_homepage_on_real_balances` (`kesh-gate-logs/s47-3/mut-accueil.log`) ;
+  (2) présentation sans retri : rouge sur `presentation::tests::banque_a_decouvert_passe_au_passif`
+  (`mut-retri.log`).
+- **Gates rejoués sur la cible propre** `/home/beat/claude/kesh-targets/kesh-wt47s3`, au commit `50a8c906` :
+  backend (nextest, base `kesh_s473`) **6202 passés, 14 ignorés** ; E2E complet **480 passés, 10 échecs attendus**
+  (les sept de la KF-029 #97, KF-065 #1282 ×2, KF-067 #1284) ; frontend **4658 tests** (`npm run check`,
+  `lint-i18n-ownership`, build verts). **`gate-ci` (`cargo test -j1`, journal `s47-3/gate-ci.log`) : INCOMPLET** —
+  arrêté au 7e binaire, `admin_auto_backup_e2e::disque_sature_pendant_l_ecriture` (panique de `zip-2.6.1`
+  `write.rs:1078`, `Failed` au lieu de `DiskFull`, instable déjà vu sur 39-11a, 40-7a et 38-11d, sans rapport avec la
+  story) ; les 804 passés ne couvrent que ces sept binaires. Le rejeu de 3 passages (`rejeu-disque.log`, 20 passés)
+  ne lève que l'instabilité de ce binaire. *Annoté à la revue P1 (M-3).* **Rejoué à `b4d17d70` (remédiation P1)** : `gate-ci` complet, **6222 passés, 0 échec,
+  18 ignorés** (`s47-3/gci2.out`, `gate-ci.log` ; l'ancien journal est `gate-ci-avant-p1r.log`), arbre `git archive` de
+  `b4d17d70` ; `admin_auto_backup_e2e` n'a pas rougi. Gate ciblé de la remédiation (`p1r-*.log`) : fmt, clippy workspace,
+  nextest `kesh-report` lib + `reports_e2e` + `homepage_summary_e2e` : 211 passés. Le gate backend nextest complet et
+  l'E2E (480/10) datent de `50a8c906` ; la remédiation touche un seul code de production (le contrôle de l'écart
+  actif − passif, `presentation.rs`), couvert par le `gate-ci` complet, non par un nextest complet rejoué.
+- **Écart d'AC 9, déclaré (L-4)** : le cas de l'accueil crée `3100 « Gains de change »` miroir de `6100.1`, non
+  `6950.1 → 6900.1` de l'exemple ; preuve équivalente (la sonde négative a rougi).
+- **Décision du responsable de l'epic du 2026-11-21, point e (L-5)** : un miroir sous un groupe d'un autre type donne un avertissement
+  **non bloquant**, non un refus ; état admis, effet à la fusion avec l'Epic 46 et porteur de l'avertissement au
+  fichier d'epic (§ *Décision du responsable de l'epic du 2026-11-21*). Les tests de la 47-3 emploient `1020.1` (numéro d'un groupe
+  d'actif) comme miroir de passif sans conséquence : la présentation ne lit pas les groupes.
+- **À la fusion dans `epic/47` (L-6)** : `sprint-status.yaml` entrera en conflit ; garder 47-2 `done` (la branche la
+  porte encore `review`).
+
+**À recâbler à la fusion de l'Epic 46 (Q5)** : (1) `groupedRows` à calculer **après** `present_*` (si la 46-1 le calcule
+dans `generate`, déplacer l'appel dans le service) ; (2) la ligne de miroir doit aller au groupe du miroir (l'arbre
+lit toutes les lignes présentées) ; (3) la ligne `kind: account` de `groupedRows` doit transporter `mirrorOf` ;
+(4) rejouer l'exemple à chaque niveau de détail et la propriété NFR-46-2 en présenté ; revue du code d'intégration.
+
 ### File List
+
+- crates/kesh-report/src/presentation.rs (neuf)
+- crates/kesh-report/src/{lib,balance_sheet,csv,pdf}.rs, crates/kesh-report/benches/export.rs
+- crates/kesh-api/src/services/rapports.rs, crates/kesh-api/src/mcp/outils/rapports.rs
+- crates/kesh-api/tests/{reports_e2e,homepage_summary_e2e}.rs
+- docs/api-external.md, docs/manual/fr/admin-manual.tex
+- _bmad-output/implementation-artifacts/47-3-miroir-presentation-rapports.md, sprint-status.yaml
+
+### Clôture (2026-11-21)
+
+Revue de code : **P1** (Opus, complète) 0 CRITICAL · 0 HIGH · 3 MEDIUM · 6 LOW → remédiation (`47284a31`, `b4d17d70`,
+`d9a4c573`) → **P2** (Sonnet, ciblée sur la remédiation) 0 · 0 · 0 · 4 LOW. Boucle close sur P2. LOW de la P2 :
+LOW-1 (le contrôle `ecart_conserve` n'est exercé par aucun test, défense en profondeur inatteignable par construction),
+LOW-2 (message de repli qui parle de l'équation quand seul l'écart diffère), LOW-3 (le filtre de type étranger de
+`presentation.rs:46` n'est pas tué par les tests) : en issue `technical-debt`, non corrigés ici pour ne pas rouvrir la
+boucle ; LOW-4 (nom de personne dans la fiche et le fichier d'epic) : corrigé dans ce commit, texte seul.
+Gates du dernier commit de code : `gate-ci.sh` complet 6222 passés / 0 / 18 ignorés à `b4d17d70` ; gate ciblé 211
+passés ; gate backend nextest 6202 / 14 et E2E 480 / 10 attendus à `50a8c906` (seule ligne de production touchée
+depuis : L-1, couverte par le gate-ci complet).

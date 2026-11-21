@@ -283,7 +283,8 @@ impl McpTool for KeshBilan {
          solde non nul (en CHF ou dans leur devise). Un compte en devise porte sa devise \
          (code ISO 4217) et son solde dans cette devise (soldeDevise), null sur un compte en \
          CHF ; les totaux restent en CHF. Non paginé : au-delà d'environ 60 comptes à solde \
-         non nul, la réponse est refusée."
+         non nul, la réponse est refusée. Le solde de sens inverse d'un compte à miroir paraît \
+         sous son compte miroir ; kesh_balance donne les soldes réels."
     }
 
     fn schema_entree(&self) -> &'static str {
@@ -334,7 +335,8 @@ impl McpTool for KeshCompteDeResultat {
          compte en devise porte sa devise (code ISO 4217) et son solde dans cette devise \
          (soldeDevise), null sur un compte en CHF ; les totaux restent en CHF. Non paginé : \
          au-delà d'environ 60 comptes à solde non nul, la réponse est refusée ; choisissez \
-         une période plus courte."
+         une période plus courte. Le solde de sens inverse d'un compte à miroir paraît sous \
+         son compte miroir ; kesh_balance donne les soldes réels."
     }
 
     fn schema_entree(&self) -> &'static str {
