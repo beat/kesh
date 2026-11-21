@@ -18,17 +18,21 @@
 //! groupées par section, écho des choix retenus) et des listes plates vides.
 //! Une seule conversion ([`groupes_demandes`]) mène les arguments à la demande
 //! typée de la Story 46-1, qui seule les valide. Pas de pagination
-//! (C-46-4-3) : le niveau borne la taille. Mesuré le 2026-11-21
-//! (`tailles_groupees_plan_pme`, `tailles_groupees_seuil`) : le plan PME
-//! complet — ses 52 comptes imputables sans rôle ni écriture passés en USD et
-//! mouvementés, les autres tels que la société d'essai les laisse — tient sous
-//! 23 552 o aux niveaux 2 et `all`, `header` et `footer` ; sur une fixture synthétique (comptes en devise, noms de
-//! 34 caractères, `all`, `footer`), la réponse est refusée au-delà d'environ
-//! [`SEUIL_LIGNES_GROUPEES`] lignes groupées. Relevés : plan PME, au plus 46
-//! lignes et 16 343 o (compte de résultat, `all`,
-//! `footer`) ; fixture synthétique, élément de 356 o, 67 lignes servies au
-//! plus (24 389 o), refus à la suivante — le seuil de 60 est une borne basse,
-//! comme celui du bilan plat.
+//! (C-46-4-3) : le niveau borne la taille.
+//!
+//! Tailles, mesurées le 2026-11-21 (`tailles_groupees_plan_pme`,
+//! `tailles_groupees_seuil`). Plan PME (hors comptes à rôle, que le test ne
+//! mouvemente pas ; ses 52 comptes imputables sans rôle ni écriture passés en
+//! USD et mouvementés, les autres tels que la société d'essai les laisse) : au
+//! plus 46 lignes et 16 343 o (compte de résultat, `all`, `footer`), sous
+//! 23 552 o aux niveaux 2 et `all`, `header` et `footer`.
+//!
+//! Fixture synthétique (comptes en devise, noms de 34 caractères, `all`,
+//! `footer`) : élément de 356 o, 67 lignes servies au plus (24 389 o), refus à
+//! la suivante ; la réponse est donc refusée au-delà d'environ
+//! [`SEUIL_LIGNES_GROUPEES`] lignes groupées. Le seuil de 60 est une borne
+//! basse pour des noms de cette largeur (une trentaine de caractères) ; des
+//! noms plus longs le font atteindre plus tôt, comme pour le bilan plat.
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -211,7 +215,7 @@ struct ArgumentsBalance {
 
 /// Le schéma du bilan et du compte de résultat : la période et les arguments
 /// de groupement (Story 46-4). Indicatif : il n'est pas appliqué à l'exécution.
-const SCHEMA_PERIODE_GROUPES: &str = r#"{"type":"object","properties":{"fiscalYearId":{"type":"integer","minimum":1},"periodStart":{"type":"string","format":"date"},"periodEnd":{"type":"string","format":"date"},"detailLevel":{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]},"subtotalPosition":{"type":"string","enum":["header","footer"]},"open":{"type":"array","items":{"type":"integer","minimum":1},"maxItems":500},"closed":{"type":"array","items":{"type":"integer","minimum":1},"maxItems":500}},"required":["fiscalYearId"],"additionalProperties":false}"#;
+const SCHEMA_PERIODE_GROUPES: &str = r#"{"type":"object","properties":{"fiscalYearId":{"type":"integer","minimum":1},"periodStart":{"type":"string","format":"date"},"periodEnd":{"type":"string","format":"date"},"detailLevel":{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]},"subtotalPosition":{"type":"string","enum":["header","footer"]},"open":{"type":"array","items":{"type":"integer"},"maxItems":500},"closed":{"type":"array","items":{"type":"integer"},"maxItems":500}},"required":["fiscalYearId"],"additionalProperties":false}"#;
 
 sortie! {
     /// La période résolue.
@@ -723,7 +727,20 @@ mod tests {
         ));
         let a = lire(r#"{"fiscalYearId":1,"detailLevel":null}"#).unwrap();
         assert!(a.detail_level.is_none());
-        for v in [r#"2.5"#, r#""2""#, r#""ALL""#, r#""""#, "true", "[2]", "{}"] {
+        for v in [
+            r#"2.5"#,
+            r#""2""#,
+            r#""ALL""#,
+            r#""""#,
+            "true",
+            "[2]",
+            "{}",
+            "1e1",
+            "-0",
+            "1.0",
+            "9223372036854775808",
+            "18446744073709551616",
+        ] {
             let j = format!(r#"{{"fiscalYearId":1,"detailLevel":{v}}}"#);
             assert!(lire(&j).is_err(), "{j}");
         }

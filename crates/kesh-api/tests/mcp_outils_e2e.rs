@@ -2898,6 +2898,80 @@ async fn groupes_par_le_mcp(pool: MySqlPool) {
     }
 }
 
+/// AC-3 (revue de code P1, M1) — la fidélité des lignes groupées : chaque ligne
+/// de compte porte les valeurs de la ligne plate de même `compteId` (numéro,
+/// nom, solde, devise, solde en devise), dont un compte en USD ; un groupe
+/// ouvert à la main porte `ouvert` à `true`.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn groupes_lignes_fideles_au_plat(pool: MySqlPool) {
+    let a = societe_piegee(&pool, "Société A 464f", 'A').await;
+    let usd = compte_usd_mouvemente(&pool, &a).await;
+    let actifs = compte_numero(&pool, &a, "1").await;
+    let jeton = cle_de(&pool, &a, &LECTURE, SendValidation::Exempt).await;
+    let b = banc(&pool);
+    let fy = a.p.exercice_id;
+    let mut usd_compare = false;
+    for outil in ["kesh_bilan", "kesh_compte_de_resultat"] {
+        let plat = structure(
+            &b.appeler(&jeton, outil, json!({"fiscalYearId": fy})).await,
+            outil,
+        );
+        let g = structure(
+            &b.appeler(
+                &jeton,
+                outil,
+                json!({"fiscalYearId": fy, "detailLevel": "all"}),
+            )
+            .await,
+            outil,
+        );
+        let mut comptes = 0;
+        for s in sections_de(outil) {
+            for l in g["groupes"][s].as_array().unwrap() {
+                if l["genre"] != json!("account") {
+                    continue;
+                }
+                let f = plat[s]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|f| f["compteId"] == l["compteId"])
+                    .unwrap_or_else(|| panic!("{outil} {s} : pas de ligne plate pour {l}"));
+                for k in ["numero", "nom", "solde", "devise", "soldeDevise"] {
+                    assert_eq!(l[k], f[k], "{outil} {s} : {k} de {l}");
+                }
+                comptes += 1;
+                if l["compteId"] == json!(usd) {
+                    assert_eq!(l["devise"], json!("USD"), "{l}");
+                    assert_eq!(l["soldeDevise"], json!("100.00"), "{l}");
+                    usd_compare = true;
+                }
+            }
+        }
+        assert!(comptes > 0, "{outil} : aucune ligne de compte comparée");
+    }
+    assert!(usd_compare, "le compte en USD n'a pas été comparé");
+
+    // Un groupe ouvert à la main : `ouvert` vrai (bilan, niveau 1).
+    let g = structure(
+        &b.appeler(
+            &jeton,
+            "kesh_bilan",
+            json!({"fiscalYearId": fy, "detailLevel": 1, "open": [actifs]}),
+        )
+        .await,
+        "kesh_bilan",
+    );
+    let ouvert = g["groupes"]["actifs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["compteId"] == json!(actifs))
+        .expect("le groupe ouvert est servi");
+    assert_eq!(ouvert["genre"], json!("group"), "{ouvert}");
+    assert_eq!(ouvert["ouvert"], json!(true), "{ouvert}");
+}
+
 /// AC-1 — un refus par contrainte : chacun rend le même texte fixe, qui ne
 /// nomme pas l'argument. Les formes valides voisines sont servies (sonde
 /// positive : le refus n'est pas celui de tout appel).
@@ -3010,7 +3084,8 @@ fn lignes_groupees(outil: &str, s: &Value) -> usize {
         .sum()
 }
 
-/// AC-5 (a) — le plan PME complet (l'arbre de `societe_complete`), chaque
+/// AC-5 (a) — le plan PME (l'arbre de `societe_complete`, hors comptes à rôle,
+/// que ce test ne mouvemente pas), chaque
 /// compte imputable de bilan, de produits et de charges sans rôle ni écriture
 /// passé en USD et mouvementé : tous à solde non nul et en devise. Aux niveaux 2
 /// et `all`, sous-totaux sur le titre puis en pied, la réponse tient sous
