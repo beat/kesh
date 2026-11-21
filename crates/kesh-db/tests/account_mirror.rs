@@ -477,6 +477,36 @@ async fn les_regles_de_la_source_se_rejouent_quand_le_miroir_reste(pool: MySqlPo
         .await
         .expect("renommer la source malgré l'état forgé de la cible");
     assert_eq!(renommee.name, "Renommée");
+
+    // Story 47-5 (revue P1 de la 47-1, L3) — `Set` du miroir actuel vaut
+    // `Unchanged` : le lien forgé n'est pas revalidé (la cible porte une ligne),
+    // mais les règles de la source se rejouent sur un retypage.
+    let reposee = modifier(&pool, &s, source2, |u| {
+        u.name = "Reposée".into();
+        u.mirror = MirrorChange::Set(cible);
+    })
+    .await
+    .expect("reposer le miroir actuel ne revalide pas la cible forgée");
+    assert_eq!(reposee.mirror_account_id, Some(cible));
+    let retype = modifier(&pool, &s, source2, |u| {
+        u.mirror = MirrorChange::Set(cible);
+        u.account_type = AccountType::Asset;
+    })
+    .await;
+    assert_eq!(refus(retype).0, MirrorReason::AccountType);
+
+    // Une cible introuvable (lien forgé) n'empêche rien : le retypage passe.
+    let source3 = compte(&pool, s.company_id, "2273", "Liability", true, None).await;
+    sqlx::query("UPDATE accounts SET mirror_account_id = ? WHERE id = ?")
+        .bind(i64::MAX)
+        .bind(source3)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let retypee = modifier(&pool, &s, source3, |u| u.account_type = AccountType::Asset)
+        .await
+        .expect("cible introuvable : rien n'empêche le retypage");
+    assert_eq!(retypee.account_type, AccountType::Asset);
 }
 
 // ---------------------------------------------------------------------------
