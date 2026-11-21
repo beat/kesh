@@ -245,17 +245,23 @@ pub const TEMOINS: &[(&str, Jeux, Complet)] = &[
     (
         "kesh_bilan",
         |p| vec![json!({"fiscalYearId": p.exercice_id})],
+        // Story 46-4 : les arguments de groupement, `open` et `closed` disjoints.
         |p| {
             json!({"fiscalYearId": p.exercice_id, "periodStart": d(p.exercice_debut),
-                   "periodEnd": d(p.exercice_fin)})
+                   "periodEnd": d(p.exercice_fin), "detailLevel": 2,
+                   "subtotalPosition": "footer", "open": [p.compte_k1],
+                   "closed": [p.compte_cr]})
         },
     ),
     (
         "kesh_compte_de_resultat",
         |p| vec![json!({"fiscalYearId": p.exercice_id})],
+        // Story 46-4 : les arguments de groupement, `open` et `closed` disjoints.
         |p| {
             json!({"fiscalYearId": p.exercice_id, "periodStart": d(p.exercice_debut),
-                   "periodEnd": d(p.exercice_fin)})
+                   "periodEnd": d(p.exercice_fin), "detailLevel": 2,
+                   "subtotalPosition": "footer", "open": [p.compte_k1],
+                   "closed": [p.compte_cr]})
         },
     ),
     (

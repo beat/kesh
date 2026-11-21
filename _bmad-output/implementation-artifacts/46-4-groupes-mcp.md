@@ -1,6 +1,6 @@
 # Story 46-4 : outils MCP du bilan et du compte de résultat par groupes
 
-Status: ready-for-dev
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D8, Q5 ; FR-46-4, FR-46-11 ; NFR-46-6. Release
 visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1, 2026-11-19) ; fiche écrite le 2026-11-20, à
@@ -48,7 +48,7 @@ schéma et la fonction de conversion posés ici (validation P1).
    - *Schéma* : `SCHEMA_PERIODE` ne sert qu'à ces deux outils (la balance a son schéma en ligne,
      `rapports.rs:208-209`) ; il est remplacé par `SCHEMA_PERIODE_GROUPES`, `additionalProperties: false` gardé :
      `detailLevel` = `{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]}`,
-     `subtotalPosition` = enum, `open` / `closed` = `{"type":"array","items":{"type":"integer","minimum":1},"maxItems":500}`.
+     `subtotalPosition` = enum, `open` / `closed` = `{"type":"array","items":{"type":"integer","minimum":1},"maxItems":500}`. *(Amendé le 2026-11-22, revue de code P1 L1 : le `minimum: 1` des éléments de `open` et `closed` est retiré du schéma ; un identifiant nul, négatif ou inconnu est ignoré.)*
 2. **AC-2 — Sans argument neuf.** La réponse est celle d'aujourd'hui **au seul champ `groupes: null` près** (AC-3 ;
    `sortie!` n'omet aucun champ, C-37-9 ; décision C-46-4-5) : un test compare le texte rendu à un **littéral écrit au
    commit de base** (avant T1) sur la société d'essai, pour chacun des deux outils — non à la sortie de la fonction qui
@@ -121,13 +121,13 @@ schéma et la fonction de conversion posés ici (validation P1).
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** — Reprise de la branche d'epic (46-1 fusionnée ; `Rapport<AvecGroupes<…>, U>`, appelants du MCP à `:305`, `:357` selon la 46-1) ; état de la 47-3 (champ de miroir) ; ligne lue citée.
-- [ ] **T1 — arguments et schéma** (AC 1, 4) : type de `detailLevel`, tableaux, `SCHEMA_PERIODE_GROUPES`, fonction
+- [x] **T0** — Reprise de la branche d'epic (46-1 fusionnée ; `Rapport<AvecGroupes<…>, U>`, appelants du MCP à `:305`, `:357` selon la 46-1) ; état de la 47-3 (champ de miroir) ; ligne lue citée.
+- [x] **T1 — arguments et schéma** (AC 1, 4) : type de `detailLevel`, tableaux, `SCHEMA_PERIODE_GROUPES`, fonction
       de conversion unique (réutilisée par la 46-6a).
-- [ ] **T2 — sortie** (AC 2, 3) : `GenreLigne` (miroir + `champ_enum!`), `sortie!` de la ligne groupée et de `groupes`,
+- [x] **T2 — sortie** (AC 2, 3) : `GenreLigne` (miroir + `champ_enum!`), `sortie!` de la ligne groupée et de `groupes`,
       conversion depuis la ligne de la 46-1 ; littéral de base du témoin (AC-2) **écrit avant T1**.
-- [ ] **T3 — tests** (AC 2, 5, 6) ; **T4 — manuel** (AC 7).
-- [ ] **T5 — gate complet** ; E2E complet au dernier commit de code.
+- [x] **T3 — tests** (AC 2, 5, 6) ; **T4 — manuel** (AC 7).
+- [x] **T5 — gate complet** ; E2E complet au dernier commit de code.
 
 ## Dev Notes
 
@@ -164,18 +164,111 @@ Fiche 46-1 (§ *Le contrat*) ; `CLAUDE.md` § *Le prompt d'une passe doit nommer
 
 ## Note de version
 
-*(à écrire au développement)* — Les outils MCP `kesh_bilan` et `kesh_compte_de_resultat` acceptent le niveau de
-détail, les groupes ouverts ou fermés et la place des sous-totaux ; sans argument, leur sortie gagne seulement `groupes: null`.
+- **Added** — Les outils MCP `kesh_bilan` et `kesh_compte_de_resultat` présentent, sur demande, le bilan et le compte de
+  résultat par groupes de comptes, comme à l'écran : `detailLevel` (1 à 20 ou `"all"`), `open` et `closed` (tableaux
+  d'identifiants de groupes), `subtotalPosition` (`header` ou `footer`) ; la réponse porte alors un champ `groupes`
+  (lignes groupées par section, écho des choix retenus) et ses listes plates sont vides. Sans ces arguments, la sortie
+  ne change qu'au champ `groupes`, présent à `null`. Au-delà d'environ 60 lignes groupées, la réponse est refusée pour
+  sa taille : choisir un niveau plus bas.
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`bmad-dev-story`), 2026-11-21.
+
 ### Debug Log References
+
+Journaux hors dépôt, `kesh-gate-logs/s46-4/` : `t0-capture.log` (littéral de base), `cible-*.log` (gate ciblé),
+`mutations.log`, `gate-backend-1-env.log` et `gate-backend.log`, `front-*.log`, `e2e*.log`, `gate-ci*.log`.
 
 ### Completion Notes List
 
+- **T0** (ligne lue, `rapports.rs` au commit `ed822f21`) : `let r = ctx.afficher(rapport).await.rapport;` aux appelants
+  du bilan et du compte de résultat (« Sans groupes jusqu'à la Story 46-4 ») ; `services::rapports` expose
+  `bilan_par_groupes`, `compte_de_resultat_par_groupes` et `DemandeGroupes::depuis_valeurs` (entrée typée,
+  `NiveauDemande`, `PositionSousTotal`) ; la 47-3 n'est pas dans `epic/46-rapports-groupes` (aucune phrase de miroir
+  dans les descriptions à garder). Le **littéral de base** de l'AC-2 a été écrit et commité **avant** tout code
+  (`767b81fa`) : `tests/fixtures/mcp-groupes/kesh_bilan.txt` et `kesh_compte_de_resultat.txt`, texte rendu entier
+  (en-tête compris), jetons `{debut}`, `{fin}`, `{exercice}` ; le test passait alors, à l'octet, sur le code d'avant.
+- **T1** : `ArgumentsPeriode` gagne `detail_level: Option<NiveauArgument>` (`#[serde(untagged)]` : entier JSON, ou
+  `Tous::All` = `"all"` ; tout autre JSON refusé à la lecture), `subtotal_position: Option<PositionSousTotaux>`,
+  `open`/`closed: Option<Vec<i64>>` ; `deny_unknown_fields` gardé, aucun `flatten`. `kesh_balance` les pose à
+  `None`. **Une seule conversion**, `groupes_demandes(&ArgumentsPeriode)`, appelle
+  `DemandeGroupes::depuis_valeurs` (aucune validation locale) et passe ses refus par `depuis_app_error` (« Arguments
+  invalides. »). `SCHEMA_PERIODE` → `SCHEMA_PERIODE_GROUPES` (`oneOf`, tableaux `maxItems: 500`). Résumé d'appel :
+  `detailLevel` (`entier`, ou `code(…, "all")`), `subtotalPosition` (`code`), `openCount`/`closedCount` (nombres).
+- **T2** : miroirs `GenreLigne` (`group`/`account`/`own`/`subtotal`) et `PositionSousTotaux` (`header`/`footer`, lu en
+  argument et rendu dans l'écho), `match` exhaustifs, admis par `champ_enum!` ; `sortie!` `LigneGroupee`,
+  `GroupesBilan`, `GroupesResultat` ; `Bilan.groupes` et `CompteDeResultat.groupes` (`null` sans `detailLevel`) ;
+  listes plates vides en mode groupé ; totaux, report, résultat, équation inchangés. L'écho passe par une structure
+  privée `Echo` (les deux sorties ne diffèrent que par leurs sections ; `sortie!` n'admet pas `flatten`). La phrase des
+  descriptions est commune (`description_groupes!`, `concat!`), le seuil est la constante `SEUIL_LIGNES_GROUPEES` (60),
+  contrôlée contre les deux descriptions par un test.
+- **T3 — tests** (recomptés : `mcp_outils_e2e.rs` 34 → 39 attributs de test de `ed822f21` à `HEAD` ; `rapports.rs`
+  0 → 4 `#[test]`) : `sans_groupes_sortie_du_commit_de_base` (AC-2, le littéral de `767b81fa` + `groupes: null`,
+  re-sérialisé par `to_value` puis `to_string_pretty`, texte entier comparé) ; `groupes_par_le_mcp` (AC-3 : témoin
+  hors groupe, niveau 1 `header`, `all` `footer` avec un groupe ouvert à la main et des identifiants inconnu, nul et
+  négatif ignorés, clés exactes des lignes, totaux inchangés) ; `groupes_arguments_refuses` (AC-1 : 17 refus — dont
+  les formes que seule la lecture refuse —, 7 formes valides servies) ; `tailles_groupees_plan_pme` et
+  `tailles_groupees_seuil` (AC-5) ; tests unitaires `lecture_de_detail_level`, `conversion_unique`,
+  `resume_des_groupes`, `descriptions_des_groupes`. `TEMOINS` (argument « complet ») de `kesh_bilan` et
+  `kesh_compte_de_resultat` : `detailLevel: 2`, `subtotalPosition: "footer"`, `open: [K1]`, `closed: [CR]`.
+- **AC-5, mesures** (2026-11-21, `cible-nextest.log`) : plan PME (52 comptes imputables sans rôle ni écriture passés en
+  USD et mouvementés, les autres tels que la société d'essai les laisse) — bilan niveau 2 : 8 lignes / 3 525 o
+  (`header`), 10 / 4 160 o (`footer`) ; `all` : 32 / 11 594 o, 38 / 13 598 o ; compte de résultat niveau 2 : 27 /
+  9 879 o, 31 / 11 223 o ; `all` : 39 / 13 965 o, 46 / 16 343 o — tous sous 23 552 o. Fixture synthétique (groupe posé
+  par SQL, comptes USD de 34 caractères, `all`, `footer`, un compte ajouté à la fois) : élément 356 o, **67 lignes
+  groupées servies au plus (24 389 o)**, refus `TEXTE_ENVOI_TROP_VOLUMINEUX` à la suivante. Seuil écrit : « environ
+  60 lignes groupées » (borne basse, comme le bilan plat), dans la doc du module, les deux descriptions, le manuel et
+  `docs/api-external.md`. Écart à l'estimation de la fiche (43 et 52 lignes à `all` en `footer`) : 38 et 46 mesurées,
+  les comptes à rôle n'ayant pas été mouvementés.
+- **Sondes par mutation** (`mutations.sh`, copie `git archive` hors dépôt, cible à part, supprimées ; filtre : tests
+  unitaires de `rapports.rs` et tests `/groupes/` de `mcp_outils_e2e`, 7 tests, verts sans mutation) — **9 sur 9
+  rouges** : listes plates gardées en mode groupé (`groupes_par_le_mcp`) ; listes plates vidées sans groupes
+  (`groupes_par_le_mcp`, `sans_groupes_sortie_du_commit_de_base`) ; `closed` ignoré par la conversion
+  (`conversion_unique`, `groupes_arguments_refuses`) ; `subtotal` rendu `account` (`groupes_par_le_mcp`) ;
+  `tousLesNiveaux` faux pour `all` (`groupes_par_le_mcp`) ; résumé sous la clé `open` (`resume_des_groupes`) ; seuil
+  désaccordé des descriptions (`descriptions_des_groupes`) ; sortie plate changée (`report`)
+  (`sans_groupes_sortie_du_commit_de_base`) ; `footer` lu `header` (`conversion_unique`, `groupes_par_le_mcp`).
+- **Gate ciblé** (`gate-cible.sh`, au commit de T1–T3) : fmt, clippy workspace `-D warnings` verts ; nextest
+  `mcp_outils_e2e`, `mcp_contrat`, `mcp_gardes_lexicales`, `mcp_matrice_manuel`, `mcp_enveloppe_e2e`,
+  `mcp_traduction` et les tests unitaires de `rapports.rs` : 110 passés.
+- **Gate complet n° 1** (`5de70260` + docs, `gate-backend-1-env.log`) : 6195 exécutés, 6194 passés, **1 échec** —
+  `configuration_transmise::lectures`, qui prenait la variable locale `env` (l'enveloppe de la 46-1) pour une lecture
+  de l'environnement (C75). Corrigé par renommage (`9cf82948`), aucune exception ajoutée à la garde.
+- **T4** : manuel d'administration FR (tableau des outils MCP, `.tex` seul, PDF non régénéré : règle des branches
+  d'epic) et `docs/api-external.md` (paragraphe « Au serveur MCP » sous la section de la 46-1).
+- **Gates finaux, au dernier commit de code `9cf82948`** (journaux `kesh-gate-logs/s46-4/`) :
+  - backend, `scripts/test-fast.sh --ci` (base remise à zéro avant) : fmt et clippy `-D warnings` verts ; nextest
+    **6195 exécutés, 6195 passés** (1 instable : `kesh-db::pool_lecture_seule
+    g_une_instruction_trop_longue_est_interrompue_par_le_serveur`, rouge au premier essai, vert au second — délai sous
+    charge, hors périmètre), 14 ignorés (`gate-backend.log`) ;
+  - frontend (inchangé par la story) : `npm run check` 0 erreur (29 avertissements, préexistants),
+    `lint-i18n-ownership` vert, Vitest **4627 passés** (278 fichiers), `npm run build` vert (`front-*.log`) ;
+  - **E2E complet** (`LANG=fr_CH.UTF-8`, binaire de `9cf82948`) : **478 passés, 10 échecs, 18 ignorés** — les dix
+    attendus, jugés un à un : les sept de la KF-029 (#97 : `mode-expert.spec.ts:26`, `:41`,
+    `onboarding-path-b.spec.ts:65`, `:92`, `onboarding.spec.ts:57`, `:77`, `:150`),
+    `backup-restore-new-install.spec.ts:262`, `:381` et `opening-balances.spec.ts:156` (`e2e.log`) ;
+  - **`scripts/gate-ci.sh`** sur une copie `git archive` de `9cf82948` : passage 1 arrêté au 89e binaire de test sur
+    257 par `mcp_transport_e2e::abandon_au_delai_le_permis_reste_pris` (témoin de délai « sonde servie », sensible à
+    la charge, hors périmètre ; vert au nextest complet et au passage 4) (`gate-ci-1-arret-transport.log`) ; passages
+    2 et 3 **interrompus par l'orchestrateur** (station sous 5 Go libres, mémoire d'échange pleine ; aucun défaut de
+    code) ; **passage 4, jusqu'au bout : 257 binaires, 6214 passés, 0 échoué, 18 ignorés** (`gate-ci.log`). ⚠️ Les
+    passages 2 à 4 ont joué `cargo test` avec **`--no-fail-fast`**, posé par l'enveloppe `gate-ci-wrap/cargo`, pour
+    jouer tout le workspace malgré un binaire rouge ; la commande de la CI est sans ce drapeau, le résultat est le même
+    quand tout est vert. Cible du gate-ci supprimée après chaque passage.
+
 ### File List
+
+- `crates/kesh-api/src/mcp/outils/rapports.rs` (modifié)
+- `crates/kesh-api/tests/mcp_outils_e2e.rs` (modifié)
+- `crates/kesh-api/tests/common/mcp_pieges.rs` (modifié)
+- `crates/kesh-api/tests/fixtures/mcp-groupes/kesh_bilan.txt` (nouveau)
+- `crates/kesh-api/tests/fixtures/mcp-groupes/kesh_compte_de_resultat.txt` (nouveau)
+- `docs/manual/fr/admin-manual.tex` (modifié)
+- `docs/api-external.md` (modifié)
+- `_bmad-output/implementation-artifacts/46-4-groupes-mcp.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
@@ -214,3 +307,30 @@ détail, les groupes ouverts ou fermés et la place des sous-totaux ; sans argum
   admis, littéral de base inchangé, la clé ajoutée par le test avant comparaison ; entrées de `TEMOINS` citées
   (F10). Statut inchangé ; la passe P2 de la 46-6a relit ces lignes.
 - 2026-11-21 — **Validation** (boucle close) : P1 (Claude Sonnet 5.5, 0 C / 0 H / 0 M au-dessus de LOW ; tendance 0/0/2/10 → 0/0/0/10) puis P2 (Claude Opus 5.5, contexte frais, à `e61c9029`) 0 C / 0 H / 0 M / 10 L sur les trois fiches (46-3 : 4, 46-6a : 5, 46-4 : 1) ; aucun finding au-dessus de LOW. LOW de la P2 appliqués dans la fiche : G5 (note de version), G8 (motif de C-46-4-5), G10 (aucun champ de miroir au MCP, C-47-3-3). Rapport : `kesh-gate-logs/s46-specs/validation-p2-rapport.md`. `ready-for-dev`.
+- 2026-11-21 — **Développement** (`bmad-dev-story`, Claude Opus 5.5) : littéral de base de l'AC-2 commité avant le code
+  (`767b81fa`) ; arguments, conversion unique, sortie groupée, résumé d'appel, tailles mesurées et seuil écrit (60
+  lignes groupées, borne basse ; 67 servies au plus sur la fixture synthétique) (`5de70260`) ; manuel d'administration
+  et `docs/api-external.md` (`9833c5a8`) ; variable `env` renommée pour la garde des lectures d'environnement
+  (`9cf82948`). Tests : 5 d'intégration et 4 unitaires ajoutés ; 9 sondes par mutation sur 9 rouges. Gates complets
+  verts au dernier commit de code (détail au Dev Agent Record). `review`.
+- 2026-11-22 — **remédiation de la revue de code P1 (Sonnet 5.5 ; 0 C, 0 H, 1 M, 5 L), commit `e94b391a`.** M1 : test
+  `groupes_lignes_fideles_au_plat` (`mcp_outils_e2e.rs`) — chaque ligne de compte groupée (`all`) comparée à la ligne plate
+  de même `compteId` (`numero`, `nom`, `solde`, `devise`, `soldeDevise`), dont un compte en USD (100.00), et `ouvert` vrai
+  pour un groupe ouvert à la main (bilan, niveau 1) ; **sondes par mutation** dans une copie hors dépôt
+  (`kesh-gate-logs/s46-4/mutations-p1.sh`, `mutations-p1.log`) : sans mutation 1 passé ; `solde` mis à zéro dans
+  `lignes_groupees` : test rouge ; `devise: None` : test rouge. L1 : `minimum` retiré des éléments de `open` et `closed` du
+  schéma (indicatif ; le code et l'API REST ignorent un identifiant inconnu, nul ou négatif). L2 : « une trentaine de
+  caractères » écrit à côté du seuil (doc de module) ; la description d'outil est inchangée. L3 : commentaire du test et
+  doc de module disent « hors comptes à rôle » (le plan PME mesuré ne les mouvemente pas). L4 : `1e1`, `-0`, `1.0`,
+  `9223372036854775808`, `18446744073709551616` ajoutés aux refus de `lecture_de_detail_level`. L5 : doc de module
+  réécrite en deux paragraphes (plan PME, fixture synthétique). **Gates** : fmt, clippy workspace `-D warnings`, nextest
+  `-p kesh-api` sur `mcp_*`, `textes_coherents` et les tests de lib `mcp::` : 292 passés, 0 échoué (`p1-nextest.log`).
+  **Gate complet rejoué ensuite** (voir l'entrée suivante).
+- 2026-11-22 — **gate complet au dernier commit de code `e94b391a`** (HEAD `4145cb04`, plus la fiche seule) : `scripts/test-fast.sh --ci`
+  (fmt, clippy workspace `-D warnings`, nextest) via `heavy.sh` : **6196 exécutés, 6196 passés (3 lents), 14 ignorés**, rc 0
+  (`gate-backend.log`). **`gate-ci.sh` : à la fin de l'epic** (règle des gates de l'epic, 2026-11-22) ; pas d'E2E (aucun
+  écran). **Passe P2 ciblée (Haiku, sur `e94b391a` seul) : 0 C, 0 H, 0 M, 2 L** (`revue-p2-rapport.md`). F1 : AC-1 annotée
+  (`minimum: 1` retiré). F2 : le test de fidélité ne couvre que les lignes de compte, non les groupes ni les sous-totaux ;
+  tracé dans `issues-a-ouvrir.md` (`technical-debt`, P4). **Tendance : P1 (Sonnet) 0 C / 0 H / 1 M / 5 L → P2 ciblée
+  (Haiku) 0 / 0 / 0 / 2** ; remédiation P1 sans MEDIUM résiduel. **Story `done`.**
+
