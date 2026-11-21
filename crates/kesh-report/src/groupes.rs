@@ -1446,6 +1446,25 @@ mod tests {
         );
     }
 
+    /// AC-4, « solde propre compris » : un groupe dont le solde propre est dans
+    /// une section et toute la descendance dans l'autre est dissous — sans quoi
+    /// il paraîtrait deux fois (ligne `account` d'un côté, `group` de l'autre).
+    #[test]
+    fn groupe_dissous_par_son_seul_solde_propre() {
+        let p = plan(&[("2", None), ("20", Some("2")), ("2000", Some("20"))]);
+        let dettes = [l("2000", dec!(10))];
+        let fonds = [l("2", dec!(4))];
+        let s = regrouper_sections(
+            &[&dettes[..], &fonds[..]],
+            &p.arbre,
+            &opts(NiveauDetail::Tous),
+        );
+        assert_eq!(rendu(&s[0]), ["G+:20@1=10", "C:2000@2=10"]);
+        assert_eq!(rendu(&s[1]), ["C:2@1=4"]);
+        assert!(!s[0].groupes.contains(&ident("2")));
+        assert!(!s[0].lignes.iter().any(|g| g.compte_id == ident("2")));
+    }
+
     /// Le plan PME (`pme.json`) : sections du bilan par rôle, du compte de
     /// résultat par type ; dissolutions relevées à la validation P2.
     #[test]
@@ -1588,7 +1607,8 @@ mod tests {
     /// Arbres et soldes tirés : à tout niveau et pour des états d'ouverture
     /// tirés, la somme des lignes de profondeur 1 (sous-totaux exclus) égale le
     /// total de chaque section ; chaque ligne d'entrée est émise au plus une
-    /// fois. Une fois sur deux, une seconde colonne de poids distincts (jamais
+    /// fois ; chaque groupe porte la somme de sa descendance ; aucun compte ne
+    /// paraît dans deux sections. Une fois sur deux, une seconde colonne de poids distincts (jamais
     /// nulle) rend tout double comptage ou oubli visible dans la somme ; une
     /// colonne seule, souvent compensée, exerce les groupes nuls masqués.
     #[test]
@@ -1673,8 +1693,35 @@ mod tests {
                         _ => {}
                     }
                 }
-                for s in &refs {
+                let mut sections_de: HashMap<i64, usize> = HashMap::new();
+                for (k, s) in refs.iter().enumerate() {
                     let g = regrouper(s, &arbre, &dissous, &o);
+                    // Aucun compte (groupe, compte ou solde propre) dans deux
+                    // sections (AC-4, solde propre compris).
+                    for x in &g.lignes {
+                        let k0 = *sections_de.entry(x.compte_id).or_insert(k);
+                        assert_eq!(k0, k, "compte {} dans deux sections", x.compte_id);
+                    }
+                    // Chaque ligne `group` porte la somme exacte des lignes
+                    // d'entrée de sa descendance (la sienne comprise), à toute
+                    // profondeur.
+                    for x in g.lignes.iter().filter(|x| x.genre == GenreLigne::Groupe) {
+                        for col in 0..largeur {
+                            let attendu: Decimal = s
+                                .iter()
+                                .filter(|e| {
+                                    e.id == x.compte_id
+                                        || arbre.ancetres(e.id).any(|a| a == x.compte_id)
+                                })
+                                .map(|e| e.m[col])
+                                .sum();
+                            assert_eq!(
+                                x.montants[col], attendu,
+                                "sous-total du groupe {}",
+                                x.compte_id
+                            );
+                        }
+                    }
                     for col in 0..largeur {
                         let total: Decimal = s.iter().map(|x| x.m[col]).sum();
                         assert_eq!(somme_racines(&g, col), total, "colonne {col}");
@@ -1683,7 +1730,7 @@ mod tests {
                     for x in g.lignes.iter().filter_map(|x| x.source) {
                         assert!(emises.insert(x), "ligne d'entrée émise deux fois");
                     }
-                    // Chaque sous-total est la somme exacte de sa descendance.
+                    // Chaque ligne `subtotal` répète sa ligne `group`, ouverte.
                     for x in g.lignes.iter().filter(|x| x.genre == GenreLigne::SousTotal) {
                         let titre = g
                             .lignes

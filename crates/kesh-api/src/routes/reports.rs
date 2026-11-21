@@ -66,17 +66,6 @@ pub struct ReportQuery {
     pub fiscal_year_id: i64,
     pub period_start: Option<NaiveDate>,
     pub period_end: Option<NaiveDate>,
-    /// Story 46-1 — niveau de détail des groupes (`1` à `20` ou `all`) ; lu par
-    /// le bilan et le compte de résultat seulement, ignoré ailleurs. Chaîne
-    /// validée à la main ([`DemandeGroupes::depuis_requete`]) : un 400, non un
-    /// 422 d'Axum.
-    pub detail_level: Option<String>,
-    /// Story 46-1 — `header` ou `footer`.
-    pub subtotal_position: Option<String>,
-    /// Story 46-1 — groupes ouverts à la main, séparés par des virgules.
-    pub open: Option<String>,
-    /// Story 46-1 — groupes fermés à la main, séparés par des virgules.
-    pub closed: Option<String>,
 }
 
 impl ReportQuery {
@@ -87,16 +76,34 @@ impl ReportQuery {
             period_end: self.period_end,
         }
     }
+}
 
-    /// La demande de groupes (Story 46-1), `None` sans `detailLevel`.
-    fn groupes(&self) -> Result<Option<DemandeGroupes>, AppError> {
-        DemandeGroupes::depuis_requete(
-            self.detail_level.as_deref(),
-            self.subtotal_position.as_deref(),
-            self.open.as_deref(),
-            self.closed.as_deref(),
-        )
+/// Les quatre paramètres de groupes (Story 46-1) du bilan et du compte de
+/// résultat.
+const PARAMETRES_GROUPES: [&str; 4] = ["detailLevel", "subtotalPosition", "open", "closed"];
+
+/// La demande de groupes (Story 46-1), lue dans les paires de la requête ;
+/// `None` sans `detailLevel`.
+///
+/// Les paires brutes, et non des champs de [`ReportQuery`] : un paramètre
+/// répété y serait un rejet de désérialisation d'Axum, sans le code
+/// `VALIDATION_ERROR`, et frapperait aussi la balance et la TVA, qui partagent
+/// `ReportQuery` et doivent ignorer ces paramètres. Ici, un paramètre de groupes
+/// répété est un 400 `VALIDATION_ERROR` qui le nomme.
+fn groupes_de(paires: &[(String, String)]) -> Result<Option<DemandeGroupes>, AppError> {
+    let mut valeurs: [Option<&str>; 4] = [None; 4];
+    for (cle, valeur) in paires {
+        if let Some(i) = PARAMETRES_GROUPES.iter().position(|p| p == cle) {
+            if valeurs[i].is_some() {
+                return Err(AppError::Validation(format!(
+                    "{cle} : paramètre répété (une seule valeur ; listes séparées par des virgules)"
+                )));
+            }
+            valeurs[i] = Some(valeur.as_str());
+        }
     }
+    let [detail_level, subtotal_position, open, closed] = valeurs;
+    DemandeGroupes::depuis_requete(detail_level, subtotal_position, open, closed)
 }
 
 /// Query params du grand livre.
@@ -255,13 +262,18 @@ fn mesurer(span: &tracing::Span, start: std::time::Instant, body: &[u8]) {
 
 /// GET /api/v1/reports/balance-sheet — avec `detailLevel`, aussi `grouping`
 /// et `groupedRows` (Story 46-1) ; sans, la réponse d'avant, à l'octet.
+///
+/// L'accès est contrôlé **avant** les paramètres de groupes : un appelant sans
+/// droit reçoit son refus d'accès, non un 400 (même ordre que `fiscalYearId`).
 pub async fn get_balance_sheet(
     State(state): State<AppState>,
     Extension(current_user): Extension<CurrentUser>,
     Query(query): Query<ReportQuery>,
+    Query(paires): Query<Vec<(String, String)>>,
 ) -> Result<Json<AvecGroupes<BalanceSheet, SectionsBilan>>, AppError> {
-    let groupes = query.groupes()?;
     let acces = ContexteAcces::depuis_api(&current_user);
+    acces.exiger(rapports::EXIGENCES_BILAN.affichage)?;
+    let groupes = groupes_de(&paires)?;
     let rapport = rapports::bilan_par_groupes(
         &acces,
         &state.lecture(),
@@ -279,9 +291,11 @@ pub async fn get_income_statement(
     State(state): State<AppState>,
     Extension(current_user): Extension<CurrentUser>,
     Query(query): Query<ReportQuery>,
+    Query(paires): Query<Vec<(String, String)>>,
 ) -> Result<Json<AvecGroupes<IncomeStatement, SectionsResultat>>, AppError> {
-    let groupes = query.groupes()?;
     let acces = ContexteAcces::depuis_api(&current_user);
+    acces.exiger(rapports::EXIGENCES_COMPTE_DE_RESULTAT.affichage)?;
+    let groupes = groupes_de(&paires)?;
     let rapport = rapports::compte_de_resultat_par_groupes(
         &acces,
         &state.lecture(),

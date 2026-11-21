@@ -2587,3 +2587,43 @@ async fn exemple_du_guide_d_api_est_la_reponse_reelle(pool: MySqlPool) {
     assert_eq!(corps["grouping"], attendu["grouping"]);
     assert_eq!(corps["groupedRows"], attendu["groupedRows"]);
 }
+
+/// Revue P1, L-4 — un paramètre de groupes répété : refus clair sur les
+/// rapports groupés (400 `VALIDATION_ERROR` qui le nomme) ; ignoré, comme
+/// avant, par la balance et la TVA, qui partagent `ReportQuery`.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn groupes_parametre_repete(pool: MySqlPool) {
+    let jeu = jeu_pme(&pool).await;
+    let app = spawn_app(pool).await;
+    for route in ["balance-sheet", "income-statement"] {
+        for (suite, parametre) in [
+            ("&detailLevel=2&open=1&open=2", "open"),
+            ("&detailLevel=2&detailLevel=3", "detailLevel"),
+        ] {
+            let resp = get_pme(&app, &jeu, route, jeu.fy_2025, suite).await;
+            assert_eq!(resp.status(), 400, "{route}{suite}");
+            let body: Value = resp.json().await.unwrap();
+            assert_eq!(body["error"]["code"], "VALIDATION_ERROR", "{route}{suite}");
+            let message = body["error"]["message"].as_str().unwrap_or_default();
+            assert!(
+                message.contains(parametre),
+                "{route}{suite} : « {message} »"
+            );
+        }
+    }
+    for route in ["trial-balance", "vat"] {
+        let resp = get_pme(
+            &app,
+            &jeu,
+            route,
+            jeu.fy_2025,
+            "&open=1&open=2&detailLevel=x&detailLevel=y",
+        )
+        .await;
+        assert_eq!(
+            resp.status(),
+            200,
+            "{route} doit ignorer les paramètres de groupes"
+        );
+    }
+}
