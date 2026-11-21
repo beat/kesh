@@ -1147,8 +1147,8 @@ fn the_registry_partition_is_what_the_story_declares() {
 
     assert_eq!(
         LIB_ROUTES.len(),
-        161,
-        "l'inventaire porte sur 161 routes (+ 1 : l'acceptation de la revue PayPal, 38-11c2 ; + 1 : le téléchargement par l'API PayPal, 38-12a ; + 1 : l'import des relevés Wise, 39-11b ; + 1 : l'import du CSV PayPal, 38-11b ; + 1 : le changement de compte analytique d'une facture, 36-16a ; + 1 : le nom de la société, v0190-nom-societe ; + 2 : l'aperçu et la passation de la réévaluation de fin d'exercice, 37-5 ; + 1 : la conversion entre devises, 37-3b ; + 5 : la récupération des cours de change, la saisie et le ↑ d'un cours retenu, l'acquittement des corrections et les genres d'un exercice, 37-2 ; + 1 : le réglage multi-devises de la société, 37-1 ; + 1 : le solde d'ouverture d'un compte bancaire existant, 34-2 ; + 1 : l'adresse de la société, 33-5 ; + 1 : `/mcp`, 32-6a ; + 1 : la décision d'un \
+        162,
+        "l'inventaire porte sur 162 routes (+ 1 : l'acceptation de la revue Wise, 39-11c ; + 1 : l'acceptation de la revue PayPal, 38-11c2 ; + 1 : le téléchargement par l'API PayPal, 38-12a ; + 1 : l'import des relevés Wise, 39-11b ; + 1 : l'import du CSV PayPal, 38-11b ; + 1 : le changement de compte analytique d'une facture, 36-16a ; + 1 : le nom de la société, v0190-nom-societe ; + 2 : l'aperçu et la passation de la réévaluation de fin d'exercice, 37-5 ; + 1 : la conversion entre devises, 37-3b ; + 5 : la récupération des cours de change, la saisie et le ↑ d'un cours retenu, l'acquittement des corrections et les genres d'un exercice, 37-2 ; + 1 : le réglage multi-devises de la société, 37-1 ; + 1 : le solde d'ouverture d'un compte bancaire existant, 34-2 ; + 1 : l'adresse de la société, 33-5 ; + 1 : `/mcp`, 32-6a ; + 1 : la décision d'un \
          envoi MCP, 32-8b ; + 5 : les routes mutantes des prompts du serveur MCP, 32-10a-iii ; \
          + 1 : le rattachement d'une transaction à une écriture, v017-3a ; + 2 : l'aperçu et \
          la création d'un relevé saisi à la main, v016-2a ; + 4 : le `PUT`, le `DELETE`, la \
@@ -1496,8 +1496,8 @@ fn every_replayed_route_calls_an_envelope() {
         }
     }
     assert_eq!(
-        examinees, 31,
-        "les trente et une routes Rejouee ont été examinées (vingt-sept avant la conversion \
+        examinees, 32,
+        "les trente-deux routes Rejouee ont été examinées (39-11c : + l'acceptation de la revue Wise ; vingt-sept avant la conversion \
          entre devises, 37-3b, et la passation de la réévaluation de fin d'exercice, 37-5 ; \
          36-16a : + le changement de compte analytique d'une facture ; 38-11c2 : + \
          l'acceptation de la revue PayPal)"
@@ -1637,8 +1637,8 @@ fn the_replay_partition_is_what_the_story_declares() {
         .count();
 
     assert_eq!(
-        rejouees, 31,
-        "38-11c2 : + l'acceptation de la revue PayPal — 31 ; 36-16a : + le changement de compte analytique d'une facture — 30 ; 37-5 : + la passation de la réévaluation — 29 ; 37-3b : + la conversion entre devises — 28 ; 5 rejouées avant la 15-5e1 (write_off, accept, cancel du rapprochement, \
+        rejouees, 32,
+        "39-11c : + l'acceptation de la revue Wise — 32 ; 38-11c2 : + l'acceptation de la revue PayPal — 31 ; 36-16a : + le changement de compte analytique d'une facture — 30 ; 37-5 : + la passation de la réévaluation — 29 ; 37-3b : + la conversion entre devises — 28 ; 5 rejouées avant la 15-5e1 (write_off, accept, cancel du rapprochement, \
          complément des soldes de départ, modification d'une écriture — 15-8a) + 4 par \
          elle (validation, règlement, annulation de règlement, saisie fournisseur) + la \
          suppression d'une écriture (15-8b) + 12 par la 15-5e2 (dévalidation, avoir, \

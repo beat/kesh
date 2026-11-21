@@ -197,12 +197,12 @@ l'emportent sur les AC ci-dessus là où elles diffèrent.
 
 ## Tâches
 
-- [ ] T0 — Lire 38-11c telle que développée ; noter chaque fonction réutilisée ou généralisée (G10) ; constater si le
+- [x] T0 — Lire 38-11c telle que développée ; noter chaque fonction réutilisée ou généralisée (G10) ; constater si le
   constructeur de conversion à une écriture et le prédicat étendu y sont.
-- [ ] T1 — `wise.rs` : `classify`, revue pure (AC-2, AC-4 à AC-6), tests purs.
-- [ ] T2 — Conversions : paire, constructeur commun, prédicat de l'autre côté s'il manque (AC-3).
-- [ ] T3 — Routes minces de revue et d'acceptation sur le moteur de 38-11c ; registre, trace (AC-1, AC-7).
-- [ ] T4 — Codes, i18n (AC-8) ; non-régression.
+- [x] T1 — `wise.rs` : `classify`, revue pure (AC-2, AC-4 à AC-6), tests purs.
+- [x] T2 — Conversions : paire, constructeur commun, prédicat de l'autre côté s'il manque (AC-3).
+- [x] T3 — Routes minces de revue et d'acceptation sur le moteur de 38-11c ; registre, trace (AC-1, AC-7).
+- [x] T4 — Codes, i18n (AC-8) ; non-régression.
 
 ## Stratégie de tests
 

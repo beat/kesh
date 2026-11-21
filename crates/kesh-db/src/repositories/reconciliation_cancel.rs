@@ -845,31 +845,22 @@ pub async fn cancel_in_tx(
     //     groupé : **une** écriture, rapprochée de **plusieurs** transactions
     //     (une par solde débité, et leurs frais), toutes au débit : aucune
     //     n'est l'autre côté d'une autre (3 bis), l'écriture est donc
-    //     contre-passée. Les autres transactions encore rattachées à l'écriture
-    //     redeviennent en attente avec elle, dans le même geste — jamais
-    //     rapprochées d'une écriture contre-passée. Inerte hors groupe : une
-    //     écriture qui n'est pas un retrait seul n'a qu'une transaction
-    //     rattachée (`linkable_side`, plafond d'un lien ; les acceptations
-    //     n'en posent pas d'autre). Lecture VERROUILLANTE après le verrou de
-    //     l'écriture (3) ; leurs comptes doivent être ouverts (W9). Une
-    //     annulation concurrente d'une autre ligne du groupe tient sa ligne
-    //     (étape 1) et attend l'écriture : InnoDB rompt l'interblocage, la
-    //     route rejoue (`Rejouee`).
+    //     contre-passée. Les autres transactions encore rattachées à
+    //     l'écriture **du même compte de prestataire**
+    //     ([`PROVIDER_GROUP_SIBLING`]) redeviennent en attente avec elle, dans
+    //     le même geste — jamais rapprochées d'une écriture contre-passée.
+    //     Toute autre transaction rattachée (état forgé : aucun chemin ne le
+    //     produit) reste refusée au rang 3, comme avant
+    //     (`MATCHED_BANK_TRANSACTION`). Inerte hors prestataire et hors groupe.
+    //     Lecture ordinaire des identifiants, puis verrou de leurs lignes,
+    //     APRÈS le verrou de l'écriture (3) ; leurs comptes doivent être ouverts
+    //     (W9). Une annulation concurrente d'une autre ligne du groupe tient sa
+    //     ligne (étape 1) et attend l'écriture : InnoDB rompt l'interblocage,
+    //     la route rejoue (`Rejouee`).
     let siblings: Vec<(i64, i64)> = if unlink_only {
         Vec::new()
     } else {
-        sqlx::query_as(
-            "SELECT id, bank_account_id FROM bank_transactions \
-             WHERE company_id = ? AND matched_entry_id = ? AND id <> ? \
-               AND status = 'reconciled' \
-             ORDER BY id FOR UPDATE",
-        )
-        .bind(company_id)
-        .bind(entry_id)
-        .bind(bank_transaction_id)
-        .fetch_all(&mut **tx)
-        .await
-        .map_err(map_db_error)?
+        provider_group_siblings(tx, company_id, entry_id, bank_transaction_id).await?
     };
     for (_, account) in &siblings {
         super::bank_accounts::ensure_open_in_tx(tx, company_id, *account).await?;
@@ -1045,6 +1036,61 @@ pub async fn cancel_in_tx(
         grouped_invoices: Vec::new(),
         kind,
     })
+}
+
+/// Story 39-11c (amendement A-2) — prédicat SQL sur `bt` (une transaction
+/// liée à l'écriture, son compte bancaire joint en `ba`) : `bt` est sur un
+/// compte du **même compte de prestataire** (`provider`, `provider_account`)
+/// que la transaction `?` qu'on dé-rapproche — une autre ligne d'un paiement
+/// par carte Wise groupé. **Une** définition : l'exemption du rang 3
+/// (`settlement_cancellation::settlement_entry_cancel_blocker`, la vue et le
+/// geste) et l'étape (5 bis) de [`cancel_in_tx`] la lisent. Lien : un `?`,
+/// l'identifiant de la transaction dé-rapprochée.
+pub(crate) const PROVIDER_GROUP_SIBLING: &str = "EXISTS (SELECT 1 FROM bank_transactions u \
+     JOIN bank_accounts ua ON ua.id = u.bank_account_id \
+     WHERE u.id = ? AND ua.provider IS NOT NULL AND ua.provider_account IS NOT NULL \
+       AND ba.provider = ua.provider AND ba.provider_account = ua.provider_account)";
+
+/// Les **autres** transactions rapprochées de l'écriture `entry_id` qui sont
+/// des lignes du même paiement de prestataire que `unlinking`
+/// ([`PROVIDER_GROUP_SIBLING`]) : `(identifiant, compte bancaire)`, leurs lignes
+/// verrouillées (`FOR UPDATE`, après une lecture ordinaire qui les désigne).
+async fn provider_group_siblings(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    company_id: i64,
+    entry_id: i64,
+    unlinking: i64,
+) -> Result<Vec<(i64, i64)>, DbError> {
+    let ids: Vec<i64> = sqlx::query_scalar(&format!(
+        "SELECT bt.id FROM bank_transactions bt \
+         JOIN bank_accounts ba ON ba.id = bt.bank_account_id \
+         WHERE bt.company_id = ? AND bt.matched_entry_id = ? AND bt.id <> ? \
+           AND bt.status = 'reconciled' AND {PROVIDER_GROUP_SIBLING} \
+         ORDER BY bt.id"
+    ))
+    .bind(company_id)
+    .bind(entry_id)
+    .bind(unlinking)
+    .bind(unlinking)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(map_db_error)?;
+    let mut out = Vec::with_capacity(ids.len());
+    for id in ids {
+        let row: Option<(i64, i64)> = sqlx::query_as(
+            "SELECT id, bank_account_id FROM bank_transactions \
+             WHERE id = ? AND company_id = ? AND matched_entry_id = ? AND status = 'reconciled' \
+             FOR UPDATE",
+        )
+        .bind(id)
+        .bind(company_id)
+        .bind(entry_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(map_db_error)?;
+        out.extend(row);
+    }
+    Ok(out)
 }
 
 /// Annule un rapprochement, transaction comprise — mince enveloppement de
