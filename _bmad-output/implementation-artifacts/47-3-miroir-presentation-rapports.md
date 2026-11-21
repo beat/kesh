@@ -1,6 +1,6 @@
 # Story 47-3 : compte miroir — présentation au bilan et au compte de résultat
 
-Status: in-progress
+Status: review
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R5 à R8 ; D4, D5, D7, D8 ; Q2, Q4, Q5, Q7, Q11 ; FR-47-3, FR-47-4 ; NFR-47-1, NFR-47-2, NFR-47-4. **Refonte du
@@ -302,16 +302,18 @@ Sonnet 5.5.
   seules les descriptions changent (contrat MCP à rejouer).
 - Le test de l'exemple monte la société avec `OrgType::Independant` (helper existant) et charge le plan `pme` par
   `load_chart("pme")` : le plan est celui de l'exemple, le type d'organisation non.
-- Pas de sonde négative par mutation exécutée (accueil présenté, présentation sans retri) : à faire à la revue.
-- **Gates** : sur la cible partagée (abandonnée), `gate-cible` (fmt ; nextest `kesh-report` lib, `reports_e2e`,
-  `homepage_summary_e2e`, `mcp_*`, `textes_coherents`, `services_motif` : 345 passés, 4 échecs `mcp_outils_e2e`
-  imputables à une base `_sqlx_test_*` supprimée en cours de test, base partagée) et frontend (`npm run check` 0 erreur,
-  lint-i18n-ownership PASS, Vitest 278 fichiers / 4627 tests, build) — **tous à rejouer sur la cible propre**
-  `/home/beat/claude/kesh-targets/kesh-wt47s3` (règle du 2026-11-20). Gate backend complet + E2E complet **en file**
-  (`kesh-gate-logs/s47-3/chaine2.sh`, journal `chaine2.log`, `gate-backend.log`, `e2e.log`), pas encore joués : la story
-  reste `in-progress`. Un premier gate backend a rougi sur `clippy::unnecessary_map_or` dans mon test (corrigé, `4797ba9c`).
-  Les clippy/nextest de `kesh-db` rouges de la première tentative venaient de la cible partagée (artefacts d'une autre
-  worktree).
+- **Sondes négatives par mutation, exécutées** : (1) accueil présenté (`homepage_summary`) : rouge sur
+  `homepage_summary_e2e::mirror_leaves_the_homepage_on_real_balances` (`kesh-gate-logs/s47-3/mut-accueil.log`) ;
+  (2) présentation sans retri : rouge sur `presentation::tests::banque_a_decouvert_passe_au_passif`
+  (`mut-retri.log`).
+- **Gates rejoués sur la cible propre** `/home/beat/claude/kesh-targets/kesh-wt47s3`, au commit `50a8c906` :
+  backend (nextest, base `kesh_s473`) **6202 passés, 14 ignorés** ; E2E complet **480 passés, 10 échecs attendus**
+  (les sept de la KF-029 #97, KF-065 #1282 ×2, KF-067 #1284) ; frontend **4658 tests** (`npm run check`,
+  `lint-i18n-ownership`, build verts) ; `gate-ci` (`cargo test`, journal `s47-3/gate-ci.log`) **804 passés, 1 échec,
+  5 ignorés** : l'échec est `admin_auto_backup_e2e::disque_sature_pendant_l_ecriture` (panique de `zip-2.6.1`
+  `write.rs:1078`, `Failed` au lieu de `DiskFull`), **instable déjà vu** sur 39-11a, 40-7a et 38-11d, sans rapport
+  avec la story ; **rejeu de 3 passages** (`s47-3/rejeu-disque.log`) : 20 passés, 0 échec, trois fois. Ce gate
+  (`cargo test`) ne vaut que pour ce commit ; aucune ligne de code depuis.
 
 **À recâbler à la fusion de l'Epic 46 (Q5)** : (1) `groupedRows` à calculer **après** `present_*` (si la 46-1 le calcule
 dans `generate`, déplacer l'appel dans le service) ; (2) la ligne de miroir doit aller au groupe du miroir (l'arbre
