@@ -725,9 +725,24 @@ fn an_expired_card_reserve_debited_then_recredited_is_read() {
     // Réserve débitée le 20, recréditée le 27 à son expiration (capturée
     // ensuite sur un autre solde) : même identifiant, deux sens.
     let file = statement(&[
-        wise_line("CARD-91000001", "27-12-2020 03:15:00.000", "32.10", "150.00"),
-        wise_line("CARD-91000001", "20-12-2020 18:40:12.000", "-32.10", "117.90"),
-        wise_line("TRANSFER-91000000", "01-12-2020 09:00:00.000", "150.00", "150.00"),
+        wise_line(
+            "CARD-91000001",
+            "27-12-2020 03:15:00.000",
+            "32.10",
+            "150.00",
+        ),
+        wise_line(
+            "CARD-91000001",
+            "20-12-2020 18:40:12.000",
+            "-32.10",
+            "117.90",
+        ),
+        wise_line(
+            "TRANSFER-91000000",
+            "01-12-2020 09:00:00.000",
+            "150.00",
+            "150.00",
+        ),
     ]);
     let s = parse_wise_csv(&file).unwrap();
     let got: Vec<(&str, WiseDirection, rust_decimal::Decimal)> = s
@@ -754,7 +769,12 @@ fn a_card_check_debited_then_recredited_seconds_later_is_read() {
     let file = statement(&[
         wise_line("CARD-91000002", "12-02-2020 10:00:09.000", "0.50", "80.00"),
         wise_line("CARD-91000002", "12-02-2020 10:00:01.000", "-0.50", "79.50"),
-        wise_line("TRANSFER-91000003", "01-02-2020 09:00:00.000", "80.00", "80.00"),
+        wise_line(
+            "TRANSFER-91000003",
+            "01-02-2020 09:00:00.000",
+            "80.00",
+            "80.00",
+        ),
     ]);
     let s = parse_wise_csv(&file).unwrap();
     assert_eq!(s.rows.len(), 3);
@@ -768,9 +788,24 @@ fn a_card_check_debited_then_recredited_seconds_later_is_read() {
 #[test]
 fn a_true_duplicate_same_id_direction_amount_and_date_is_refused() {
     let file = statement(&[
-        wise_line("CARD-91000004", "05-03-2020 11:00:00.000", "-10.00", "70.00"),
-        wise_line("CARD-91000004", "05-03-2020 11:00:00.000", "-10.00", "80.00"),
-        wise_line("TRANSFER-91000005", "01-03-2020 09:00:00.000", "90.00", "90.00"),
+        wise_line(
+            "CARD-91000004",
+            "05-03-2020 11:00:00.000",
+            "-10.00",
+            "70.00",
+        ),
+        wise_line(
+            "CARD-91000004",
+            "05-03-2020 11:00:00.000",
+            "-10.00",
+            "80.00",
+        ),
+        wise_line(
+            "TRANSFER-91000005",
+            "01-03-2020 09:00:00.000",
+            "90.00",
+            "90.00",
+        ),
     ]);
     assert_eq!(
         parse_wise_csv(&file).unwrap_err(),
@@ -787,10 +822,30 @@ fn a_second_debit_under_the_same_id_is_refused_with_the_debit_lines_only() {
     // non ; les lignes citées sont celles du sens en double (limite de la
     // fiche : refus bruyant, jamais un mouvement perdu).
     let file = statement(&[
-        wise_line("CARD-91000006", "10-04-2020 08:00:00.000", "-20.00", "80.00"),
-        wise_line("CARD-91000006", "08-04-2020 08:00:00.000", "20.00", "100.00"),
-        wise_line("CARD-91000006", "01-04-2020 08:00:00.000", "-20.00", "80.00"),
-        wise_line("TRANSFER-91000007", "01-03-2020 09:00:00.000", "100.00", "100.00"),
+        wise_line(
+            "CARD-91000006",
+            "10-04-2020 08:00:00.000",
+            "-20.00",
+            "80.00",
+        ),
+        wise_line(
+            "CARD-91000006",
+            "08-04-2020 08:00:00.000",
+            "20.00",
+            "100.00",
+        ),
+        wise_line(
+            "CARD-91000006",
+            "01-04-2020 08:00:00.000",
+            "-20.00",
+            "80.00",
+        ),
+        wise_line(
+            "TRANSFER-91000007",
+            "01-03-2020 09:00:00.000",
+            "100.00",
+            "100.00",
+        ),
     ]);
     assert_eq!(
         parse_wise_csv(&file).unwrap_err(),
