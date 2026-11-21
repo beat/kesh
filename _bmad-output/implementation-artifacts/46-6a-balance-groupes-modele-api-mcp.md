@@ -72,7 +72,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    totalDebit, totalCredit, balance, closingBalance, currency?, openingCurrency?, totalDebitCurrency?,
    totalCreditCurrency?, balanceCurrency?, closingCurrency?, open?, active? }` (les noms de `TrialBalanceRow`, plus
    ceux de la 46-1) ; `rows`, plat, est toujours rendu. Sans paramètre : JSON identique à l'octet (NFR-46-1). `GET /reports/trial-balance` partage `ReportQuery` et **ignorait** ces paramètres (46-1) : il les lit et les refuse
-   désormais comme les deux autres rapports. Une seule requête de plus (l'arbre), aucune sans paramètre.
+   désormais comme les deux autres rapports (**par `groupes_de` et `Query<Vec<(String, String)>>`, non par des champs `Option<String>` ajoutés à `ReportQuery`**, que `vat` partage aussi : un paramètre répété y deviendrait un rejet Axum sans `VALIDATION_ERROR` — revue P2 de la 46-1, L-6). Une seule requête de plus (l'arbre), aucune sans paramètre.
 6. **AC-6 — MCP.** `kesh_balance` (`ArgumentsBalance`, `deny_unknown_fields`, schéma en ligne `rapports.rs:208-209`)
    gagne les quatre arguments de la 46-4, **déclarés dans la structure** (pas de `flatten`) et convertis par la
    fonction de la 46-4. En mode groupé : la sortie gagne `groupes` (`null` sinon) = l'écho et `lignes` (genre,

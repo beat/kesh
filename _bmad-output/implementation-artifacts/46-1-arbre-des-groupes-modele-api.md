@@ -189,6 +189,7 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
       `open=1,2`) qui produit la même `DemandeGroupes` typée, et la construction directe depuis des valeurs typées
       (tableaux d'entiers du MCP, 46-4) ; les refus de l'AC-8 vivent dans la seconde, sauf ceux de la syntaxe de la chaîne (`2.5`, `ALL`, vide, élément non entier), que la première refuse à l'analyse ; `ReportQuery` gagne `detail_level`, `subtotal_position`, `open`, `closed`
       (`Option<String>`, validés à la main comme `validate_format`, pour un 400 et non un 422 Axum).
+      *(Annotation du 2026-11-21, revue P2 L-1 : description de tâche périmée — la remédiation P1 a retiré ces quatre champs de `ReportQuery` ; les paramètres se lisent dans `groupes_de` (`routes/reports.rs`) par `Query<Vec<(String, String)>>`, qui refuse un paramètre répété par un 400 `VALIDATION_ERROR`.)*
 - [x] **T4 — tests d'intégration** (AC 14) dans `crates/kesh-api/tests/reports_e2e.rs`.
 - [x] **T5 — documentation** (AC 12, 15).
 - [ ] **T6 — gate complet** (fmt, clippy, nextest, `scripts/gate-ci.sh`) ; frontend non touché ; E2E complet au
@@ -336,6 +337,7 @@ base avec une cible à part, supprimée ensuite (`verif-fixtures-base.sh`).
 - `crates/kesh-api/src/routes/reports.rs` : `ReportQuery` gagne `detail_level`, `subtotal_position`, `open`, `closed`
   (`Option<String>`, 400 et non 422) ; les deux handlers JSON rendent `AvecGroupes<…>` ; les exports lisent
   `&report.rapport`. `trial-balance` et `vat` partagent `ReportQuery` et ignorent les champs.
+  *(Annotation du 2026-11-21, revue P2 L-1 : périmé — `ReportQuery` n'a plus que `fiscal_year_id`, `period_start`, `period_end` ; les quatre paramètres se lisent dans `groupes_de`, `trial-balance` et `vat` ne sont pas touchés.)*
 - `crates/kesh-api/src/mcp/outils/rapports.rs` : `kesh_bilan` et `kesh_compte_de_resultat` lisent `.rapport` (sans
   groupes jusqu'à la 46-4).
 - `docs/api-external.md` : paragraphe « Le bilan et le compte de résultat par groupes de comptes » (paramètres, refus,
@@ -375,7 +377,7 @@ l'Epic 46 avec la 47-3 doit le savoir.
   dissolution remontent les ancêtres de chaque ligne, O(n × profondeur) — profondeur de 3 au plan PME.
 
 **Tests ajoutés** (de `4c498494` à `HEAD`, recomptés : `grep -c '#\[test\]' crates/kesh-report/src/groupes.rs` → 13 ;
-`sqlx::test` de `reports_e2e.rs` 39 → 46, soit 7) : 13 unitaires dans `groupes.rs` (niveaux 1, 2, 3, `all` et 20 ;
+`sqlx::test` de `reports_e2e.rs` 39 → 46, soit 7 ; *annotation du 2026-11-21, revue P2 L-2 : recompté au dernier commit de code `14230aa3`, **14** unitaires et `sqlx::test` 39 → 47, soit **8** d'intégration, le test `groupes_parametre_repete` de la remédiation P1 s'y ajoutant*) : 13 unitaires dans `groupes.rs` (niveaux 1, 2, 3, `all` et 20 ;
 `maxDepth` ; `open`/`closed` dont un ouvert sous fermé ; `header`/`footer` et la somme sans `subtotal` ; solde propre ;
 groupes nuls masqués ou non ; devise unique, mêlée, CHF mêlé ; cycle, parent inconnu, étranger, lui-même ; groupe à
 cheval et son solde propre ; plan PME complet à chaque niveau de 1 à 20 et `all` ; propriété sur 300 arbres tirés,

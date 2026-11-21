@@ -78,7 +78,7 @@ dur, i18n des PDF différée).
       quand même sa fusion dans `main` — Beat et Guy décident alors de l'ordre.
 - [ ] **T1 — fixtures** (AC-2) au commit de base, avant toute modification.
 - [ ] **T2 — route** (AC-1) : `ExportQuery` (`routes/reports.rs`) gagne les quatre champs ; validation par la fonction
-      du service de la 46-1.
+      du service de la 46-1. **Ne pas ajouter `Option<String>` à `ExportQuery`** (revue P2 de la 46-1, L-6) : un paramètre répété deviendrait un rejet de désérialisation d'Axum sans `VALIDATION_ERROR`. Lire les groupes par `groupes_de` (à passer en `pub(crate)`) et un extracteur `Query<Vec<(String, String)>>`, comme les routes JSON.
 - [ ] **T3 — PDF** (AC 3, 4, 6) : deux fonctions **neuves** de rendu groupé, qui reçoivent l'enveloppe
       `AvecGroupes<BalanceSheet, SectionsBilan>` / `AvecGroupes<IncomeStatement, SectionsResultat>` de la 46-1 (C-46-1-4) ; `render_balance_sheet_pdf`
       (`pdf.rs:816`) et `render_income_statement_pdf` (`:954`) gardent **leur comportement**, leurs appelants et leurs
