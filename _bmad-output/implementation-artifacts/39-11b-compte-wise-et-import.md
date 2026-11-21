@@ -318,29 +318,26 @@ qui retire tout prestataire (`modifier_un_solde_wise`) ; changement de prestatai
 
 ### Gates (cible `/home/beat/claude/kesh-targets/kesh-wt3911b`, `CARGO_INCREMENTAL=0`, file `heavy.sh`)
 
-- Gate ciblé (fmt, clippy workspace, nextest de `wise_import_e2e`, `paypal_import_e2e`, `audit_route_registry`,
-  `audit_label_registry`, `bank_accounts_e2e`, `bank_account_opening_balance_e2e`, `admin_full_import_e2e`,
-  `i18n_e2e`, `bank_accounts_repository`, libs `kesh-api` et `kesh-db`), base `kesh_s3911b` sur `kesh-mariadb-dev5` :
-  **1501 passés, 5 ignorés** (`nextest-5.log`).
-- **Gate complet** `scripts/test-fast.sh --ci` au commit `368369e3`, base `kesh_s3911b` remise à zéro sur
-  `kesh-mariadb-dev2` (3307) : fmt et clippy verts, nextest **6269 passés, 15 ignorés** (`gate-backend.log`).
-- **E2E complet** (`LANG=fr_CH.UTF-8`, base `kesh_e2e_s3911b` sur `kesh-mariadb-dev2`, backend port 3911) :
-  **477 passés, 10 échecs, 18 ignorés** — les dix attendus et eux seuls : les sept de la KF-029 (#97 :
-  `mode-expert.spec.ts:26`, `:41`, `onboarding-path-b.spec.ts:65`, `:92`, `onboarding.spec.ts:57`, `:77`, `:150`),
-  `backup-restore-new-install.spec.ts:262`, `:381`, `opening-balances.spec.ts:156` (`e2e.log`).
-- Frontend : non touché par la story (aucun fichier de `frontend/`), gates frontend non relancés ; le build du
-  frontend a servi l'E2E (`e2e-build.log`).
-- **`scripts/gate-ci.sh` : non vert, pour une cause d'environnement, à rejouer.** Deux passages (copie `git archive`
-  de `368369e3`, `kesh-mariadb-dev2`) : la base `kesh_ci_s3911b`, recréée et migrée par le script, **n'existait plus**
-  au premier test qui l'ouvre (`Unknown database 'kesh_ci_s3911b'`, 37 tests des libs `kesh-api` :
-  `auth::bootstrap::tests`, `pre_upgrade_backup::tests`), après une quinzaine de minutes de compilation ; 701 autres
-  passés (`gate-ci.log`, `gate-ci-2.console`). Le premier passage avait en plus un écart d'enveloppes (conteneur de la
-  place `heavy.sh` pour `docker`, port 3307 pour `cargo`, l'environnement fermé de gate-ci ne transmettant pas
-  `KESH_DB_PORT`) — corrigé (`gate-ci.sh` force dev2 des deux côtés) ; le second a rougi de la même façon. La même
-  disparition s'est vue sur `kesh_s3911b` entre deux runs des sondes (corrigée en remettant la base à zéro avant
-  chaque sonde). Le troisième passage, avec une sonde d'existence de la base, a été **arrêté par Claude Code faute de
-  mémoire sur la station** avant de démarrer, et n'a pas été relancé. Les mêmes tests sont verts au gate complet
-  (nextest). À rejouer à la reprise, en cherchant qui supprime la base sur dev2 pendant le gate.
+Tous au **dernier commit de code `385adfaf`** (remédiation du LOW L1 de la revue P2), journaux `kesh-gate-logs/s39-11b/` ;
+Claude Sonnet 5.5, 2026-11-21. Les gates joués à `368369e3` (avant les remédiations P1 et P2) sont remplacés.
+
+- **Gate ciblé** (fmt, clippy workspace `-D warnings`, nextest `test(wise) | binary(wise_import_e2e)`) : vert,
+  **19 passés** (`cible-p2.log`, `cible-p2.console`).
+- **Gate complet** `scripts/test-fast.sh --ci`, base `kesh_s3911b` remise à zéro (`kesh-mariadb-dev5`) : fmt et clippy verts,
+  nextest **6271 passés, 15 ignorés** (`gate-backend.log`).
+- **`scripts/gate-ci.sh`** (copie `git archive` de `385adfaf`, enveloppes lisant `gate-ci-wrap/place.env`, écrit par le
+  script, sans forçage de dev2) : **6290 passés, 0 échoué, 19 ignorés** (`gate-ci.log`, code 0). Le premier passage
+  (`gate-ci-1-unknowndb.log`) a rougi sur 37 tests (`Unknown database 'kesh_ci_s3911b'`, base disparue du serveur en cours
+  de gate : environnement, comme à `368369e3`) ; rejoué sans autre changement, vert. La cause de la disparition de la base
+  n'est pas élucidée ici.
+- **E2E complet** (`LANG=fr_CH.UTF-8`, base `kesh_e2e_s3911b`, backend port 3911) : **477 passés, 10 échecs, 18 ignorés** —
+  les dix attendus et eux seuls : les sept de la KF-029 (#97 : `mode-expert.spec.ts:26`, `:41`,
+  `onboarding-path-b.spec.ts:65`, `:92`, `onboarding.spec.ts:57`, `:77`, `:150`), `backup-restore-new-install.spec.ts:262`
+  et `:381` (KF-065, #1282), `opening-balances.spec.ts:156` (KF-067, #1284) (`e2e.log`).
+- Frontend : non touché par la story (aucun fichier de `frontend/`), gates frontend non relancés ; le build du frontend a
+  servi l'E2E (`e2e-build.log`).
+- Les journaux `mut-*.log` et `mutations*.log` des six sondes négatives sont ceux du passage à `368369e3` ; la mutation du
+  test neuf `une_longue_description_ne_rogne_pas_la_conversion` n'a pas été jouée (à faire à la passe ciblée P3).
 
 ### Revue de code P1 (Claude Opus 5.5, 2026-11-21) — remédiation
 
@@ -358,3 +355,14 @@ qui retire tout prestataire (`modifier_un_solde_wise`) ; changement de prestatai
   l'erreur interne « import PayPal : trop de transactions » devient « import {provider} : trop de transactions ». Ni
   réponse, ni trace d'audit, ni ordre des refus ne changent ; « PayPal inchangé » s'entend hors ces textes.
 - Gate ciblé de la remédiation : fmt, clippy workspace, nextest de `wise_import_e2e`, `paypal_import_e2e`, `audit_route_registry`, des tests `wise_imports` et `bank_account` : 58 verts sur 59, le rouge (facture fournisseur sans compte fournisseur par défaut dans le test neuf, corrigé) puis rejoué vert (`cible-p1-rem.log`, `cible-p1-rem-2.log`). Gate complet au push.
+
+### Revue de code P2 et LOW L1 (Claude Sonnet 5.5, 2026-11-21)
+
+- P2 : 0 CRITICAL, 0 HIGH, 0 MEDIUM, 5 LOW (`revue-p2-rapport.md`). **L1 corrigé** (`385adfaf`) : `transaction_of_row` rogne la
+  tête du libellé (description, type de détail, numéro non IBAN) pour réserver la place du segment de conversion ; la note
+  reste rognée en premier. Test `une_longue_description_ne_rogne_pas_la_conversion`. Le code de production étant touché, la
+  boucle se rouvre sur une **passe ciblée P3** de ce seul commit (`revue-p3-prompt.md`) ; statut `review`.
+- L2 (deux fichiers de la 38-12a non nommés à la liste « À raccorder »), L3 (sonde négative du paiement fournisseur non
+  rejouée), L4 (fmt/clippy de la remédiation P1 sans journal : couverts par le gate ciblé et le gate complet ci-dessus) :
+  non corrigés, sans effet sur le code. La relisibilité du segment par la 39-11c (L1, seconde partie) est à fixer dans sa
+  fiche.
