@@ -1,6 +1,6 @@
 # Story 47-3 : compte miroir — présentation au bilan et au compte de résultat
 
-Status: review
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R5 à R8 ; D4, D5, D7, D8 ; Q2, Q4, Q5, Q7, Q11 ; FR-47-3, FR-47-4 ; NFR-47-1, NFR-47-2, NFR-47-4. **Refonte du
@@ -328,9 +328,9 @@ Sonnet 5.5.
   actif − passif, `presentation.rs`), couvert par le `gate-ci` complet, non par un nextest complet rejoué.
 - **Écart d'AC 9, déclaré (L-4)** : le cas de l'accueil crée `3100 « Gains de change »` miroir de `6100.1`, non
   `6950.1 → 6900.1` de l'exemple ; preuve équivalente (la sonde négative a rougi).
-- **Décision de Beat du 2026-11-21, point e (L-5)** : un miroir sous un groupe d'un autre type donne un avertissement
+- **Décision du responsable de l'epic du 2026-11-21, point e (L-5)** : un miroir sous un groupe d'un autre type donne un avertissement
   **non bloquant**, non un refus ; état admis, effet à la fusion avec l'Epic 46 et porteur de l'avertissement au
-  fichier d'epic (§ *Décision de Beat du 2026-11-21*). Les tests de la 47-3 emploient `1020.1` (numéro d'un groupe
+  fichier d'epic (§ *Décision du responsable de l'epic du 2026-11-21*). Les tests de la 47-3 emploient `1020.1` (numéro d'un groupe
   d'actif) comme miroir de passif sans conséquence : la présentation ne lit pas les groupes.
 - **À la fusion dans `epic/47` (L-6)** : `sprint-status.yaml` entrera en conflit ; garder 47-2 `done` (la branche la
   porte encore `review`).
@@ -348,3 +348,15 @@ lit toutes les lignes présentées) ; (3) la ligne `kind: account` de `groupedRo
 - crates/kesh-api/tests/{reports_e2e,homepage_summary_e2e}.rs
 - docs/api-external.md, docs/manual/fr/admin-manual.tex
 - _bmad-output/implementation-artifacts/47-3-miroir-presentation-rapports.md, sprint-status.yaml
+
+### Clôture (2026-11-21)
+
+Revue de code : **P1** (Opus, complète) 0 CRITICAL · 0 HIGH · 3 MEDIUM · 6 LOW → remédiation (`47284a31`, `b4d17d70`,
+`d9a4c573`) → **P2** (Sonnet, ciblée sur la remédiation) 0 · 0 · 0 · 4 LOW. Boucle close sur P2. LOW de la P2 :
+LOW-1 (le contrôle `ecart_conserve` n'est exercé par aucun test, défense en profondeur inatteignable par construction),
+LOW-2 (message de repli qui parle de l'équation quand seul l'écart diffère), LOW-3 (le filtre de type étranger de
+`presentation.rs:46` n'est pas tué par les tests) : en issue `technical-debt`, non corrigés ici pour ne pas rouvrir la
+boucle ; LOW-4 (nom de personne dans la fiche et le fichier d'epic) : corrigé dans ce commit, texte seul.
+Gates du dernier commit de code : `gate-ci.sh` complet 6222 passés / 0 / 18 ignorés à `b4d17d70` ; gate ciblé 211
+passés ; gate backend nextest 6202 / 14 et E2E 480 / 10 attendus à `50a8c906` (seule ligne de production touchée
+depuis : L-1, couverte par le gate-ci complet).

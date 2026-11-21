@@ -130,7 +130,7 @@ décision rend caduques portent la mention « remplacé par la décision du 2026
 *Stories*), **remises à `drafted`** et à revalider en boucle (`CLAUDE.md` § *Review Iteration Rule*) ; la validation du
 2026-11-19 (§ *Validation des fiches*) ne vaut plus pour elles.
 
-### Décision de Beat du 2026-11-21 (point e) : miroir sous un groupe d'un autre type
+### Décision du responsable de l'epic du 2026-11-21 (point e) : miroir sous un groupe d'un autre type
 
 Un compte miroir rangé sous un groupe d'**un autre type** que le sien donne un **avertissement non bloquant**, non un
 refus : cet état est **admis**. Effet attendu à la fusion avec l'Epic 46 : la ligne du miroir, rangée dans la section du
