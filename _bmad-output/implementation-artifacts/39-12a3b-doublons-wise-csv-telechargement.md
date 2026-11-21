@@ -29,10 +29,10 @@ automatiques et les paiements par carte payés dans une autre devise.
 ## Critères d'acceptation
 
 1. **AC-1 — Doublons avec le CSV, dans les deux ordres** (AC-4 de 39-12a3 avant l'amendement du 21.11, reprise telle
-   quelle ; « cette story » y désigne aussi le téléchargement de 39-12a3, qui passe désormais `WiseDuplicateRules`). Règle de base (39-11b AC-5) : même `transaction_id` sur le même
-   compte bancaire → ligne ignorée. S'y ajoutent trois règles **propres à Wise**, qui ne s'écrivent **pas** dans le chemin
+   quelle ; « cette story » y désigne aussi le téléchargement de 39-12a3, qui passe désormais `WiseDuplicateRules`). Règle de base (39-11b AC-5, clé (identifiant, sens) de 39-11a2, au lecteur comme à l'import, lue par `existing_transactions_by_ids` (identifiant, montant, date) : même `transaction_id` **et même sens** sur le même compte bancaire → ligne ignorée ; un montant à 0.00 vaut pour les deux sens).
+   S'y ajoutent trois règles **propres à Wise**, qui ne s'écrivent **pas** dans le chemin
    commun tel quel : le cœur `provider_imports.rs` reçoit un paramètre `rules: Option<&dyn DuplicateRules>` (rien par défaut),
-   appelé **sous les verrous et dans la transaction d'écriture**, après le test d'identifiant et **avant** le calcul de la période et de la clôture de la devise et le cas « aucune ligne gardée » (qui jugent les lignes restantes) ; **PayPal (38-11b, 38-12a) et
+   appelé **sous les verrous et dans la transaction d'écriture**, après le test de la clé (identifiant, sens) et **avant** le calcul de la période et de la clôture de la devise et le cas « aucune ligne gardée » (qui jugent les lignes restantes) ; **PayPal (38-11b, 38-12a) et
    Stripe (40-7b) passent `None` et se comportent comme avant, octet pour octet** — un doublon de montant différent y reste
    ignoré, test de non-régression sur une entrée PayPal ; Wise (la route CSV de 39-11b, `wise_imports::create`, **et** cette
    story) passe `WiseDuplicateRules` (module neuf `crates/kesh-api/src/wise_duplicates.rs`, préfixes d'identifiant Wise
@@ -63,7 +63,7 @@ automatiques et les paiements par carte payés dans une autre devise.
    - **(R1) Frais de conversion inclus.** Une ligne de frais `FEE-BALANCE-x` ou `FEE-CONVERSION_ORDER-x` d'un CSV dont la
      ligne d'origine `x` est un doublon, et dont l'origine en base a pour montant `montant de x dans le fichier + montant
      des frais` (débit téléchargé, frais inclus, 39-12a2 AC-4), est **ignorée** et comptée dans `feesIncluded` — sans quoi
-     les frais compteraient deux fois. « L'origine en base » est la ligne de même identifiant, ou celle que (R3) a
+     les frais compteraient deux fois. « L'origine en base » est la ligne de même identifiant **et de même sens** que l'origine `x` du fichier (clé de 39-11a2 ; un montant à 0.00 vaut pour les deux sens), ou celle que (R3) a
      reconnue pour un `CONVERSION_ORDER-x` du CSV (une `AUTO_CONVERSION-y` téléchargée). Le compte est rendu par fichier à la réponse de l'import CSV sous la clé
      `feesIncluded`, **absente quand elle vaut 0** (les réponses de 39-11b gardent leur forme) ; l'écran d'import CSV
      (39-11d) l'affiche avec le libellé de 39-12b.
@@ -161,6 +161,8 @@ conversion compris, y compris pour les paiements par carte payés dans une autre
   il se dédoublonne par la règle de base, sans R1 ni R2. Le manuel (39-12b) recommande le CSV « avec ».
 
 ## Change Log
+
+- 2026-11-22 — alignement sur 39-11a2, terminée (branche `story/39-11a2`) : règle de base et origine d'un `FEE-x` (R1) lues par la clé (identifiant, sens), montant à 0.00 pour les deux sens ; `existing_transactions_by_ids` réutilisée (M13). Statut `drafted`, validation P2 à lancer.
 
 - 2026-11-21 — **remédiation de la validation P1 des fiches 39-12a** (Claude Sonnet 5.5, contexte frais ; rapport
   `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md` ; ici 0 C, 0 H, 1 M, 2 L). **M13** — dépend de 39-14 (raccord

@@ -82,8 +82,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
    le contrôle de 39-12a2 AC-5 quand un point de contrôle existe.
 4. **AC-4 — Déplacée en 39-12a3b** (amendement du 21.11, A-2) : les doublons propres à Wise entre un CSV et un
    téléchargement (règles R1 à R3, point d'accroche `rules` du cœur commun, lectures du dépôt, préfixe
-   `AUTO_CONVERSION` du rapprochement). Ici, le cœur applique sa seule règle de base (39-11b AC-5) : même `transaction_id`
-   sur le même compte bancaire → ligne ignorée.
+   `AUTO_CONVERSION` du rapprochement). Ici, le cœur applique sa seule règle de base (39-11b AC-5, clé (identifiant, sens) de 39-11a2, au lecteur comme à l'import, lue par `existing_transactions_by_ids` (identifiant, montant, date) : même `transaction_id` **et même sens** sur le même compte bancaire → ligne ignorée ; un montant à 0.00 vaut pour les deux sens) ; la lecture est celle de 39-11a2, jamais une lecture neuve.
 5. **AC-5 — Parallélisme.** `KESH_WISE_PARALLEL` (socle S2, lue par 39-12a1) borne les requêtes de devis faites en même
    temps pour l'ensemble du serveur (les activités et transferts se lisent dans l'ordre, par curseur et par `offset`) ; la
    reprise sur 429 (pause commune, `Retry-After`, six essais) est celle du socle, la même qu'à PayPal et Stripe ; **aucune
@@ -170,6 +169,8 @@ AC ci-dessus là où elles diffèrent.
   l'ordre n'est que celui du développement (39-12a3, puis 39-12a3b).
 
 ## Change Log
+
+- 2026-11-22 — règle de base des doublons alignée sur 39-11a2, terminée (branche `story/39-11a2`) : clé (identifiant, sens), montant à 0.00 pour les deux sens, lecture `existing_transactions_by_ids` réutilisée (AC-4). Statut `drafted`, validation P2 à lancer.
 
 - 2026-11-21 — **remédiation de la validation P1 des fiches 39-12a** (Claude Sonnet 5.5, contexte frais ; rapport
   `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md` ; ici 0 C, 0 H, 0 M, 3 L, plus des propagations). **L4** —
