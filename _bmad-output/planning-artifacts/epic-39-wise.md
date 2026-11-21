@@ -272,8 +272,11 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 | Story | Objet | Modules (≤ 5) | Dépend de | Migration |
 |---|---|---|---|---|
 | 39-12a1 | configuration (jeton seul), client Wise (profil, soldes, activités paginées, transferts, devis), erreurs, serveur simulé ; recette AC-0 (2024 comparé au CSV 2024 du site, en local ; un mois 2025 plus tard, non bloquant) | `kesh-api` (config, client) | **recette préalable (AC-0 a)**, socle S1/S2/S5 (38-12a) | aucune |
-| 39-12a2 | activités → `WiseRow`/`WiseCsv` : forme fermée des montants, sens, identifiants du CSV, frais des virements, solde reconstruit et contrôlé (fonction pure) | `kesh-import` | 39-11a, recette 39-12a1 AC-0 (a) | aucune |
-| 39-12a3 | route, tâche en fond, ordre de lecture et points de contrôle, import par le cœur de 39-11b, doublons CSV ↔ téléchargement (R1 à R3), parallélisme, audit, erreurs, tests | `kesh-api` (route, tâche, cœur d'import), `kesh-db` (deux lectures), `kesh-reconciliation` (un préfixe), `kesh-i18n` | 39-12a1, 39-12a2, 39-11b, 39-11c, socle S2/S3/S4/S6 | aucune |
+| 39-12a2 | activités → `WiseRow`/`WiseCsv` : forme fermée des montants, sens, identifiants du CSV, frais des virements, solde reconstruit et contrôlé (fonction pure) ; amendée le 21.11 : totale par carte (débit du secondaire), capture tardive, partielle refusée (décision (a)) | `kesh-import` | 39-11a, recette 39-12a1 AC-0 (a) | aucune |
+| 39-12a3 | route, tâche en fond, ordre de lecture et points de contrôle, import par le cœur de 39-11b, partielle refusée en `WISE_CARD_PARTIAL_CONVERSION` (amendement du 21.11 ; doublons R1 à R3 passés à 39-12a3b), parallélisme, audit, erreurs, tests | `kesh-api` (route, tâche, cœur d'import), `kesh-db` (deux lectures), `kesh-reconciliation` (un préfixe), `kesh-i18n` | 39-12a1, 39-12a2, 39-11b, 39-11c, socle S2/S3/S4/S6 | aucune |
+| 39-12a3b | doublons CSV ↔ téléchargement R1 à R3 (ex-AC-4 de 39-12a3), étendus au paiement par carte converti (`CARD-`, `FEE-CARD-`) | `kesh-api` (cœur commun : point d'accroche), `kesh-db` (deux lectures), `kesh-reconciliation` (un préfixe) | 39-12a3, 39-11a2 | aucune |
+| 39-12a4a | paiements par carte partiellement convertis : répartition par continuité des soldes (ancrages, segments), exactitude confirmée par le cours, « à vérifier » avec la somme exacte du groupe, trou de solde refusé (fonction pure) ; suivi de la décision (a) du 21.11 | `kesh-import` | 39-12a2 | aucune |
+| 39-12a4b | cours de Wise (`/v1/rates`), lignes déjà dans Kesh, compte rendu « à vérifier », `WISE_BALANCE_GAP`, `WISE_CARD_SPLIT_UNRESOLVED` | `kesh-api`, `kesh-db` (une lecture), `kesh-i18n` | 39-12a4a, 39-12a3, 39-12a3b | aucune |
 | 39-12b | bouton et dialogue générique de 38-12b, manuels (jeton, ce que Kesh lit et ne lit pas), E2E | `frontend`, `kesh-i18n`, `docs/manual` (`.tex`), E2E | 39-12a3, 39-11d, 38-12b | aucune |
 
 ## Registre (stories de l'epic)
@@ -289,6 +292,7 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 | `39-6-ecrans-et-manuels` | superseded | remplacée par 39-11d et 39-12b |
 | `39-11a` à `39-11d` | ready-for-dev | fiches du 2026-11-20, phase 1 validée |
 | `39-12a1-client-wise-activites`, `39-12a2-activites-en-lignes-wise`, `39-12a3-telechargement-wise-route-et-import`, `39-12b-ecran-manuels-wise-api` | drafted | phase 2 **réécrite sur la voie activités le 2026-11-20** (avant : `deferred` après les recettes 1 et 2) ; 39-12a1 renommée (ex-`39-12a1-client-wise-et-sca`), 39-12a2 neuve (conversion), 39-12a3 = l'ancienne 39-12a2 (route et import) renumérotée ; à revalider |
+| `39-12a3b-doublons-wise-csv-telechargement`, `39-12a4a-partielles-wise-continuite-des-soldes`, `39-12a4b-partielles-wise-telechargement` | backlog | 2026-11-21, amendements du 21.11 : 39-12a3b née du découpage de 39-12a3 (doublons R1 à R3), 39-12a4a et 39-12a4b suivi de la décision (a) (partielles par continuité des soldes) ; fiches rédigées, validation P1 à lancer |
 | `39-12a-telechargement-api-wise` | split | scindée en 39-12a1 et 39-12a2 (2026-11-20), puis, sur la voie activités, en 39-12a1, 39-12a2 et 39-12a3 |
 | `39-12a1-client-wise-et-sca`, `39-12a2-telechargement-wise-route-et-import` | superseded | clés renommées le 2026-11-20 (voie activités) : `39-12a1-client-wise-activites`, `39-12a3-telechargement-wise-route-et-import` |
 
@@ -312,6 +316,7 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 
 ## Change Log (refonte)
 
+- 2026-11-21 — Amendements du 21.11 de 39-12a2 et 39-12a3 (recherche `kesh-gate-logs/epic-39-40-kiss/wise-conversion-partielle-recherche.md`, décisions (a) et (b) du 21.11) : partielle refusée d'abord (décision (a)), puis répartie par continuité des soldes (suivi « essayer encore ») dans les stories neuves 39-12a4a et 39-12a4b ; doublons R1 à R3 sortis de 39-12a3 en 39-12a3b (règle des petites stories). Validation P1 à lancer.
 - 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : Q-39-17 close pour 2024 ; le paragraphe « Ce qui reste à confirmer » devient « Décisions de la recette réelle AC-0 (a) » avec les restes ouverts (2025, activités non terminées sur `amount`, décalage UTC+1) ; l'identifiant `AUTO_CONVERSION-<id>` passe de provisoire à définitif ; fiches 39-12a1, 39-12a2, 39-12a3 et 39-12b alignées.
 
 - 2026-11-20 — Validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié dans 39-12a1, 39-12a2 et 39-12b (virement remboursé : recette et suffixe d'identifiant). Socle S1 à S9 inchangé.

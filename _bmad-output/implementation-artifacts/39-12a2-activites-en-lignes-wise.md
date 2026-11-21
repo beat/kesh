@@ -169,8 +169,65 @@ importés.
   maintenant et un refus pour tout type inconnu de cette plage ; pour un usage mensuel (relevé de clôture récent), la plage est
   courte. Reconstruire en avant depuis le dernier relevé de Kesh serait un perfectionnement futur, hors périmètre.
 
+## Amendement du 21.11
+
+Sources : `kesh-gate-logs/epic-39-40-kiss/wise-conversion-carte-ecarts.md` (formes réelles des paiements par carte
+convertis, 2025–2026) et `wise-conversion-partielle-recherche.md` (§ « Reconstitution par continuité des soldes » et
+« Mesure contre les relevés réels » : relevés CSV, CAMT et PDF du site, 2025 et 2026) ; décisions du responsable de
+l'epic du 21.11 (journal des décisions de signature des epics du 21.11, sous `kesh-gate-logs/`, (a) et (b)). Elles l'emportent sur les AC ci-dessus
+là où elles diffèrent. La répartition d'une conversion **partielle** par continuité des soldes, suivi de la décision
+(a), n'est **pas** ici : elle forme les stories **39-12a4a** (moteur, `kesh-import`) et **39-12a4b** (téléchargement),
+qui lèvent le refus de A-3 ; cette story livre le refus seul, pour qu'un téléchargement sûr existe sans elles.
+
+- **A-1 — Paiement par carte à conversion totale** (écart 1 de la note des écarts). Un `CARD_PAYMENT` dont le
+  `secondary_amount` est un **montant** (forme de l'AC-2) : `primary` = montant et devise **du marchand** (sa devise
+  n'est pas débitée), `secondary` = montant débité dans un autre solde, **frais de conversion compris**. Règle, à la
+  place de « Montant d'un débit simple » pour ce type : la ligne est un débit du **secondaire**, dans sa devise, jamais
+  du primaire — même quand les deux devises sont des soldes du profil (sans quoi les 14 totales de 2025–2026 rendaient
+  `AmbiguousAmount`) ; `exchange_from` = devise du secondaire, `exchange_to` = devise du primaire, `exchange_to_amount`
+  = montant du primaire, `exchange_rate` = `None` ; aucune ligne de frais (comme une conversion de solde, AC-4 : le
+  débit porte les frais ; le CSV « avec frais indiqués séparément » porte, lui, une ligne `FEE-CARD-<id>`, traitée par
+  39-12a3b). Mesuré : chaque ligne carte convertie du relevé est dans le fichier du solde débité, *Exchange To Amount* =
+  montant du marchand (26 lignes sur 26). Le segment de conversion que l'import écrit de ces champs
+  (`transaction_of_row`, `routes/wise_imports.rs`) est celui que lit l'écriture groupée de 39-11c (amendement A-1 de
+  39-11c). Un `CARD_PAYMENT` sans secondaire garde la règle de l'AC-3 ; un remboursement (`+`) aussi.
+- **A-2 — Réserve de carte expirée puis capturée.** Un `CARD_PAYMENT` dont `updated_on − created_on` dépasse **7
+  jours** est daté et ordonné à `updated_on` (date = jour de Zurich de `updated_on`, `date_time` et place dans l'ordre
+  de l'AC-5 au même instant), non à `created_on` : la réserve a expiré, le solde a été recrédité, et le débit a lieu à
+  la capture, sur les soldes du jour de la capture (cas réel : achat du 2025-12-20 capturé le 2026-01-06 sur l'EUR ;
+  ordonné à la création, il tombait sur un solde qui ne pouvait pas le payer). Le relevé du site porte trois lignes
+  (débit, recrédit, débit à la capture), l'API l'état final seul : une ligne. L'écart est sans effet sur les soldes ;
+  un CSV importé après le téléchargement apporte le débit et le recrédit du premier solde (39-11a2 : même identifiant,
+  sens opposés), de somme nulle.
+- **A-3 — Paiement par carte à conversion partielle : refus fermé dédié** (écart 2 ; décision (a) du 21.11). Un
+  `CARD_PAYMENT` dont le `secondary_amount`, balises retirées et `trim` faits, a la forme
+  `^[A-Z]{3}(, [A-Z]{3})+$` (« USD, CHF », « USD, CHF, EUR » : une **liste de devises sans montant**) est une
+  conversion partielle : l'API ne donne pas sa répartition par solde. Il ne relève **pas** de `AmountFormat` (motif
+  trompeur : le format n'a pas changé) mais d'une variante neuve `PartialCardConversion { date }` (date de la ligne,
+  règle de l'AC-3 et de A-2), code `WISE_API_PARTIAL_CARD_CONVERSION`, que 39-12a3 rend en `WISE_CARD_PARTIAL_CONVERSION`
+  (renvoi au CSV de la période). Comme `UnsupportedActivity`, le refus vaut **même hors de `period`** (le solde se
+  reconstruit depuis aujourd'hui) ; avec plusieurs partielles, la date rendue est celle de la **plus récente**, qui
+  borne tout téléchargement : il ne peut pas remonter avant elle. Un `CARD_PAYMENT` non `COMPLETED` reste compté dans
+  `ignored.not_completed`, quelle que soit sa forme. 39-12a4a remplace ce refus par la répartition.
+- **A-4 — Erreurs et tests.** `WiseApiError` gagne `PartialCardConversion` (AC-6 : neuf variantes) ; l'AC-7 gagne :
+  une totale CHF ← USD et une CHF ← EUR, devises toutes deux soldes du profil (débit du secondaire, champs d'échange,
+  aucune ligne de frais, aucun `AmbiguousAmount`) ; une capture à plus de 7 jours (date et ordre à `updated_on`, solde
+  reconstruit juste) et une à 7 jours tout juste (date à `created_on`) ; une partielle à deux et à trois devises →
+  `PartialCardConversion` avec la date de la plus récente, y compris hors de `period` ; une liste de devises mal formée
+  (« USD,CHF », « usd, chf ») → `AmountFormat`. Fixtures fictives seulement (modèle :
+  `kesh-gate-logs/epic-39-40-kiss/wise-fixtures-conversion-carte/`, à recopier sous `tests/fixtures/` avec sa ligne au
+  catalogue).
+- **Hors de cet amendement, relevé** (note des écarts, § 3 et § 4) : un virement sortant dont le secondaire est dans la
+  **même devise**, frais compris (31 virements sur 46 en 2025–2026 ; débit = `primary`, contrôle `secondary − primary =
+  fee_total`) ; deux types `COMPLETED` refusés par l'AC-3, `DIRECT_DEBIT_TRANSACTION` et `BALANCE_DEPOSIT`, présents en
+  2026 — tant qu'ils sont refusés, aucun téléchargement ne remonte avant le dernier d'entre eux. À trancher avant la
+  recette 39-12a1 AC-0 (c) ; non traités ici.
+
 ## Change Log
 
+- 2026-11-21 — **amendement du 21.11** (section ci-dessus) : totale par carte (débit du secondaire), capture tardive,
+  refus dédié d'une partielle (décision (a)) ; la répartition par continuité va aux stories neuves 39-12a4a et 39-12a4b.
+  À revalider (validation P1 de l'amendement).
 - 2026-11-20 — validation ciblée AC-0 (a) « décisions » P2 sur le commit `b2d272e0` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-ac0-decisions-ciblee-2.md`) : 0 C, 0 H, 0 M, 2 L, remédiés : la table de l'AC-3 ne cite plus de ligne de frais d'une conversion (jamais produite, AC-4) ; la date d'un crédit de carte est marquée non relevée, à confirmer à l'AC-0 (c).
 - 2026-11-20 — **décisions de la recette AC-0 (a), 2026-11-20** (source `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) : règles de l'AC-3 devenues définitives. Date : jour de Zurich de `createdOn` pour débits et conversions, de `updatedOn` pour les entrants (UTC : 7 débits faux ; `createdOn` seul pour les entrants : 1 faux ; `updatedOn` seul pour les débits : 15 faux) ; heure : le CSV est en UTC+1 constant, jamais comparer ni dédoublonner sur l'heure ; ligne de frais à la date de son origine ; `AUTO_CONVERSION-<resource_id>` définitif ; solde `amount.value` (égal à `cashAmount.value`) ; sens : `+` sur `primary` pour les entrants, devise débitée = `sourceCurrency` du devis (22 sur 22) ; table des types de détail ; `reference` = `Payment Reference` ; virement sans frais = option `BALANCE` à `fee.total` 0, aucune ligne de frais ; virement remboursé non relevé, suffixe provisoire maintenu ; cartes en devise étrangère non relevées (règle inchangée). Les mentions « à reconfirmer / tranché par la recette » sont retirées ; les tests de l'AC-6 (date des entrants et des débits proches de minuit, frais à la date de l'origine, sans frais, remboursé) restent cohérents, avec ces règles pour attendus. Aucun code touché.
 - 2026-11-20 — validation P5 ciblée sur le commit `06a8f336` (Claude Sonnet 5.5, contexte frais ; rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-12-v2-P5-ciblee.md`) : 0 C, 0 H, 0 M, 1 L, remédié. Ici : deux activités distinctes de même `resource_id` (virement remboursé) donnent deux lignes, identifiants suffixés `-<n>`, au lieu d'un `DuplicateId` durable (AC-3) ; cas ajouté au test de l'AC-7. Limite sur le mouvement en cours, `MissingTransferFee` (AC-3, AC-4, AC-7) relus, cohérents.
