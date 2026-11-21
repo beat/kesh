@@ -54,7 +54,7 @@ qu'il refuse le téléchargement quand les soldes révèlent un mouvement que l'
    Vec<WiseApiSplitGroup>` (AC-5 ; vides si `split` est `None`). **Raccord de 39-12a3, sans effet** (une ligne par site
    de construction, `kesh-api`) : le point de contrôle reçoit l'identifiant que ses deux lectures rendent déjà
    (`previous_statement_closing` → `(id, period_to, closing_balance)`, `overlapping_statements` → `BankImport.id`),
-   l'entrée `split: None`. 39-12a3 lit la sortie par ses champs (à vérifier à l'étape 0 : une déstructuration exhaustive
+   l'entrée `split: None`. `BalanceGap` et `SplitUnresolved` s'ajoutent à `WiseApiError` (`#[non_exhaustive]`, `code()`, 39-12a2 AC-6) : 39-12a3 les traduit par son bras générique, sans raccord de plus. 39-12a3 lit la sortie par ses champs (à vérifier à l'étape 0 : une déstructuration exhaustive
    de `WiseApiOutput` prend une ligne de plus). Ainsi le gate complet de cette story est vert avec 39-12a3 telle quelle ;
    le passage à `Some` est de 39-12a4b.
 2. **AC-2 — Inconnues et ancrages.** Le moteur ne traite que les **devises qui portent au moins une part d'une
@@ -68,24 +68,24 @@ qu'il refuse le téléchargement quand les soldes révèlent un mouvement que l'
      AC-5) **placé**. Une ligne lue est **connue de K** quand `known_lines` la porte (même identifiant, même sens) avec
      `import_id ≤ K.import_id` : elle était dans Kesh quand K a été écrit (un relevé ne crée de transactions que pour
      ses lignes neuves ; les plus anciennes, doublons, viennent d'un import antérieur). K se place **juste après la
-     dernière ligne lue de sa devise, datée de son jour `K.date`, connue de K**, à condition que, parmi les lignes lues
-     de ce jour, toutes celles connues de K précèdent toutes les autres ; sinon (lignes mêlées, `import_id` absent,
-     aucune ligne de ce jour connue de K) K n'est **pas** un ancrage et garde le seul contrôle de 39-12a2 AC-5, avec sa
-     tolérance « à un instant du jour ». *Deux relevés finissant le même jour* (téléchargé à 10 h, puis, après un
+     dernière ligne lue de sa devise, datée de son jour `K.date`, insérée par K** (`import_id == K.import_id`), à condition que,
+     parmi les lignes lues de ce jour, **toutes celles connues de K** (`import_id ≤ K.import_id`) **précèdent toutes les autres** ; sinon (lignes mêlées, `import_id` absent,
+     aucune ligne de ce jour insérée par K, **ou une ligne connue de K mais d'un import antérieur, placée après la dernière ligne insérée par K**) K n'est **pas** un ancrage et garde le seul contrôle de 39-12a2 AC-5, avec sa
+     tolérance « à un instant du jour ». **Pourquoi la dernière ligne insérée, et pourquoi on retombe sur la tolérance** (validation P2, M3) : le cœur commun, après 39-14 (`provider_imports.rs`), stocke pour un relevé la clôture de sa dernière ligne **insérée** (`period_to`, `closing_balance` calculés sur les lignes gardées), non celle de la dernière ligne **rendue** ; un relevé dont les dernières lignes du jour étaient des doublons (import antérieur, ou CSV exporté avant un téléchargement puis importé après lui) a donc une clôture d'**avant** ces doublons, et le placer après eux ferait un faux ancrage, donc un `BalanceMismatch` ou un `BalanceGap` durable dans un cas que 39-12a2 AC-5 accepte. Choix : retomber sur la tolérance plutôt que d'imposer au cœur commun de stocker la clôture de la dernière ligne rendue, ce qui changerait un cœur partagé avec PayPal et Stripe ; le coût est un ancrage de moins (une partielle devient « à vérifier » au lieu d'être déduite), jamais un refus à tort. Un relevé enregistré avant 39-14 (clôture de la dernière ligne rendue) dont la fin du jour est en doublon n'est de même pas un ancrage. *Deux relevés finissant le même jour* (téléchargé à 10 h, puis, après un
      mouvement de 11 h, à 12 h) se placent chacun après ses propres lignes : la ligne de 11 h, importée par le second,
      n'est pas connue du premier ;
    - **de règle** — (R1) zéro dans la devise du marchand juste après une partielle ; (R2) zéro en USD juste après une
      partielle dont la liste est exactement {CHF (marchand), USD, EUR} ; (R3) zéro dans la devise du marchand juste avant
      une totale par carte, et zéro en USD aussi quand elle part de l'EUR vers le CHF. Une partielle d'une autre forme
      (marchand hors CHF, quatre devises ou plus, trois devises autres que CHF, USD, EUR) ne pose **aucun** ancrage de
-     règle et n'est jamais exacte (motif `unsupported_shape`). *Limite* : R1 n'est observée qu'avec l'USD comme seconde
+     règle et n'est jamais exacte (motif `unsupported_shape`). *Limite* : une ligne que l'API et le CSV nomment différemment (`AUTO_CONVERSION-y` téléchargée pour un `CONVERSION_ORDER-n` du CSV, 39-12a3b R3 ; remboursement suffixé, 39-12a2 AC-3) est « inconnue de K » : K se place avant elle alors que sa clôture l'inclut ; cas rare (aucune `AUTO_CONVERSION` dans les mesures), à traduire par la reconnaissance de R3 si le cas se présente. *Limite* : R1 n'est observée qu'avec l'USD comme seconde
      devise ; la fiche l'étend à tout couple (X, CHF) — la confirmation par le cours (39-12a4a2) et le refus de l'AC-6
      gardent.
 3. **AC-3 — Résolution par segments.** Par devise traitée, entre deux ancrages consécutifs (un **segment**), la somme
    des parts inconnues = ancrage de fin − ancrage de début − somme des montants connus du segment (une part est un
    débit : montant négatif). Aucune inconnue : l'égalité est un **contrôle** (écart : AC-6). **Une** inconnue : sa valeur
    est **déduite** (« deux ancrages »), exacte si les mouvements du segment sont complets. **Plusieurs** : elles forment
-   un **groupe** de somme exacte ; leurs valeurs ne sont pas établies ici (39-12a4a2 les estime au cours). Avant le premier
+   un **groupe** de somme exacte ; leurs valeurs ne sont pas établies ici (39-12a4a2 les résout au centime quand la solution est unique, AC-4b, sinon les estime au cours). Avant le premier
    ancrage d'une devise (segment **ouvert**), une part inconnue n'a ni valeur ni somme. Un même instant portant deux
    ancrages (p. ex. O2 et R1), dans une devise traitée : ils doivent être égaux (sinon AC-6). Le solde courant de chaque
    ligne s'en déduit ; il est **indéterminé** entre deux parts d'un même groupe (39-12a4a2 : estimé).
@@ -118,11 +118,11 @@ qu'il refuse le téléchargement quand les soldes révèlent un mouvement que l'
      (règle « un appariement automatique propose, il ne crée jamais ») : la partielle s'importe ensuite par le relevé CSV
      de sa période (`POST /api/v1/wise-imports`, 39-11b : ses lignes y sont neuves) — un relevé **saisi à la main** est
      refusé sur un compte Wise (`409 BANK_ACCOUNT_IS_PROVIDER`, `refuse_provider_account`).
-   - *Bornes de chaque `WiseCsv`* (définition, la même pour les deux lectures du cœur d'import) : `rows` = les lignes
+   - *Bornes de chaque `WiseCsv`* (définition de la **sortie** `WiseCsv`, la même pour les deux lectures ; le cœur commun stocke, lui, la clôture de la dernière ligne **insérée**, ce que l'AC-2 retient pour le placement) : `rows` = les lignes
      **rendues** ; `opening_balance` = solde avant la première rendue ; `closing_balance` = solde **après la dernière
      rendue** ; `first_date`, `last_date` = dates de la première et de la dernière **rendues** — une part retenue ne fixe
      jamais aucune de ces valeurs, si bien que la clôture stockée et le `period_to` du relevé décrivent le même instant et
-     que le point de contrôle qu'il devient se place au téléchargement suivant. Invariant, asserté : `closing − opening`
+     que le point de contrôle qu'il devient se place au téléchargement suivant (sauf lignes de fin de jour en doublon : AC-2). Invariant, asserté : `closing − opening`
      = somme des `rows` + somme des parts retenues de la devise placées **entre** la première et la dernière ligne
      rendues. Si l'ouverture ou la clôture d'une devise est indéterminée (elle suit une part d'un groupe non encore
      refermé), refus `SplitUnresolved` `period_boundary` (AC-6). Le solde courant d'une ligne rendue n'est pas écrit en
@@ -152,7 +152,7 @@ qu'il refuse le téléchargement quand les soldes révèlent un mouvement que l'
    CHF négatif ; totale sur un solde non nul) → `BalanceGap`, y compris hors de `period` ; part déduite nulle ou
    négative, c ≥ M → `BalanceGap` ; capture tardive (ordre à `updated_on`) ; **deux téléchargements le même jour**
    (relevés K1 puis K2 de même `period_to`, clôtures différentes, un mouvement entre les deux) → les deux placés, aucune
-   erreur ; point de contrôle non placé (lignes mêlées ; `import_id` absent) ; segment ouvert → `unanchored` ; fin de
+   erreur ; **dernières lignes du jour en doublon** (relevé dont la fin de journée est faite de lignes connues d'un import antérieur, ou CSV exporté avant un téléchargement et importé après lui) → K non placé, contrôle toléré de 39-12a2 AC-5, aucun refus ; point de contrôle non placé (lignes mêlées ; `import_id` absent) ; segment ouvert → `unanchored` ; fin de
    période entre deux parts d'un groupe → `period_boundary` ; dernière ligne de la période = part retenue → clôture
    et `last_date` de la dernière ligne rendue, point de contrôle placé au téléchargement suivant ; devise sans partielle
    → seul le contrôle de 39-12a2 AC-5 (aucun ancrage de règle ne s'y applique) ; partielle à marchand en EUR →
@@ -203,6 +203,8 @@ soldes révèlent un mouvement absent de l'API.
   exposition publique et décision d'architecture à prendre d'abord.
 
 ## Change Log
+
+- 2026-11-22 — **remédiation de la validation P2** (rapport `kesh-gate-logs/s39-12a-specs/validation-p2-rapport.md`) : **M3** — le point de contrôle se place après la dernière ligne **insérée** par lui (le cœur commun stocke la clôture de la dernière ligne insérée, `provider_imports.rs`) ; une ligne connue d'un import antérieur après elle le fait retomber sur la tolérance de 39-12a2 AC-5 (choix motivé à l'AC-2), test ajouté ; **M4** — raccord des variantes d'erreur par `code()` ; **L5** — limite des identifiants nommés différemment ; résolution par groupe : renvoi à 39-12a4a2 AC-4b. Statut `drafted`, validation P3 à lancer.
 
 - 2026-11-21 — **remédiation de la validation P1** (Claude Sonnet 5.5, rapport
   `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md` : 0 C, 2 H, 15 M, 18 L sur les six fiches). Ici : **M15** —

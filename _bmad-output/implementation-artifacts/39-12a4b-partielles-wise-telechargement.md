@@ -46,7 +46,7 @@ dise clairement quand il faut passer par le relevé CSV.
    **aucune lecture neuve** n'est écrite ; elle rend, pour le compte bancaire de chaque devise liée, les transactions dont
    l'identifiant est lu (ou est `FEE-<identifiant lu>`) ; le sens se lit au signe du montant (39-11a2). Elles forment
    `known_lines` (39-12a4a1 AC-1) ; les points de contrôle portent déjà l'identifiant de leur relevé (raccord de
-   39-12a4a1). La route passe `split: Some(…)` avec ces lignes et les cours. Lecture hors de la transaction d'écriture :
+   39-12a4a1). La route passe `split: Some(…)` avec ces lignes et les cours. Lecture hors de la transaction d'écriture (le doc-comment de `existing_transactions_by_ids`, qui dit « dans la transaction de l'import, sous ses verrous », est à amender dans la même story) :
    une ligne importée entre-temps (CSV concurrent) est écartée sous les verrous par les doublons (39-12a3b) ; une
    partielle retenue à tort de ce fait n'écrit rien.
 4. **AC-4 — Compte rendu.** `result` (39-12a3 AC-2) gagne `cardSplitsToVerify: [{ cardId, date, merchantAmount,
@@ -129,9 +129,11 @@ exactement la répartition, et le propose à vérifier sinon ; un trou dans les 
   acceptée comme une dépense ordinaire avant l'arrivée du fichier de l'autre solde, ne se regroupe plus ; le manuel
   conseille d'importer ensemble les fichiers des trois soldes d'une même période (39-12b). La garde au rapprochement
   (ligne `CARD-x` sans segment dont un solde du même libellé porte un `CARD-x` converti → « à examiner ») relève de
-  39-11c : à suivre par une issue.
+  39-11c : à suivre par une issue, dont le numéro se cite ici dès qu'elle est ouverte (« on trace toujours »).
 
 ## Change Log
+
+- 2026-11-22 — **remédiation de la validation P2** (rapport `kesh-gate-logs/s39-12a-specs/validation-p2-rapport.md`) : **L2** — contrat de la lecture amendé ; **L14** — numéro d'issue à citer. Statut `drafted`, validation P3 à lancer.
 
 - 2026-11-21 — **remédiation de la validation P1 des fiches 39-12a** (Claude Sonnet 5.5, contexte frais ; rapport
   `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md` ; ici 0 C, 0 H, 2 M, 3 L, plus des propagations). **M11** — plus

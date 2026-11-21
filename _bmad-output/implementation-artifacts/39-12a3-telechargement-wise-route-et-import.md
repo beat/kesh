@@ -22,7 +22,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
 |---|---|---|
 | `FR-39-12a3-1` | Une route lance le téléchargement d'une période en tâche de fond ; une autre en donne la progression et le résultat. | AC-1, AC-2 |
 | `FR-39-12a3-2` | Tout est lu **avant** toute écriture (soldes, activités, transferts, devis), converti par 39-12a2 et contrôlé, puis importé par le cœur de 39-11b, une seule transaction de base. | AC-3 |
-| `FR-39-12a3-3` | *Déplacée en 39-12a3b (amendement du 21.11)* : CSV et téléchargement se mélangent dans les deux ordres sans doublon, frais de conversion compris. Ici, doublons par identifiant seulement. | AC-4 |
+| `FR-39-12a3-3` | *Déplacée en 39-12a3b (amendement du 21.11)* : CSV et téléchargement se mélangent dans les deux ordres sans doublon, frais de conversion compris. Ici, la seule règle de base : doublons par (identifiant, sens). | AC-4 |
 | `FR-39-12a3-4` | Parallélisme réglé par `KESH_WISE_PARALLEL` (socle S2). | AC-5 |
 | `NFR-39-12a3-1` | Aucun secret dans une réponse, un journal, une erreur ou une trace d'audit ; aucun appel réel dans les tests. | AC-6 |
 
@@ -53,7 +53,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
    `downloaded: { from, importFrom, to, readFrom }` (`importFrom`, AC-3 (4)). ⚠️ Écart assumé avec PayPal (38-12a, `PROVIDER_CURRENCY_ACCOUNT_MISSING`) : Wise
    liste d'avance ses soldes. **Une activité dans une devise non liée** n'empêche pas l'import des autres : ses lignes ne
    sont simplement pas importées, et la devise figure dans `unlinkedCurrencies`. La tâche vit en mémoire (socle S2),
-   perdue au redémarrage ; relancer est sans risque (doublons par identifiant, AC-4).
+   perdue au redémarrage ; relancer est sans risque (doublons par (identifiant, sens), AC-4).
 3. **AC-3 — Lire, convertir, contrôler, puis importer.** Ordre : (1) profil ; (2) **soldes**, à l'instant `read_until`
    (`now`) ; (3) **points de contrôle** dans Kesh, pour chaque devise liée : la clôture du relevé à solde antérieur à `from`
    (`previous_statement_closing`, `crates/kesh-db/src/repositories/bank_imports.rs:358`) et celle de chaque relevé à solde
@@ -61,7 +61,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
    téléchargement) ; un relevé saisi à la main est refusé sur un compte Wise (`BANK_ACCOUNT_IS_PROVIDER`) ; (4) **début d'import** `importFrom` = le plus tôt de `from` et du dernier jour (`period_to`) du relevé
    de `previous_statement_closing` — un relevé arrêté en cours de journée (téléchargement jusqu'à l'instant, CSV exporté
    dans la journée) laisse en dehors de Kesh les mouvements de la fin de ce jour ; les relire, doublons ignorés par
-   identifiant, les rattrape, alors qu'une période commencée au lendemain les perdrait sans rien dire —, et **début de
+   (identifiant, sens), les rattrape, alors qu'une période commencée au lendemain les perdrait sans rien dire —, et **début de
    lecture** `readFrom` = `importFrom` (le jour du plus ancien point de contrôle, relevé précédent ou relevé qui
    chevauche, n'est jamais antérieur à `importFrom` : une clause de plus serait sans effet ; le contrôle de 39-12a2 AC-5 lit
    les instants de ce jour, que la lecture depuis le début de ce jour atteint). Quand `from` est bien postérieur au
@@ -75,7 +75,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
    fichiers d'un import CSV, par le **cœur commun de 39-11b** (socle S6 ; une entrée `bank_imports` par devise, `source_format` = la valeur de 39-11b,
    `filename` = « Wise API <devise> <importFrom>…<to> » (forme du « PayPal API <from>…<to> » de 38-12a, devise en plus :
    un nom **par devise**, que le cœur accepte depuis 39-11b — un nom et une empreinte par fichier ; le cœur de 38-12a
-   n'en prend qu'un pour toutes les devises), verrous, doublons par identifiant Wise (les règles propres à Wise viennent avec 39-12a3b), **une seule
+   n'en prend qu'un pour toutes les devises), verrous, doublons par (identifiant, sens) (les règles propres à Wise viennent avec 39-12a3b), **une seule
    transaction de base**, tout ou rien). **Empreinte** (`file_hash`) = SHA-256 des identifiants des lignes de la devise, triés, ‖ `":"` ‖ devise (la forme de 38-12a AC-7 et du socle S6) :
    le refus `BANK_IMPORT_DUPLICATE_FILE` **ne s'applique pas** à un téléchargement (relancer la même période rend
    `inserted: 0`). La continuité avec l'import précédent (39-11b AC-5) se juge comme pour le CSV ; elle est ici garantie par
@@ -88,7 +88,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
    reprise sur 429 (pause commune, `Retry-After`, six essais) est celle du socle, la même qu'à PayPal et Stripe ; **aucune
    pause fixe** entre deux requêtes. Résultat **identique** à 1 et à 3 en parallèle (test qui compare les lignes importées).
 6. **AC-6 — Audit, secrets, i18n.** Trace `wise_download.created` (`details` : libellé, période, `readFrom`, étapes, compte rendu) sous l'acteur (`NewAuditLogEntry::for_actor`), **écrite dans la même transaction que l'import** (comme `paypal_download.created`, 38-12a AC-7), plus `bank_import.created` par devise comme à l'import CSV, jamais `wise_import.created` ; l'action est **déclarée à `ACTIONS` de `crates/kesh-api/src/audit_labels.rs` avec son libellé dans les quatre catalogues** (la garde `audit_label_registry.rs` rougit sinon) ; **aucun secret** (jeton) ni `KESH_WISE_BASE_URL`
-   dans une réponse ou une trace. Codes `PROVIDER_*` du socle S4, `WISE_PROFILE_AMBIGUOUS` et **`WISE_ACTIVITY_UNSUPPORTED`** (`details: { activityType, date }` : un mouvement de ce type, daté de `date`, se trouve entre le début de lecture et maintenant, même hors de la période demandée, et le solde ne peut plus se reconstruire : le message le dit, et que le téléchargement ne remontera pas avant cette date ; le manuel dit d'importer le CSV) ; les autres refus de 39-12a2
+   dans une réponse ou une trace. Codes `PROVIDER_*` du socle S4, `WISE_PROFILE_AMBIGUOUS` et **`WISE_ACTIVITY_UNSUPPORTED`** (`details: { activityType, date }` : un mouvement de ce type, daté de `date`, se trouve entre le début de lecture et maintenant, même hors de la période demandée, et le solde ne peut plus se reconstruire : le message le dit, et que le téléchargement ne remontera pas avant cette date ; le manuel dit d'importer le CSV) ; les autres refus de 39-12a2, **traduits par `WiseApiError::code()` avec un bras générique** (l'énumération est `#[non_exhaustive]` : une variante ajoutée par 39-12a4a1 ou 39-12a4a2 ne demande aucun raccord ici)
    (tous sauf `UnsupportedActivity` et, amendement A-1, `PartialCardConversion`, qui devient
    **`WISE_CARD_PARTIAL_CONVERSION`**) deviennent `PROVIDER_RESPONSE_INVALID` avec `details.reason` = leur code (dont
    `WISE_API_TRANSFER_FEE_MISMATCH`, 39-12a2 A-5) (`WISE_API_BALANCE_MISMATCH` porte aussi
@@ -98,7 +98,7 @@ seulement si le solde reconstruit concorde avec mes relevés.
 7. **AC-7 — Tests** (`crates/kesh-api/tests/wise_download_e2e.rs`, serveur Wise simulé de 39-12a1, base `#[sqlx::test]`,
    activités fictives de 39-12a2 qui redonnent les fixtures CSV de 39-11a) : période de 400 jours (deux fenêtres), trois
    soldes dont un sans compte bancaire (`unlinkedCurrencies`) → import par devise, soldes d'ouverture et de clôture
-   exacts ; **CSV puis téléchargement** de mouvements sans frais de conversion → doublons par identifiant, rien de doublé (les cas à frais de conversion et R1 à R3 : 39-12a3b) ;
+   exacts ; **CSV puis téléchargement** de mouvements sans frais de conversion → doublons par (identifiant, sens), rien de doublé ; **paire débit/crédit d'un même identifiant** : un CSV portant `CARD-x` au débit puis au crédit (réserve expirée, vérification de carte), puis le téléchargement du même mouvement → aucune ligne doublée, aucune perdue, et le sens ne se perd pas dans l'autre ordre (les cas à frais de conversion et R1 à R3 : 39-12a3b) ;
    **relevé arrêté en cours de journée** (un téléchargement jusqu'à l'instant, puis un mouvement le même jour, puis un
    téléchargement dont `from` est le lendemain) → contrôle accepté, le mouvement de la fin du jour importé (`importFrom`),
    les autres lignes de ce jour en doublon ; une devise non liée → aucune 422, devise listée ; relevé antérieur dont la clôture ne concorde pas → `WISE_API_BALANCE_MISMATCH`, rien d'écrit ; aucun relevé
@@ -135,7 +135,7 @@ Aucune migration : P5 à P8 sans objet.
 
 *Ajouté* — Kesh télécharge les mouvements Wise d'une période par l'API de Wise (jeton en lecture seule, sans
 authentification forte), contrôle le solde reconstruit contre les relevés déjà importés et les importe comme un relevé
-CSV, sans doublon par identifiant ; tout ou rien en cas d'échec. Une période qui contient un paiement par carte
+CSV, sans doublon par (identifiant, sens) ; tout ou rien en cas d'échec. Une période qui contient un paiement par carte
 partiellement converti est refusée, avec renvoi au CSV de cette période (levé par 39-12a4b).
 
 ## Notes de développement
@@ -165,10 +165,12 @@ AC ci-dessus là où elles diffèrent.
   `rules` du cœur commun, deux lectures du dépôt, préfixe `AUTO_CONVERSION` du rapprochement — et ses cas de test
   passent **tels quels** à la story neuve **39-12a3b**, qui y ajoute les lignes `CARD-`/`FEE-CARD-` d'un paiement par
   carte converti (même forme que `BALANCE-`/`FEE-BALANCE-`). Cette story importe avec la seule règle de base du cœur
-  (doublon par identifiant) ; `feesIncluded` n'apparaît qu'avec 39-12a3b. Les deux se livrent dans la même release :
+  (doublon par (identifiant, sens), 39-11a2) ; `feesIncluded` n'apparaît qu'avec 39-12a3b. Les deux se livrent dans la même release :
   l'ordre n'est que celui du développement (39-12a3, puis 39-12a3b).
 
 ## Change Log
+
+- 2026-11-22 — **remédiation de la validation P2** (rapport `kesh-gate-logs/s39-12a-specs/validation-p2-rapport.md`) : **M1** — clé (identifiant, sens) propagée aux six sites restants (FR-3, AC-2, AC-3, AC-7, Note de version, A-2) ; cas de test « paire débit/crédit d'un même identifiant, CSV puis téléchargement » ajouté à l'AC-7 ; **M4** — traduction des erreurs de 39-12a2 par `code()` avec bras générique (AC-6). Statut `drafted`, validation P3 à lancer.
 
 - 2026-11-22 — règle de base des doublons alignée sur 39-11a2, terminée (branche `story/39-11a2`) : clé (identifiant, sens), montant à 0.00 pour les deux sens, lecture `existing_transactions_by_ids` réutilisée (AC-4). Statut `drafted`, validation P2 à lancer.
 

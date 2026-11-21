@@ -23,7 +23,7 @@ remonter avant eux.
 | `DIRECT_DEBIT_TRANSACTION` (`DIRECT_DEBIT_TRANSACTION`), `primary` sans signe, sans `secondary` | `DIRECT_DEBIT-<resource.id>`, `DIRECT_DEBIT` / `DEBIT` ; *Merchant* = texte du premier `<strong>` du titre ; *Payment Reference* renseignée (absente de l'API) ; *Total fees* 0.00 | montant = `primary` (1/1) ; date = jour de `created_on` et de `updated_on` (même jour, 1/1) |
 
 Un seul cas de chaque : la règle de date (débit à `created_on`, entrant à `updated_on`, celle de 39-12a2 AC-3) est
-celle de leur famille, **non départagée** par les données ; le contrôle de solde de 39-12a2 AC-5 verra un écart.
+celle de leur famille, **non départagée** par les données ; un jour de décalage ne se verrait au contrôle de solde de 39-12a2 AC-5 que si un point de contrôle tombait entre `created_on` et `updated_on` (la tolérance « à un instant du jour » et l'ordre ne le signalent pas autrement).
 
 ## Exigences
 
@@ -40,8 +40,7 @@ celle de leur famille, **non départagée** par les données ; le contrôle de s
    `details_type` `MONEY_ADDED` / `CREDIT`, `date` = jour de Zurich de `updated_on` (règle des entrants de 39-12a2
    AC-3), `date_time` au même instant ; `description` = `title` sans balises (comme toute ligne de 39-12a2 ; le CSV
    porte une description traduite, jamais comparée) ; `payer_name`, `payment_reference` = `None` (vides au CSV) ; aucune
-   ligne de frais. Au rapprochement, le préfixe `TRANSFER` le classe comme un dépôt (39-11c, genre `Other`, préfixe
-   `TRANSFER`) : rien à changer à 39-11c.
+   ligne de frais. Au rapprochement, le préfixe `TRANSFER` le classe comme un virement (39-11c : `ProviderKind::Specific(KIND_TRANSFER)`, `kesh-reconciliation/src/wise.rs`), comme la ligne du CSV de même préfixe : rien à changer à 39-11c.
 2. **AC-2 — Prélèvement (`DIRECT_DEBIT_TRANSACTION`).** Activité `COMPLETED`, `primary` sans signe (débit), sans
    `secondary` → **une ligne** de débit de `primary`, identifiant `DIRECT_DEBIT-<resource_id>` (préfixe accepté par le
    contrôle de 39-11a : `[A-Z0-9_-]`), `details_type` `DIRECT_DEBIT` / `DEBIT`, `date` = jour de Zurich de `created_on`
@@ -93,6 +92,8 @@ remonter avant eux.
   identifiant), mais la ligne téléchargée n'a pas la référence du CSV.
 
 ## Change Log
+
+- 2026-11-22 — **remédiation de la validation P2** (rapport `kesh-gate-logs/s39-12a-specs/validation-p2-rapport.md`) : **L3** — classement 39-11c du préfixe `TRANSFER` corrigé ; **L4** — portée du contrôle de solde ramenée au vrai. Statut `drafted`, validation P3 à lancer.
 
 - 2026-11-21 — fiche née de la remédiation de la validation P1 des fiches 39-12a (Claude Sonnet 5.5, rapport
   `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md`, finding M1 et question Q2) ; préfixes et types de détail

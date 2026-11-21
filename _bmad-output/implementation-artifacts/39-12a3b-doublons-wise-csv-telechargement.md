@@ -28,8 +28,7 @@ automatiques et les paiements par carte payés dans une autre devise.
 
 ## Critères d'acceptation
 
-1. **AC-1 — Doublons avec le CSV, dans les deux ordres** (AC-4 de 39-12a3 avant l'amendement du 21.11, reprise telle
-   quelle ; « cette story » y désigne aussi le téléchargement de 39-12a3, qui passe désormais `WiseDuplicateRules`). Règle de base (39-11b AC-5, clé (identifiant, sens) de 39-11a2, au lecteur comme à l'import, lue par `existing_transactions_by_ids` (identifiant, montant, date) : même `transaction_id` **et même sens** sur le même compte bancaire → ligne ignorée ; un montant à 0.00 vaut pour les deux sens).
+1. **AC-1 — Doublons avec le CSV, dans les deux ordres** (AC-4 de 39-12a3 avant l'amendement du 21.11, reprise, sa règle de base alignée sur la clé (identifiant, sens) ; « cette story » y désigne aussi le téléchargement de 39-12a3, qui passe désormais `WiseDuplicateRules`). Règle de base (39-11b AC-5, clé (identifiant, sens) de 39-11a2, au lecteur comme à l'import, lue par `existing_transactions_by_ids` (identifiant, montant, date) : même `transaction_id` **et même sens** sur le même compte bancaire → ligne ignorée ; un montant à 0.00 vaut pour les deux sens).
    S'y ajoutent trois règles **propres à Wise**, qui ne s'écrivent **pas** dans le chemin
    commun tel quel : le cœur `provider_imports.rs` reçoit un paramètre `rules: Option<&dyn DuplicateRules>` (rien par défaut),
    appelé **sous les verrous et dans la transaction d'écriture**, après le test de la clé (identifiant, sens) et **avant** le calcul de la période et de la clôture de la devise et le cas « aucune ligne gardée » (qui jugent les lignes restantes) ; **PayPal (38-11b, 38-12a) et
@@ -42,7 +41,7 @@ automatiques et les paiements par carte payés dans une autre devise.
    **objet-sûr sans `async_trait`**, sa méthode rendant une future en boîte (patron de `mail::MailFuture`,
    `crates/kesh-api/src/mail/mod.rs:12`, et de `exchange_rates/source.rs:23`), et reçoit, par devise : la connexion de la
    transaction d'écriture, le compte bancaire, la **source** (`ImportSource::File` ou `Download` : R2 ne vaut qu'au
-   téléchargement), les lignes **gardées** et les lignes **écartées comme doublons** par le test d'identifiant ; elle rend
+   téléchargement), les lignes **gardées** et les lignes **écartées comme doublons** par le test de la clé (identifiant, sens) ; elle rend
    pour chaque ligne gardée « garder » ou « ignorer » (R1, R3), un refus (R2, la tâche échoue), un compte `fees_included`
    et des avertissements. Le cœur reporte ces deux derniers au compte rendu de la devise (`CurrencyReport`) en champs
    **omis quand ils sont vides** (`skip_serializing_if`) : la réponse de PayPal et de Stripe garde sa forme, octet pour
@@ -50,12 +49,12 @@ automatiques et les paiements par carte payés dans une autre devise.
    `feesIncluded`. *(Relevé au code des worktrees de 38-12a et de 40-7b le 2026-11-20, P3 : le cœur de 40-7b **reprend** celui de 38-12a —
    `ProviderLine`, `ImportRequest`, `import_lines` — et n'y ajoute que `ProviderLine.value_date` (`None` pour Wise), plus des
    aides de formulaire ; il n'y a plus qu'une forme, au contraire de ce que la P2 avait relevé. `dedupe_lines` garde sa
-   signature et ses tests : les lignes écartées pour le point d'accroche se déduisent des lignes gardées. Les copies
+   signature et ses tests : les lignes écartées pour le point d'accroche se déduisent des lignes gardées ; **le test de doublon du cœur** (`dedupe_groups(groups, existing: &HashSet<String>)`, identifiant seul à ce jour) **passe à la clé (identifiant, sens) par le raccord de 39-14**, signature à elle : cette story le lit tel que 39-14 le laisse, sans le réécrire. Les copies
    privées de PayPal que 40-7b dit « à replier » ne concernent pas Wise.)* **Lectures du dépôt des transactions bancaires** (amendé à la validation P1, finding M13 : aucune lecture en double) :
    cette story **réutilise** `existing_transactions_by_ids(conn, company, compte, ids) -> Vec<ExistingTransaction {
    transaction_id, amount, booking_date }>` qu'ajoute 39-11a2 (même nom, même forme : ne pas la recréer), et n'ajoute
    que `transactions_by_prefix_window(company, compte, préfixe, du, au)`, rendant la même `ExistingTransaction` ;
-   39-12a4b étend cette structure d'un champ (`import_id`) au lieu d'écrire une troisième lecture. *Point d'accroche*
+   39-12a4b étend cette structure de deux champs (`import_id`, `booked`) au lieu d'écrire une troisième lecture. *Point d'accroche*
    : dans cette branche, le dédoublonnage Wise est encore fait par `WiseWriter` (`routes/wise_imports.rs`) et le
    `dedupe_groups` du cœur est celui de PayPal (`provider_imports.rs`) ; le point d'accroche se pose dans le cœur que
    39-14 raccorde à Wise — sans 39-14 faite, cette story ne commence pas. Les tests de 39-11b restent verts sans changement
@@ -101,6 +100,15 @@ automatiques et les paiements par carte payés dans une autre devise.
    - la clé d'une ligne Wise à l'import est **(identifiant, sens)** (39-11a2) : un `CARD-x` débité puis recrédité
      (réserve expirée, vérification de carte) est deux lignes en base ; R1 et R2 ne comparent qu'aux lignes **de débit**
      de même identifiant, la ligne de crédit restant soumise à la règle de base (même identifiant et même sens : ignorée).
+   - **Échec muet de (R1), à fermer** (validation P2, M5) : si l'origine `CARD-x` est en base mais que son montant n'est pas
+     `montant de CARD-x dans le fichier + montant des frais` (un téléchargement dont la part estimée est fausse d'un centime,
+     39-12a4a2), R1 ne s'applique pas : `FEE-CARD-x` (identifiant neuf) serait **insérée** alors que `CARD-x` est ignorée
+     (règle de base, ou R2 qui ne vaut qu'au téléchargement), et les frais compteraient **deux fois**, sans aucun signal. Règle :
+     une ligne de frais `FEE-CARD-x`, `FEE-BALANCE-x` ou `FEE-CONVERSION_ORDER-x` dont l'origine est en base **sans remplir la
+     condition de R1** n'est jamais insérée en silence : l'import est **refusé** (aucune écriture, code `WISE_FEE_ORIGIN_MISMATCH`,
+     `details` : identifiants, montants lu et attendu), ce que le manuel (39-12b) explique et dont la sortie est d'annuler
+     l'import téléchargé ou de corriger le montant. Cas de test : origine à un centime de l'attendu → refus. À reprendre à
+     la lumière de la décision C de 39-12a4a2 (règle du dernier centime) : si elle rend la part exacte, ce refus reste le filet.
    **R3** ne vise pas les cartes (identifiant commun aux deux sources). Le rapprochement (39-11c, amendement A-1) groupe les
    lignes `CARD-x` et `FEE-CARD-x` en attente d'un même paiement : qu'elles viennent du CSV, du téléchargement ou des deux,
    l'écriture groupée garde la charge au montant du marchand (somme des lignes dans sa devise et des montants des segments
@@ -161,6 +169,8 @@ conversion compris, y compris pour les paiements par carte payés dans une autre
   il se dédoublonne par la règle de base, sans R1 ni R2. Le manuel (39-12b) recommande le CSV « avec ».
 
 ## Change Log
+
+- 2026-11-22 — **remédiation de la validation P2** (rapport `kesh-gate-logs/s39-12a-specs/validation-p2-rapport.md`) : **M1** — la clé (identifiant, sens) propagée aux résidus (AC-1 : reprise, test de la clé, signature du test de doublon renvoyée à 39-14) ; **M5** — l'échec muet de R1 sur une origine connue devient un refus `WISE_FEE_ORIGIN_MISMATCH` (AC-2) ; **L1** — deux champs ajoutés par 39-12a4b. Statut `drafted`, validation P3 à lancer.
 
 - 2026-11-22 — alignement sur 39-11a2, terminée (branche `story/39-11a2`) : règle de base et origine d'un `FEE-x` (R1) lues par la clé (identifiant, sens), montant à 0.00 pour les deux sens ; `existing_transactions_by_ids` réutilisée (M13). Statut `drafted`, validation P2 à lancer.
 
