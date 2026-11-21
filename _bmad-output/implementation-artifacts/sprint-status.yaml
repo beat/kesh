@@ -1182,7 +1182,7 @@ development_status:
   39-11d-ecrans-manuel-e2e-wise: ready-for-dev  # 2026-11-20, phase 1 KISS ; validation P1 le 2026-11-20
   39-12a-telechargement-api-wise: split  # 2026-11-20 : scindée en 39-12a1 et 39-12a2 (recette 1 : défi SCA)
   39-12a1-client-wise-et-sca: superseded  # 2026-11-20 : renommée 39-12a1-client-wise-activites (voie activités, SCA abandonnée)
-  39-12a1-client-wise-activites: ready-for-dev  # 2026-11-20 : réécrite sur la voie activités (jeton lecture seule, sans SCA : activités, transferts, devis, soldes) ; recette AC-0 = un mois 2025 comparé au CSV 2025 du site ; à revalider
+  39-12a1-client-wise-activites: done  # 2026-11-20 développée (commit 51ae9874, revue P1 à lancer) ; fiche réécrite : réécrite sur la voie activités (jeton lecture seule, sans SCA : activités, transferts, devis, soldes) ; recette AC-0 = un mois 2025 comparé au CSV 2025 du site ; à revalider
   39-12a2-telechargement-wise-route-et-import: superseded  # 2026-11-20 : renumérotée 39-12a3-telechargement-wise-route-et-import (voie activités)
   39-12a2-activites-en-lignes-wise: ready-for-dev  # 2026-11-20 : neuve, voie activités (activités → WiseRow, forme fermée des montants, frais des virements, solde reconstruit et contrôlé ; kesh-import) ; à revalider
   39-12a3-telechargement-wise-route-et-import: ready-for-dev  # 2026-11-20 : ex-39-12a2, réécrite sur la voie activités (points de contrôle, doublons CSV ↔ téléchargement R1 à R3) ; à revalider

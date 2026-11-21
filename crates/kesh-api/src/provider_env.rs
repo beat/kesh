@@ -82,7 +82,7 @@ pub const PAYPAL: ProviderSpec = ProviderSpec {
 };
 
 /// Les prestataires lus au démarrage (Wise et Stripe s'y ajoutent).
-pub const ALL_PROVIDERS: &[ProviderSpec] = &[PAYPAL];
+pub const ALL_PROVIDERS: &[ProviderSpec] = &[PAYPAL, crate::wise::WISE];
 
 impl ProviderSpec {
     /// `KESH_<P>_<n>_<champ>`.
