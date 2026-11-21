@@ -269,8 +269,9 @@ fn text_of(v: &Value) -> Option<String> {
 /// Un montant Wise est toujours un décimal simple : nombre JSON ou chaîne,
 /// la **littérale** doit être de forme stricte `-?chiffres(.chiffres)?` (ni
 /// `_`, ni `+`, ni espace, **ni exposant**, `e` ou `E`, positif ou négatif),
-/// avec au plus 28 décimales (limite de [`Decimal`]). Toute autre forme,
-/// `null` compris, donne `None` : rien n'est arrondi ni réinterprété.
+/// avec au plus 28 décimales (limite de [`Decimal`]). La littérale est lue
+/// **brute, sans décodage d'échappements** (`"\u0031"` est refusé). Toute autre
+/// forme, `null` compris, donne `None` : rien n'est arrondi ni réinterprété.
 fn decimal_of_raw(raw: &RawValue) -> Option<Decimal> {
     let text = raw.get().trim();
     let litterale = text
@@ -738,7 +739,8 @@ fn parse_balances(body: &[u8]) -> Option<Vec<WiseBalance>> {
 
 /// L'option de devis retenue (fonction pure) : le devis porte un `payOut`,
 /// `payIn` vaut `BALANCE` et `payOut` est celui du devis ; exactement une
-/// option, avec `fee.total` lu par son texte exact.
+/// option, avec `fee.total` lu par son texte exact. Devises source du devis et
+/// de l'option présentes et différentes : refus.
 fn pick_quote_fee(body: &[u8]) -> Option<WiseQuoteFee> {
     #[derive(Deserialize)]
     struct Fee {
@@ -768,9 +770,9 @@ fn pick_quote_fee(body: &[u8]) -> Option<WiseQuoteFee> {
     if chosen.next().is_some() {
         return None;
     }
-    // La devise des frais est celle du devis (devise source) ; l'option ne
-    // sert qu'en repli.
-    // Si les deux sont présentes et diffèrent, on ne choisit pas en silence.
+    // La devise des frais est la devise source du devis ; l'option ne sert
+    // qu'en repli quand le devis n'en porte pas. Si les deux sont présentes et
+    // diffèrent, on ne choisit pas en silence : refus.
     if let (Some(q), Some(o)) = (&quote.source_currency, &option.source_currency)
         && q != o
     {
