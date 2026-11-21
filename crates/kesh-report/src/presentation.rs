@@ -128,7 +128,10 @@ pub fn present_balance_sheet(raw: BalanceSheet, links: &[MirrorLink]) -> Balance
     let total_liabilities = somme(&liabilities);
     let equation_holds = total_assets
         == total_liabilities + raw.total_equity + raw.retained_earnings + raw.equity_result;
-    if equation_holds != raw.equation_holds {
+    // L'écart actif − passif est invariant par construction, même quand l'équation brute est fausse.
+    let ecart_conserve =
+        total_assets - total_liabilities == raw.total_assets - raw.total_liabilities;
+    if equation_holds != raw.equation_holds || !ecart_conserve {
         tracing::error!(
             equation_brute = raw.equation_holds,
             equation_presentee = equation_holds,
@@ -372,6 +375,48 @@ mod tests {
         assert_eq!(p.liabilities.len(), 1);
     }
 
+    /// Branches de `reclasser` : ligne de miroir de somme nulle omise (état forgé),
+    /// miroir d'un type étranger aux deux sections sans effet, sources triées par numéro.
+    #[test]
+    fn branches_somme_nulle_type_etranger_et_tri() {
+        // Somme nulle : la ligne brute du miroir (−300) annule la source (−300 → +300).
+        let raw = bilan(
+            vec![ligne(1, "1020", Asset, dec!(-300))],
+            vec![ligne(9, "2100.1", Liability, dec!(-300))],
+        );
+        let p = present_balance_sheet(raw, &[lien(1, 9, "2100.1", Liability)]);
+        assert!(p.assets.is_empty() && p.liabilities.is_empty());
+        assert!(p.equation_holds);
+
+        // Type étranger : le rapport reste tel quel.
+        let raw = bilan(vec![ligne(1, "1020", Asset, dec!(-300))], vec![]);
+        let p = present_balance_sheet(raw.clone(), &[lien(1, 9, "3000.1", Revenue)]);
+        assert_eq!(
+            serde_json::to_string(&p).unwrap(),
+            serde_json::to_string(&raw).unwrap()
+        );
+
+        // Tri : les sources arrivent dans l'ordre inverse des numéros.
+        let raw = bilan(
+            vec![
+                ligne(1, "1021", Asset, dec!(-50)),
+                ligne(2, "1020", Asset, dec!(-300)),
+            ],
+            vec![],
+        );
+        let links = [
+            lien(1, 9, "2100.1", Liability),
+            lien(2, 9, "2100.1", Liability),
+        ];
+        let p = reclasser((Asset, raw.assets), (Liability, raw.liabilities), &links).unwrap();
+        let nums: Vec<_> = p.1[0]
+            .mirror_of
+            .iter()
+            .map(|s| s.account_number.as_str())
+            .collect();
+        assert_eq!(nums, ["1020", "1021"]);
+    }
+
     /// Générateur déterministe (graine fixe), sans dépendance.
     struct Lcg(u64);
     impl Lcg {
@@ -419,7 +464,42 @@ mod tests {
                 }
             }
             let raw = bilan(assets, liabilities);
+            // Les invariants se jugent sur la sortie de `reclasser` elle-même : le repli
+            // sur le brut de `present_*` les satisferait toujours.
+            let reclasse = reclasser(
+                (Asset, raw.assets.clone()),
+                (Liability, raw.liabilities.clone()),
+                &links,
+            );
             let p = present_balance_sheet(raw.clone(), &links);
+            if let Some((a, l)) = &reclasse {
+                assert_eq!(
+                    somme(a) - somme(l),
+                    raw.total_assets - raw.total_liabilities,
+                    "reclasser : écart actif − passif, tour {tour}"
+                );
+                assert_eq!(
+                    somme(a),
+                    somme(l) + raw.total_equity + raw.retained_earnings + raw.equity_result,
+                    "reclasser : équation, tour {tour}"
+                );
+                // La présentation a bien été appliquée, non remplacée par le brut.
+                assert_eq!(
+                    serde_json::to_string(&p.assets).unwrap(),
+                    serde_json::to_string(a).unwrap()
+                );
+                assert_eq!(
+                    serde_json::to_string(&p.liabilities).unwrap(),
+                    serde_json::to_string(l).unwrap()
+                );
+                assert!(
+                    p.assets
+                        .iter()
+                        .chain(&p.liabilities)
+                        .any(|x| !x.mirror_of.is_empty()),
+                    "tour {tour}"
+                );
+            }
             assert!(p.equation_holds, "tour {tour}");
             assert_eq!(p.equation_holds, raw.equation_holds);
             assert_eq!(p.equity_result, raw.equity_result);
@@ -465,7 +545,27 @@ mod tests {
                 }
             }
             let raw = resultat(rev, exp);
+            let reclasse = reclasser(
+                (Revenue, raw.revenues.clone()),
+                (Expense, raw.expenses.clone()),
+                &liens_r,
+            );
             let p = present_income_statement(raw.clone(), &liens_r);
+            if let Some((r, e)) = &reclasse {
+                assert_eq!(
+                    somme(r) - somme(e),
+                    raw.net_result,
+                    "reclasser : net, tour {tour}"
+                );
+                assert_eq!(
+                    serde_json::to_string(&p.revenues).unwrap(),
+                    serde_json::to_string(r).unwrap()
+                );
+                assert_eq!(
+                    serde_json::to_string(&p.expenses).unwrap(),
+                    serde_json::to_string(e).unwrap()
+                );
+            }
             assert_eq!(p.net_result, raw.net_result, "tour {tour}");
             assert_eq!(p.total_revenues, somme(&p.revenues));
             assert_eq!(p.total_expenses, somme(&p.expenses));

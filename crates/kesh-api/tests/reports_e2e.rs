@@ -2241,6 +2241,19 @@ async fn mirror_example_is_replayed_by_the_reports(pool: MySqlPool) {
     .await
     .unwrap();
 
+    // AC-11 — balance et grand livre lus AVANT les rapports présentés, relus après.
+    let grand_livre = |app: &TestApp, jwt: &str| {
+        let url = app.url("/api/v1/reports/general-ledger?from=2026-07-01&to=2027-06-30");
+        let (client, jwt) = (app.client.clone(), jwt.to_string());
+        async move {
+            let r = client.get(url).bearer_auth(jwt).send().await.unwrap();
+            assert_eq!(r.status(), 200, "general-ledger");
+            r.json::<Value>().await.unwrap()
+        }
+    };
+    let balance_avant = get_json(&app, &jwt, "trial-balance", fy_id).await;
+    let livre_avant = grand_livre(&app, &jwt).await;
+
     let bilan = get_json(&app, &jwt, "balance-sheet", fy_id).await;
     let resultat = get_json(&app, &jwt, "income-statement", fy_id).await;
     let balance = get_json(&app, &jwt, "trial-balance", fy_id).await;
@@ -2382,6 +2395,31 @@ async fn mirror_example_is_replayed_by_the_reports(pool: MySqlPool) {
     .await
     .unwrap();
     assert_eq!(ecritures_avant, ecritures_apres);
+    assert_eq!(balance_avant, balance, "balance identique avant et après");
     let balance2 = get_json(&app, &jwt, "trial-balance", fy_id).await;
-    assert_eq!(balance, balance2, "balance identique avant et après");
+    let livre_apres = grand_livre(&app, &jwt).await;
+    assert_eq!(balance_avant, balance2, "balance identique avant et après");
+    assert_eq!(
+        livre_avant, livre_apres,
+        "grand livre identique avant et après"
+    );
+
+    // Sonde négative : une écriture modifiée (équilibrée) entre deux lectures doit se voir aux deux rapports.
+    sqlx::query(
+        "UPDATE journal_entry_lines SET debit = IF(debit > 0, debit + 1, debit), credit = IF(credit > 0, credit + 1, credit) \
+         WHERE entry_id = (SELECT MIN(id) FROM journal_entries)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_ne!(
+        balance_avant,
+        get_json(&app, &jwt, "trial-balance", fy_id).await,
+        "la sonde doit voir la ligne modifiée (balance)"
+    );
+    assert_ne!(
+        livre_avant,
+        grand_livre(&app, &jwt).await,
+        "la sonde doit voir la ligne modifiée (grand livre)"
+    );
 }
