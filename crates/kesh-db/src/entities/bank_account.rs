@@ -97,29 +97,34 @@ impl<'r> Decode<'r, MySql> for BankAccountKind {
 
 /// Prestataires dont un compte bancaire peut être le solde — Story 38-11b
 /// (Epic 38, phase 1). Domaine de la colonne `bank_accounts.provider`, fermé à
-/// l'octet par `chk_bank_accounts_provider`. **Seul `paypal` est servi** en
-/// phase 1 ; `wise` et `stripe` sont réservés au schéma pour les Epics 39 et
-/// 40, qu'aucun chemin de l'API n'écrit encore.
+/// l'octet par `chk_bank_accounts_provider`. `paypal` (38-11b) et `wise`
+/// (39-11b) sont servis ; `stripe` est réservé au schéma pour l'Epic 40,
+/// qu'aucun chemin de l'API n'écrit encore.
 pub const PROVIDER_PAYPAL: &str = "paypal";
+
+/// Le prestataire Wise — Story 39-11b : un compte bancaire est le solde, dans
+/// une devise, d'un compte Wise (mêmes colonnes et mêmes gardes que PayPal).
+pub const PROVIDER_WISE: &str = "wise";
 
 /// Longueur maximale, en caractères Unicode, du libellé du compte d'un
 /// prestataire ([`BankAccountProvider::provider_account`]) — la borne de la
 /// colonne `varchar(120)` (Story 38-11b, AC-2).
 pub const PROVIDER_ACCOUNT_MAX_CHARS: usize = 120;
 
-/// Réglages de prestataire d'un compte bancaire — Story 38-11b (AC-1, AC-2).
+/// Réglages de prestataire d'un compte bancaire — Story 38-11b (AC-1, AC-2),
+/// étendus à Wise par la Story 39-11b.
 ///
 /// Les trois colonnes `provider`, `provider_account` et `fee_account_id` :
 /// toutes `NULL` pour un compte bancaire ordinaire (CHECK
-/// `chk_bank_accounts_provider`). Un compte PayPal est le solde, dans **une**
-/// devise (celle de son compte du plan), d'un compte PayPal nommé par
-/// `provider_account` ; un compte PayPal a au plus un compte bancaire par devise
-/// (garde de la route, refus d'ambiguïté à l'import).
+/// `chk_bank_accounts_provider`). Un compte PayPal (ou Wise) est le solde, dans
+/// **une** devise (celle de son compte du plan), d'un compte du prestataire
+/// nommé par `provider_account` ; un compte du prestataire a au plus un compte
+/// bancaire par devise (garde de la route, refus d'ambiguïté à l'import).
 ///
 /// **Sérialisation** (aplatie dans [`BankAccount`]) : `provider` (la colonne,
-/// telle quelle : `"paypal" | "wise" | "stripe" | null`) et `paypal`
-/// (`{ account, feeAccountId }` pour un compte PayPal, `null` sinon — aussi pour
-/// un prestataire réservé, inatteignable en phase 1).
+/// telle quelle : `"paypal" | "wise" | "stripe" | null`), `paypal` et `wise`
+/// (`{ account, feeAccountId }` pour un compte de ce prestataire, `null`
+/// sinon — aussi pour un prestataire réservé, inatteignable par l'API).
 #[derive(Debug, Clone, Default, PartialEq, Eq, sqlx::FromRow)]
 pub struct BankAccountProvider {
     /// Le prestataire, ou `None` pour un compte bancaire ordinaire.
@@ -131,47 +136,66 @@ pub struct BankAccountProvider {
 }
 
 impl BankAccountProvider {
-    /// `true` si le compte est le solde d'un compte PayPal.
-    pub fn is_paypal(&self) -> bool {
-        self.provider.as_deref() == Some(PROVIDER_PAYPAL)
-    }
-
     /// `true` si le compte porte un prestataire, quel qu'il soit.
     pub fn is_provider(&self) -> bool {
         self.provider.is_some()
     }
 
-    /// Réglages PayPal (`None` si le compte n'est pas un compte PayPal).
-    pub fn paypal(&self) -> Option<PaypalSettings> {
-        if !self.is_paypal() {
+    /// Réglages du prestataire `provider` (`None` si le compte n'est pas un
+    /// compte de ce prestataire) — Story 39-11b, la lecture commune de
+    /// [`Self::paypal`] et [`Self::wise`].
+    pub fn settings_for(&self, provider: &str) -> Option<ProviderSettings> {
+        if self.provider.as_deref() != Some(provider) {
             return None;
         }
-        Some(PaypalSettings {
+        Some(ProviderSettings {
             account: self.provider_account.clone().unwrap_or_default(),
             fee_account_id: self.fee_account_id,
         })
     }
+
+    /// Le prestataire servi par l'API et ses réglages (`None` pour un compte
+    /// ordinaire ou un prestataire réservé) — Story 39-11b.
+    pub fn served(&self) -> Option<(&'static str, ProviderSettings)> {
+        [PROVIDER_PAYPAL, PROVIDER_WISE]
+            .into_iter()
+            .find_map(|p| self.settings_for(p).map(|s| (p, s)))
+    }
+
+    /// Réglages PayPal (`None` si le compte n'est pas un compte PayPal).
+    pub fn paypal(&self) -> Option<ProviderSettings> {
+        self.settings_for(PROVIDER_PAYPAL)
+    }
+
+    /// Réglages Wise (`None` si le compte n'est pas un compte Wise) — Story
+    /// 39-11b.
+    pub fn wise(&self) -> Option<ProviderSettings> {
+        self.settings_for(PROVIDER_WISE)
+    }
 }
 
-/// Réglages PayPal d'un compte bancaire, tels que l'API les rend et les reçoit
-/// (`{ account, feeAccountId }`) — Story 38-11b (AC-2).
+/// Réglages d'un prestataire (PayPal, Wise) d'un compte bancaire, tels que
+/// l'API les rend et les reçoit (`{ account, feeAccountId }`) — Story 38-11b
+/// (AC-2), commun à Wise par la Story 39-11b (objet `wise` de même forme).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaypalSettings {
-    /// Libellé du compte PayPal (« PayPal www »).
+pub struct ProviderSettings {
+    /// Libellé du compte du prestataire (« PayPal www », « Wise Pro »).
     pub account: String,
     /// Compte de charge des frais ; `null` = frais « à examiner ».
     #[serde(default)]
     pub fee_account_id: Option<i64>,
 }
 
-/// Forme JSON de [`BankAccountProvider`] : `provider` et `paypal`.
+/// Forme JSON de [`BankAccountProvider`] : `provider`, `paypal` et `wise`.
 #[derive(Serialize, Deserialize)]
 struct BankAccountProviderJson {
     #[serde(default)]
     provider: Option<String>,
     #[serde(default)]
-    paypal: Option<PaypalSettings>,
+    paypal: Option<ProviderSettings>,
+    #[serde(default)]
+    wise: Option<ProviderSettings>,
 }
 
 impl Serialize for BankAccountProvider {
@@ -179,6 +203,7 @@ impl Serialize for BankAccountProvider {
         BankAccountProviderJson {
             provider: self.provider.clone(),
             paypal: self.paypal(),
+            wise: self.wise(),
         }
         .serialize(serializer)
     }
@@ -187,10 +212,11 @@ impl Serialize for BankAccountProvider {
 impl<'de> Deserialize<'de> for BankAccountProvider {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let json = BankAccountProviderJson::deserialize(deserializer)?;
+        let settings = json.paypal.or(json.wise);
         Ok(Self {
             provider: json.provider,
-            provider_account: json.paypal.as_ref().map(|p| p.account.clone()),
-            fee_account_id: json.paypal.and_then(|p| p.fee_account_id),
+            provider_account: settings.as_ref().map(|p| p.account.clone()),
+            fee_account_id: settings.and_then(|p| p.fee_account_id),
         })
     }
 }
@@ -427,15 +453,15 @@ mod tests {
     }
 
     /// Story 38-11b (AC-2) — la réponse porte `provider` (la colonne, telle
-    /// quelle) et `paypal` (`{ account, feeAccountId }` pour un compte PayPal,
-    /// `null` sinon, y compris pour un prestataire réservé) ; l'aller-retour
-    /// JSON rend les mêmes réglages.
+    /// quelle), `paypal` et — Story 39-11b — `wise` (`{ account, feeAccountId }`
+    /// pour un compte de ce prestataire, `null` sinon, y compris pour un
+    /// prestataire réservé) ; l'aller-retour JSON rend les mêmes réglages.
     #[test]
     fn les_reglages_de_prestataire_en_json() {
         let ordinaire = BankAccountProvider::default();
         assert_eq!(
             serde_json::to_value(&ordinaire).unwrap(),
-            serde_json::json!({ "provider": null, "paypal": null })
+            serde_json::json!({ "provider": null, "paypal": null, "wise": null })
         );
         let paypal = BankAccountProvider {
             provider: Some("paypal".into()),
@@ -447,23 +473,46 @@ mod tests {
             json,
             serde_json::json!({
                 "provider": "paypal",
-                "paypal": { "account": "PayPal www", "feeAccountId": 42 }
+                "paypal": { "account": "PayPal www", "feeAccountId": 42 },
+                "wise": null
             })
         );
         assert_eq!(
             serde_json::from_value::<BankAccountProvider>(json).unwrap(),
             paypal
         );
-        let reserve = BankAccountProvider {
+        // Story 39-11b — Wise est servi : objet `wise` de même forme.
+        let wise = BankAccountProvider {
             provider: Some("wise".into()),
-            provider_account: Some("Wise".into()),
+            provider_account: Some("Wise Fictif".into()),
+            fee_account_id: None,
+        };
+        let json = serde_json::to_value(&wise).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "provider": "wise",
+                "paypal": null,
+                "wise": { "account": "Wise Fictif", "feeAccountId": null }
+            })
+        );
+        assert_eq!(
+            serde_json::from_value::<BankAccountProvider>(json).unwrap(),
+            wise
+        );
+        assert!(wise.is_provider());
+        assert_eq!(wise.served().map(|(p, _)| p), Some(PROVIDER_WISE));
+        // Un prestataire réservé (Stripe) n'a ni `paypal` ni `wise`.
+        let reserve = BankAccountProvider {
+            provider: Some("stripe".into()),
+            provider_account: Some("Stripe".into()),
             fee_account_id: None,
         };
         assert_eq!(
             serde_json::to_value(&reserve).unwrap(),
-            serde_json::json!({ "provider": "wise", "paypal": null })
+            serde_json::json!({ "provider": "stripe", "paypal": null, "wise": null })
         );
-        assert!(reserve.is_provider() && !reserve.is_paypal());
+        assert!(reserve.is_provider() && reserve.served().is_none());
     }
 
     #[test]

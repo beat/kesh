@@ -961,6 +961,15 @@ pub fn build_router_avec_registre(
                 (state.config.bank_import_max_mib as usize) * 1024 * 1024,
             )),
         )
+        // Story 39-11b (Epic 39) : import d'un ou plusieurs relevés CSV d'un
+        // compte Wise, un fichier par devise (Comptable+, clés `read-write`
+        // comme l'import bancaire ; même limite de taille, pour le corps entier).
+        .route(
+            "/api/v1/wise-imports",
+            post(routes::wise_imports::create).layer(axum::extract::DefaultBodyLimit::max(
+                (state.config.bank_import_max_mib as usize) * 1024 * 1024,
+            )),
+        )
         // Story v016-2a (#816) : saisir un relevé à la main (Comptable+, clés
         // `read-write` comme l'import). Corps JSON borné par une limite PROPRE,
         // indépendante de `KESH_BANK_IMPORT_MAX_MB` (revue de code P1, E1) :
