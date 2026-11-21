@@ -1,6 +1,6 @@
 # Story 46-1 : arbre des groupes — modèle et API
 
-Status: ready-for-dev
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D1 à D10, Q2, Q3, Q4, Q5, Q7 ; FR-46-1, FR-46-7,
 FR-46-8, FR-46-9 (contrat), FR-46-11 ; NFR-46-1 à NFR-46-4, NFR-46-7. Release visée **0.21.0** (prévision). Approuvée
@@ -88,7 +88,7 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
    depuis le numéro ; les frères se trient par numéro, `String::cmp` (D10), la ligne `own` en premier.
 2. **AC-2 — Sous-totaux exacts.** Sous-total d'un groupe = Σ **exacte** (`Decimal`, sans arrondi) des montants de sa
    descendance présente dans la section, solde propre compris (D5). Dans chaque section, **à tout niveau et pour tout
-   état d'ouverture**, la somme des `balance` des lignes de profondeur 1 égale le total de la section (NFR-46-2), et
+   état d'ouverture**, la somme des `balance` des lignes de profondeur 1, **lignes `subtotal` exclues** (en `footer`, le sous-total d'un groupe de profondeur 1 a la profondeur de sa ligne `group`), égale le total de la section (NFR-46-2), et
    chaque ligne d'entrée est comptée **une fois et une seule** : soit en ligne `account`/`own` visible, soit dans le
    sous-total d'exactement un ancêtre visible fermé, soit dans un groupe fermé masqué parce que nul (AC-5), dont le
    zéro reste dans le sous-total de son parent.
@@ -168,20 +168,20 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** — Reprise de `main` ; relire la 48-11 (fusionnée ou non) et la 47-3 (fusionnée ou non) ; noter au Change
+- [x] **T0** — Reprise de `main` ; relire la 48-11 (fusionnée ou non) et la 47-3 (fusionnée ou non) ; noter au Change
       Log l'état trouvé (ligne lue citée). **Avant toute modification**, écrire les fixtures JSON de l'AC-8 (bilan et
       compte de résultat sans paramètre).
-- [ ] **T1 — `groupes.rs`** (AC 1 à 7, 13) : `ArbreComptes`, `LigneAgregeable`, `OptionsGroupes`
+- [x] **T1 — `groupes.rs`** (AC 1 à 7, 13) : `ArbreComptes`, `LigneAgregeable`, `OptionsGroupes`
       (`NiveauDetail::{Niveau(u8), Tous}`, `PositionSousTotal::{Titre, Pied}`, ensembles `ouverts`, `fermes`),
       `LigneGroupee` (neutre : un vecteur de montants), `regrouper` ; tests unitaires et de propriété. La **conversion** de
       `LigneGroupee` en ligne JSON à champs nommés (`balance`, `currency`, `balanceCurrency`, `role`, `mirrorOf`…,
       `skip_serializing_if`) est propre à chaque rapport : bilan et compte de résultat la posent ici (`LigneRapport`,
       `Serialize`, camelCase), la balance en 46-6a (cinq colonnes). Déclarer le module dans `crates/kesh-report/src/lib.rs`.
-- [ ] **T2 — enveloppe** (AC 8, C-46-1-4) : dans `groupes.rs`, `AvecGroupes<T, S>` (`Serialize`, camelCase) —
+- [x] **T2 — enveloppe** (AC 8, C-46-1-4) : dans `groupes.rs`, `AvecGroupes<T, S>` (`Serialize`, camelCase) —
       `#[serde(flatten)] rapport: T`, puis `grouping: Option<Grouping>` et `grouped_rows: Option<S>` (`S` : les sections
       du rapport), `#[serde(skip_serializing_if = "Option::is_none")]`. `BalanceSheet`, `IncomeStatement` et leurs
       littéraux ne changent pas.
-- [ ] **T3 — service et route** (AC 8 à 11) : `DemandePeriode` reste ; une `DemandeGroupes` optionnelle passée à
+- [x] **T3 — service et route** (AC 8 à 11) : `DemandePeriode` reste ; une `DemandeGroupes` optionnelle passée à
       `bilan` / `compte_de_resultat`, qui rendent `Rapport<AvecGroupes<…>, U>` (appelants : `routes/reports.rs:241`,
       `:253`, `:393`, `:524`, `mcp/outils/rapports.rs:305`, `:357` — l'export et le MCP lisent `.rapport` jusqu'aux
       46-3 et 46-4) ; validation dans le service (un seul endroit, réutilisé par l'export de la 46-3 et
@@ -189,9 +189,10 @@ comptes ; `closed=<id de 10>` ferme `10` et cache `100`, ouvert ou non.
       `open=1,2`) qui produit la même `DemandeGroupes` typée, et la construction directe depuis des valeurs typées
       (tableaux d'entiers du MCP, 46-4) ; les refus de l'AC-8 vivent dans la seconde, sauf ceux de la syntaxe de la chaîne (`2.5`, `ALL`, vide, élément non entier), que la première refuse à l'analyse ; `ReportQuery` gagne `detail_level`, `subtotal_position`, `open`, `closed`
       (`Option<String>`, validés à la main comme `validate_format`, pour un 400 et non un 422 Axum).
-- [ ] **T4 — tests d'intégration** (AC 14) dans `crates/kesh-api/tests/reports_e2e.rs`.
-- [ ] **T5 — documentation** (AC 12, 15).
-- [ ] **T6 — gate complet** (fmt, clippy, nextest, `scripts/gate-ci.sh`) ; frontend non touché ; E2E complet au
+      *(Annotation du 2026-11-21, revue P2 L-1 : description de tâche périmée — la remédiation P1 a retiré ces quatre champs de `ReportQuery` ; les paramètres se lisent dans `groupes_de` (`routes/reports.rs`) par `Query<Vec<(String, String)>>`, qui refuse un paramètre répété par un 400 `VALIDATION_ERROR`.)*
+- [x] **T4 — tests d'intégration** (AC 14) dans `crates/kesh-api/tests/reports_e2e.rs`.
+- [x] **T5 — documentation** (AC 12, 15).
+- [x] **T6 — gate complet** (fmt, clippy, nextest, `scripts/gate-ci.sh`) ; frontend non touché ; E2E complet au
       dernier commit de code (règle du dépôt, même sans écran).
 
 ## Dev Notes
@@ -273,19 +274,156 @@ invariants NFR-46-2 se vérifient sur les sections présentées.
 
 ## Note de version
 
-*(à écrire au développement)* — Le bilan et le compte de résultat se demandent **par groupes de comptes** : niveau de
-détail, groupes ouverts ou fermés, sous-total sur la ligne du titre ou en pied. Pour les intégrations : paramètres
-facultatifs ; sans eux, la réponse ne change pas.
+- **Added** — API : le bilan et le compte de résultat se demandent **par groupes de comptes** (l'arbre du plan
+  comptable) : `detailLevel` (1 à 20 ou `all`), `subtotalPosition` (`header` ou `footer`), `open` et `closed` ;
+  la réponse gagne `grouping` et `groupedRows`, un sous-total exact par groupe, dans les sections légales (un groupe à
+  cheval sur deux sections, comme `2 Passifs`, est dissous). Paramètres facultatifs : **sans eux, la réponse ne change
+  pas, à l'octet**. L'écran (46-2), les exports (46-3) et le MCP (46-4) suivront.
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+Claude Opus 5.5 (bmad-dev-story), 2026-11-20.
+
 ### Debug Log References
+
+Journaux hors dépôt, `/home/beat/claude/kesh-gate-logs/s46-1/`, tous sur la cible propre `kesh-targets/kesh-wt46s1`
+(`CARGO_INCREMENTAL=0`) sauf mention :
+- `t0-fixture.log` (génération des fixtures, cible partagée abandonnée) et `verif-fixtures-base.log` (contre-épreuve sur
+  l'arbre de base, cible à part : passé) ;
+- `cible-clippy.log`, `cible-nextest.log` : gate ciblé au commit de remédiation `14230aa3` — fmt, clippy workspace
+  verts, **327 passés sur 327**, 1 ignoré (au commit `b3ea6fc0` : 325 sur 325) ;
+- `gate-backend.log` : `scripts/test-fast.sh --ci` **au commit `b3ea6fc0`** (avant la remédiation) — 6184 passés,
+  14 ignorés ; **à rejouer au dernier commit de code** ;
+- `front-check.log`, `front-lint-i18n-ownership.log`, `front-build.log` verts ; `front-test-unit-2.log` : Vitest
+  278 fichiers, 4627 tests verts (`front-test-unit.log`, premier passage : un délai dépassé sous charge, frontend non
+  touché) ;
+- `mutations.log` : relancé et complet, voir ci-dessous ;
+- `gate-ci-essai1.log`, `gate-ci-essai2.log`, `gate-ci.log` : trois essais en échec d'environnement (cause plus bas) ;
+  rejoué avec succès, voir ci-dessous ;
+- **Gates finaux (2026-11-21), dernier commit de code `14230aa3`** (les commits suivants ne portent que des fiches et
+  des comptes rendus), tous par `heavy.sh` :
+  - `mutations.log` : six sondes, chacune rougit des tests (sans mutation : 20 passés) — « ne pas dissoudre » 8 rouges ;
+    M1 « solde propre hors de sa partition » 2 ; M2 « sous-total faux sous la profondeur 1 » 8 ; « groupe nul fermé à
+    la main masqué » 1 ; « solde propre oublié » 11 ; « fermes ignorés » 2 ;
+  - `gate-backend-final.log` : `scripts/test-fast.sh --ci`, **6186 passés**, 14 ignorés, fmt et clippy verts ;
+  - `gate-ci.log` (`scripts/gate-ci.sh`, `cargo test` comme la CI) : **portée entière du workspace, code 0**, 6205 passés,
+    18 ignorés. Un premier passage (`gate-ci-run1-zip.log`) s'était arrêté au premier binaire rouge,
+    `admin_auto_backup_e2e::disque_sature_pendant_l_ecriture` (panique de `zip` 2.6.1, instabilité connue, fichiers non
+    touchés par la branche ; rejoué 3 fois seul, `diag-sature.log`, vert) : `cargo test` s'arrête alors et le reste du
+    workspace n'avait pas tourné ; le second passage, complet, est vert ;
+  - `e2e.log` : E2E complet, **478 passés, 10 échecs, 18 ignorés** — les dix attendus : sept de la KF-029 (#97 : deux
+    `mode-expert`, cinq `onboarding*`), `backup-restore-new-install.spec.ts:262` et `:381` (KF-065, #1282),
+    `opening-balances.spec.ts:156` (KF-067, #1284). Aucune autre régression.
 
 ### Completion Notes List
 
+**T0 — état trouvé (2026-11-20, branche `story/46-1` à `4c498494`).** 47-3 **non fusionnée** : `grep -rn "mirrorOf\|mirror_of" crates/` ne rend rien
+(elle est sur `story/47-3`, en développement). 48-11 **non fusionnée** : `crates/kesh-report/src/pdf.rs:349`
+`pub(crate) fn round_for_display(amount: Decimal) -> Decimal {` est toujours là, aucune `format_two_decimals` ; rien
+recopié, rien formaté (AC-13). Les fixtures de l'AC-8 (`crates/kesh-api/tests/fixtures/rapports-groupes/`, bilan et
+compte de résultat, exercices 2025 et 2026) ont été écrites par le code de base, **avant toute modification** : copie
+`git archive 4c498494` plus le seul test du T0, `KESH_ECRIRE_FIXTURES_46_1=1` ; commit `1f75cb29` (test et fixtures
+seuls). Les dates de période y sont **fixes** (exercices 2025-01-01→2025-12-31 et 2026-01-01→2026-12-31 créés
+explicitement), aucune ne dépend de l'horloge de test : la fixture ne casse pas sous un autre `KESH_TEST_INSTANT`
+(correction de l'orchestrateur reprise de la validation P2 de la 46-4). Les identifiants sont stables (base
+`#[sqlx::test]` neuve, montage déterministe) : aucune normalisation nécessaire.
+
+**Cible cargo.** La première génération des fixtures et un premier clippy ont tourné sur la cible partagée
+`/home/beat/claude/kesh-target`, abandonnée le 2026-11-20 (empreintes indépendantes du chemin) ; **tout a été rejoué**
+sur la cible propre `kesh-targets/kesh-wt46s1` (`CARGO_INCREMENTAL=0`), et les fixtures contre-éprouvées sur l'arbre de
+base avec une cible à part, supprimée ensuite (`verif-fixtures-base.sh`).
+
+**Implémentation.**
+- `crates/kesh-report/src/groupes.rs` (neuf, sans I/O) : `ArbreComptes` (`depuis(&[Account])`, `depuis_noeuds`,
+  parents validés, cycles coupés au premier compte par numéro, remontées bornées, `warn!` par compte), trait
+  `LigneAgregeable` (impl pour `AccountBalance`), `Dissolution::calculer` (clé de partition fournie par l'appelant),
+  `regrouper`, `regrouper_sections`, `LigneGroupee` neutre (vecteur de montants), `Grouping`, `LigneRapport`,
+  `SectionsBilan`, `SectionsResultat`, `AvecGroupes<T, S>` (`flatten`, `sans_groupes`, `bilan`,
+  `compte_de_resultat`). Déclaré et réexporté dans `lib.rs`.
+- `crates/kesh-api/src/services/rapports.rs` : `DemandeGroupes` avec ses deux entrées (`depuis_valeurs`, typée, porte
+  les refus du contrat ; `depuis_requete`, REST, refuse la syntaxe puis délègue), `NiveauDemande`,
+  `MAX_GROUPES_MANUELS = 500` ; `bilan_par_groupes`, `compte_de_resultat_par_groupes` ; `arbre_des_comptes` (une
+  requête, `list_by_company(…, true)`, seulement avec des groupes).
+- `crates/kesh-api/src/routes/reports.rs` : `ReportQuery` gagne `detail_level`, `subtotal_position`, `open`, `closed`
+  (`Option<String>`, 400 et non 422) ; les deux handlers JSON rendent `AvecGroupes<…>` ; les exports lisent
+  `&report.rapport`. `trial-balance` et `vat` partagent `ReportQuery` et ignorent les champs.
+  *(Annotation du 2026-11-21, revue P2 L-1 : périmé — `ReportQuery` n'a plus que `fiscal_year_id`, `period_start`, `period_end` ; les quatre paramètres se lisent dans `groupes_de`, `trial-balance` et `vat` ne sont pas touchés.)*
+- `crates/kesh-api/src/mcp/outils/rapports.rs` : `kesh_bilan` et `kesh_compte_de_resultat` lisent `.rapport` (sans
+  groupes jusqu'à la 46-4).
+- `docs/api-external.md` : paragraphe « Le bilan et le compte de résultat par groupes de comptes » (paramètres, refus,
+  dissolution, règle d'ouverture, réponse, règle de rendu, art. 959a CO et « affichage de travail », exemple JSON du
+  plan PME au niveau 2 — **tenu égal à la réponse réelle par un test**).
+
+**Point d'insertion de la présentation miroir (AC-9).** Dans `bilan_par_groupes` et `compte_de_resultat_par_groupes`,
+entre `generate_balance_sheet` / `generate_income_statement` et le `match groupes`, un commentaire marque l'endroit :
+`present_balance_sheet` / `present_income_statement` (47-3) s'y appliquent au rapport brut, **avant**
+`AvecGroupes::bilan` / `AvecGroupes::compte_de_resultat`, qui calculent alors les groupes sur les sections
+présentées. Au recâblage : (1) appeler la présentation à cet endroit ; (2) ajouter `mirror_of` à `LigneRapport`
+(`skip_serializing_if` vide), lu de `AccountBalance` par `source` dans `LigneRapport::depuis`, sur les lignes
+`account` et `own` ; une ligne de miroir se range alors sous le groupe **du miroir**, puisque son `account_id` est
+celui du miroir. Les générateurs ne changent pas.
+
+**Interaction avec la 47-3, pour l'intégration (revue P1, sans code ici).** Rien n'oblige un compte miroir à avoir un
+parent de son type (`routes/accounts.rs:76`, `check_parent_in_company`). Un miroir de passif rangé sous un groupe
+d'actif (p. ex. un découvert `1020.1` sous `10`) fait dissoudre `10` et `1` dans le bilan groupé dès qu'un découvert
+est présenté au passif : sommes justes (AC-4, voulu), mais groupes d'actif absents de l'affichage groupé. Point versé
+à `kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md` (n° 20), à trancher avec Beat ; la revue du code d'intégration de
+l'Epic 46 avec la 47-3 doit le savoir.
+
+**Écarts à la fiche, déclarés.**
+- **E1 — services à quatre arguments gardés.** T3 disait « une `DemandeGroupes` optionnelle passée à `bilan` /
+  `compte_de_resultat` » ; mais l'AC-11 exige `services_motif.rs` vert **sans modification**, et ce test appelle
+  `rapports::bilan(a, l, demande, u)` (`services_motif.rs:1104`, `:1882`). D'où `bilan` / `compte_de_resultat`
+  inchangés en arguments (ils délèguent avec `None`) et `bilan_par_groupes` / `compte_de_resultat_par_groupes`, qui
+  prennent la demande de groupes. Le type rendu est bien `Rapport<AvecGroupes<…>, U>` pour les quatre.
+- **E2 — signature de `regrouper`.** L'AC-1 donnait trois arguments ; la dissolution (AC-4) exige de voir **toutes**
+  les partitions, qu'une liste seule ne porte pas : `regrouper(lignes, arbre, &Dissolution, options)`, et
+  `regrouper_sections(sections, arbre, options)` calcule la dissolution avec la section pour clé. La 46-6a appellera
+  `Dissolution::calculer` avec la nature pour clé, puis `regrouper` sur sa liste unique.
+- **E3 — `active` aussi sur `own`**, et `role` sur `account` et `own` (`null` pour un compte sans rôle, comme dans les
+  sections plates) : la ligne `own` est une ligne d'entrée comme `account`.
+- **E4 — `open=` (ou `closed=`) vide refusé** (« élément non entier ») : choix strict, dit au guide d'API.
+- **Complexité (AC-10)** : agrégation et émission en O(n) par section, mais la construction de l'arbre affiché et la
+  dissolution remontent les ancêtres de chaque ligne, O(n × profondeur) — profondeur de 3 au plan PME.
+
+**Tests ajoutés** (de `4c498494` à `HEAD`, recomptés : `grep -c '#\[test\]' crates/kesh-report/src/groupes.rs` → 13 ;
+`sqlx::test` de `reports_e2e.rs` 39 → 46, soit 7 ; *annotation du 2026-11-21, revue P2 L-2 : recompté au dernier commit de code `14230aa3`, **14** unitaires et `sqlx::test` 39 → 47, soit **8** d'intégration, le test `groupes_parametre_repete` de la remédiation P1 s'y ajoutant*) : 13 unitaires dans `groupes.rs` (niveaux 1, 2, 3, `all` et 20 ;
+`maxDepth` ; `open`/`closed` dont un ouvert sous fermé ; `header`/`footer` et la somme sans `subtotal` ; solde propre ;
+groupes nuls masqués ou non ; devise unique, mêlée, CHF mêlé ; cycle, parent inconnu, étranger, lui-même ; groupe à
+cheval et son solde propre ; plan PME complet à chaque niveau de 1 à 20 et `all` ; propriété sur 300 arbres tirés,
+graine fixe, deux colonnes une fois sur deux ; enveloppe ; contrat JSON) ; 7 d'intégration dans `reports_e2e.rs`
+(fixture à l'octet, refus du contrat sur les deux routes — 15 cas chacune —, bilan au niveau 2 et `all` sur deux
+exercices, compte de résultat de même, ouverture manuelle, identifiants ignorés et `footer`, exemple du guide).
+
+**Sondes négatives** (`mutations.sh`, `mutations.log`, cible propre) : « ne pas dissoudre » → 6 rouges, dont les quatre
+tests d'intégration groupés (AC-4) ; « groupe nul fermé à la main masqué » → 1 ; « solde propre oublié » → 10 ;
+« `closed` ignoré » → 2. Fichier restauré après chaque mutation.
+
+**Gate-ci, cause des 37 échecs « Unknown database 'kesh_ci_s461' » (trois essais, `gate-ci-essai1.log`,
+`gate-ci-essai2.log`, `gate-ci.log` du 2026-11-21 07:09).** Les deux premiers coïncident avec l'OOM de 00:22 et la
+sortie de dev2 (`Exited (137)`). Le troisième est une faute de mon enveloppe : `scripts/gate-ci.sh` lance cargo sous
+`env -i`, si bien que `s46-1/gate-ci-wrap/cargo` ne voyait pas `KESH_DB_PORT` et retombait sur 3307 (dev2) pendant que
+`gate-ci-wrap/docker`, lancé hors de `env -i`, créait la base sur le serveur de la place (dev4 ou dev5). Corrigé :
+`s46-1/gate-ci.sh` écrit le port de la place en dur dans l'enveloppe cargo avant le lancement. Aucun autre gate-ci de
+la 46-1 ne tournait (vérifié au `ps`). Aucun défaut du code de la story.
+
 ### File List
+
+- `crates/kesh-report/src/groupes.rs` (neuf)
+- `crates/kesh-report/src/lib.rs`
+- `crates/kesh-api/src/services/rapports.rs`
+- `crates/kesh-api/src/routes/reports.rs`
+- `crates/kesh-api/src/mcp/outils/rapports.rs`
+- `crates/kesh-api/tests/reports_e2e.rs`
+- `crates/kesh-api/tests/fixtures/rapports-groupes/bilan-2025.json` (neuf)
+- `crates/kesh-api/tests/fixtures/rapports-groupes/bilan-2026.json` (neuf)
+- `crates/kesh-api/tests/fixtures/rapports-groupes/resultat-2025.json` (neuf)
+- `crates/kesh-api/tests/fixtures/rapports-groupes/resultat-2026.json` (neuf)
+- `docs/api-external.md`
+- `_bmad-output/implementation-artifacts/46-1-arbre-des-groupes-modele-api.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
@@ -313,3 +451,19 @@ facultatifs ; sans eux, la réponse ne change pas.
   relevés (`6`, `7`, `70`, `8`, `80` au compte de résultat ; `2` au bilan, partition par rôle) (AC-4) ; déterminisme de
   la fixture (AC-8). Rapport : `kesh-gate-logs/epic-46/validation/46-1-P2.md`.
 - 2026-11-20 — Validation P3 ciblée (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `8a7f0f73`, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 0 M / 2 L, remédiés. L : le test PME de l'AC-14 n'énumérait pas les dissolutions de l'AC-4 (désormais énumérées dans l'AC-14) ; les refus de syntaxe (`2.5`, `ALL`, vide, élément non entier) étaient attribués au service alors qu'ils se refusent à l'analyse (T3). Rapport : `kesh-gate-logs/epic-46/validation/46-123-P3-ciblee.md`.
+- 2026-11-20 — Développement (Claude Opus 5.5, bmad-dev-story) : T0 (fixtures du commit de base, `1f75cb29`), T1 à T5
+  (`b3ea6fc0`) ; corrections de l'orchestrateur reprises : AC-2 exclut les lignes `subtotal` de la somme de profondeur
+  1 (code, tests, critère) ; dates de période de la fixture fixes, sans horloge de test. Écarts E1 à E4 au Dev Agent
+  Record.
+- 2026-11-21 — Revue de code P1 (Claude Opus 5.5, complète, une lentille) : 0 C / 0 H / 1 M / 6 L. Remédiation
+  `14230aa3` : M-1, test `groupe_dissous_par_son_seul_solde_propre` (la règle « solde propre compris » de la
+  dissolution n'était tenue par aucun test) ; L-1, la propriété affirme la somme de la descendance de chaque groupe à
+  toute profondeur et l'absence d'un compte dans deux sections ; L-2, L-3, guide d'API (`active`/`role` sur `own`,
+  « groupe de l'arbre affiché », groupe nul sans ligne) ; L-4, paramètres de groupes lus dans les paires brutes de la
+  requête (`groupes_de`) : un paramètre répété est un 400 `VALIDATION_ERROR` qui le nomme sur le bilan et le compte de
+  résultat, et `ReportQuery` revient à ses trois champs, si bien que la balance et la TVA les ignorent comme avant
+  (test `groupes_parametre_repete`) ; L-5, l'accès est contrôlé dans le handler avant la validation des groupes ; L-6,
+  comptes rendus, `mutations.sh` dans une copie hors dépôt. Interaction avec la 47-3 (miroir de passif sous un groupe
+  d'actif) écrite au Dev Agent Record et versée aux issues à ouvrir, sans code. La remédiation touche la production
+  (L-4, L-5) : passe ciblée P2 à suivre (`kesh-gate-logs/s46-1/revue-p2-prompt.md`).
+- 2026-11-21 : LOW de la revue P2 (L-1, L-2, L-6) corrigés dans les fiches 46-1, 46-3 et 46-6a (texte seulement) ; mutations, gate backend, gate-ci complet (second passage) et E2E complets verts au dernier commit de code ; statut `done`.
