@@ -47,12 +47,12 @@ pub mod vat_rate;
 
 pub use account::{
     Account, AccountRole, AccountType, AccountUpdate, CurrencyChange, FxAccounts, FxAccountsOrigin,
-    NewAccount, OwnFxAccounts, OwnFxAccountsChange,
+    NewAccount, OwnFxAccounts, OwnFxAccountsChange, ParentChange,
 };
 pub use api_key::{ApiKey, ApiKeyScope, NewApiKey};
 pub use audit_log::{AUDIT_ENTITY_ID_NONE, Acteur, ActorType, AuditLogEntry, NewAuditLogEntry};
 pub use bank_account::{
-    BankAccount, BankAccountKind, BankAccountProvider, NewBankAccount, PaypalSettings,
+    BankAccount, BankAccountKind, BankAccountProvider, NewBankAccount, ProviderSettings,
 };
 pub use bank_import::{BankImport, BankImportSourceFormat, NewBankImport};
 pub use bank_profile::{BankProfile, NewBankProfile};

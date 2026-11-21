@@ -184,6 +184,9 @@ pub const ACTIONS: &[&str] = &[
     "payment_batch.cancelled",
     "payment_batch.confirmed",
     "payment_batch.generated",
+    // Story 38-12a — le téléchargement par l'API PayPal (une entrée par
+    // téléchargement, en plus de `bank_import.created` par devise).
+    "paypal_download.created",
     // Story 38-11b — l'import du CSV PayPal d'un compte PayPal (une entrée par
     // import, en plus de `bank_import.created` par devise).
     "paypal_import.created",
@@ -224,6 +227,9 @@ pub const ACTIONS: &[&str] = &[
     "vat_rate.created",
     "vat_rate.deactivated",
     "vat_rate.updated",
+    // Story 39-11b — l'import des relevés CSV d'un compte Wise (une entrée par
+    // import, en plus de `bank_import.created` par fichier).
+    "wise_import.created",
 ];
 
 /// Préfixe de clé des types d'entité.

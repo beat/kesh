@@ -41,10 +41,12 @@ pub mod mcp_server_settings;
 pub mod onboarding;
 pub mod opening_balances;
 pub mod payment_batches;
+pub mod paypal_downloads;
 pub mod paypal_imports;
 pub mod products;
 pub mod profile;
 pub mod projects;
+pub mod provider_imports;
 pub mod reconciliation;
 pub mod reconciliation_group;
 pub mod reconciliation_rules;
@@ -55,6 +57,7 @@ pub mod supplier_invoices;
 pub mod test_endpoints;
 pub mod users;
 pub mod vat;
+pub mod wise_imports;
 
 use serde::Serialize;
 

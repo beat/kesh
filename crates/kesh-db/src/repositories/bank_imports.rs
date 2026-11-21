@@ -408,6 +408,66 @@ where
     .map_err(map_db_error)
 }
 
+/// Écart de continuité entre un relevé et le relevé à solde qui le précède —
+/// Story 39-11b (AC-5) : la clôture du relevé précédent (`expected`) diffère du
+/// solde d'ouverture du relevé jugé (`found`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatementGap {
+    /// L'entrée `bank_imports` du relevé précédent.
+    pub previous_import_id: i64,
+    /// Sa clôture : le solde d'ouverture attendu.
+    pub expected: rust_decimal::Decimal,
+    /// Le solde d'ouverture du relevé jugé.
+    pub found: rust_decimal::Decimal,
+}
+
+/// Story 39-11b (AC-5) — **la** règle de continuité d'un relevé avec le
+/// précédent du même compte, servie par l'import Wise (à l'instant de
+/// l'import) et par la revue des écarts de la Story 39-11c (sur l'état présent
+/// des relevés, rien n'est stocké). Jugée sur le **premier jour** du relevé
+/// seul :
+///
+/// 1. si un relevé du compte (saisi ou importé, hors `exclude_import_id` — le
+///    relevé jugé lui-même, à la revue) couvre `first_date`
+///    ([`overlapping_statements`] sur `[first_date, first_date]`), le relevé
+///    **prolonge par chevauchement** : aucun écart ;
+/// 2. sinon, le relevé à solde le plus tardif dont `period_to < first_date`
+///    ([`previous_statement_closing`]) : si sa clôture diffère de
+///    `opening_balance`, écart ; s'il n'y en a aucun, rien.
+///
+/// Jamais le chevauchement de toute la période : un relevé postérieur qui
+/// chevauche la fin masquerait l'écart du début. Lectures sans verrou :
+/// l'écart est un avertissement, non une garde.
+pub async fn continuity_gap(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    bank_account_id: i64,
+    first_date: chrono::NaiveDate,
+    opening_balance: rust_decimal::Decimal,
+    exclude_import_id: Option<i64>,
+) -> Result<Option<StatementGap>, DbError> {
+    let covering = overlapping_statements(
+        &mut *conn,
+        company_id,
+        bank_account_id,
+        first_date,
+        first_date,
+    )
+    .await?;
+    if covering.iter().any(|s| Some(s.id) != exclude_import_id) {
+        return Ok(None);
+    }
+    let previous =
+        previous_statement_closing(&mut *conn, company_id, bank_account_id, first_date).await?;
+    Ok(previous.and_then(|(id, _, closing)| {
+        (closing != opening_balance).then_some(StatementGap {
+            previous_import_id: id,
+            expected: closing,
+            found: opening_balance,
+        })
+    }))
+}
+
 /// Issue de [`delete_unreconciled_in_tx`] (Story 27-1, #632).
 #[derive(Debug)]
 pub enum DeleteBankImportOutcome {
