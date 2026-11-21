@@ -4,6 +4,7 @@
 	import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
 	import { accountRoleKey, type AccountRole } from '$lib/features/accounts/accounts.types';
 	import AccountCurrencyBalance from './AccountCurrencyBalance.svelte';
+	import MirrorOfNote from './MirrorOfNote.svelte';
 	import {
 		formatCurrencyFigure,
 		formatReportAmount,
@@ -138,7 +139,7 @@
 					</thead>
 					<tbody>
 						{#each dto.assets as a (a.accountId)}
-							<tr class:opacity-60={!a.active}>
+							<tr class:opacity-60={!a.active} data-testid="report-row-{a.accountNumber}">
 								<td class="px-2 py-1 font-mono">
 									<a
 										class="text-indigo-700 hover:underline"
@@ -147,7 +148,7 @@
 									>{a.accountNumber}</a
 									>
 								</td>
-								<td class="px-2 py-1">{a.accountName}<AccountCurrencyBalance account={a} /></td>
+								<td class="px-2 py-1">{a.accountName}<AccountCurrencyBalance account={a} /><MirrorOfNote account={a} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(a.balance)}</td>
 							</tr>
 						{/each}
@@ -177,7 +178,7 @@
 					</thead>
 					<tbody>
 						{#each dto.liabilities as l (l.accountId)}
-							<tr class:opacity-60={!l.active}>
+							<tr class:opacity-60={!l.active} data-testid="report-row-{l.accountNumber}">
 								<td class="px-2 py-1 font-mono">
 									<a
 										class="text-indigo-700 hover:underline"
@@ -186,7 +187,7 @@
 									>{l.accountNumber}</a
 									>
 								</td>
-								<td class="px-2 py-1">{l.accountName}<AccountCurrencyBalance account={l} /></td>
+								<td class="px-2 py-1">{l.accountName}<AccountCurrencyBalance account={l} /><MirrorOfNote account={l} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(l.balance)}</td>
 							</tr>
 						{/each}

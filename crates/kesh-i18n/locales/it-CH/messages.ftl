@@ -3398,6 +3398,9 @@ reports-fx-line = { $amount } × { $rate }
 reports-fx-totals = dare { $debit } · avere { $credit }
 reports-fx-trial-balance = apertura { $opening } · dare { $debit } · avere { $credit } · chiusura { $closing }
 reports-ledger-include-zero = Includere i conti senza movimenti
+# Story 47-4 — sotto la riga di un conto specchio.
+reports-mirror-of-one = Saldo di { $sources }
+reports-mirror-of-other = Saldi di { $sources }
 reports-ledger-instruction = Scegliete un periodo, poi cliccate su Genera. Il conto è facoltativo.
 
 # --- Journal d'audit — route, vocabulaire et export (Story 25-1c-a) ---

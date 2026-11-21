@@ -1,4 +1,3 @@
-import { inflateSync } from 'node:zlib';
 import { expect, test } from '@playwright/test';
 import {
 	seedTestState,
@@ -11,6 +10,7 @@ import {
 	createAndValidateInvoiceViaApi,
 	ensurePrimaryBankAccountViaApi,
 } from './helpers/api-fixtures';
+import { contenuDuPdf, hexWinAnsi } from './helpers/pdf';
 
 /**
  * Tests E2E — une QR-facture dont le débiteur porte « & » (Story 33-12a, #941).
@@ -19,27 +19,6 @@ import {
  * produit, là où le téléchargement du PDF était refusé pour un nom réel. Seul un
  * E2E voit le nom traverser la route jusqu'au fichier.
  */
-
-/** Les flux du PDF, décompressés au besoin, en minuscules. */
-function contenuDuPdf(pdf: Buffer): string {
-	const brut = pdf.toString('latin1');
-	const flux = /stream\r?\n([\s\S]*?)endstream/g;
-	let sortie = '';
-	for (const m of brut.matchAll(flux)) {
-		const octets = Buffer.from(m[1], 'latin1');
-		try {
-			sortie += inflateSync(octets).toString('latin1');
-		} catch {
-			sortie += m[1];
-		}
-	}
-	return sortie.toLowerCase();
-}
-
-/** Un texte tel qu'il s'écrit dans un `Tj` hexadécimal, Latin-1 valant WinAnsi ici. */
-function hexWinAnsi(texte: string): string {
-	return Buffer.from(texte, 'latin1').toString('hex');
-}
 
 test.beforeAll(async () => {
 	await seedTestState('with-company');

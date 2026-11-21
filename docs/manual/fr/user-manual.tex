@@ -306,7 +306,11 @@ porte tous, et les chiffres. Un mois peut être négatif : sa barre part sous l'
     \item Kesh ne passe aucune écriture de clôture : il n'y a rien à écarter à ce titre.
 \end{itemize}
 Le total des barres \textbf{égale le compte de résultat} de l'exercice : c'est ce qui permet
-de les recouper. Le grand livre d'un poste ou les écritures d'un mois peuvent en revanche
+de les recouper. Une exception : un compte de produits ou de charges qui a un \textbf{compte miroir}
+(\S\ref{sec:rapports-miroirs}). L'accueil lit
+les soldes réels ; le compte de résultat présente sous le miroir le solde de sens inverse d'un
+compte, si bien que ses totaux des produits et des charges dépassent alors ceux des barres du
+même montant ; le \textbf{résultat net} reste le même. Le grand livre d'un poste ou les écritures d'un mois peuvent en revanche
 montrer des lignes que le graphique n'a pas retenues : les deux écritures d'une paire écartée,
 dont la somme est nulle.
 
@@ -501,7 +505,7 @@ C'est pourquoi Kesh \textbf{refuse le changement au premier essai} et vous indiq
 
 \subsection{Compte miroir}\label{sec:compte-miroir}
 
-Un compte dont le solde change de sens --- une banque à découvert, une créance sociale devenue une dette, des gains de change que les pertes dépassent --- paraît dans les rapports \textbf{du mauvais côté}, avec un montant négatif. Le \textbf{compte miroir} règle cette présentation : vous désignez, pour ce compte, un compte de présentation de l'autre côté du même rapport, et son solde, quand il est de sens inverse, y paraît --- dans le bilan, comme le prévoit sa présentation (art.~959a CO), ou dans le compte de résultat. \textbf{Aucune écriture n'est passée et rien n'est compensé} : le compte garde ses écritures et son solde, que la balance de vérification et le grand livre montrent tels quels. (Les avertissements sur la structure du bilan et du compte de résultat, au chapitre des rapports, restent valables.)
+Un compte dont le solde change de sens --- une banque à découvert, une créance sociale devenue une dette, des gains de change que les pertes dépassent --- paraît dans les rapports \textbf{du mauvais côté}, avec un montant négatif. Le \textbf{compte miroir} règle cette présentation : vous désignez, pour ce compte, un compte de présentation de l'autre côté du même rapport, et son solde, quand il est de sens inverse, y paraît --- dans le bilan, comme le prévoit sa présentation (art.~959a CO), ou dans le compte de résultat. \textbf{Aucune écriture n'est passée et rien n'est compensé} : le compte garde ses écritures et son solde, que la balance de vérification et le grand livre montrent tels quels ; ce que montrent les rapports est décrit au \S\ref{sec:rapports-miroirs}. (Les avertissements sur la structure du bilan et du compte de résultat, au chapitre des rapports, restent valables.)
 
 \paragraph{Créer le compte de présentation, puis le choisir.} Le compte miroir est un compte \textbf{de présentation} : créez-le par \emph{Nouveau compte}, \textbf{Postable} décoché, \textbf{sans rôle} et \textbf{sans compte parent}, de l'autre côté du compte qu'il complète (un passif pour un actif et inversement, une charge pour un produit et inversement). Ne lui donnez pas de compte parent : un compte qui reçoit un premier sous-compte devient non postable, si bien que 6900.1 créé sous 6900 Charges financières rendrait 6900 non postable --- l'inverse de l'exemple de l'\emph{Ajout d'un compte}, qui pose un parent. Ouvrez ensuite le compte à compléter par \emph{Modifier le compte} (ou choisissez son miroir dès sa création) : le champ \textbf{Compte miroir}, en dernier, ne propose que les comptes qui conviennent --- actifs, de l'autre côté du type choisi, non postables, sans rôle et sans miroir eux-mêmes ; Kesh refuse au moment d'enregistrer un compte qui porte des écritures, un compte de fonds propres qui désignerait un miroir, ou --- en modifiant le \textbf{type} d'un compte --- un retypage qui le mettrait du même côté du rapport que son miroir ; le message s'affiche sous le champ. Pour retyper un tel compte, choisissez \emph{Aucun} dans le champ \textbf{Compte miroir} \textbf{en même temps} que le nouveau type, puis désignez un compte de l'autre côté si vous le souhaitez. \emph{Aucun} retire le lien.
 
@@ -3957,7 +3961,8 @@ au journal d'audit (\S\ref{sec:tracabilite}), avec son auteur.
 
 \emph{Mensuel} → \emph{Rapports} → \emph{Bilan}. Affiche, à une date donnée, les comptes
 d'actif et de passif à solde non nul, \textbf{triés par numéro de compte}, avec les totaux
-Actifs, Passifs et Capitaux propres.
+Actifs, Passifs et Capitaux propres. Le solde de sens inverse d'un compte qui a un
+\textbf{compte miroir} paraît sous ce miroir, de l'autre côté (\S\ref{sec:rapports-miroirs}).
 
 \begin{keshwarning}[title=\faExclamationTriangle\ Le bilan n'est pas encore structuré selon l'art.~959a CO]
 Kesh ne regroupe pas les comptes en \textbf{actif circulant} et \textbf{actif immobilisé}, ni
@@ -3987,7 +3992,9 @@ Filtres : date de référence (par défaut fin d'exercice en cours), exercice à
 \keshscreenshot{rapport-resultat.png}{Compte de résultat : produits, charges et résultat de la période.}  % TODO capture: rapport compte de resultat
 
 \emph{Mensuel} → \emph{Rapports} → \emph{Compte de résultat}. Liste les comptes de produits
-et les comptes de charges à solde non nul, et le résultat de la période.
+et les comptes de charges à solde non nul, et le résultat de la période. Le solde de sens
+inverse d'un compte qui a un \textbf{compte miroir} paraît sous ce miroir, de l'autre côté
+(\S\ref{sec:rapports-miroirs}).
 
 \begin{keshwarning}[title=\faExclamationTriangle\ Le compte de résultat n'est pas encore structuré selon l'art.~959b CO]
 Kesh ne propose \textbf{pas} les présentations \emph{par nature} et \emph{par fonction}, et ne
@@ -3999,6 +4006,68 @@ net.
 \noindent Pour des comptes annuels destinés à un tiers, la mise en forme normée reste à
 produire hors de Kesh, à partir de ces chiffres.
 \end{keshwarning}
+
+\subsection{Comptes miroirs dans les rapports}\label{sec:rapports-miroirs}
+
+Un compte qui a un \textbf{compte miroir} (\S\ref{sec:compte-miroir}) et dont le solde est \textbf{de sens inverse}
+--- une banque à découvert, une dette sociale débitrice, des gains de change que les pertes dépassent --- ne paraît
+pas au bilan ni au compte de résultat avec un montant négatif : son solde, changé de signe, paraît \textbf{sous son
+miroir}, de l'autre côté du même rapport. Un compte dont le solde est dans son sens normal reste à sa place. Sous le
+nom du miroir, une mention en petit dit de quel compte vient le montant : «~Solde de 2270 AVS/AI/APG~», ou
+«~Soldes de~…~» quand plusieurs comptes partagent ce miroir.
+
+\keshscreenshot{mi-bilan.png}{Bilan avec deux comptes miroirs : 1040.1 et 2100.1 présentent les soldes de 2270 et de 1020, avec la mention « Solde de … ».}
+
+\begin{itemize}
+    \item \textbf{Rien n'est compensé et aucune écriture n'est passée.} Le montant présenté sous le miroir est le
+        solde du compte d'origine, entier ; il n'est déduit d'aucun autre compte. C'est la présentation que le bilan
+        de l'art.~959a CO attend d'un solde de sens inverse --- un découvert bancaire parmi les dettes, une créance
+        parmi les actifs. Les avertissements sur la structure du bilan et du compte de résultat, ci-dessus, restent
+        valables : le miroir ne règle que le signe d'un solde.
+    \item \textbf{Les exports PDF et CSV} du bilan et du compte de résultat montrent la même présentation, le miroir
+        comme un compte ordinaire, sans la mention ; le serveur MCP de même ; l'API ajoute à la ligne du miroir la liste
+        des comptes d'origine. Un miroir dont aucun compte n'a de solde de sens inverse ne paraît pas.
+    \item \textbf{La balance des comptes et le grand livre} restent sur les soldes réels : le compte d'origine y
+        garde son solde, de sens inverse, et le miroir, qui ne porte aucune écriture, y reste à zéro.
+    \item \textbf{L'accueil} lit lui aussi les soldes réels (\S\ref{sec:graphiques-accueil}).
+\end{itemize}
+
+\keshscreenshot{mi-resultat.png}{Compte de résultat : 6900.1 présente en charges le solde de 6950.1, qui n'apparaît plus parmi les produits.}
+
+\paragraph{Un exemple chiffré.} Une société tient le plan \textbf{PME} livré. Elle a créé, sans compte parent, les
+comptes de présentation 1040.1 «~Créances AVS/AI/APG~» (actif), 2100.1 «~Découvert bancaire~» (passif) et 6900.1
+«~Pertes de change~» (charge), tous trois non postables, et le compte de produit 6950.1 «~Gains de change~» ; elle a
+désigné 2100.1 comme miroir de 1020 Banque, 1040.1 comme miroir de 2270 AVS/AI/APG et 6900.1 comme miroir de 6950.1.
+Ses écritures, chacune contre 2800 Capital social : 1000 Caisse au débit de 500.00, 1010 Poste au débit de
+12'000.00, 1020 Banque au crédit de 800.00, 2000 Créanciers au crédit de 3'000.00, 2270 AVS/AI/APG au débit de
+1'200.00, 3200 Prestations de services au crédit de 2'000.00, 6900 Charges financières au débit de 50.00 et 6950.1
+au débit de 250.00 ; 2800 a donc un solde créditeur de 8'200.00.
+
+% exemple-presentation:debut
+\begin{center}
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.22\linewidth}>{\raggedright\arraybackslash}p{0.35\linewidth}>{\raggedright\arraybackslash}p{0.35\linewidth}}
+\toprule
+ & \textbf{Sans miroir} & \textbf{Avec les miroirs} \\
+\midrule
+Actif & 1000 : 500.00 ; 1010 : 12'000.00 ; 1020 : $-$800.00 & 1000 : 500.00 ; 1010 : 12'000.00 ; 1040.1 : 1'200.00 (solde de 2270) \\
+Total de l'actif & 11'700.00 & 13'700.00 \\
+Passif (hors fonds propres) & 2000 : 3'000.00 ; 2270 : $-$1'200.00 & 2000 : 3'000.00 ; 2100.1 : 800.00 (solde de 1020) \\
+Total du passif & 1'800.00 & 3'800.00 \\
+Fonds propres & 2800 : 8'200.00 ; résultat 1'700.00 ; total 9'900.00 & identiques \\
+Produits & 3200 : 2'000.00 ; 6950.1 : $-$250.00 ; total 1'750.00 & 3200 : 2'000.00 ; total 2'000.00 \\
+Charges & 6900 : 50.00 ; total 50.00 & 6900 : 50.00 ; 6900.1 : 250.00 (solde de 6950.1) ; total 300.00 \\
+Résultat de l'exercice & 1'700.00 & 1'700.00 \\
+\bottomrule
+\end{tabular}
+\end{center}
+% exemple-presentation:fin
+
+Les deux côtés du bilan augmentent de 2'000.00, les produits et les charges de 250.00 chacun ; l'équation du bilan
+(13'700.00 = 3'800.00 + 9'900.00) et le résultat ne changent pas. La balance des comptes montre toujours 1020 à
+$-$800.00, 2270 à $-$1'200.00 et 6950.1 à $-$250.00.
+
+\keshscreenshot{mi-balance.png}{Balance des comptes : 1020, 2270 et 6950.1 gardent leurs soldes réels, de sens inverse.}
 
 \subsection{Balance des comptes}
 
@@ -4013,7 +4082,10 @@ d'ouverture}, les \textbf{mouvements} débit et crédit, et le \textbf{solde de 
         bilan à la fin de la période ; celle d'un compte de résultat, son montant \textbf{depuis le début de l'exercice} —
         égal au compte de résultat quand la période commence au premier jour de l'exercice, puisque le compte de
         résultat ne porte que les mouvements de la période choisie. Ouverture et clôture sont, dans tous les cas,
-        celles du grand livre (\S\ref{sec:grand-livre}) sur la même période.
+        celles du grand livre (\S\ref{sec:grand-livre}) sur la même période. Avec un \textbf{compte miroir}, la
+        concordance ne se lit plus ligne à ligne : la balance garde le solde réel du compte, de sens inverse, que le
+        bilan ou le compte de résultat présente sous le miroir (\S\ref{sec:rapports-miroirs}) ; les totaux de chaque
+        côté du bilan augmentent du même montant, et le résultat reste le même.
     \item \textbf{La ligne « Résultat reporté (calculé) ».} Kesh ne passe aucune écriture de clôture : le résultat des
         exercices antérieurs n'est porté par aucun compte. Une ligne calculée le montre, sous les comptes — la même
         valeur qu'au bilan, « Perte reportée » à l'écran si elle est négative. Contrairement au bilan, la balance la

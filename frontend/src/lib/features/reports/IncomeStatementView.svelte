@@ -3,6 +3,7 @@
 	import Big from 'big.js';
 	import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
 	import AccountCurrencyBalance from './AccountCurrencyBalance.svelte';
+	import MirrorOfNote from './MirrorOfNote.svelte';
 	import { formatReportAmount, formatSwissDate, isReportEmpty } from './reports.api';
 	import type { IncomeStatementDto } from './reports.types';
 
@@ -56,9 +57,9 @@
 					</thead>
 					<tbody>
 						{#each dto.revenues as r (r.accountId)}
-							<tr>
+							<tr data-testid="report-row-{r.accountNumber}">
 								<td class="px-2 py-1 font-mono">{r.accountNumber}</td>
-								<td class="px-2 py-1">{r.accountName}<AccountCurrencyBalance account={r} /></td>
+								<td class="px-2 py-1">{r.accountName}<AccountCurrencyBalance account={r} /><MirrorOfNote account={r} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(r.balance)}</td>
 							</tr>
 						{/each}
@@ -86,9 +87,9 @@
 					</thead>
 					<tbody>
 						{#each dto.expenses as e (e.accountId)}
-							<tr>
+							<tr data-testid="report-row-{e.accountNumber}">
 								<td class="px-2 py-1 font-mono">{e.accountNumber}</td>
-								<td class="px-2 py-1">{e.accountName}<AccountCurrencyBalance account={e} /></td>
+								<td class="px-2 py-1">{e.accountName}<AccountCurrencyBalance account={e} /><MirrorOfNote account={e} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(e.balance)}</td>
 							</tr>
 						{/each}

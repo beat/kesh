@@ -11,7 +11,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/svelte';
 
 vi.mock('$lib/shared/utils/i18n.svelte', () => ({
-	i18nMsg: (_key: string, fallback: string) => fallback,
+	// Story 47-4 — le repli, ses variables `{ $x }` remplacées (mention « Solde de … »).
+	i18nMsg: (_key: string, fallback: string, args?: Record<string, string | number>) =>
+		args ? fallback.replace(/\{\s*\$(\w+)\s*\}/g, (_m, k) => String(args[k] ?? '')) : fallback,
 }));
 
 import BalanceSheetView from './BalanceSheetView.svelte';
@@ -199,5 +201,77 @@ describe('BalanceSheetView — Story 37-4, compte en devise', () => {
 	it('mono-devise : aucune mention en devise', () => {
 		const { container } = render(BalanceSheetView, { dto: makeDto() });
 		expect(container.innerHTML).not.toContain('account-fx-');
+	});
+});
+
+describe('BalanceSheetView — Story 47-4, mention « Solde de … » sous un compte miroir', () => {
+	const miroirActif = {
+		accountId: 40,
+		accountNumber: '1040.1',
+		accountName: 'Créances sociales',
+		accountType: 'Asset' as const,
+		active: true,
+		balance: '1200.00',
+		role: null,
+		mirrorOf: [{ accountId: 22, accountNumber: '2270', accountName: 'AVS/AI/APG', balance: '-1200.00' }],
+	};
+	const miroirPassif = {
+		accountId: 21,
+		accountNumber: '2100.1',
+		accountName: 'Banque à découvert',
+		accountType: 'Liability' as const,
+		active: true,
+		balance: '1000.00',
+		role: null,
+		mirrorOf: [
+			{ accountId: 12, accountNumber: '1020', accountName: 'Banque', balance: '-800.00' },
+			{ accountId: 13, accountNumber: '1021', accountName: 'Banque 2', balance: '-200.00' },
+		],
+	};
+
+	it('une source : « Solde de 2270 AVS/AI/APG » sous la ligne du miroir, rien sous les autres', () => {
+		const dto = makeDto();
+		const { getByTestId, queryByTestId } = render(BalanceSheetView, {
+			dto: { ...dto, assets: [...dto.assets, miroirActif] },
+		});
+		const note = getByTestId('mirror-of-1040.1');
+		expect(note.textContent).toBe('Solde de 2270 AVS/AI/APG');
+		// Sous le libellé, dans la cellule du nom de la ligne du miroir.
+		expect(note.closest('tr')?.getAttribute('data-testid')).toBe('report-row-1040.1');
+		expect(note.closest('td')?.textContent).toContain('Créances sociales');
+		// Texte seul, sans lien.
+		expect(note.querySelector('a')).toBeNull();
+		expect(note.closest('a')).toBeNull();
+		// Ligne sans `mirrorOf` : aucune mention.
+		expect(queryByTestId('mirror-of-1000')).toBeNull();
+		expect(getByTestId('report-row-1000').textContent).not.toContain('Solde de');
+	});
+
+	it('plusieurs sources au passif : « Soldes de … », séparées par des virgules', () => {
+		const dto = makeDto();
+		const { getByTestId } = render(BalanceSheetView, {
+			dto: { ...dto, liabilities: [...dto.liabilities, miroirPassif] },
+		});
+		expect(getByTestId('mirror-of-2100.1').textContent).toBe('Soldes de 1020 Banque, 1021 Banque 2');
+		expect(getByTestId('report-row-2100.1')).toBeTruthy();
+	});
+
+	it('le numéro du miroir reste lié au grand livre ; les fonds propres ne portent ni mention ni testid de ligne', () => {
+		const dto = makeDto();
+		const { getByTestId, container } = render(BalanceSheetView, {
+			dto: { ...dto, assets: [...dto.assets, miroirActif] },
+		});
+		const lien = getByTestId('report-row-1040.1').querySelector('a');
+		expect(lien?.textContent).toBe('1040.1');
+		expect(lien?.getAttribute('href')).toContain('/reports');
+		const fondsPropres = container.querySelector('[data-testid="balance-sheet-equity"]');
+		expect(fondsPropres?.querySelector('[data-testid^="mirror-of-"]')).toBeNull();
+		expect(fondsPropres?.querySelector('[data-testid^="report-row-"]')).toBeNull();
+	});
+
+	it('sans aucun miroir : aucune mention dans tout le rapport', () => {
+		const { container } = render(BalanceSheetView, { dto: makeDto() });
+		expect(container.querySelector('[data-testid^="mirror-of-"]')).toBeNull();
+		expect(container.textContent).not.toContain('Solde de');
 	});
 });

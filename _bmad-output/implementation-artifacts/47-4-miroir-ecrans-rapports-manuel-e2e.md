@@ -1,6 +1,6 @@
 # Story 47-4 : compte miroir — écrans des rapports, parcours E2E, manuel utilisateur
 
-Status: ready-for-dev
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — § *Décision du 2026-11-19 : miroir seul*,
 règles R5 à R7 ; D4 ; FR-47-3 (écran), FR-47-4, FR-47-5 (manuel utilisateur) ; NFR-47-4. **Refonte du 2026-11-19
@@ -103,12 +103,12 @@ l'E2E (`frontend/tests/e2e/`), la garde `crates/kesh-api/tests/textes_coherents.
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** : reprise de `main` ; `fix/bilan-resultat-reporte` (#1346) touche `BalanceSheetView.svelte` ; si la 46-2
+- [x] **T0** : reprise de `main` ; `fix/bilan-resultat-reporte` (#1346) touche `BalanceSheetView.svelte` ; si la 46-2
   (niveau de détail) est fusionnée, la mention vaut aussi pour les lignes `kind: account` des groupes.
-- [ ] **T1** : types, `MirrorOfNote`, vues (AC 1, 2, 4). **T2** : Vitest (AC 3).
-- [ ] **T3** : E2E (assistant PDF déplacé dans `helpers/`), captures (AC 5, 6).
-- [ ] **T4** : manuel, garde G26 et ses témoins, i18n (AC 7–10).
-- [ ] **T5** : gates frontend, **backend** (`textes_coherents`) et E2E complets au dernier commit de code.
+- [x] **T1** : types, `MirrorOfNote`, vues (AC 1, 2, 4). **T2** : Vitest (AC 3).
+- [x] **T3** : E2E (assistant PDF déplacé dans `helpers/`), captures (AC 5, 6).
+- [x] **T4** : manuel, garde G26 et ses témoins, i18n (AC 7–10).
+- [x] **T5** : gates frontend, **backend** (`textes_coherents`) et E2E complets au dernier commit de code.
 
 ## Dev Notes
 
@@ -156,6 +156,13 @@ Au bilan et au compte de résultat, la ligne d'un compte miroir dit de quel comp
 le manuel utilisateur décrit les comptes miroirs, avec un exemple chiffré.
 
 ## Change Log
+
+- 2026-11-21 — **développement** (branche `story/47-4`, partie d'`epic/47-comptes-miroirs` `d715361d`) : composant
+  `MirrorOfNote` et mention « Solde de … » aux quatre tableaux, `data-testid` `report-row-{numéro}` et
+  `mirror-of-{numéro}`, type `MirrorSource` ; deux clés i18n `-one`/`-other` (écart motivé à l'AC-1, ci-dessous) ;
+  Vitest (douze tests neufs) ; E2E `reports-mirror.spec.ts` et lecture du PDF déplacée dans `helpers/pdf.ts` ;
+  sous-section `sec:rapports-miroirs` du manuel utilisateur, exemple chiffré entre marqueurs, trois figures `mi-*.png`,
+  quatre phrases rendues fausses par le miroir corrigées ; garde G26 et ses témoins. Story en `review`.
 
 - 2026-11-19 — validation P3 (Sonnet 5.5, ciblée sur la remédiation P2) : **0 C / 0 H / 0 M / 1 L, remédié**. Relu au
   code d'`origin/main` `fd04099f` : AC-7 sans « conforme à l'art. 959a CO » (la parenthèse ne dit plus que « comme la
@@ -255,8 +262,95 @@ le manuel utilisateur décrit les comptes miroirs, avec un exemple chiffré.
 
 ### Agent Model Used
 
+Claude Opus 5.5.
+
 ### Debug Log References
+
+Journaux hors dépôt, dossier `kesh-gate-logs/s47-4/` : `gate-backend.log`, `front-*.log`, `e2e.log`,
+`e2e-rejeu-bank-import.log`, `gate-ci.log`, `cible-*.log`, `mut-*.log`, `manuel-make.log`, `manuel-plat.txt` ;
+captures `captures/` ; PDF contrôlé `manuel-pdf/fr/user-manual.pdf` (copie, non commité).
 
 ### Completion Notes List
 
+- **T0** : la base `d715361d` porte déjà `main` 0.19.1 ; l'Epic 46 (groupes, 46-2) n'est pas fusionné dans
+  `epic/47` : la mention ne concerne que les lignes de compte actuelles. **Décision du responsable de l'epic du 21.11
+  (point e)** (miroir rangé sous un groupe d'un autre type : avertissement non bloquant, état admis) : la fiche n'en dit
+  rien, et rien ne s'y rattache dans la 47-4 — aucun refus n'est posé, aucun avertissement non plus ; le fichier d'epic
+  dit déjà que personne ne porte cet avertissement et qu'il s'ouvre en issue `enhancement` à la fusion avec l'Epic 46.
+- **Écart à la lettre de l'AC-1 — deux clés au lieu d'une clé à sélecteur `$count`** : le serveur pré-résout les
+  messages Fluent **sans arguments** (`frontend/src/lib/shared/utils/i18n.svelte.ts`, commentaire d'`i18nMsg`) ; un
+  sélecteur sur `$count` y serait figé sur sa variante par défaut. Kesh règle ce cas par deux clés `-one`/`-other`
+  (précédent : `reconciliation-labels-already-booked-one`/`-other`) : `reports-mirror-of-one` « Solde de { $sources } »,
+  `reports-mirror-of-other` « Soldes de { $sources } », quatre locales, sources jointes en une chaîne.
+- **T1** : `MirrorOfNote.svelte` (un composant, placé après `AccountCurrencyBalance` dans la cellule du nom aux quatre
+  tableaux) ; `report-row-{numéro}` sur les `<tr>` d'actifs, de passifs, de produits et de charges (pas sur les fonds
+  propres) ; `mirrorOf?: MirrorSource[]` et `MirrorSource` dans `reports.types.ts` ; `reports.api.ts` et
+  `isReportEmpty` inchangés.
+- **T2** : douze tests Vitest neufs (périmètre `d715361d..HEAD`, recomptés par `grep -cE '^\s*(it|test)\('`) :
+  `BalanceSheetView.test.ts` 9 → 13, `IncomeStatementView.test.ts` 4 → 7, `MirrorOfNote.test.ts` 0 → 5. Le mock
+  d'`i18nMsg` des deux fichiers existants remplace désormais les variables `{ $x }` du repli (sans argument, il rend le
+  repli comme avant). `sitesTotal` 3513 → 3515, relevé par la garde.
+- **Sondes par mutation** (copie hors dépôt `kesh-gate-logs/s47-4/mut/`, supprimée après) : mention rendue sur toute
+  ligne (`{#if true}`) → 6 rouges (`mut-mention-sans-mirrorof.log`) ; mention retirée des passifs → 1 rouge ; retirée
+  des produits → 1 rouge ; pluriel cassé (`>= 1`) → 3 rouges. G26 : `800.00` changé en `801.00` dans le bloc du
+  manuel d'une copie de l'arbre → `l_exemple_des_comptes_miroirs_du_manuel_est_celui_du_test` rouge (« absent(s) :
+  ["800.00"] », alors que `3'800.00` reste : jetons entiers), copie intacte verte (`mut-g26-800.log`,
+  `mut-g26-intact.log` ; cible de compilation de la copie supprimée).
+- **T3** : `reports-mirror.spec.ts` (un test, mode série, reseed `with-company` avant et après) suit l'AC-5 ; les deux
+  comptes du seed 1000 et 2000 sont **renommés** « Caisse » et « Créanciers » par l'API pour que les figures du manuel
+  portent les noms de l'exemple — aucune assertion ne porte sur leurs libellés. PDF lu par `contenuDuPdf` et `tjDe`
+  (jeton `<hex> tj` entier) de `helpers/pdf.ts`, où `contenuDuPdf` et `hexWinAnsi` ont été **déplacés**
+  d'`invoice-qr-caracteres.spec.ts` (qui les importe). CSV lu champ par champ (`;`).
+- **Captures** (thème clair, base E2E jetable) : `captures/mi-bilan.png`, `mi-resultat.png`, `mi-balance.png`, prises
+  par l'E2E complet au commit `b54fea2e` et reprises telles quelles en figures du manuel
+  (`docs/manual/fr/screenshots/`) ; pages du PDF `captures/manuel-p-156.png` à `-158.png`.
+- **T4** : manuel utilisateur — sous-section *Comptes miroirs dans les rapports* (`sec:rapports-miroirs`, entre
+  *Compte de résultat* et *Balance des comptes*), renvoi depuis `sec:compte-miroir` ; phrases d'ouverture du *Bilan* et
+  du *Compte de résultat* complétées ; item « La balance concorde … » et phrase de l'accueil (« Le total des barres … »)
+  corrigés ; avertissements art. 959a/959b intacts, aucune conformité affirmée ; l'exemple chiffré entre
+  `% exemple-presentation:debut` et `:fin`, montants à apostrophe. Vérifié à l'écran pendant l'E2E : un miroir **figure
+  à 0.00 à la balance** (le manuel le dit ainsi). PDF compilé dans une copie (`make user`, 3 passes stables), contrôlé
+  aplati. Garde **G26** : `bloc_entre` (corps commun), `bloc_marque` inchangée en signature et comportement (G23 verte),
+  `bloc_marque_rs`, `montants_jetons`, `montants_absents_du_manuel` ; deux tests neufs (`textes_coherents` 30 → 32),
+  rangée au tableau de l'en-tête.
+- **Gates au dernier commit de code `b54fea2e`** (les commits suivants ne portent que le manuel `.tex`, les PNG et la
+  fiche ; `textes_coherents` rejoué ensuite sur l'arbre final par le binaire compilé : 32/32,
+  `textes-coherents-apres-doc.log`) :
+  - backend `scripts/test-fast.sh --ci` (base remise à zéro) : fmt, clippy, nextest **6250 passés, 15 ignorés**
+    (`gate-backend.log`) ;
+  - frontend : `check` 0 erreur, `lint-i18n-ownership` vert, `test:unit` **4871 tests, 284 fichiers**, `build` vert ;
+  - E2E complet : **494 passés, 10 échecs, 18 ignorés** (`e2e.log`) — les sept KF-029, `backup-restore-new-install
+    .spec.ts:262` et `:381` attendus ; le dixième, `bank-import.spec.ts:130`, compte les lignes avant que la liste soit
+    chargée (`rowsBefore`, sans attente) puis en voit une : spec sans rapport avec la story, **rejouée seule avec
+    `reports-mirror.spec.ts` : 8/8 verts** (`e2e-rejeu-bank-import.log`) ; `opening-balances.spec.ts:156` est passé ;
+  - `scripts/gate-ci.sh` sur une copie `git archive` de `b54fea2e`, **joué jusqu'au bout : 6269 passés, 0 échoué,
+    19 ignorés** (`gate-ci.log`). Un premier passage (`gate-ci-1-base-disparue.log`) avait rougi sur 37 tests
+    « Unknown database » : l'enveloppe `cargo`, lancée sous `env -i`, perdait le port de la place de `heavy.sh` ;
+    enveloppes corrigées (relisent `place.env`), cible supprimée après le gate.
+
 ### File List
+
+- `crates/kesh-api/tests/textes_coherents.rs`
+- `crates/kesh-i18n/locales/{fr-CH,de-CH,en-CH,it-CH}/messages.ftl`
+- `docs/manual/fr/user-manual.tex`
+- `docs/manual/fr/screenshots/mi-bilan.png`, `mi-resultat.png`, `mi-balance.png` (neufs)
+- `frontend/src/lib/features/reports/MirrorOfNote.svelte` (neuf), `MirrorOfNote.test.ts` (neuf)
+- `frontend/src/lib/features/reports/BalanceSheetView.svelte`, `BalanceSheetView.test.ts`
+- `frontend/src/lib/features/reports/IncomeStatementView.svelte`, `IncomeStatementView.test.ts`
+- `frontend/src/lib/features/reports/reports.types.ts`
+- `frontend/src/lib/shared/i18n-keys.test.ts`
+- `frontend/tests/e2e/helpers/pdf.ts` (neuf), `frontend/tests/e2e/reports-mirror.spec.ts` (neuf)
+- `frontend/tests/e2e/invoice-qr-caracteres.spec.ts`
+- `_bmad-output/implementation-artifacts/47-4-miroir-ecrans-rapports-manuel-e2e.md`,
+  `_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+### Clôture (2026-11-21)
+
+Revue de code **P1** (Sonnet, complète) : **0 CRITICAL · 0 HIGH · 0 MEDIUM · 7 LOW** (`kesh-gate-logs/s47-4/revue-p1-rapport.md`).
+Boucle close sur P1. L'écart à l'AC-1 (deux clés `reports-mirror-of-one` / `-other` au lieu d'un sélecteur `$count`)
+est jugé justifié par la revue : les messages sont résolus côté serveur sans arguments ; **l'AC-1 se lit donc ainsi :
+« deux clés, une pour une source, une pour plusieurs »** (L2). Les échecs E2E `backup-restore-new-install.spec.ts:262`
+et `:381` sont ceux de la KF-065 (#1282) (L3) ; `bank-import.spec.ts:130` est une course connue, tracée en issue. Les
+autres LOW (L1 phrase de l'accueil non revérifiée au PDF, L4 capture de la balance avec des comptes du seed, L5 deux
+formulations du manuel un peu fortes, L6 détails de forme) vont en issue `documentation` / `technical-debt` ; L7 ne
+relève aucun nom de personne.
