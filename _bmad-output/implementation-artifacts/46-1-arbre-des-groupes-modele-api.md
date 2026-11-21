@@ -1,6 +1,6 @@
 # Story 46-1 : arbre des groupes — modèle et API
 
-Status: ready-for-dev
+Status: in-progress
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D1 à D10, Q2, Q3, Q4, Q5, Q7 ; FR-46-1, FR-46-7,
 FR-46-8, FR-46-9 (contrat), FR-46-11 ; NFR-46-1 à NFR-46-4, NFR-46-7. Release visée **0.21.0** (prévision). Approuvée
@@ -338,6 +338,13 @@ présentées. Au recâblage : (1) appeler la présentation à cet endroit ; (2) 
 `account` et `own` ; une ligne de miroir se range alors sous le groupe **du miroir**, puisque son `account_id` est
 celui du miroir. Les générateurs ne changent pas.
 
+**Interaction avec la 47-3, pour l'intégration (revue P1, sans code ici).** Rien n'oblige un compte miroir à avoir un
+parent de son type (`routes/accounts.rs:76`, `check_parent_in_company`). Un miroir de passif rangé sous un groupe
+d'actif (p. ex. un découvert `1020.1` sous `10`) fait dissoudre `10` et `1` dans le bilan groupé dès qu'un découvert
+est présenté au passif : sommes justes (AC-4, voulu), mais groupes d'actif absents de l'affichage groupé. Point versé
+à `kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md` (n° 20), à trancher avec Beat ; la revue du code d'intégration de
+l'Epic 46 avec la 47-3 doit le savoir.
+
 **Écarts à la fiche, déclarés.**
 - **E1 — services à quatre arguments gardés.** T3 disait « une `DemandeGroupes` optionnelle passée à `bilan` /
   `compte_de_resultat` » ; mais l'AC-11 exige `services_motif.rs` vert **sans modification**, et ce test appelle
@@ -366,6 +373,14 @@ exercices, compte de résultat de même, ouverture manuelle, identifiants ignor�
 **Sondes négatives** (`mutations.sh`, `mutations.log`, cible propre) : « ne pas dissoudre » → 6 rouges, dont les quatre
 tests d'intégration groupés (AC-4) ; « groupe nul fermé à la main masqué » → 1 ; « solde propre oublié » → 10 ;
 « `closed` ignoré » → 2. Fichier restauré après chaque mutation.
+
+**Gate-ci, cause des 37 échecs « Unknown database 'kesh_ci_s461' » (trois essais, `gate-ci-essai1.log`,
+`gate-ci-essai2.log`, `gate-ci.log` du 2026-11-21 07:09).** Les deux premiers coïncident avec l'OOM de 00:22 et la
+sortie de dev2 (`Exited (137)`). Le troisième est une faute de mon enveloppe : `scripts/gate-ci.sh` lance cargo sous
+`env -i`, si bien que `s46-1/gate-ci-wrap/cargo` ne voyait pas `KESH_DB_PORT` et retombait sur 3307 (dev2) pendant que
+`gate-ci-wrap/docker`, lancé hors de `env -i`, créait la base sur le serveur de la place (dev4 ou dev5). Corrigé :
+`s46-1/gate-ci.sh` écrit le port de la place en dur dans l'enveloppe cargo avant le lancement. Aucun autre gate-ci de
+la 46-1 ne tournait (vérifié au `ps`). Aucun défaut du code de la story.
 
 ### File List
 
@@ -409,3 +424,18 @@ tests d'intégration groupés (AC-4) ; « groupe nul fermé à la main masqué �
   relevés (`6`, `7`, `70`, `8`, `80` au compte de résultat ; `2` au bilan, partition par rôle) (AC-4) ; déterminisme de
   la fixture (AC-8). Rapport : `kesh-gate-logs/epic-46/validation/46-1-P2.md`.
 - 2026-11-20 — Validation P3 ciblée (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `8a7f0f73`, au code de `origin/main` `d29aa557`) : 0 C / 0 H / 0 M / 2 L, remédiés. L : le test PME de l'AC-14 n'énumérait pas les dissolutions de l'AC-4 (désormais énumérées dans l'AC-14) ; les refus de syntaxe (`2.5`, `ALL`, vide, élément non entier) étaient attribués au service alors qu'ils se refusent à l'analyse (T3). Rapport : `kesh-gate-logs/epic-46/validation/46-123-P3-ciblee.md`.
+- 2026-11-20 — Développement (Claude Opus 5.5, bmad-dev-story) : T0 (fixtures du commit de base, `1f75cb29`), T1 à T5
+  (`b3ea6fc0`) ; corrections de l'orchestrateur reprises : AC-2 exclut les lignes `subtotal` de la somme de profondeur
+  1 (code, tests, critère) ; dates de période de la fixture fixes, sans horloge de test. Écarts E1 à E4 au Dev Agent
+  Record.
+- 2026-11-21 — Revue de code P1 (Claude Opus 5.5, complète, une lentille) : 0 C / 0 H / 1 M / 6 L. Remédiation
+  `14230aa3` : M-1, test `groupe_dissous_par_son_seul_solde_propre` (la règle « solde propre compris » de la
+  dissolution n'était tenue par aucun test) ; L-1, la propriété affirme la somme de la descendance de chaque groupe à
+  toute profondeur et l'absence d'un compte dans deux sections ; L-2, L-3, guide d'API (`active`/`role` sur `own`,
+  « groupe de l'arbre affiché », groupe nul sans ligne) ; L-4, paramètres de groupes lus dans les paires brutes de la
+  requête (`groupes_de`) : un paramètre répété est un 400 `VALIDATION_ERROR` qui le nomme sur le bilan et le compte de
+  résultat, et `ReportQuery` revient à ses trois champs, si bien que la balance et la TVA les ignorent comme avant
+  (test `groupes_parametre_repete`) ; L-5, l'accès est contrôlé dans le handler avant la validation des groupes ; L-6,
+  comptes rendus, `mutations.sh` dans une copie hors dépôt. Interaction avec la 47-3 (miroir de passif sous un groupe
+  d'actif) écrite au Dev Agent Record et versée aux issues à ouvrir, sans code. La remédiation touche la production
+  (L-4, L-5) : passe ciblée P2 à suivre (`kesh-gate-logs/s46-1/revue-p2-prompt.md`).
