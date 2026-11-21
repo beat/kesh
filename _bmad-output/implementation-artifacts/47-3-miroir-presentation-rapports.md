@@ -309,11 +309,20 @@ Sonnet 5.5.
 - **Gates rejoués sur la cible propre** `/home/beat/claude/kesh-targets/kesh-wt47s3`, au commit `50a8c906` :
   backend (nextest, base `kesh_s473`) **6202 passés, 14 ignorés** ; E2E complet **480 passés, 10 échecs attendus**
   (les sept de la KF-029 #97, KF-065 #1282 ×2, KF-067 #1284) ; frontend **4658 tests** (`npm run check`,
-  `lint-i18n-ownership`, build verts) ; `gate-ci` (`cargo test`, journal `s47-3/gate-ci.log`) **804 passés, 1 échec,
-  5 ignorés** : l'échec est `admin_auto_backup_e2e::disque_sature_pendant_l_ecriture` (panique de `zip-2.6.1`
-  `write.rs:1078`, `Failed` au lieu de `DiskFull`), **instable déjà vu** sur 39-11a, 40-7a et 38-11d, sans rapport
-  avec la story ; **rejeu de 3 passages** (`s47-3/rejeu-disque.log`) : 20 passés, 0 échec, trois fois. Ce gate
-  (`cargo test`) ne vaut que pour ce commit ; aucune ligne de code depuis.
+  `lint-i18n-ownership`, build verts). **`gate-ci` (`cargo test -j1`, journal `s47-3/gate-ci.log`) : INCOMPLET** —
+  arrêté au 7e binaire, `admin_auto_backup_e2e::disque_sature_pendant_l_ecriture` (panique de `zip-2.6.1`
+  `write.rs:1078`, `Failed` au lieu de `DiskFull`, instable déjà vu sur 39-11a, 40-7a et 38-11d, sans rapport avec la
+  story) ; les 804 passés ne couvrent que ces sept binaires. Le rejeu de 3 passages (`rejeu-disque.log`, 20 passés)
+  ne lève que l'instabilité de ce binaire. *Annoté à la revue P1 (M-3) ; le gate-ci rejoué jusqu'au bout est
+  au Change Log, § remédiation P1.*
+- **Écart d'AC 9, déclaré (L-4)** : le cas de l'accueil crée `3100 « Gains de change »` miroir de `6100.1`, non
+  `6950.1 → 6900.1` de l'exemple ; preuve équivalente (la sonde négative a rougi).
+- **Décision de Beat du 2026-11-21, point e (L-5)** : un miroir sous un groupe d'un autre type donne un avertissement
+  **non bloquant**, non un refus ; état admis, effet à la fusion avec l'Epic 46 et porteur de l'avertissement au
+  fichier d'epic (§ *Décision de Beat du 2026-11-21*). Les tests de la 47-3 emploient `1020.1` (numéro d'un groupe
+  d'actif) comme miroir de passif sans conséquence : la présentation ne lit pas les groupes.
+- **À la fusion dans `epic/47` (L-6)** : `sprint-status.yaml` entrera en conflit ; garder 47-2 `done` (la branche la
+  porte encore `review`).
 
 **À recâbler à la fusion de l'Epic 46 (Q5)** : (1) `groupedRows` à calculer **après** `present_*` (si la 46-1 le calcule
 dans `generate`, déplacer l'appel dans le service) ; (2) la ligne de miroir doit aller au groupe du miroir (l'arbre
