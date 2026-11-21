@@ -195,6 +195,13 @@ restent à `GET /reports/trial-balance`.
 
 ## Change Log
 
+- 2026-11-21 — **remédiation de la revue de code P1** (Opus 5.5 : 0 CRITICAL / 0 HIGH / 3 MEDIUM / 6 LOW ; Sonnet 5.5
+  remédie) : M-1 propriété affirmée sur la sortie de `reclasser` et sur l'application de la présentation (mutation
+  `-=` → `+=` rejouée hors dépôt : propriété rouge, `mut-m1.log`) ; M-2 balance et grand livre lus avant les rapports,
+  relus après, sonde négative (écriture équilibrée modifiée) ; M-3 `gate-ci` rejoué jusqu'au bout (6222 passés) et portée
+  des gates corrigée ; L-1 repli aussi sur l'écart actif − passif (seule ligne de production) ; L-2 test des trois
+  branches ; L-3 exemple JSON à quatre décimales et dit « extrait » ; L-4, L-5, L-6 au Dev Agent Record et au fichier
+  d'epic. Passe ciblée P2 : `s47-3/revue-p2-prompt.md`.
 - 2026-11-19 — retouche de la validation P3 des fiches 47-2 et 47-4 (Sonnet 5.5) : AC-10, les sous-comptes de l'exemple
   se créent **sans parent** (propagation de la 47-2 P2 M1 ; signalé par la P2 de la 47-4). Aucune autre modification.
 - 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : fiche renommée de `47-2a-presentation-fonction-api-mcp` ;
@@ -313,8 +320,12 @@ Sonnet 5.5.
   arrêté au 7e binaire, `admin_auto_backup_e2e::disque_sature_pendant_l_ecriture` (panique de `zip-2.6.1`
   `write.rs:1078`, `Failed` au lieu de `DiskFull`, instable déjà vu sur 39-11a, 40-7a et 38-11d, sans rapport avec la
   story) ; les 804 passés ne couvrent que ces sept binaires. Le rejeu de 3 passages (`rejeu-disque.log`, 20 passés)
-  ne lève que l'instabilité de ce binaire. *Annoté à la revue P1 (M-3) ; le gate-ci rejoué jusqu'au bout est
-  au Change Log, § remédiation P1.*
+  ne lève que l'instabilité de ce binaire. *Annoté à la revue P1 (M-3).* **Rejoué à `b4d17d70` (remédiation P1)** : `gate-ci` complet, **6222 passés, 0 échec,
+  18 ignorés** (`s47-3/gci2.out`, `gate-ci.log` ; l'ancien journal est `gate-ci-avant-p1r.log`), arbre `git archive` de
+  `b4d17d70` ; `admin_auto_backup_e2e` n'a pas rougi. Gate ciblé de la remédiation (`p1r-*.log`) : fmt, clippy workspace,
+  nextest `kesh-report` lib + `reports_e2e` + `homepage_summary_e2e` : 211 passés. Le gate backend nextest complet et
+  l'E2E (480/10) datent de `50a8c906` ; la remédiation touche un seul code de production (le contrôle de l'écart
+  actif − passif, `presentation.rs`), couvert par le `gate-ci` complet, non par un nextest complet rejoué.
 - **Écart d'AC 9, déclaré (L-4)** : le cas de l'accueil crée `3100 « Gains de change »` miroir de `6100.1`, non
   `6950.1 → 6900.1` de l'exemple ; preuve équivalente (la sonde négative a rougi).
 - **Décision de Beat du 2026-11-21, point e (L-5)** : un miroir sous un groupe d'un autre type donne un avertissement
