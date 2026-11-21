@@ -188,7 +188,7 @@ Déclarés au kickoff (`CLAUDE.md` § *Travailler à plusieurs développeurs*, �
 |---|---|---|---|
 | `crates/kesh-report/src/groupes.rs` (neuf, enveloppe `AvecGroupes<T, S>`), `lib.rs` | 46-1, 46-6a | — | — |
 | `crates/kesh-report/src/balance_sheet.rs`, `income_statement.rs` | **aucune** (validation P1 de la 46-1, C-46-1-4 : enveloppe, structures et littéraux inchangés) | 47-3 (`mirror_of` d'`AccountBalance`) | — |
-| `crates/kesh-report/src/trial_balance.rs` | 46-6a | — | — |
+| `crates/kesh-report/src/trial_balance.rs` | **aucune** (46-6a : `TrialBalance` inchangé, code de la balance groupée dans `groupes.rs` ; validation P1 de la nouvelle boucle, F12) | — | — |
 | `crates/kesh-report/src/pdf.rs` | 46-3, 46-6b | **48-11** (fort : formateurs, garde `{:.2}`), 47-3 (littéraux de tests), 49-1b (PDF des factures, autre région) | 46-3 part de `main` **après** la 48-11 |
 | `crates/kesh-report/src/csv.rs` | 46-3, 46-6b | **48-11**, 47-3 (littéraux) | idem |
 | `crates/kesh-report/benches/export.rs` | aucune (C-46-1-4) | 47-3 | — |
@@ -290,3 +290,9 @@ La page pour Guy (`data-not-committed/epic-46-revue-pour-guy.html`) porte ces r�
   neuf à confirmer en validation : **à la balance, une ligne nulle ne compte pas pour la dissolution par nature**
   (46-6a C-46-6a-3), d'où une phrase propagée à la 46-6b. Les deux fiches repassent `drafted` ; nouvelle boucle de
   validation (prompt `kesh-gate-logs/s46-specs/validation-p1-prompt.md`).
+- 2026-11-21 — **Validation P1 de la nouvelle boucle des 46-3 et 46-6a** (`kesh-gate-logs/s46-specs/validation-p1-rapport.md`) :
+  0 C / 0 H / 2 M / 10 L, remédiés ; C-46-6a-3 jugé juste. Décision sur la sortie MCP sans argument neuf : **`groupes:
+  null` admis** (`sortie!` n'omet aucun champ), littéral de base inchangé, la clé ajoutée par le test (46-6a
+  C-46-6a-5, 46-4 C-46-4-5). La 46-6b repasse en `drafted` (phrase de manuel adossée à C-46-6a-3) ; ligne
+  `trial_balance.rs` des fichiers communs corrigée (aucune story). Passe P2 à suivre
+  (`kesh-gate-logs/s46-specs/validation-p2-prompt.md`).

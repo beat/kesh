@@ -1209,6 +1209,6 @@ development_status:
   46-4-groupes-mcp: ready-for-dev  # 2026-11-20 ; suit 46-1
   46-5-aide-groupes-plan: ready-for-dev  # conditionnelle (Q9) : maquette avant décision ; #1351 fusionnée
   46-6a-balance-groupes-modele-api-mcp: drafted  # 2026-11-21 corrigée sur l'API réelle de la 46-1 et la 47-3, validation à reprendre ; 2026-11-20 ; balance par groupes, modèle, API, MCP ; suit 46-1
-  46-6b-balance-groupes-ecran-pdf-csv: ready-for-dev  # 2026-11-20 ; balance par groupes, écran, PDF, CSV ; suit 46-6a, 46-2, 46-3
+  46-6b-balance-groupes-ecran-pdf-csv: drafted  # 2026-11-21 repassée en drafted : phrase de manuel adossée à C-46-6a-3, validation en cours ; 2026-11-20 ; balance par groupes, écran, PDF, CSV ; suit 46-6a, 46-2, 46-3
   46-7-solde-dette-epic: ready-for-dev  # story de solde, plafond 2 issues ; en dernier
   epic-46-retrospective: optional

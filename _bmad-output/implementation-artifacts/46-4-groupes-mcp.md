@@ -49,10 +49,13 @@ schéma et la fonction de conversion posés ici (validation P1).
      `rapports.rs:208-209`) ; il est remplacé par `SCHEMA_PERIODE_GROUPES`, `additionalProperties: false` gardé :
      `detailLevel` = `{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]}`,
      `subtotalPosition` = enum, `open` / `closed` = `{"type":"array","items":{"type":"integer","minimum":1},"maxItems":500}`.
-2. **AC-2 — Sans argument neuf.** La réponse est **identique** à celle d'aujourd'hui (même contenu, même texte rendu) :
-   un test compare le texte rendu à un **littéral écrit au commit de base** (avant T1) sur la société d'essai, pour
-   chacun des deux outils — non à la sortie de la fonction qui le produit (un « avant et après » ne se rejoue pas dans
-   un seul commit). ⚠️ La société d'essai (`societe_piegee`) est datée du jour de l'horloge de test
+2. **AC-2 — Sans argument neuf.** La réponse est celle d'aujourd'hui **au seul champ `groupes: null` près** (AC-3 ;
+   `sortie!` n'omet aucun champ, C-37-9 ; décision C-46-4-5) : un test compare le texte rendu à un **littéral écrit au
+   commit de base** (avant T1) sur la société d'essai, pour chacun des deux outils — non à la sortie de la fonction qui
+   le produit (un « avant et après » ne se rejoue pas dans un seul commit). Le littéral **reste tel qu'écrit à T0** ;
+   le test en analyse la partie JSON, y ajoute la clé `groupes` à `null` au niveau supérieur, la re-sérialise par le
+   même chemin que la sortie (`serde_json::to_value` puis `to_string_pretty`, `sortie.rs:489-493`), et compare le texte
+   rendu **entier**, en-tête compris, à ce texte : toute autre différence rougit. ⚠️ La société d'essai (`societe_piegee`) est datée du jour de l'horloge de test
    (`tests/common/jour.rs`, `aujourd_hui_test`), que la recette fait varier (`KESH_TEST_INSTANT`) : les dates de la
    période (et tout identifiant qui ne serait pas stable) s'écrivent dans le littéral en **jetons** (`{debut}`,
    `{fin}`), remplacés par les valeurs de `a.p` avant la comparaison ; tout le reste est littéral.
@@ -106,7 +109,8 @@ schéma et la fonction de conversion posés ici (validation P1).
    (n'apparie que **portée × outil** : la phrase du manuel n'est contrôlée par aucune garde, la revue la lit),
    `mcp_outils_e2e` (`bornes_des_schemas` inchangé : le bilan et le compte de résultat ne sont pas paginés ;
    `proprietes_du_schema_acceptees` exige que l'argument « complet » de `TEMOINS`
-   (`tests/common/mcp_pieges.rs:186`) nomme **chaque** propriété du schéma et soit servi : celui de `kesh_bilan` et de
+   (`tests/common/mcp_pieges.rs:186` ; entrées `kesh_bilan` `:246` et `kesh_compte_de_resultat` `:254` sur
+   `story/46-1` à `de0a582f`) nomme **chaque** propriété du schéma et soit servi : celui de `kesh_bilan` et de
    `kesh_compte_de_resultat` gagne `detailLevel`, `subtotalPosition`, `open` et `closed` — deux listes disjointes —,
    `mcp_enveloppe_e2e` parcourt `TEMOINS` mais ne lit que ses **jeux** (`for (outil, jeux, _)`, `:654`, `:974`, `:1291`),
    jamais l'argument « complet » : il n'est pas touché) ; un cas
@@ -151,6 +155,10 @@ miroir) et ajoute un champ de miroir : garder les deux phrases.
   `limit`/`offset` sur les lignes groupées — un groupe et son sous-total en pied tomberaient dans deux tranches, pour
   une réponse qui reste petite aux niveaux utiles. (La balance, dont la ligne pèse 540 o, est tranchée : 46-6a.)
 - **C-46-4-4** : le genre de ligne reprend les codes de l'API, non le français du CSV.
+- **C-46-4-5** (2026-11-21, validation P1 de la 46-6a, F2) : **`groupes: null` est admis** sans argument neuf, au lieu
+  d'omettre le champ : `sortie!` n'admet aucun attribut de champ et n'omet aucun champ (C-37-9), et changer la macro
+  partagée par tous les outils pour un champ n'en vaut pas la peine. Le littéral du commit de base n'est pas réécrit :
+  le test y ajoute la seule clé neuve (AC-2). Même décision à la 46-6a (C-46-6a-5).
 
 ### References
 
@@ -203,3 +211,7 @@ détail, les groupes ouverts ou fermés et la place des sous-totaux.
   `TEMOINS` (`mcp_pieges.rs:186`), `depuis_app_error` (`textes.rs:311`). L : `mcp_enveloppe_e2e` ne lit pas l'argument
   « complet » de `TEMOINS` (seulement ses jeux) — l'affirmation de la P2 retirée ; « 31 comptes de bilan » précisé
   (feuilles) ; descriptions de l'AC-5 (b) complétées à T3. Rapport : `kesh-gate-logs/epic-46/validation/46-4567-P3-ciblee.md`.
+- 2026-11-21 — Propagation de la validation P1 de la 46-6a (F2, `kesh-gate-logs/s46-specs/validation-p1-rapport.md`) :
+  l'AC-2 (« réponse identique ») contredisait l'AC-3 (« `groupes` à `null` sinon ») → C-46-4-5 : `groupes: null`
+  admis, littéral de base inchangé, la clé ajoutée par le test avant comparaison ; entrées de `TEMOINS` citées
+  (F10). Statut inchangé ; la passe P2 de la 46-6a relit ces lignes.

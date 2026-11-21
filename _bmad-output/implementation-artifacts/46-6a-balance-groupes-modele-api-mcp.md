@@ -52,7 +52,9 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    `LigneBalanceGroupee`, que porte `AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>` (`grouped_rows:
    Option<Vec<LigneBalanceGroupee>>`) — `TrialBalance` et ses littéraux de tests restent intacts. ⚠️ Les lignes passées
    à `regrouper` sont celles de `rows` **moins** les lignes propres nulles des comptes de groupe (AC-3 (d)) : la
-   conversion lit `source` dans **cette** liste filtrée (vecteur de références ou d'indices), jamais dans `rows`.
+   conversion lit `source` dans **cette** liste filtrée, jamais dans `rows`. Les lignes retenues sont **clonées** dans
+   un `Vec<TrialBalanceRow>` (`TrialBalanceRow` dérive `Clone`, `trial_balance.rs:89`), que reçoit `regrouper(lignes:
+   &[L], …)` : seul `TrialBalanceRow` implémente `LigneAgregeable` ici, aucune impl pour une référence n'est posée.
 2. **AC-2 — Nature, au lieu de section.** La balance n'a pas de sections ; ses soldes sont signés du côté naturel de
    chaque compte (`trial_balance.rs:91`, `opening::signed`). La clé de partition est la **nature**
    (`opening::is_debit_natured(row.account_type)` : `Asset` et `Expense` débitrices, `Liability` et `Revenue`
@@ -89,7 +91,8 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    46-1 ne le fait pas : `Agregat::ajouter_ligne` (privé, `groupes.rs`) marque `ligne_principale` pour toute ligne
    sans devise, nulle ou non, et ouvre une entrée `par_devise` pour toute ligne en devise. Cette story le retouche :
    une ligne dont `montants()` et `montants_devise()` sont entièrement nuls n'agit ni sur `ligne_principale` ni sur
-   `par_devise` (ses montants, nuls, ne changent ni la somme ni `est_nul`). Sans effet sur le bilan et le compte de
+   `par_devise` (ses montants, nuls, ne changent ni la somme ni `est_nul`) ; le commentaire du champ
+   `ligne_principale` se met à jour avec la retouche. Sans effet sur le bilan et le compte de
    résultat, qui n'ont jamais de ligne entièrement nulle (`HAVING balance != 0 OR balance_currency != 0` ; la ligne
    d'un miroir de la 47-3 est non nulle) : les tests et les fixtures de la 46-1 restent verts **sans modification** ;
    (d) **la ligne propre d'un compte de groupe** : la balance rend aussi les comptes de groupe eux-mêmes (actifs, donc
@@ -132,14 +135,19 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    désormais comme les deux autres rapports. Une seule requête de plus (l'arbre), aucune sans paramètre.
 6. **AC-6 — MCP.** `kesh_balance` (`ArgumentsBalance`, `deny_unknown_fields`, schéma en ligne `rapports.rs:208-209`)
    gagne les quatre arguments de la 46-4, **déclarés dans la structure** (pas de `flatten`) et convertis par la
-   fonction de la 46-4. En mode groupé : la sortie gagne `groupes` (`null` sinon) = l'écho et `lignes` (genre,
-   profondeur, `compteId`, `numero`, `nom`, les cinq montants `ouverture`, `debit`, `credit`, `solde`, `cloture` et les
-   cinq `…Devise`, `devise`, `ouvert`) ; les lignes plates (`lignes`) sont vides ; la **tranche** (`limit`, `offset`,
+   fonction de la 46-4. La sortie `Balance` gagne un champ `groupes` (`null` sans `detailLevel`, convention C-37-9,
+   comme 46-4 AC-3). En mode groupé, `groupes` = l'écho de la 46-4 (`niveau`, `tousLesNiveaux`, `positionSousTotaux`,
+   `profondeurMax`, `ouverts`, `fermes`) et **`groupes.lignes`**, les lignes groupées (genre, profondeur, `compteId`,
+   `numero`, `nom`, les cinq montants `ouverture`, `debit`, `credit`, `solde`, `cloture` et les cinq `…Devise`,
+   `devise`, `ouvert`) ; le champ plat existant `lignes` (au niveau supérieur, lu par `mcp_outils_e2e.rs:753`) est
+   alors vide ; la **tranche** (`limit`, `offset`,
    défaut 23, maximum 42) porte sur les **lignes groupées**, `total` en compte le nombre ; totaux du rapport entier
    inchangés. *Pourquoi la tranche et non le niveau seul (contraire du bilan, 46-4 C-46-4-3)* : une ligne de balance
    pèse ≈ 540 o (dix montants), et le plan PME rend, en `footer`, **42 lignes groupées au niveau 2 et 97 à `all`**
    (calcul du 2026-11-20 sur `pme.json`, tous les comptes actifs, lignes propres nulles des groupes exclues, AC-3 (d))
-   — au-delà du plafond sans tranche dès le niveau 2. *Recalculé le 2026-11-21 sous la règle C-46-6a-3* (simulation
+   — au-delà du plafond (`MCP_ENVOI_OCTETS_MAX`, 24 576 o) sans tranche **à `all`** (97 à 107 lignes, ≈ 52 à 58 Ko) ;
+   au niveau 2 (42 ou 43 lignes, ≈ 22,7 à 23,2 Ko à 540 o la ligne), à mesurer au T3, la ligne groupée pouvant peser
+   plus que la plate. *Recalculé le 2026-11-21 sous la règle C-46-6a-3* (simulation
    de `regrouper` sur `pme.json`, comptes de groupe sans solde propre, script
    `kesh-gate-logs/s46-specs/sim-balance-pme.py`) : 42 au niveau 2 et 97 à `all` quand des comptes des deux natures
    portent un montant dans `6` à `8` (ces groupes dissous) ; **au plus 43 au niveau 2 et 107 à `all`** quand aucun
@@ -147,9 +155,14 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    ligne groupée est mesurée (`tailles_mesurees_en_devise` étendu, groupe et pied compris) ; si elle dépasse la plate,
    les **deux** bornes baissent ensemble, avec `LIMITE_DEFAUT_BALANCE` / `LIMITE_MAX_MCP_BALANCE`
    (`rapports.rs:25-29`), `bornes_attendues` et la table `mesurees` de `bornes_des_schemas`
-   (`mcp_outils_e2e.rs:98`, `:161-181`) ; chiffre daté dans la doc du module. Sans argument neuf : sortie identique
-   (littéral du commit de base, dates de la période en jetons, comme 46-4 AC-2). L'argument « complet » de
-   `kesh_balance` dans `TEMOINS` (`tests/common/mcp_pieges.rs:186`) gagne les quatre arguments
+   (`mcp_outils_e2e.rs:98`, `:161-181`) ; chiffre daté dans la doc du module. **Sans argument neuf** (C-46-6a-5) : la
+   sortie est celle d'aujourd'hui **au seul champ `groupes: null` près**. Le littéral du commit de base (dates de la
+   période en jetons, comme 46-4 AC-2) **reste tel qu'écrit à T0** ; le test en analyse la partie JSON, y ajoute la
+   clé `groupes` à `null` au niveau supérieur, la re-sérialise par le même chemin que la sortie
+   (`serde_json::to_value` puis `to_string_pretty`, `sortie.rs:489-493`), et compare le texte rendu **entier**, en-tête
+   compris, à ce texte : toute autre différence rougit. L'argument « complet » de `kesh_balance` dans `TEMOINS`
+   (`tests/common/mcp_pieges.rs:186` ; entrée `kesh_balance` `:238-243` sur `story/46-1` à `de0a582f`) gagne les
+   quatre arguments
    (`proprietes_du_schema_acceptees`), et `kesh_balance` recopie ses quatre champs dans l'`ArgumentsPeriode` qu'il
    construit (`rapports.rs:225-229`), que lit la fonction de conversion de la 46-4. L'outil appelle
    `rapports::balance_par_groupes` avec la demande que rend cette conversion (`DemandeGroupes::depuis_valeurs`, entrée
@@ -172,9 +185,12 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    tranche sur lignes groupées, `total`), `mcp_contrat`, `mcp_gardes_lexicales`, `mcp_matrice_manuel` verts ; un
    paramètre de groupes répété refusé (400 `VALIDATION_ERROR`) sur `trial-balance` — le test `groupes_parametre_repete`
    de la 46-1, qui affirme aujourd'hui que la balance l'**ignore**, est adapté (déclaré au Change Log) — et toujours
-   ignoré par `vat` et par l'export de la balance ;
-   `docs/api-external.md` (balance groupée ; aucun numéro de compte hors du plan PME, gardes G4-bis et G4-ter de
-   `textes_coherents.rs`) ; manuel d'administration (tableau MCP, `kesh_balance`), `.tex` seul.
+   ignoré par `vat` et par l'export de la balance (ce dernier cas **bascule** en refus à la 46-6b, qui adapte le test) ;
+   `docs/api-external.md` (balance groupée : `groupedRows` en tableau, partition par **nature** et non par section,
+   dissolution sur les seules lignes non nulles, ligne propre nulle d'un compte de groupe sans ligne `own` ; aucun
+   numéro de compte hors du plan PME, gardes G4-bis et G4-ter de `textes_coherents.rs`), dont la phrase posée par la
+   46-1 « `GET /reports/trial-balance` et `GET /reports/vat` ignorent ces paramètres, même répétés » devient : `vat`
+   et l'export de la balance les ignorent (l'export jusqu'à la 46-6b), la balance les lit et les refuse comme le bilan ; manuel d'administration (tableau MCP, `kesh_balance`), `.tex` seul.
 
 ## Tâches / sous-tâches
 
@@ -192,7 +208,8 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
       route `get_trial_balance` (second extracteur, `exiger`, `groupes_de`) ; `export_trial_balance` rend
       `&report.rapport` (AC 5, 7).
 - [ ] **T3** — MCP `kesh_balance` (AC 6), **après la 46-4** ; appelle `balance_par_groupes` ; la sortie lit l'enveloppe
-      (`.rapport` pour les lignes plates, `grouping` et `grouped_rows` pour `groupes` et `lignes`).
+      (`.rapport` pour les lignes plates, `grouping` et `grouped_rows` pour `groupes` et `groupes.lignes`) ; littéral de
+      base du témoin sans argument (AC-6) **écrit avant toute modification du MCP**.
 - [ ] **T4** — tests d'intégration, documentation (AC 9) ; **T5** — gate complet, E2E complet au dernier commit de code.
 
 ## Dev Notes
@@ -218,6 +235,12 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
   `80` du plan PME dépend des montants, non plus de la seule présence de 6950 actif (l'AC-2 d'avant disait « `6` l'est
   toujours ») ; c'est la règle des lignes présentes de la 46-1 (AC-4). *Écarté* : garder les lignes nulles dans la
   dissolution et dire au manuel qu'un miroir mal rangé défait des groupes de la balance.
+- **C-46-6a-5** (validation P1 de la nouvelle boucle, 2026-11-21) : **`groupes: null` est admis** dans la sortie
+  sans argument neuf, au lieu d'omettre le champ. *Pourquoi* : `sortie!` n'admet aucun attribut de champ et n'omet
+  aucun champ (C-37-9) ; omettre `groupes` demanderait de changer la macro partagée par tous les outils, pour un seul
+  champ. Le littéral du commit de base n'est pas réécrit : le test y ajoute la seule clé neuve (AC-6). Même décision
+  à la 46-4 (AC-2), pour `kesh_bilan` et `kesh_compte_de_resultat`. *Écarté* : `skip_serializing_if` (impossible sans
+  toucher la macro) ; réécrire le littéral en cours de story (il ne prouverait plus rien).
 - **C-46-6a-4** (correction du 2026-11-21) : **aucun avertissement** pour un miroir rangé sous un groupe d'un autre
   type : son porteur n'est pas désigné (fichier de l'Epic 47, § *Décision … du 2026-11-21, point e*) ; sa place est
   l'édition du plan, et, par C-46-6a-3, l'état n'a aucun effet sur la balance.
@@ -298,3 +321,12 @@ d'ouverture, de mouvements et de clôture de chaque groupe ; sans paramètre, ri
   (au plus 43 lignes au niveau 2 et 107 à `all`) ; AC-9 : tests neufs, `groupes_parametre_repete` de la 46-1 adapté.
   Propagation : 46-6b AC-6 (dissolution « dès que les deux natures portent un montant »). Validation à reprendre (P1
   d'une nouvelle boucle, prompt `kesh-gate-logs/s46-specs/validation-p1-prompt.md`).
+- 2026-11-21 — **Validation P1 de la nouvelle boucle** (Claude Sonnet 5.5, contexte frais, à `fe8f0eeb`) : 0 C / 0 H /
+  1 M / 5 L sur cette fiche, remédiés ; C-46-6a-3 jugé juste sur le fond. M (F2) : « sortie identique sans argument
+  neuf » contredisait « `groupes` à `null` sinon » (`sortie!` n'omet aucun champ) → C-46-6a-5 : `groupes: null`
+  admis, littéral de base inchangé, la clé ajoutée par le test avant comparaison (AC-6) ; même décision à la 46-4.
+  L : justification de la tranche (au-delà du plafond à `all`, niveau 2 à mesurer, F6) ; `groupes.lignes` distinct du
+  champ plat `lignes` (F7) ; lignes filtrées clonées, `TrialBalanceRow` dérivant `Clone` (F8, AC-1) ; phrase du guide
+  d'API de la 46-1 à réécrire et règles propres à la balance nommées (F9, AC-9) ; entrée `kesh_balance` de `TEMOINS`
+  (F10) ; bascule du test d'ignorance de l'export de la balance à la 46-6b (F11). Aussi : commentaire de
+  `ligne_principale` à mettre à jour (AC-3 (c)). Rapport : `kesh-gate-logs/s46-specs/validation-p1-rapport.md`.

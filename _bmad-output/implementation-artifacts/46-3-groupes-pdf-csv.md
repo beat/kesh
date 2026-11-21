@@ -71,7 +71,13 @@ dur, i18n des PDF différée).
 4. **AC-4 — Fidélité prouvée.** Un test d'intégration demande le JSON (46-1) et le PDF avec **les mêmes paramètres**
    (niveau 2, un groupe ouvert à la main, un fermé, `footer`), et affirme que, **section par section**, la suite des
    lignes de texte du PDF entre le titre de la section et sa ligne de total est exactement celle des
-   `groupedRows.<section>` (numéro, nom, montant formaté selon la règle de rendu) — sonde négative :
+   `groupedRows.<section>` (numéro, nom, montant formaté selon la règle de rendu) ; pour **Capitaux propres**, la
+   suite attendue est `groupedRows.equity` **suivie** des lignes calculées que le rendu à plat écrit déjà entre les
+   comptes et le total (`pdf.rs:896-925` : « Résultat reporté (calculé) » si `shows_retained_earnings_line()`, puis
+   « Résultat de l'exercice », toujours ; hors de `groupedRows`, 46-1 D4), puis le total. Comparaison sur le **texte
+   normalisé** : retrait de début de ligne et espaces répétés réduits ; le jeu d'essai n'a que des noms de comptes
+   plus courts que la limite de troncature (`ACCOUNT_NAME_MAX_CHARS_FX`, 34 caractères, `pdf.rs:718`), ce que le test
+   affirme d'abord, si bien qu'aucun « … » n'entre dans la comparaison — sonde négative :
    ignorer `open` dans le PDF rougit le test. **Si la 47-3 est dans la branche d'epic au T0**, le même test pose aussi
    un compte miroir (sans parent) qui reçoit un solde, et un second miroir rangé sous un groupe d'**un autre type** que
    le sien (état admis, avertissement non bloquant : décision du responsable de l'Epic 47 du 2026-11-21) : le groupe et
@@ -97,7 +103,11 @@ dur, i18n des PDF différée).
    de groupes répété **ignoré** par l'export de la balance (inchangé jusqu'à la 46-6b), des fixtures sans paramètre
    (AC-2) et de l'AC-4 ; `docs/api-external.md` (paramètres de l'export, colonnes CSV) ;
    manuel utilisateur FR, § *Visualisation et exports* (`user-manual.tex:4188`) : export groupé, fidélité à l'écran,
-   affichage de travail (lecture (a) de l'art. 959a CO), `.tex` seul.
+   affichage de travail (lecture (a) de l'art. 959a CO), `.tex` seul ; la phrase « Aucun des deux ne perd de ligne,
+   même quand l'écran en limite le nombre » (`user-manual.tex:4200-4202`) se restreint à l'export **à plat** ou nomme
+   l'exception de l'export groupé (les comptes d'un groupe fermé n'y ont pas de ligne, leur somme est sur celle du
+   groupe), et la liste des textes abrégés d'un « … » reste juste (aucun nom de groupe n'y entre si le retrait ne
+   tronque pas ; sinon, l'y ajouter).
 
 ## Tâches / sous-tâches
 
@@ -143,8 +153,9 @@ lignes calculées, équation en pied),
   `:954` compte de résultat. Montants alignés à droite (`AMOUNT_RIGHT_MM`, `FX_AMOUNT_RIGHT_MM`, #1327).
 - `csv.rs:42` `make_writer` (`;`, CRLF, BOM), `:50` `format_amount_iso` (`{amount:.2}` — site de la 48-11), `:101`
   `write_account_balance`, `:143-270` bilan (garde par section, `Total actifs;;;…`), `:277` compte de résultat.
-- `routes/reports.rs:174` `ExportQuery`, `:374` `export_balance_sheet`, `:504` `export_income_statement`,
-  `:942` `PdfContext::fr_ch_default` (à `29b9ec27` ; sur `story/46-1` à `de0a582f` : `:203`, `:427`, `:559`). Les
+- `routes/reports.rs`, à `29b9ec27` : `:174` `ExportQuery`, `:374` `export_balance_sheet`, `:504`
+  `export_income_statement`, `:942` `PdfContext::fr_ch_default` ; sur `story/46-1` à `de0a582f` : `:203`
+  `ExportQuery`, `:427` `export_balance_sheet`, `:559` `export_income_statement`, `:999` `PdfContext::fr_ch_default`. Les
   numéros de ligne de `pdf.rs` et `csv.rs` bougeront avec la 48-11 : se fier aux noms, relevés à nouveau au T0.
 
 ### L'API de la 46-1 (relevée sur `story/46-1` à `de0a582f`, à revérifier au T0 dans la branche d'epic)
@@ -246,3 +257,10 @@ l'export ne change pas.
   du 2026-11-21) ; C-46-3-3 : aucun avertissement imprimé ; Dev Notes : § *L'API de la 46-1*, lignes de
   `routes/reports.rs` à la 46-1 ; T0 : 46-1 fusionnée exigée, 47-3 relevée. Validation à reprendre (P1 d'une nouvelle
   boucle, prompt `kesh-gate-logs/s46-specs/validation-p1-prompt.md`).
+- 2026-11-21 — **Validation P1 de la nouvelle boucle** (Claude Sonnet 5.5, contexte frais, à `fe8f0eeb`) : 0 C / 0 H /
+  1 M / 3 L sur cette fiche, remédiés. M (F1) : l'AC-4 comparait la section Capitaux propres à `groupedRows.equity`
+  seul, alors que le PDF écrit les deux lignes calculées entre les comptes et le total (`pdf.rs:896-925`) → suite
+  attendue `groupedRows.equity` puis les lignes calculées. L : texte normalisé et jeu d'essai à noms courts, sans
+  troncature (F3, AC-4) ; phrase du manuel « aucun des deux ne perd de ligne » à restreindre à l'export à plat (F4,
+  AC-8) ; lignes de `routes/reports.rs` séparées par commit (F5). Rapport :
+  `kesh-gate-logs/s46-specs/validation-p1-rapport.md`.

@@ -1,11 +1,13 @@
 # Story 46-6b : balance par groupes — écran, PDF et CSV
 
-Status: ready-for-dev
+Status: drafted
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D11 modifiée (Q6), D9 étendue (Q10) ; FR-46-6,
 FR-46-9, FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Fiche écrite le 2026-11-20 (remarque 2
 de Guy), à valider en boucle. **Suit la 46-6a, la 46-2 (composant et contrôles) et la 46-3 (rendu PDF/CSV groupé,
-après la 48-11).** Aucune migration.
+après la 48-11).** Aucune migration. **Repassée en `drafted` le 2026-11-21** : sa phrase de manuel (AC-6)
+s'appuie sur C-46-6a-3, choix neuf de la 46-6a dont la validation est en cours ; elle redevient `ready-for-dev` quand
+la boucle de la 46-6a se clôt, après une passe sur ses propres lignes touchées.
 
 ## Story
 
@@ -39,7 +41,11 @@ extensions ci-dessous portent sur ces quatre colonnes ; aucune cinquième n'est 
    pied s'intitule « Total <nom du groupe> ». Les tests axe de la page, à zéro violation, portent aussi l'onglet Balance par défaut (groupé). Les `data-testid` d'aujourd'hui (`tb-row`, `tb-fx-row-<numéro>`,
    `tb-retained`, `tb-opening-check`, `tb-movements-check`) sont conservés sur les lignes de compte.
 2. **AC-2 — PDF et CSV fidèles à l'écran.** `GET /reports/trial-balance/export` (`routes/reports.rs:745`) accepte les
-   quatre paramètres (validation de la 46-1) ; PDF (`render_trial_balance_pdf`, `pdf.rs:1042`) et CSV
+   quatre paramètres (validation de la 46-1), lus comme à la 46-3 AC-1 : second extracteur
+   `Query<Vec<(String, String)>>` et `groupes_de(&paires)`, **`ExportQuery` inchangé** (revue P2 de la 46-1, L-6),
+   paramètre répété refusé (`400 VALIDATION_ERROR`), ordre `format` → accès → groupes, appel de
+   `rapports::balance_par_groupes` (46-6a) ; le test d'intégration qui affirme qu'un paramètre de groupes répété est
+   **ignoré** par l'export de la balance (46-3 AC-8, 46-6a AC-9) **bascule** en refus, déclaré au Change Log ; PDF (`render_trial_balance_pdf`, `pdf.rs:1042`) et CSV
    (`render_trial_balance_csv`, `csv.rs:355`) rendent `groupedRows` par **deux fonctions neuves**
    (`render_trial_balance_pdf` et `_csv` à plat restent **inchangées** avec leurs appelants et tests, comme la 46-3 le
    fait pour le bilan), qui reçoivent `AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>` de la 46-6a et appellent **la fonction de ligne groupée
@@ -120,3 +126,7 @@ Fiches 46-1, 46-2, 46-3, 46-6a.
   groupes à zéro sans ligne propre (46-6a AC-3 (d)). Rapport : `kesh-gate-logs/epic-46/validation/46-6b-P2.md`.
 - 2026-11-21 — Propagation de la correction de la 46-6a (C-46-6a-3 : une ligne nulle ne compte pas pour la
   dissolution par nature) à l'AC-6 (phrase du manuel). Aucune autre modification.
+- 2026-11-21 — Validation P1 de la nouvelle boucle des 46-3 et 46-6a (F11, `kesh-gate-logs/s46-specs/validation-p1-rapport.md`) :
+  repassée en `drafted` (phrase de manuel de l'AC-6 adossée à C-46-6a-3, en validation) ; AC-2 complété (lecture par
+  `groupes_de` et second extracteur, `ExportQuery` inchangé, paramètre répété refusé, ordre des contrôles, appel de
+  `balance_par_groupes`, bascule du test « paramètre répété ignoré par l'export de la balance »).
