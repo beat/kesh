@@ -724,8 +724,9 @@ async fn import_refus_dans_l_ordre_roles_et_cles(pool: MySqlPool) {
         .await;
     assert_eq!((s, code(&b)), (422, "WISE_CSV_INVALID"), "{b}");
     assert_eq!(b["error"]["details"]["filename"], "mauvais.csv");
-    // Story 39-11d (revue P1, M2) : `archive` toujours présent, nul à part.
-    assert_eq!(b["error"]["details"]["archive"], Value::Null);
+    // Story 39-11d (revue P1, M2) : `archive` toujours présent, nul à part
+    // (une clé absente se lirait aussi `Null` : sa présence est contrôlée).
+    assert_eq!(b["error"]["details"].get("archive"), Some(&Value::Null));
     assert_eq!(b["error"]["details"]["reason"], "WISE_CSV_MISSING_COLUMNS");
     assert!(b["error"]["details"]["columns"].as_array().unwrap().len() > 3);
 
