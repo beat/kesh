@@ -1231,13 +1231,15 @@ pub struct ProviderEntry<'a> {
     pub kind: EntryKind,
     /// Projet analytique (règle).
     pub project_id: Option<i64>,
-    /// Le **CHF connu** de la transaction, quand le prestataire le donne
-    /// (Wise : carte payée en devise depuis un solde, montant CHF du marchand,
-    /// 39-11c) : la ligne du compte de prestataire en devise porte alors ce
-    /// CHF, au cours `rate_from_chf(|montant|, CHF)` de provenance `manual` —
-    /// le CHF réel fait foi, aucun cours de Kesh, comme la conversion à une
-    /// écriture. `None` : cours mensuel retenu (PayPal). Sans effet pour un
-    /// compte du plan en CHF (le montant est déjà en CHF).
+    /// Le **CHF connu** de la transaction, quand le prestataire le donne :
+    /// la ligne du compte de prestataire en devise porte alors ce CHF, au
+    /// cours `rate_from_chf(|montant|, CHF)` de provenance `manual` — le CHF
+    /// réel fait foi, aucun cours de Kesh, comme la conversion à une écriture.
+    /// `None` : cours mensuel retenu (PayPal). Sans effet pour un compte du
+    /// plan en CHF (le montant est déjà en CHF). ⚠️ **Aucun appelant
+    /// aujourd'hui** : la 39-11c écrit son paiement groupé elle-même, au cours
+    /// du mois (amendement A-1) ; champ hérité de la 38-11c2, à retirer ou à
+    /// employer au prochain besoin.
     pub known_chf: Option<Decimal>,
 }
 

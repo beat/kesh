@@ -77,6 +77,10 @@ pub const REVIEW_STRIPE_PAYOUT_UNMATCHED: &str = "stripe_payout_unmatched";
 pub const REVIEW_CARD_GROUP_UNSUPPORTED: &str = "card_group_unsupported";
 /// À examiner : paiement par carte converti sans règle de contrepartie en CHF.
 pub const REVIEW_CARD_GROUP_NO_RULE: &str = "card_group_no_rule";
+/// À examiner : paiement par carte converti dont un solde en CHF du compte
+/// Wise n'a pas de ligne dans le groupe et pas de relevé importé qui couvre la
+/// date du paiement (l'autre moitié d'une conversion partielle peut manquer).
+pub const REVIEW_CARD_GROUP_STATEMENTS_MISSING: &str = "card_group_statements_missing";
 
 /// Écart maximal, en jours, entre la date de paiement d'une transaction et
 /// l'écriture déjà passée de l'autre côté (AC-4).
@@ -139,9 +143,13 @@ fn parse_segment(segment: &str) -> Option<Exchange> {
 
 /// Le segment de conversion d'un libellé (éléments séparés par ` · `), ou
 /// `None`. Seul un élément qui en a **exactement** la forme compte : une
-/// description qui contient une flèche n'en est pas un.
+/// description qui contient une flèche n'en est pas un. L'import écrit la tête
+/// (description, type, numéro), puis le segment, puis la note : c'est le
+/// **dernier** élément conforme qui compte (une description conforme, placée
+/// avant, ne l'emporte pas ; une note conforme, après lui, le ferait : cas
+/// non traité).
 pub fn exchange_of(details: &str) -> Option<Exchange> {
-    details.split(" · ").find_map(parse_segment)
+    details.rsplit(" · ").find_map(parse_segment)
 }
 
 /// L'identifiant Wise d'une transaction (vide sans identifiant).
@@ -344,13 +352,24 @@ pub fn judge_card_group(lines: &[&BankTransaction]) -> CardGroupJudgement {
         }
         cards += 1;
         match exchange_of(&t.details) {
-            None if t.currency == BASE_CURRENCY => merchant += t.amount.abs(),
+            None if t.currency == BASE_CURRENCY => {
+                if t.amount.normalize().scale() > 2 {
+                    return CardGroupJudgement::Unsupported("merchant_scale");
+                }
+                merchant += t.amount.abs();
+            }
             None => return CardGroupJudgement::Unsupported("exchange_missing"),
             Some(e) if e.to != BASE_CURRENCY => {
                 return CardGroupJudgement::Unsupported("merchant_not_chf");
             }
             Some(e) if e.from != t.currency => {
                 return CardGroupJudgement::Unsupported("exchange_currency_mismatch");
+            }
+            Some(Exchange {
+                to_amount: Some(chf),
+                ..
+            }) if chf.normalize().scale() > 2 => {
+                return CardGroupJudgement::Unsupported("merchant_scale");
             }
             Some(Exchange {
                 to_amount: Some(chf),
@@ -549,10 +568,7 @@ mod tests {
             ProviderKind::Fee
         );
         // Versement Stripe : avant la conversion (préfixe BALANCE d'un dépôt).
-        let depot = named(
-            tx(2, 1, "BALANCE-8", "1500", "CHF"),
-            "Stripe Payments Europe",
-        );
+        let depot = named(tx(2, 1, "BALANCE-8", "1500", "CHF"), "Stripe Fictif SA");
         assert_eq!(classify(&depot), ProviderKind::Specific(KIND_STRIPE_PAYOUT));
         let virement_stripe = named(tx(2, 1, "TRANSFER-9", "10", "EUR"), "STRIPE");
         assert_eq!(

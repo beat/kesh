@@ -149,7 +149,7 @@ pub async fn settlement_entry_cancel_blocker(
             "SELECT bt.id FROM bank_transactions bt \
              JOIN bank_accounts ba ON ba.id = bt.bank_account_id \
              WHERE bt.company_id = ? AND bt.matched_entry_id = ? AND bt.id <> ? \
-               AND NOT {} ORDER BY bt.id LIMIT 1",
+               AND NOT (bt.status = 'reconciled' AND {}) ORDER BY bt.id LIMIT 1",
             super::reconciliation_cancel::PROVIDER_GROUP_SIBLING
         ))
         .bind(company_id)

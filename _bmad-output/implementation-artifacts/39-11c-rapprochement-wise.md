@@ -291,6 +291,9 @@ depuis votre banque, versement Stripe), le reste par vos règles ; ce qui ne se 
 - 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : `PROVIDER_PROPOSAL_STALE` et `provider.proposal_accepted` servis (replis `WISE_PROPOSAL_STALE` et `wise.proposal_accepted` retirés) ; `link_sale` → `link_entry` (38-11c2) ; moteur servi générique par 38-11c2 (plus de généralisation G10 par défaut) ; rattachement en devise = 38-11c1 AC-1, prédicat de l'autre côté = 38-11c1 AC-1b (repli seulement si l'Epic 38 arrive après). Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.
 - 2026-11-22 — développement (Claude Opus 5.5), branche `story/39-11c` partie d'`epic/39-wise` (`3a9861f0`) ;
   amendement du 21.11 écrit avant le code (`07f04c4e`). Voir le Dev Agent Record.
+- 2026-11-22 — remédiation de la revue de code P1 (1 MEDIUM, 9 LOW) : garde `card_group_statements_missing` (M1), tests
+  du gain de change et de la règle forgée (L1), échelle du montant CHF (L2), prédicats d'annulation alignés (L5), segment lu
+  à sa place (L7), fixture sans raison sociale réelle (L4). Voir le Dev Agent Record ; passe P2 à lancer.
 
 ## Dev Agent Record
 
@@ -387,6 +390,52 @@ Champ `known_chf` de `ProviderEntry` : non employé (le paiement groupé écrit 
   reste du montant du marchand), mais en deux écritures.
 - Fusion avec l'Epic 40 : `ProviderSpec` inchangé ; aucun conflit attendu hors des compteurs des registres (à
   recompter).
+
+### Remédiation de la revue de code P1 (2026-11-22, rapport `kesh-gate-logs/s39-11c/revue-p1-rapport.md`)
+
+0 CRITICAL, 0 HIGH, 1 MEDIUM, 9 LOW à la revue ; périmètre des décomptes ci-dessous : `b56fd531..HEAD`.
+
+- **M1 (corrigé)** : une partielle dont un seul solde est importé ne donne plus deux écritures. Garde
+  `missing_statement_balances` (`routes/wise.rs`) : pour chaque solde **en CHF** du compte Wise absent du groupe, un relevé
+  importé doit couvrir la date du paiement (`bank_imports::overlapping_statements`) ; sinon revue « à examiner »
+  `card_group_statements_missing` (`details.missingBankAccountIds`), et acceptation refusée `PROVIDER_PROPOSAL_STALE`
+  (`details.reason = card_group_statements_missing`, mêmes identifiants). **Écart au remède proposé, à confirmer** : la
+  garde ne porte que sur les soldes en CHF (une partielle débite d'abord le solde du marchand, en CHF), non sur chaque
+  solde absent : le montage de test et l'usage réel importent CHF et USD sans EUR, et exiger un relevé EUR aurait mis
+  toute partielle « à examiner ». Limite écrite (`docs/api-external.md`, entrée d'issue) : une partielle sur deux soldes
+  en devise dont l'un manque, et un frais `FEE-CARD` importé plus tard par un second fichier du **même** solde que la carte,
+  ne se décèlent pas. Aucune clé i18n : aucun écran n'affiche encore ces motifs (39-11d).
+- **Sondes par mutation de la garde M1** (copie hors dépôt, `scratchpad/s39-11c-p1fix/sonde.sh`, journaux `m0` à `mC`) :
+  copie non mutée verte (`partielle_dont_un_seul_solde_est_importe` 1/1) ; A (garde de la revue retirée) → rouge,
+  `assertion left == right` à `wise_reconciliation_e2e.rs:1044` (nombre de propositions) ; B (garde de l'acceptation
+  retirée) → rouge à `:1060` (refus de la proposition forgée) ; C (relevé jamais requis) → rouge à `:1044`. ⚠️ Deux pièges
+  de la méthode, payés : (1) une première série de sondes ne compilait pas (`frontend/tests/e2e/fixtures` exclu de la copie) :
+  aucune « tuée » comptée ; (2) la copie partageait la cible cargo de la worktree : cargo prend pour à jour des artefacts
+  compilés depuis un autre chemin (empreintes indépendantes du chemin) — la copie mutée C a servi de binaire à la copie
+  « non mutée » suivante, puis au premier gate de la worktree (test rouge à tort) ; remède : `touch` des sources avant chaque
+  passe, et pour la worktree avant son gate. **Une copie de sonde prend sa propre cible cargo.**
+- **Gate de la remédiation** (journaux `kesh-gate-logs/s39-11c/`) : ciblé (`wise_reconciliation_e2e`, `wise_*`,
+  `reconciliation_e2e`, `settlement_*`, `textes_coherents`, `audit_route_registry`) 293 / 293 avant les sondes ; **backend
+  complet** `scripts/test-fast.sh --ci` (fmt, clippy workspace `-D warnings`, nextest) **6491 exécutés, 6491 passés,
+  16 ignorés** (`gate-backend.log`, après `touch` des sources, cf. plus haut ; 6488 + 3 tests HTTP neufs). Frontend : aucune
+  clé i18n ajoutée, aucun fichier du frontend touché — non rejoué. Aucun E2E (aucune spec neuve).
+- **L1** : trois tests HTTP — `partielle_dont_un_seul_solde_est_importe` (USD seul : « à examiner », forgée refusée, rien
+  d'écrit ; le relevé CHF arrive : une proposition, **une** écriture), `partielle_gain_de_change` (cours 0.80 : 13.89 USD =
+  11.11 CHF, gain 0.24 au crédit du compte de gain), `regle_forgee_sur_un_versement_stripe` (`kind_changed`). L'interblocage
+  de deux annulations : test trop lourd, **entrée d'issue**.
+- **L2** : `judge_card_group` refuse un montant CHF d'échelle > 2 (`merchant_scale`).
+- **L3** : commentaire de `ProviderEntry.known_chf` corrigé (aucun appelant). La constante `DESCRIPTION_MAX_CHARS` de
+  `routes/wise.rs` double celle de la 40-7c : **à unifier à la fusion** avec `ENTRY_DESCRIPTION_MAX_CHARS`.
+- **L4** : « Stripe Payments Europe » remplacé par « Stripe Fictif SA » dans les deux ajouts de la story (test pur de
+  `wise.rs`, relevé du test `ecarts`) ; les fixtures d'import des stories précédentes ne sont pas touchées.
+- **L5** : `settlement_entry_cancel_blocker` aligné sur `status = 'reconciled'` (`NOT (bt.status = 'reconciled' AND …)`).
+  Message de la vue et de la réponse sur le retour en attente des autres lignes : laissé à la 39-11d (écran). Interblocage
+  des deux annulations et compte des autres lignes : **issue**.
+- **L7** : `exchange_of` lit le **dernier** élément conforme (`rsplit`) : une description conforme, avant le segment,
+  ne l'emporte plus.
+- **L8, L9** : laissés (moteur partagé avec la 40-7c ; perf) — entrées d'issue. **L6** : échec fermé, conforme à A-5, laissé.
+- Hors changement : la conversion **totale** (crédit du solde en devise au cours du mois, différence de change) reste
+  celle de l'amendement A-1 ; question au responsable de l'epic.
 
 ### Notes de version
 

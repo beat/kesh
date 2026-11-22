@@ -1021,6 +1021,144 @@ async fn partielle_perimee_ou_refusee(pool: MySqlPool) {
     assert_eq!(revue["toReview"][0]["details"]["merchantAmount"], "97.95");
 }
 
+/// Revue M1 de la 39-11c : une partielle dont **un seul** solde est importé
+/// (ici l'USD, la ligne en CHF manque) ressemble à une conversion totale ; elle
+/// n'est ni proposée ni acceptée tant que le relevé du solde en CHF qui couvre
+/// la date n'est pas importé — sinon deux écritures. Le relevé CHF arrivé
+/// ensuite, la proposition paraît et l'acceptation passe **une** écriture.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn partielle_dont_un_seul_solde_est_importe(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let (chf, usd) = releves_partielle();
+    let (s, b) = ctx.importer(&[("usd.csv", &usd)]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let regle = ctx
+        .regle(
+            "Boutique",
+            "counterparty_contains",
+            "Boutique Exemple",
+            Some("CARD"),
+        )
+        .await;
+    let revue = ctx.revue().await;
+    assert_eq!(revue["counts"]["proposals"], 0, "{revue}");
+    assert_eq!(
+        codes(&revue["toReview"], "code"),
+        vec![paire("card_group_statements_missing", "CARD-90000020")],
+        "{revue}"
+    );
+    let manquants = &revue["toReview"][0]["details"]["missingBankAccountIds"];
+    assert_eq!(manquants.as_array().map(Vec::len), Some(1), "{revue}");
+    // Forgée, la proposition est refusée à l'acceptation, rien d'écrit.
+    let carte = ctx.tx("CARD-90000020", ctx.usd).await;
+    let frais = ctx.tx("FEE-CARD-90000020", ctx.usd).await;
+    let mut ids = [carte, frais];
+    ids.sort_unstable();
+    let avant = ctx.count("SELECT COUNT(*) FROM journal_entries").await;
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!(s, 200, "{b}");
+    assert_eq!(
+        b["failed"][0]["errorCode"], "PROVIDER_PROPOSAL_STALE",
+        "{b}"
+    );
+    assert_eq!(
+        b["failed"][0]["details"]["reason"],
+        "card_group_statements_missing"
+    );
+    assert_eq!(
+        ctx.count("SELECT COUNT(*) FROM journal_entries").await,
+        avant
+    );
+    // Le relevé du solde en CHF arrive : une proposition, une écriture.
+    let (s, b) = ctx.importer(&[("chf.csv", &chf)]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let revue = ctx.revue().await;
+    assert_eq!(revue["counts"]["proposals"], 1, "{revue}");
+    assert_eq!(revue["toReview"], json!([]), "{revue}");
+    let tous = revue["proposals"][0]["bankTransactionIds"].clone();
+    let ids: Vec<i64> = serde_json::from_value(tous).unwrap();
+    assert_eq!(ids.len(), 3);
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    assert_eq!(
+        ctx.count("SELECT COUNT(*) FROM journal_entries").await,
+        avant + 1,
+        "une seule écriture"
+    );
+}
+
+/// Revue L1 : le cours du mois fait gagner du change — 13.89 USD à 0.80 =
+/// 11.11 CHF pour un marchand à 11.35 : la différence (0.24) est **créditée**
+/// au compte de gain, et l'écriture est équilibrée.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn partielle_gain_de_change(pool: MySqlPool) {
+    let (ctx, regle, ids) = monter_partielle(&pool).await;
+    sqlx::query(
+        "UPDATE exchange_rates SET rate = 0.80 WHERE company_id = ? AND currency = 'USD' \
+         AND rate_date = '2020-03-01'",
+    )
+    .bind(ctx.seeded.company_id)
+    .execute(&ctx.pool)
+    .await
+    .unwrap();
+    let gain: i64 =
+        sqlx::query_scalar("SELECT id FROM accounts WHERE company_id = ? AND number = '6950'")
+            .bind(ctx.seeded.company_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    let ecriture = b["accepted"][0]["journalEntryIds"][0].as_i64().unwrap();
+    assert_eq!(
+        ctx.lignes(ecriture).await,
+        vec![
+            (ctx.charge, dec!(97.95), dec!(0), None, None),
+            (ctx.chf, dec!(0), dec!(86.60), None, None),
+            (
+                ctx.usd,
+                dec!(0),
+                dec!(11.11),
+                Some(dec!(13.89)),
+                Some(dec!(0.80))
+            ),
+            (gain, dec!(0), dec!(0.24), None, None),
+        ]
+    );
+}
+
+/// Revue L1 : une proposition `rule` forgée sur un versement Stripe est
+/// refusée à l'acceptation (`kind_changed`) — le versement ne se rapproche
+/// jamais par règle.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn regle_forgee_sur_un_versement_stripe(pool: MySqlPool) {
+    let ctx = monter(&pool).await;
+    let regle = ctx
+        .regle("Stripe", "counterparty_contains", "Stripe", None)
+        .await;
+    let versement = ctx.tx("BALANCE-90000008", ctx.chf).await;
+    let avant = ctx.count("SELECT COUNT(*) FROM journal_entries").await;
+    let (s, b) = ctx
+        .accepter(vec![json!({
+            "type": "rule",
+            "bankTransactionId": versement,
+            "ruleId": regle,
+            "counterpartyAccountId": ctx.charge,
+        })])
+        .await;
+    assert_eq!(s, 200, "{b}");
+    assert_eq!(
+        b["failed"][0]["errorCode"], "PROVIDER_PROPOSAL_STALE",
+        "{b}"
+    );
+    assert_eq!(b["failed"][0]["details"]["reason"], "kind_changed");
+    assert_eq!(
+        ctx.count("SELECT COUNT(*) FROM journal_entries").await,
+        avant
+    );
+    assert_eq!(ctx.etat(versement).await.0, "pending");
+}
+
 // ============================================================
 // AC-6 — écarts
 // ============================================================
@@ -1036,7 +1174,7 @@ async fn ecarts(pool: MySqlPool) {
     // Chevauchant : son premier jour (15 mars) est couvert par le relevé CHF.
     let chevauchant = format!(
         "{HEADER}\nCARD-90000031,20-03-2020,20-03-2020 10:00:00.000,-10.00,CHF,Carte,,2000.00,,,,,,,Kiosque,,,,,,,DEBIT,CARD\n\
-         BALANCE-90000008,15-03-2020,15-03-2020 08:00:00.000,1500.00,CHF,Argent reçu de Stripe,,2010.00,,,,Stripe Payments Europe,,,,,,,,,,CREDIT,DEPOSIT\n"
+         BALANCE-90000008,15-03-2020,15-03-2020 08:00:00.000,1500.00,CHF,Argent reçu de Stripe,,2010.00,,,,Stripe Fictif SA,,,,,,,,,,CREDIT,DEPOSIT\n"
     );
     let (s, b) = ctx.importer(&[("chf2.csv", chevauchant.as_bytes())]).await;
     assert_eq!(s, 201, "{b}");

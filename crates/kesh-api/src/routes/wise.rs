@@ -68,9 +68,9 @@ use sqlx::MySql;
 
 use super::provider_accept::{
     self, AcceptBodyExtractor, AcceptContext, BatchOutcome, CounterpartyRule, EngineProposal,
-    ProviderAcceptResponse, ProviderAccepted, Refusal, ReviewQuery, ReviewResponse,
-    check_counterparty, db_refusal, entry_refusal, failed, mark_reconciled, month_rate,
-    record_rule_applied, rejudge, stale,
+    PROVIDER_PROPOSAL_STALE, ProviderAcceptResponse, ProviderAccepted, Refusal, ReviewQuery,
+    ReviewResponse, check_counterparty, db_refusal, entry_refusal, failed, mark_reconciled,
+    month_rate, record_rule_applied, rejudge, stale,
 };
 use super::reconciliation::{
     counterparty_is_bank_ledger_failed_proposal, project_error_to_failed_proposal,
@@ -175,6 +175,21 @@ async fn build_wise_review(
                 let mut merchant = merchant_chf;
                 merchant.rescale(2);
                 details["merchantAmount"] = serde_json::json!(merchant.to_string());
+                let missing = missing_statement_balances(
+                    &mut *tx,
+                    company_id,
+                    loaded.balances.iter().map(|b| (b.account.id, b.currency())),
+                    &g.lines,
+                )
+                .await?;
+                if !missing.is_empty() {
+                    details["missingBankAccountIds"] = serde_json::json!(missing);
+                    review.push_to_review(ReviewFinding {
+                        details: Some(details),
+                        ..ReviewFinding::on(wise::REVIEW_CARD_GROUP_STATEMENTS_MISSING, principal)
+                    });
+                    continue;
+                }
                 let ledger = balances
                     .get(&principal.bank_account_id)
                     .and_then(|b| b.account.journal_account_id);
@@ -299,6 +314,37 @@ async fn build_wise_review(
 
     review.sort();
     Ok(review)
+}
+
+/// Les soldes **en CHF** du compte Wise qui n'ont aucune ligne dans le groupe
+/// et aucun relevé importé qui couvre la date du paiement (revue M1 de la
+/// 39-11c). Une conversion partielle débite d'abord le solde en CHF : sans sa
+/// ligne, elle ressemble à une conversion totale, et l'écrire seule donnerait
+/// deux écritures quand l'autre ligne arrive. Qu'un relevé couvre la date sans
+/// porter de ligne du paiement atteste qu'il n'y en a pas. ⚠️ Limite : un frais
+/// `FEE-CARD` importé plus tard par un second fichier du **même** solde que la
+/// carte n'est pas décelable (le relevé de ce solde couvre déjà la date).
+async fn missing_statement_balances<'b>(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    balances: impl Iterator<Item = (i64, &'b str)>,
+    group: &[&BankTransaction],
+) -> Result<Vec<i64>, DbError> {
+    let date = payment_date(group[0]);
+    let present: HashSet<i64> = group.iter().map(|t| t.bank_account_id).collect();
+    let mut missing = Vec::new();
+    for (id, currency) in balances {
+        if currency != BASE_CURRENCY || present.contains(&id) {
+            continue;
+        }
+        let covering =
+            bank_imports::overlapping_statements(&mut *conn, company_id, id, date, date).await?;
+        if covering.is_empty() {
+            missing.push(id);
+        }
+    }
+    missing.sort_unstable();
+    Ok(missing)
 }
 
 /// Retire de la revue toute proposition, tout écart et toute ligne à examiner
@@ -509,6 +555,25 @@ async fn accept_card_group(
         return Err(stale(primary, "card_group_changed"));
     };
     let principal = group.principal();
+    // Chaque solde en CHF absent du groupe : un relevé qui couvre la date.
+    let missing = missing_statement_balances(
+        &mut *tx,
+        ctx.company_id,
+        ctx.balances.iter().map(|(id, b)| (*id, b.currency())),
+        &group.lines,
+    )
+    .await
+    .map_err(|e| db_refusal(primary, e))?;
+    if !missing.is_empty() {
+        return Err(failed(
+            primary,
+            PROVIDER_PROPOSAL_STALE,
+            serde_json::json!({
+                "reason": "card_group_statements_missing",
+                "missingBankAccountIds": missing,
+            }),
+        ));
+    }
 
     // La règle, rejugée sur la ligne principale.
     let rule: Option<ReconciliationRule> =
