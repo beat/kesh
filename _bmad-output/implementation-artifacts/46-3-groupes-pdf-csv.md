@@ -464,3 +464,7 @@ Journaux hors dépôt, `kesh-gate-logs/s46-3/` : `t1-ecrire.log` (fixtures au co
   « (solde propre) » tronqué, production) et les L2, L4, L5 de la P1 sont écrites dans
   `kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md`, à ouvrir. Tendance : P1 0/0/3/6 → P2 0/0/0/6. Modèles : Opus 5.5
   (développement, P1 et P2).
+  Gates au dernier commit de code (`dd144a72`, base remise à zéro, journaux `kesh-gate-logs/s46-3/*-p2.log`) : fmt et
+  clippy workspace verts ; nextest `package(kesh-report) | package(kesh-core) | binary(reports_export_e2e) |
+  binary(reports_e2e) | binary(textes_coherents)` : 799 passés, 1 ignoré ; manuel compilé dans une copie, phrase des
+  libellés présente au PDF, aucun « Overfull ».
