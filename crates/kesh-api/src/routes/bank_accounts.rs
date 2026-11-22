@@ -1388,7 +1388,8 @@ pub async fn create_bank_account(
             body.paypal.as_ref(),
             body.wise.as_ref(),
             body.stripe.as_ref(),
-        )?.as_ref(),
+        )?
+        .as_ref(),
     })?;
     let opening = parse_opening_balance(body.opening_balance.as_ref())?;
     if opening.is_some() && body.journal_account_id.is_none() {

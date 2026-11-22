@@ -1,6 +1,7 @@
 <!--
   Story 40-7d (AC-2, AC-3) — la page **commune** des prestataires (PayPal,
-  Stripe), tirée de la page PayPal de la 38-11d : choix du compte et de
+  Stripe ; Wise depuis la 39-11d, plusieurs fichiers ou un zip d'un geste, et,
+  jusqu'à la revue Wise de la 39-11c, l'import seul), tirée de la page PayPal de la 38-11d : choix du compte et de
   l'exercice, import du fichier et son compte rendu, propositions à cocher et
   à accepter par paquets de 500, écarts et lignes « à examiner » (rattachement
   par la modale du rapprochement, écriture manuelle). Ce qui est
@@ -42,39 +43,47 @@
 	} from './provider-review.types';
 
 	interface Props {
-		/** Préfixe des identifiants de test (`paypal`, `stripe`). */
+		/** Préfixe des identifiants de test (`paypal`, `stripe`, `wise`). */
 		testId: string;
+		/** Story 39-11d — les types de fichier offerts au choix (défaut : CSV). */
+		fileAccept?: string;
+		/** Story 39-11d — plusieurs fichiers d'un geste (`api.importFiles`). */
+		multiple?: boolean;
+		/** Story 39-11d — le compte rendu entier, à la place des lignes par devise (Wise : par fichier). */
+		importReportMain?: Snippet<[R]>;
 		texts: ProviderPageTexts;
 		api: ProviderPageApi<P, B, R>;
 		/** Les libellés de compte du prestataire, tirés des comptes bancaires chargés. */
 		accountLabels: (bankAccounts: BankAccountSummary[]) => string[];
 		/** Les phrases d'un refus de l'import. */
 		importErrorLines: (err: unknown) => string[];
+		// Story 39-11d — les libellés et formes de la revue qui suivent sont facultatifs : une page
+		// sans revue (`api.getReview` absent) ne les lit jamais ; les défauts sont les codes bruts.
 		/** Libellé d'un refus de l'acceptation. */
-		failedLabel: (f: ProviderFailedProposal) => string;
+		failedLabel?: (f: ProviderFailedProposal) => string;
 		/** Clé stable d'une proposition et la transaction qui l'identifie. */
-		proposalKey: (p: P) => string;
-		proposalTransactionId: (p: P) => number;
+		proposalKey?: (p: P) => string;
+		proposalTransactionId?: (p: P) => number;
 		/** Genre d'une proposition (colonne « Genre »). */
-		proposalKind: (p: P) => string;
+		proposalKind?: (p: P) => string;
 		/** Une proposition se coche-t-elle ? (défaut : oui) */
 		selectable?: (p: P, key: string) => boolean;
 		/** Les corps à envoyer pour la sélection, dans l'ordre des dates. */
-		acceptBodies: (proposals: readonly P[], selected: ReadonlySet<string>) => B[];
+		acceptBodies?: (proposals: readonly P[], selected: ReadonlySet<string>) => B[];
 		/** Libellé et détails d'un écart. */
-		gapLabel: (f: ProviderFinding) => string;
-		gapDetails: (f: ProviderFinding) => string | null;
+		gapLabel?: (f: ProviderFinding) => string;
+		gapDetails?: (f: ProviderFinding) => string | null;
 		/** Libellé d'un motif « à examiner ». */
-		toReviewLabel: (f: ProviderFinding) => string;
+		toReviewLabel?: (f: ProviderFinding) => string;
 		/** Le compte rendu propre au prestataire, sous les lignes par devise. */
 		importReportExtra?: Snippet<[R]>;
-		/** La colonne « Ce qui sera fait » d'une proposition. */
-		proposalAction: Snippet<[P, string]>;
+		/** La colonne « Ce qui sera fait » d'une proposition (sans objet sans revue). */
+		proposalAction?: Snippet<[P, string]>;
 		/** Ce qui suit le libellé d'un écart (un lien, par exemple), facultatif. */
 		gapExtra?: Snippet<[ProviderFinding]>;
 		/** Les en-têtes et les cellules propres au prestataire d'une ligne « à examiner ». */
-		toReviewHead: Snippet;
-		toReviewCells: Snippet<[ProviderFinding, number]>;
+		toReviewHead?: Snippet;
+		toReviewCells?: Snippet<[ProviderFinding, number]>;
 		/** Lectures propres au prestataire, au chargement de la page (libellés des règles…). */
 		onLoad?: () => Promise<void>;
 		/** Appelé à chaque revue relue (pour vider un état propre aux propositions). */
@@ -91,19 +100,22 @@
 
 	let {
 		testId,
+		fileAccept = '.csv,text/csv',
+		multiple = false,
+		importReportMain,
 		texts,
 		api,
 		accountLabels,
 		importErrorLines,
-		failedLabel,
-		proposalKey,
-		proposalTransactionId,
-		proposalKind,
+		failedLabel = (f) => f.errorCode,
+		proposalKey = (p) => String(p.transaction.id),
+		proposalTransactionId = (p) => p.transaction.id,
+		proposalKind = (p) => p.type,
 		selectable = () => true,
-		acceptBodies,
-		gapLabel,
-		gapDetails,
-		toReviewLabel,
+		acceptBodies = () => [],
+		gapLabel = (f) => f.code,
+		gapDetails = () => null,
+		toReviewLabel = (f) => f.code,
 		importReportExtra,
 		proposalAction,
 		gapExtra,
@@ -145,6 +157,8 @@
 	let linkTarget = $state<LinkTarget | null>(null);
 
 	let providerAccounts = $derived(accountLabels(bankAccounts));
+	// Story 39-11d — une page sans revue (Wise, avant la 39-11c) n'a ni exercice ni propositions.
+	let hasReview = $derived(api.getReview !== undefined);
 
 	onMount(async () => {
 		const [ba, fy] = await Promise.allSettled([listBankAccounts(), listFiscalYears(), onLoad?.()]);
@@ -163,7 +177,8 @@
 		const account = selectedAccount;
 		const yearId = selectedYearId;
 		const myGen = ++reviewGen;
-		if (account === null || yearId === null) {
+		const getReview = api.getReview;
+		if (account === null || yearId === null || getReview === undefined) {
 			review = null;
 			reviewLoading = false;
 			return;
@@ -171,7 +186,7 @@
 		reviewLoading = true;
 		reviewError = null;
 		try {
-			const r = await api.getReview(account, yearId);
+			const r = await getReview(account, yearId);
 			if (myGen !== reviewGen) return;
 			review = r;
 			selected = new Set();
@@ -194,13 +209,16 @@
 
 	async function onFileChosen(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
+		const files = Array.from(input.files ?? []);
 		input.value = '';
-		if (!file || selectedAccount === null) return;
+		if (files.length === 0 || selectedAccount === null) return;
 		importing = true;
 		importErrors = [];
 		try {
-			importReport = await api.importFile(file, selectedAccount);
+			// Story 39-11d — plusieurs fichiers d'un geste quand la page les prend (Wise).
+			if (api.importFiles) importReport = await api.importFiles(files, selectedAccount);
+			else if (api.importFile) importReport = await api.importFile(files[0], selectedAccount);
+			else return;
 			await reload();
 		} catch (err) {
 			importReport = null;
@@ -246,7 +264,8 @@
 		// Le compte est figé avant la boucle (revue P1 de la 38-11d, L1) : les sélecteurs sont
 		// désactivés pendant l'acceptation, et chaque paquet part au même compte.
 		const account = selectedAccount;
-		if (!review || account === null) return;
+		const accept = api.accept;
+		if (!review || account === null || accept === undefined) return;
 		const bodies = acceptBodies(review.proposals, selected);
 		if (bodies.length === 0) return;
 		const batches = chunkProposals(bodies);
@@ -256,7 +275,7 @@
 		try {
 			for (let i = 0; i < batches.length; i++) {
 				batchProgress = { current: i + 1, total: batches.length };
-				const res = await api.accept(account, batches[i]);
+				const res = await accept(account, batches[i]);
 				report.accepted += res.accepted.length;
 				report.failed.push(...res.failed);
 			}
@@ -306,6 +325,7 @@
 				{/each}
 			</select>
 		</div>
+		{#if hasReview}
 		<div>
 			<label for="{testId}-fiscal-year" class="block text-sm font-medium text-text mb-1">
 				{i18nMsg('provider-label-fiscal-year', 'Exercice')}
@@ -323,11 +343,13 @@
 				{/each}
 			</select>
 		</div>
+		{/if}
 		<div>
 			<input
 				bind:this={fileInput}
 				type="file"
-				accept=".csv,text/csv"
+				accept={fileAccept}
+				{multiple}
 				class="hidden"
 				onchange={onFileChosen}
 				data-testid="{testId}-file-input"
@@ -337,6 +359,9 @@
 			</Button>
 		</div>
 	</div>
+	{#if texts.importHelp}
+		<p class="mt-2 text-sm text-text" data-testid="{testId}-import-help">{texts.importHelp}</p>
+	{/if}
 	{#if texts.hint}
 		<p class="mt-2 text-sm text-text-muted" data-testid="{testId}-hint">{texts.hint}</p>
 	{/if}
@@ -355,8 +380,11 @@
 	{#if importReport}
 		<section class="mt-4 rounded border border-border bg-surface-alt p-3 text-sm" data-testid="{testId}-import-report">
 			<h2 class="font-semibold">{i18nMsg('provider-import-report-title', 'Compte rendu de l’import')}</h2>
+			{#if importReportMain}
+				{@render importReportMain(importReport)}
+			{:else}
 			<ul class="mt-2 list-disc pl-5">
-				{#each importReport.currencies as c (c.currency)}
+				{#each importReport.currencies ?? [] as c (c.currency)}
 					<li data-testid="{testId}-import-report-{c.currency}">
 						{i18nMsg('provider-import-report-currency', '{ $currency } : { $inserted } transaction(s) insérée(s), { $duplicates } doublon(s)', {
 							currency: c.currency,
@@ -366,6 +394,7 @@
 					</li>
 				{/each}
 			</ul>
+			{/if}
 			{@render importReportExtra?.(importReport)}
 		</section>
 	{/if}
@@ -466,7 +495,7 @@
 								</td>
 								<td class="py-2 pr-4">{p.transaction.name ?? ''}</td>
 								<td class="py-2 pr-4 font-mono text-xs">{p.transaction.transactionId ?? ''}</td>
-								<td class="py-2">{@render proposalAction(p, key)}</td>
+								<td class="py-2">{@render proposalAction?.(p, key)}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -545,7 +574,7 @@
 							<th class="py-2 pr-4 font-semibold">{i18nMsg('provider-col-date', 'Date')}</th>
 							<th class="py-2 pr-4 font-semibold">{i18nMsg('provider-col-reason', 'Motif')}</th>
 							<th class="py-2 pr-4 text-right font-semibold">{i18nMsg('provider-col-amount', 'Montant')}</th>
-							{@render toReviewHead()}
+							{@render toReviewHead?.()}
 							<th class="py-2"></th>
 						</tr>
 					</thead>
@@ -556,7 +585,7 @@
 								<td class="py-2 pr-4 whitespace-nowrap">{findingDate(t)}</td>
 								<td class="py-2 pr-4">{toReviewLabel(t)}</td>
 								<td class="py-2 pr-4 text-right font-mono whitespace-nowrap">{#if tx}{tx.amount} {tx.currency}{/if}</td>
-								{@render toReviewCells(t, i)}
+								{@render toReviewCells?.(t, i)}
 								<td class="py-2 whitespace-nowrap">
 									<button
 										type="button"

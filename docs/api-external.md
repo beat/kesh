@@ -1072,6 +1072,9 @@ curl -X POST \
 #                "currency": "CHF", "bankAccountId": 7, "importId": 31,
 #                "rows": 10, "inserted": 10, "duplicates": 0, … }, … ],
 #   "ignoredEntries": [] }
+```
+
+**L'écran Wise** *(Epic 39, phase 1)*. L'écran *Mensuel* → *Wise* appelle cette route : un envoi par geste, avec le zip de Wise tel quel ou plusieurs CSV (un champ `file` chacun), et montre le compte rendu par fichier (`files[]`, `ignoredEntries`) et l'avertissement `gap`. Les réglages Wise d'un compte bancaire se posent à l'écran *Comptes bancaires* par `POST /bank-accounts` et `PUT /bank-accounts/{id}`, objet `wise: { "account", "feeAccountId" | null }` (au `PUT`, `wise: null` les retire). La revue et l'acceptation des transactions Wise ne sont pas encore servies.
 
 ### Le compte Stripe et l'import de son rapport — `POST /api/v1/stripe-imports`
 
