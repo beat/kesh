@@ -1,6 +1,6 @@
 # Story 39-11d : écrans, manuel et E2E de l'import Wise
 
-Status: review
+Status: done
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, revérifiée à la validation P1. Epic 39, **phase 1 KISS**.
 **Dépend de** : 39-11a à 39-11c, **38-11d** (écrans PayPal, validée P1 : case « Compte PayPal » du formulaire des
@@ -149,6 +149,10 @@ relevés par la page *Mensuel* → *Wise* (le zip de Wise tel quel ou plusieurs 
 fichier et refus qui nomment le fichier en cause ; section Wise au manuel utilisateur. La revue et l'acceptation des
 transactions Wise viennent avec la 39-11d2 : d'ici là, les transactions importées restent en attente.
 
+*Modifié (API, additif)* — les `details` du refus `422 WISE_CSV_INVALID` portent une clé `archive` : le nom du zip
+d'où vient le relevé refusé, `null` pour un fichier envoyé à part (comme `WISE_CSV_FEES_NOT_SEPARATED`). Aucune clé
+retirée ni renommée ; `docs/api-external.md` le dit.
+
 ## Change Log
 
 - 2026-11-22 — amendée par la fiche 39-11e (zip de Wise et format des frais) : AC-2 (bouton, compte rendu, refus
@@ -218,4 +222,13 @@ transactions Wise viennent avec la 39-11d2 : d'ici là, les transactions import�
     - Manuel : PDF régénéré dans une copie (`make user`, rc 0), aplati et grepé : « Ouvrir la page Wise pour un compte Wise
       (§14.4) — dans cette version, la page Wise ne fait qu'importer … », la phrase des refus ventilée ; aucun `??`.
   - Passe suivante : P2 complète, Sonnet (`kesh-gate-logs/s39-11d/revue-p2-prompt.md`).
-
+- 2026-11-22 — revue de code P2 (Claude Sonnet 5.5, contexte frais, complète) : 0 CRITICAL, 0 HIGH, 0 MEDIUM, 4 LOW
+  (rapport `kesh-gate-logs/s39-11d/revue-p2-rapport.md`) ; aucune remédiation P1 n'introduit de défaut. Clôture :
+  - **L3** : test Vitest `wise-labels.test.ts`, `archive` sur les sept autres raisons de `WISE_CSV_INVALID` (7 cas
+    d'un `it.each`, test seul) ; 34 passés (`cloture/vitest-l3.log`) ; mutation (archive ignorée dans `fileOf`) tuée
+    par les sept cas neufs, AssertionError (`cloture/vitest-l3-mut.log`).
+  - **L4** : note de version, `archive` ajouté aux `details` de `WISE_CSV_INVALID` (changement additif de l'API).
+  - **L1** (`WISE_DUPLICATE_CURRENCY_FILE` ne nomme pas le zip de chaque fichier) et **L2** (le refus de doublon ne
+    nomme que le premier relevé déjà importé, sans le dire) : non traités, versés à la liste des issues à ouvrir.
+  - Trend de la boucle de revue de code : P1 (Opus) 0/0/3/7 → P2 (Sonnet) 0/0/0/4. Close sur la P2, rien au-dessus de
+    LOW. Story `done`. Intégration dans `epic/39-wise` (avec `epic/40-stripe` à jour) : gates au commit de fusion.
