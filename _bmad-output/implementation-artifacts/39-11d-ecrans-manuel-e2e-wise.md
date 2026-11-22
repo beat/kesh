@@ -60,8 +60,8 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
 4. **AC-4 — Manuel et API** (`docs/manual/fr/user-manual.tex`, `.tex` seul ; DE, IT, EN « à traduire » selon la règle
    du dépôt) : sous-section « Comptes Wise » à côté de « Comptes PayPal » (38-11d AC-6) — un compte bancaire par devise,
    compte de frais, compte de conversion requis entre deux devises étrangères ; exporter de Wise le relevé CSV de chaque
-   solde (période, une devise par fichier ; le zip n'est pas lu) *(amendé le 2026-11-22 : l'export est décrit par la
-   sous-section `sec:wise-export` de la story 39-11e — CSV, option des frais séparés cochée, zip tel quel —, à
+   solde (période, une devise par fichier ; le zip se donne tel quel) *(amendé le 2026-11-22 : l'export est décrit par
+   la sous-section `sec:wise-export` de la story 39-11e — CSV, option des frais séparés cochée, zip tel quel —, à
    laquelle cette sous-section renvoie)* ; l'importer ; ce que Kesh propose ligne par ligne ;
    les conversions au cours de Wise ; le rattachement à l'autre côté (virement depuis votre banque, versement Stripe de
    l'Epic 40 : jamais compté deux fois, jamais affecté par une règle) ; un virement vers sa banque par une règle quand
@@ -102,7 +102,9 @@ manuel utilisateur.
 ## Change Log
 
 - 2026-11-22 — amendée par la fiche 39-11e (zip de Wise et format des frais) : AC-2 (bouton, compte rendu, refus
-  neufs) et AC-4 (renvoi à `sec:wise-export`) ; amendement relu par la validation P1 de 39-11e.
+  neufs) et AC-4 (renvoi à `sec:wise-export`) ; amendement relu par la validation P1 de 39-11e (0 au-dessus de LOW ;
+  son L8 a retiré la phrase « le zip n'est pas lu », qui contredisait l'amendement). Les `reason` de `WISE_ZIP_INVALID`
+  se traduisent à l'écran par le message de l'erreur (rendu par le serveur), sans clé par raison.
 
 - 2026-11-20 — fiche rédigée (phase 1 KISS), non validée.
 - 2026-11-20 — validation P1 (Claude Opus 5.5, contexte frais) : 0 CRITICAL, 0 HIGH, 3 MEDIUM, 2 LOW, remédiés dans la

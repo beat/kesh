@@ -1,6 +1,6 @@
 # Story 39-11e : le zip de Wise tel que téléchargé, et le bon format des frais
 
-Status: drafted
+Status: ready-for-dev
 
 *Fiche rédigée le 2026-11-22, branche `story/39-11e` partie d'`epic/39-wise` (`b3826e2d`), numéros de ligne relevés à
 ce commit. Epic 39, **phase 1 KISS** (amende G1 et tranche Q-39-11). **Dépend de** : 39-11a et 39-11a2 (lecteur),
@@ -74,30 +74,51 @@ place, rien recopié ; mesure par un script hors dépôt, `python3 -I`, comptes 
     s'enverrait pas décompressé ne passe pas compressé —, comptée **sur les octets réellement produits**, par une
     lecture à travers `take(reste + 1)`, **jamais** sur la taille que déclare l'en-tête (déclarative) — au-delà,
     `TOO_LARGE` ;
-  - **chemin** : une entrée dont le nom est absolu, contient `..`, une lettre de lecteur ou une barre oblique inverse
-    (`ZipFile::enclosed_name()` rend `None`, ou nom contenant `\`) refuse **toute l'archive** (`UNSAFE_PATH`) — rien
-    n'étant écrit sur disque, ce n'est pas une évasion, mais un tel nom ne vient pas de Wise ;
+  - **chemin** : une entrée dont le nom est absolu, sort de la racine par `..` (`enclosed_name()` rend `None` ; un
+    `..` qui reste dans l'archive, `a/../x.csv`, ou un `./x.csv` passent `enclosed_name` mais contiennent un `/` : entrée
+    « dans un dossier », ignorée par D3), contient une barre oblique inverse `\`, ou contient un deux-points `:` (lettre
+    de lecteur, `C:x.csv` : `enclosed_name()` ne la refuse que sous Windows, d'où un contrôle explicite du `:`) refuse
+    **toute l'archive** (`UNSAFE_PATH`) — rien n'étant écrit sur disque, ce n'est pas une évasion, mais un tel nom ne
+    vient pas de Wise ;
   - entrée **chiffrée** → `ENCRYPTED` ; méthode de compression autre que *stored* ou *deflate* (les seules du crate
     `zip` tel qu'il est configuré, `crates/kesh-api/Cargo.toml:66`) → `UNSUPPORTED_COMPRESSION` ; archive illisible
-    (répertoire central faux, CRC faux à la lecture) → `UNREADABLE`.
+    (répertoire central faux, CRC faux à la lecture) → `UNREADABLE`. Ces deux métadonnées se lisent par
+    `ZipArchive::by_index_raw(i)` (sans décompresser), **jamais** par `by_index(i)`, qui rend une erreur avant de
+    construire l'entrée quand elle est chiffrée ou de méthode non gérée (`zip-2.6.1/src/read.rs:1113-1114`,
+    `Decompressor::new`) et ferait dire `UNREADABLE` à la place ; seules les entrées retenues se rouvrent ensuite par
+    `by_index(i)` pour être lues.
+  - **Portée et ordre des contrôles** (la `reason` rendue en dépend) : `UNREADABLE` (ouverture de l'archive), puis
+    `TOO_MANY_ENTRIES`, puis **entrée par entrée dans l'ordre du répertoire** : le chemin (`UNSAFE_PATH`) sur **toutes**
+    les entrées, retenues ou non ; le chiffrement (`ENCRYPTED`) et la méthode (`UNSUPPORTED_COMPRESSION`) sur les
+    seules entrées **retenues** (D3 : un `.pdf` chiffré est ignoré, jamais ouvert) ; puis la lecture des retenues, par
+    nom (`UNREADABLE` sur un CRC faux, `TOO_LARGE`) ; enfin `NO_CSV`. La première faute trouvée l'emporte.
   - Angle mort assumé, le même que celui de la sauvegarde (`crates/kesh-api/src/admin_backup/import.rs:27-31`) :
     `ZipArchive::new` décode tout le répertoire central avant qu'on puisse compter les entrées ; sa mémoire n'est
     bornée que par la taille reçue (limite du corps). Deux entrées de même nom : le crate n'en garde qu'une, sans le
     dire.
-- **D5 — Le bon format des frais, au lecteur.** Un relevé est refusé `WISE_CSV_FEES_NOT_SEPARATED` quand il ne porte
-  **aucune** ligne `FEE-` **et** au moins une ligne non `FEE-` dont *Total fees* est non nul. Critère **par fichier,
-  non par ligne**, pour ne jamais refuser un bon fichier : une ligne d'origine dont la ligne `FEE-` (écrite une
-  milliseconde avant elle) tomberait juste hors de la période exportée laisserait un fichier « avec » sans sa ligne de
-  frais ; le critère par fichier l'accepte, le critère par ligne l'aurait refusé. Un fichier « sans » n'a jamais de
-  ligne `FEE-` (0 sur trois fichiers réels) : le critère le reconnaît dès qu'il porte un frais.
+- **D5 — Le bon format des frais, au lecteur.** Une ligne « à frais » est une ligne non `FEE-` dont *Total fees* est
+  non nul ; elle « a sa `FEE-` » quand le fichier porte une ligne `FEE-<id>` de même identifiant (`FEE-` + son
+  *TransferWise ID*). Un relevé est refusé `WISE_CSV_FEES_NOT_SEPARATED` quand **(a)** il ne porte **aucune** ligne
+  `FEE-` et au moins **une** ligne à frais, **ou (b)** au moins **deux** lignes à frais n'ont pas leur `FEE-` (règle (b)
+  ajoutée le 2026-11-22, L5 de la validation P1 : une ligne `FEE-` isolée ne suffit plus à faire passer un relevé
+  « sans »). Critère **par fichier, avec une tolérance d'une ligne** dans un fichier qui porte des `FEE-` : la ligne
+  `FEE-` est écrite une milliseconde avant sa ligne d'origine, si bien qu'une origine posée dans la toute première
+  milliseconde de la période exportée peut avoir sa `FEE-` hors période — cela ne peut arriver qu'à **une** ligne, la
+  première. Un fichier « sans » n'a jamais de ligne `FEE-` (0 sur trois fichiers réels, 50 lignes à frais) : la règle
+  (a) le reconnaît dès qu'il porte un frais. **Limite, écrite au manuel (L6)** : un bon fichier dont la **seule** ligne
+  à frais tombe à la borne (sa `FEE-` hors période) est refusé par (a) — cas rare, bruyant et réparable : réexporter
+  en élargissant la période d'un jour. Le choix inverse (tolérer aussi ce cas) laisserait passer **en silence** un
+  relevé « sans » à une seule opération à frais, avec un montant faux : un refus se voit, une écriture fausse non.
   - **Relevé sans aucun frais sur la période** (aucune ligne `FEE-`, *Total fees* nul ou vide partout) : **accepté**.
     Les deux exports sont alors identiques ligne pour ligne (rien à séparer, aucun montant frais compris) : il n'y a ni
     moyen ni raison de les distinguer. Écrit au manuel et testé.
-  - **Fichier mixte** (des lignes `FEE-`, et une ligne à frais sans sa `FEE-<id>`) : **accepté** (jamais observé ; la
-    forme d'un bon fichier coupé à la borne de période).
+  - **Fichier mixte** (des lignes `FEE-`, et **une** ligne à frais sans sa `FEE-<id>`) : **accepté** (jamais observé ;
+    la forme d'un bon fichier coupé à la borne de période). Deux lignes à frais ou plus sans leur `FEE-`, même avec
+    d'autres lignes `FEE-` : **refusé** (b).
   - Colonne *Total fees* absente (colonne facultative du lecteur, `OPTIONAL_COLUMNS`, `crates/kesh-import/src/wise.rs:91`) :
     rien à juger, accepté.
-  - Le contrôle vient **après** les contrôles existants du lecteur (`parse_wise_csv`, `wise.rs:451-499` : un fichier
+  - Le contrôle vient **après** les contrôles existants du lecteur (`parse_wise_csv`, `wise.rs:451-509`, contrôles de
+    fichier `:491-494` : un fichier
     cassé garde son refus d'aujourd'hui) ; il vaut pour **tout** relevé Wise, envoyé à part ou dans un zip.
 
 ## Exigences
@@ -107,7 +128,7 @@ place, rien recopié ; mesure par un script hors dépôt, `python3 -I`, comptes 
 | `FR-39-11e-1` | `POST /api/v1/wise-imports` accepte, dans un champ `file`, le zip de Wise tel que téléchargé ; ses CSV vont chacun au solde de leur devise, comme des fichiers à part. | AC-1, AC-3 |
 | `FR-39-11e-2` | Seules les entrées `.csv` à la racine sont lues ; nombre d'entrées, taille décompressée et chemins bornés ; archive refusée par un code fermé. | AC-2 |
 | `FR-39-11e-3` | Un relevé exporté sans les frais séparés est refusé par un code neuf, message aux quatre locales qui dit de réexporter en cochant l'option ; un relevé sans frais sur la période est accepté. | AC-4 |
-| `FR-39-11e-4` | Le compte rendu nomme chaque fichier, son archive, ses lignes lues, importées et ignorées comme doublons, ses soldes, et les entrées ignorées ; relisible par l'API. | AC-3, AC-5 |
+| `FR-39-11e-4` | Le compte rendu de la réponse `201` nomme chaque fichier, son archive, ses lignes lues, importées et ignorées comme doublons, ses soldes, et les entrées ignorées ; chaque import créé se relit ensuite par l'API (sans l'archive ni les entrées ignorées). | AC-3, AC-5 |
 | `NFR-39-11e-1` | DRY : lecture bornée d'une entrée de zip partagée avec la sauvegarde ; chemin d'import de 39-11b inchangé ; aucune migration, aucune route neuve. | AC-6 |
 | `NFR-39-11e-2` | `docs/api-external.md` (exemple `curl`) et manuel utilisateur (`.tex`) disent comment exporter et ce que Kesh accepte. | AC-5, AC-7 |
 
@@ -140,16 +161,24 @@ place, rien recopié ; mesure par un script hors dépôt, `python3 -I`, comptes 
 3. **AC-3 — Compte rendu.** La réponse `201` de 39-11b (`WiseImportResponse`, `:118-123`) gagne, sans rien retirer :
    `FileReport.rows` (lignes lues du fichier, = `inserted + duplicates`), `FileReport.archive` (`string | null`), et
    `ignoredEntries: [{ archive, entry }]` (toujours présent, vide sans zip). La trace `wise_import.created` porte ces
-   mêmes champs (sa clé `files` sérialise `FileReport`, `:570-574` ; ajouter `ignoredEntries`). « Soldes contrôlés » :
+   mêmes champs (sa clé `files` sérialise `FileReport`, `:570-574` ; ajouter `ignoredEntries`). **Noms bornés** :
+   chaque nom d'entrée ignorée (`ignoredEntries[].entry`) et `details.entry` d'un refus sont rognés à 255 octets à la
+   frontière d'un caractère par le même `truncate_bytes` que le nom retenu, et leurs caractères de contrôle remplacés
+   par `?` — un nom de zip peut faire 65 535 octets, 64 entrées tiendraient plusieurs Mio dans la réponse et l'audit. « Soldes contrôlés » :
    un fichier accepté a eu son solde courant contrôlé ligne à ligne (le lecteur refuse sinon,
-   `WISE_CSV_RUNNING_BALANCE_BREAK`) — dit par la documentation, sans champ neuf. **Relisible par l'API** : la réponse
-   `201` est le compte rendu ; chaque entrée créée se relit ensuite par `GET /api/v1/bank-imports/{importId}` (clé
-   `read` admise) ; la trace d'audit n'est lisible qu'à l'écran (le journal d'audit est fermé aux clés,
-   `docs/api-external.md` § 4), ce que la documentation dit. Les tests de 39-11b gardent leurs assertions ; une
+   `WISE_CSV_RUNNING_BALANCE_BREAK`) — dit par la documentation, sans champ neuf. **Ce qui se relit** : le compte
+   rendu complet n'est rendu **qu'à l'envoi**, par la réponse `201` ; perdue, un nouvel envoi du même zip est refusé
+   `BANK_IMPORT_DUPLICATE_FILE`. Ensuite, chaque import créé se relit par `GET /api/v1/bank-imports/{importId}` (clé
+   `read` admise) : il rend `BankImportResponse` (`crates/kesh-api/src/routes/bank_imports.rs:295` : `filename` = le
+   nom de l'**entrée** CSV, période, soldes d'ouverture et de clôture, `transactionCount`, `importedAt`) et ses
+   transactions — **ni** le nom de l'archive, **ni** `rows`, **ni** `ignoredEntries`, qui n'ont pas de colonne
+   (l'étendre demanderait une migration, hors périmètre). La trace `wise_import.created`, qui porte tout, n'est lisible
+   qu'à l'écran (le journal d'audit est fermé aux clés, `docs/api-external.md` § 4). La documentation dit ces trois
+   points. Les tests de 39-11b gardent leurs assertions ; une
    assertion qui compare la réponse ou la trace **entière** gagne les champs neufs, déclarée au Change Log.
 4. **AC-4 — Le bon format des frais.** Au lecteur (`crates/kesh-import/src/wise.rs`) : variante neuve
-   `WiseCsvError::FeesNotSeparated { lines: Vec<usize>, count: usize }` (`lines` = les lignes à frais, au plus
-   `MAX_CSV_LINE_ERRORS`, `crates/kesh-import/src/error.rs:49` ; `count` = leur nombre), code
+   `WiseCsvError::FeesNotSeparated { lines: Vec<usize>, count: usize }` (`lines` = les lignes à frais **sans leur
+   `FEE-`**, au plus `MAX_CSV_LINE_ERRORS`, `crates/kesh-import/src/error.rs:49` ; `count` = leur nombre), code
    `WISE_CSV_FEES_NOT_SEPARATED` (`WiseCsvError::code`, `:326`), contrôle après `check_running_balance` (`:494`),
    règle D5. À l'API : refus **propre** `422 WISE_CSV_FEES_NOT_SEPARATED` (et non `WISE_CSV_INVALID`, pour que le
    message soit une consigne), à la place de `WISE_CSV_INVALID` dans l'ordre des refus (le premier fichier refusé, dans
@@ -161,8 +190,9 @@ place, rien recopié ; mesure par un script hors dépôt, `python3 -I`, comptes 
    Log. `WISE_CSV_INVALID` du même fichier (forme cassée) passe avant. Tests (lecteur, entrées fabriquées à partir des
    fixtures fictives) : relevé « sans » (lignes `FEE-` retirées, montant de l'origine frais compris, *Total fees*
    gardé, solde courant recalculé) refusé, lignes et nombre justes ; les trois fixtures acceptées ; relevé sans aucun
-   frais accepté ; fichier mixte accepté ; *Total fees* `0`, `0.00` ou vide = nul ; colonne *Total fees* absente
-   acceptée. Inventaire **avant** d'écrire le contrôle : toute entrée de test existante (`crates/kesh-import/tests/
+   frais accepté ; fichier mixte à **une** ligne sans `FEE-` accepté ; fichier à `FEE-` dont **deux** lignes à frais
+   n'ont pas la leur refusé (b) ; relevé sans `FEE-` à une seule ligne à frais refusé (a, limite écrite) ; *Total fees* `0`,
+   `0.00` ou vide = nul ; colonne *Total fees* absente acceptée. Inventaire **avant** d'écrire le contrôle : toute entrée de test existante (`crates/kesh-import/tests/
    wise_csv.rs`, tests de `wise.rs`, `crates/kesh-api/tests/wise_import_e2e.rs`, tests de `wise_imports.rs`) qui
    porte une ligne à *Total fees* non nul sans aucune ligne `FEE-` — elle deviendrait rouge : chaque cas modifié
    (ajout de la ligne `FEE-` ou *Total fees* mis à zéro) est nommé au Change Log, avec la raison ; aucune attente
@@ -170,7 +200,8 @@ place, rien recopié ; mesure par un script hors dépôt, `python3 -I`, comptes 
 5. **AC-5 — `docs/api-external.md`**, § « Le compte Wise et l'import de ses relevés » (`:1007-1011`) : le champ `file`
    admet le zip (D1 à D4 en une phrase chacune, les bornes nommées), l'ordre des refus complété (`WISE_ZIP_INVALID`
    après le `404`, `WISE_CSV_FEES_NOT_SEPARATED` au rang de `WISE_CSV_INVALID`), la réponse avec `rows`, `archive`,
-   `ignoredEntries`, et comment relire (AC-3). **Exemple `curl`** (clé `read-write`, nom de compte et fichier fictifs,
+   `ignoredEntries`, et ce qui se relit (AC-3 : le compte rendu à l'envoi seulement ; `GET /bank-imports/{id}` sans
+   archive ni entrées ignorées ; la trace à l'écran). **Exemple `curl`** (clé `read-write`, nom de compte et fichier fictifs,
    `curl -F "account=…" -F "file=@…zip"`, réponse abrégée). Deux lignes neuves à la table des erreurs (`:1315-1316`,
    même forme). Pas d'outil MCP.
 6. **AC-6 — DRY et non-régression.** La lecture bornée d'une entrée (`lire_borne`,
@@ -186,11 +217,16 @@ place, rien recopié ; mesure par un script hors dépôt, `python3 -I`, comptes 
    (`\label{sec:wise-export}`) dans § *Import bancaire* (`\label{sec:import-bancaire}`, `:3012`), que 39-11d citera :
    choisir la période, le format **CSV**, **cocher** l'option des frais séparés (et pourquoi : sinon les montants
    comprennent les frais et Kesh refuse le relevé) ; le zip se donne **tel quel**, sans le décompresser ; un relevé
-   sans frais sur la période passe ; ce que Kesh ignore dans un zip ; un refus n'importe rien. Gardes de
+   sans frais sur la période passe ; la limite de D5 (un refus alors que l'option est cochée : élargir la période
+   d'un jour) ; ce que Kesh ignore dans un zip ; un refus n'importe rien. Gardes de
    `crates/kesh-api/tests/textes_coherents.rs` lues avant d'écrire (aucun numéro de compte du plan). Contrôle local du
    PDF permis, aplati (`pdftotext … | tr '\n' ' ' | tr -s ' '`), PDF non commité.
 
 ## Tâches
+
+*Ordre des commits (L9 de la validation P1 : la story n'est pas scindée)* : T1 (D5, livrable seul, protège déjà
+l'import à plat) **d'abord, dans un commit séparé**, puis T2 et T3 (zip). Si une passe de revue de code stagne, c'est
+la couture d'un découpage.
 
 - [ ] T0 — Relire au code les lignes citées ; inventaire de l'AC-4 (entrées de test à *Total fees* sans `FEE-`),
   écrit au Change Log avant tout changement.
@@ -213,8 +249,12 @@ place, rien recopié ; mesure par un script hors dépôt, `python3 -I`, comptes 
   une archive illisible, archive illisible avant un CSV illisible) ; clé `read-write` admise, clé `read` → `403`
   (comme 39-11b) ; `ignoredEntries` et trace `wise_import.created`.
 - **Sondes négatives** (mutations à jouer et consigner) : borne cumulée remplacée par la taille déclarée ; critère D5
-  passé « par ligne » (le fichier mixte doit rougir) ; `enclosed_name` ignoré ; condition « aucune ligne `FEE-` »
-  retirée.
+  passé « par ligne », seuil 1 (le fichier mixte à une ligne doit rougir) ; seuil de (b) passé à 3 (le refus à deux
+  lignes doit rougir) ; règle (a) retirée (le relevé « sans » à une ligne doit rougir) ; `enclosed_name` ignoré ; contrôle du `:` retiré ; métadonnées lues par `by_index` au lieu de
+  `by_index_raw` (`ENCRYPTED` doit rougir) ; rognage des noms ignorés retiré.
+- **Relevés réels, test ignoré** (comme `real_statements_are_read`) : un test `#[ignore]` lit les zips du dossier que
+  nomme une variable d'environnement (aucun chemin écrit dans le dépôt, rien recopié) ; les zips « avec » s'importent
+  (lecteur et archive), le zip « sans » est refusé `WISE_CSV_FEES_NOT_SEPARATED`.
 - **Aucune donnée réelle** : fixtures fictives de 39-11a et entrées dérivées dans les tests ; aucun zip réel ni nom de
   fichier réel commité (le gabarit `statement_<n>_<DEVISE>_…` des tests prend un `<n>` inventé).
 - Gate ciblé entre les passes ; gate complet, `scripts/gate-ci.sh` et E2E complet au dernier commit de code (aucun
@@ -244,7 +284,8 @@ est refusé avec la marche à suivre, pour que les frais ne se perdent jamais da
 ## Notes de développement
 
 - `zip` 2.6.1 (`Cargo.lock`), `default-features = false, features = ["deflate"]` : `ZipArchive::new`, `len()`,
-  `by_index(i)`, `ZipFile::{name, enclosed_name, is_dir, encrypted, compression}` ; une erreur de CRC ne paraît qu'en
+  `by_index_raw(i)` pour les métadonnées (`ZipFile::{name, enclosed_name, is_dir, encrypted, compression}`, sans
+  décompresser), puis `by_index(i)` pour lire les seules entrées retenues (D4) ; une erreur de CRC ne paraît qu'en
   fin de lecture d'une entrée (lire jusqu'au bout avant de l'accepter).
 - Les octets d'un champ `file` sont un `Bytes` : `Cursor` dessus pour `ZipArchive`, sans copie.
 - La limite du corps de la route (`DefaultBodyLimit`, `lib.rs:977-980`) borne déjà la taille **compressée** reçue.
@@ -254,3 +295,14 @@ est refusé avec la marche à suivre, pour que les frais ne se perdent jamais da
 
 - 2026-11-22 — fiche rédigée (Claude Opus 5.5), `drafted` ; constats mesurés sur les relevés réels (métadonnées
   seules). Validation P1 à lancer (`kesh-gate-logs/s39-11e/validation-p1-prompt.md`).
+- 2026-11-22 — validation P1 (Claude Sonnet 5.5, contexte frais, rapport `kesh-gate-logs/s39-11e/validation-p1-rapport.md`) :
+  **0 CRITICAL, 0 HIGH, 0 MEDIUM, 10 LOW**. Appliqués à la fiche : L1 (métadonnées par `by_index_raw`, D4 et Notes) ;
+  L2 (lettre de lecteur refusée par un contrôle explicite du `:`, `..` refusé seulement s'il sort de la racine) ; L3
+  (portée et ordre des contrôles, D4) ; L4 (noms d'entrées rognés à 255 octets, caractères de contrôle remplacés,
+  AC-3) ; L5 (refus **aussi** dès deux lignes à frais sans leur `FEE-`, règle (b), D5, AC-4, sondes) ; L6 (limite
+  écrite, D5 et AC-7 : un bon fichier à une seule ligne à frais coupée par la borne est refusé, réexporter sur une
+  période élargie — préféré à une tolérance qui laisserait passer un montant faux en silence) ; L7 (ce que `GET /bank-imports/{id}` rend, exactement ; l'étendre
+  demanderait une migration, non fait) ; L8 (39-11d : phrase contradictoire retirée, Change Log corrigé). L9 : pas de
+  scission ; D5 développé en premier, dans un commit séparé (ordre écrit aux Tâches). L10 : hors périmètre (noms dans
+  le fichier d'epic), rien ici. Citation `wise.rs:451-499` corrigée en `:451-509`. Aucune remédiation ne touchant du
+  code et la passe ne rendant rien au-dessus de LOW, la boucle se clôt : `ready-for-dev`.
