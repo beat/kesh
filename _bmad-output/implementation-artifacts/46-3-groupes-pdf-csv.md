@@ -259,9 +259,8 @@ groupes en gras ; le CSV gagne les colonnes `Niveau` et `TypeLigne`. Les montant
 au centime, l'équidistant loin de zéro. Sans paramètre, l'export ne change pas (CSV identique à l'octet, PDF aux mêmes
 lignes de texte).
 
-**Changed** — L'export d'écran suit la hiérarchie affichée, avec les colonnes `Niveau;TypeLigne` et les sous-totaux ;
-pour additionner la colonne `Solde` dans un tableur, filtrer `TypeLigne` sur les lignes `compte` et `propre` (le solde propre d'un groupe), ou décocher
-« Hiérarchie des groupes » pour l'export à plat d'avant ; les montants groupés sont arrondis au centime. Seul un appel
+**Changed** — L'export d'écran suit la hiérarchie affichée, avec les colonnes `Niveau;TypeLigne` et les sous-totaux.
+Le CSV groupé ne s'additionne pas tel quel (un groupe fermé n'y porte que son sous-total) : chaque section porte sa ligne de total ; pour additionner la colonne `Solde` dans un tableur, décocher « Hiérarchie des groupes » pour l'export à plat d'avant ; les montants groupés sont arrondis au centime. Seul un appel
 de l'API sans paramètre garde l'export d'avant, à l'octet.
 
 ### Choix du développement

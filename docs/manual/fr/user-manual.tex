@@ -4280,9 +4280,7 @@ résultat~», «~Décompte TVA~»).
 résultat \textbf{suit l'écran}~: même niveau de détail, mêmes groupes ouverts ou fermés, mêmes
 sous-totaux, sur la ligne du titre ou en pied. Exporté sans niveau --- à l'écran, case \textbf{Hiérarchie des groupes} décochée --- il reste à
 plat, tel qu'avant. Depuis l'écran, l'export suit la hiérarchie affichée, avec les colonnes
-\texttt{Niveau} et \texttt{TypeLigne} et les sous-totaux~: pour additionner la colonne \texttt{Solde}
-dans un tableur, filtrez \texttt{TypeLigne} sur les lignes \texttt{compte} et \texttt{propre} (le solde propre d'un groupe), ou décochez «~Hiérarchie des
-groupes~» pour l'export à plat d'avant. Les montants groupés sont arrondis au centime.
+\texttt{Niveau} et \texttt{TypeLigne} et les sous-totaux. Le CSV groupé ne s'additionne pas tel quel (un groupe fermé n'y porte que son sous-total)~: chaque section porte sa ligne de total~; pour additionner la colonne \texttt{Solde} dans un tableur, décochez «~Hiérarchie des groupes~» pour l'export à plat d'avant. Les montants groupés sont arrondis au centime.
 \begin{itemize}
     \item \textbf{PDF} --- sous la période, une ligne dit le niveau imprimé («~Niveau~2~», ou
           «~Tous les comptes~»), suivie de «~, détail ajusté à la main~» si vous avez ouvert ou
