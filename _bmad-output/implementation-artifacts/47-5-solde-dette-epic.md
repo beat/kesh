@@ -98,15 +98,16 @@ registre. Reporté au registre (§ *Registre de la dette de l'epic*), sept ligne
 
 | Story | Passe | Sévérité | Objet | Issue | Sort |
 |---|---|---|---|---|---|
-| 47-1 | P1 | LOW | phrase « réactivez-le d'abord » au singulier pour plusieurs sources (L5), visible | à ouvrir (`bug`, P4) | reportée (hors plafond) |
-| 47-1 | P1 | LOW ×7 | L1 course, L2 doc-comments, L3 commentaire `Set`, L4 verrous, L6 test `update_in_tx`, L8 sauvegarde 0.20.0, L9 table G9 | à ouvrir (`technical-debt`, P4) | reportée (hors plafond) |
-| 47-2 | P2 | LOW ×3 | commentaire du rejeu de l'archivage, doc de `create`, ordre des refus non testé | à ouvrir (`technical-debt`, P4) | reportée (hors plafond) |
+| 47-1 | P1 | LOW | phrase « réactivez-le d'abord » au singulier pour plusieurs sources (L5), visible | non ouverte (`bug`, P4) | corrigée en 47-5 (second temps) |
+| 47-1 | P1 | LOW | liste des sources du refus non bornée (L5, second point) | à ouvrir (`enhancement`, P4) | reportée (décision d'interface) |
+| 47-1 | P1 | LOW ×8 | L1 course, L2 doc-comments, L3 commentaire `Set`, L4 verrous, L6 test `update_in_tx`, L7 rédaction, L8 sauvegarde 0.20.0, L9 table G9 | non ouverte (`technical-debt`, P4) | corrigée en 47-5 (second temps) |
+| 47-2 | P2 | LOW ×3 | commentaire du rejeu de l'archivage, doc de `create`, ordre des refus non testé | non ouverte (`technical-debt`, P4) | corrigée en 47-5 (second temps) |
 | 47-3 | P2 | LOW ×3 | `presentation.rs` : `ecart_conserve` non testé ; message de repli ; filtre de type non tué | non ouverte (`technical-debt`, P4) | corrigée en 47-5 |
 | 47-4 | P1 | LOW ×4 | manuel : phrase de l'accueil, « 959a CO attend », figure `mi-balance.png`, rangement des clés `.ftl` | non ouverte (`documentation`, P4) | corrigée en 47-5 |
 | 47-4 | gate E2E | — | `bank-import.spec.ts:130`, course (compte avant chargement) | tracée hors epic (`known-failure`, P3) | reportée |
 | 47-3 (L-5) | décision du point e | — | avertissement non bloquant, miroir sous un groupe d'un autre type | à ouvrir (`enhancement`, P3) | reportée |
 
-(L7 de la 47-1 — deux échecs E2E hors liste — est depuis identifié : #1282 ; rien à ouvrir.)
+(L7 de la 47-1 — deux échecs E2E hors liste — est depuis identifié : #1282 ; seule la rédaction est reprise.)
 
 **T1 — choix (AC 1, 2).** Plafond de deux issues : les lignes 47-3 P2 et 47-4 P1, une issue chacune telle que la liste des
 issues à ouvrir les groupe, désignées par la consigne de l'orchestrateur ; aucune n'exige de migration. **Écart au
@@ -143,7 +144,49 @@ le Project Lead ; les deux lignes corrigées ne sont pas à ouvrir (marquées «
 - Rien de visible à l'écran ni à l'API : aucune capture d'écran neuve hors la figure ; ligne des *Notes de version*
   écrite (manuel).
 
-**T3 — gates (AC 4, 5).** Dernier commit de code `7fdb0fa9` (le commit suivant, `fef4de33`, ne porte que la figure PNG
+**T2 bis — second temps (décision du responsable de l'epic du 22.11).** Les LOW reportés des 47-1 (revue P1) et 47-2
+(revue P2) se corrigent dans la 47-5 quand ils sont faciles et sans risque ; le plafond de deux issues du kickoff est
+ainsi dépassé, par cette décision. Corrigés :
+- **47-1 L5** — `crates/kesh-api/src/errors.rs` : `account_is_mirror_reactivate_message` rend la clé et le repli selon
+  le nombre de sources **archivées** : `error-account-is-mirror-reactivate-first` (une) ou
+  `error-account-is-mirror-reactivate-first-many` (plusieurs, neuve dans les quatre catalogues : « sont archivés :
+  réactivez-les d'abord, puis retirez leur compte miroir », DE, IT, EN accordés). Test : deux sources archivées dans
+  `mirror_refusals_map_to_their_status_code_and_details`. Sondes hors dépôt (`mut2-*.log`) : toujours le singulier,
+  rouge ; toujours le pluriel, rouge ; copie intacte verte. La borne de la liste des sources (second point de L5) reste
+  en issue : choisir une borne et la forme du reste est une décision d'interface.
+- **47-1 L9** — les treize clés des refus du miroir entrent dans la garde commune G9
+  (`crates/kesh-api/tests/textes_coherents.rs`, paramètres `{ $number }`, `{ $sources }`, `{ $archived }`) ; la
+  comparaison des replis, doublon, est retirée du test d'`errors.rs`, qui garde la présence dans les quatre catalogues
+  et l'absence de chiffre.
+- **47-1 L2, 47-2 P2-L2** — doc-comments de `create` (refus du miroir juste après `MULTI_CURRENCY_DISABLED`, avant le
+  parent ; verrou de la cible avant celui du parent), d'`update` (compte miroir puis parent, avant les refus
+  existants) et d'`archive_guarded` (compte miroir entre gain / perte / conversion et désignation), lus contre le code.
+- **47-1 L3** — commentaire de `guard_mirror_update` : un lien forgé reposé tel quel n'est pas revalidé, sans effet
+  comptable ; tests neufs dans `les_regles_de_la_source_se_rejouent_quand_le_miroir_reste` : miroir reposé tel quel
+  vers une cible forgée accepté, retypage refusé (`accountType`), cible introuvable sans effet sur un retypage.
+- **47-1 L4** — commentaire de la garde des lignes (`journal_entries.rs`) : le verrou d'intervalle et l'attente
+  possible d'une création de compte, raisonnés, non mesurés (la revue recommandait de documenter).
+- **47-1 L6** — `aucune_ecriture_ne_se_passe_sur_un_compte_miroir` exerce aussi `journal_entries::update` : une ligne
+  déplacée vers le miroir est refusée (`ACCOUNT_NOT_POSTABLE`, « 1179 »).
+- **47-1 L1** — `course_pose_contre_archivage` attend les **deux** témoins, chacun par le texte de sa requête
+  (`CIBLE_DE_LA_POSE`, `CIBLE_DE_L_ARCHIVAGE`) ; `course_ecriture_contre_pose` attend la requête de la cible, non la
+  lecture de la source.
+- **47-1 L7** — annotation datée au Dev Agent Record de la 47-1 (échecs attendus par récurrence, non par la liste ;
+  depuis tracés en #1282), sans réécrire le relevé.
+- **47-1 L8** — `docs/migrations-idempotence-audit.md` : « testé en 0.19.0, la 0.20.0 par la même règle, non testée »
+  (le fichier de migration n'est pas touché).
+- **47-2 P2-L1** — commentaire du rejeu de l'archivage (`routes/accounts.rs`) : la raison « sans cycle » est que la
+  pose verrouille la cible avant d'écrire le lien, et qu'aucun geste qui tient la source n'attend la cible quand le
+  lien existe déjà.
+- **47-2 P2-L3** — test neuf `a_la_creation_le_refus_du_miroir_passe_avant_celui_du_parent` (parent compte de gains de
+  change et cible imputable : `MIRROR_ACCOUNT_INVALID` ; sans miroir : `ACCOUNT_IS_FX_DIFFERENCE_ACCOUNT`).
+- Comptés (de `6878a873` à `HEAD`) : `account_mirror.rs` 11 → 12 tests `#[sqlx::test]` (un neuf, trois étendus) ;
+  `errors.rs` 38 → 38 (un étendu).
+- Grep des symptômes : « réactivez-le » (code, quatre locales, manuels, `docs/api-external.md` : aucune autre copie),
+  « 0.19.0 ou 0.20.0 » (une autre copie : la note de version de la 47-1, laissée telle quelle — vraie par la règle
+  de la colonne facultative, elle ne prétend pas à un test).
+
+**T3 — gates (AC 4, 5).** Premier temps — dernier commit de code `7fdb0fa9` (le commit suivant, `fef4de33`, ne porte que la figure PNG
 tirée de l'E2E) :
 - gate ciblé (sans base) : `cargo fmt` rouge au premier passage (formatage des tests neufs), corrigé par `rustfmt`
   avant le commit ; clippy workspace vert ; `kesh-report` lib 151 passés, 1 ignoré ;
@@ -162,12 +205,23 @@ tirée de l'E2E) :
   l'intégration.
 - L'E2E complet ci-dessus a été joué avant cette décision ; la nouvelle règle (E2E des seules specs ajoutées) ne
   demandait ici aucun E2E (aucune spec neuve, deux specs modifiées).
+- **Second temps — dernier commit de code `acf670b8`** (règle des gates de la nuit du 22.11 : fmt, clippy, nextest complet,
+  frontend complet ; E2E des seules specs ajoutées ; pas de gate-ci) : backend complet (`scripts/test-fast.sh --ci`,
+  base remise à zéro ; un premier essai est tombé sur un serveur de test arrêté avant tout test, rejoué) — fmt et
+  clippy verts, nextest **6253 passés, 15 ignorés** (`gate-backend-2.log`) ; frontend — `check` 0 erreur,
+  `lint-i18n-ownership` vert, Vitest **4871 passés (284 fichiers)**, `build` vert ; **E2E : aucun** (le second temps
+  n'ajoute ni ne modifie aucune spec) ; gate-ci et E2E complet dus à la branche d'intégration de tous les epics.
 - Décompte d'issues : non relevé (`gh` hors de portée) ; à relever par le Project Lead à côté du compte au tag v0.20.0
   et de l'objectif de l'epic (§ *Décomptes d'issues*). Aucune issue à fermer par cette story (les deux lignes traitées
   n'ont pas été ouvertes) : aucune ligne `closes #N` à préparer. Messages de commit sans mot-clé de fermeture.
 
 ### File List
 
+- `crates/kesh-api/src/errors.rs`, `crates/kesh-api/src/routes/accounts.rs`, `crates/kesh-api/tests/textes_coherents.rs`
+- `crates/kesh-db/src/repositories/accounts.rs`, `crates/kesh-db/src/repositories/journal_entries.rs`,
+  `crates/kesh-db/tests/account_mirror.rs`
+- `docs/migrations-idempotence-audit.md`, `_bmad-output/implementation-artifacts/47-1-miroir-modele-et-depot.md`
+  (annotation datée)
 - `crates/kesh-report/src/presentation.rs`
 - `crates/kesh-i18n/locales/{de-CH,en-CH,fr-CH,it-CH}/messages.ftl`
 - `docs/manual/fr/user-manual.tex`, `docs/manual/fr/screenshots/mi-balance.png`
@@ -195,3 +249,7 @@ tirée de l'E2E) :
   modèle et dépôt, 47-2 API et écran du plan, 47-3 présentation, 47-4 écrans des rapports, manuel et E2E ; K10 retiré) ;
   renvois « 47-1a à 47-4 » devenus « 47-1 à 47-4 » ; plafond inchangé (deux issues). Six critères (inchangés).
   **Statut remis à `drafted`** en attendant la revalidation.
+- 2026-11-22 — second temps (Opus 5.5), décision du responsable de l'epic du 22.11 : les LOW reportés des 47-1 (L1 à
+  L9) et 47-2 (P2-L1 à P2-L3) corrigés, sauf la borne de la liste des sources du refus `ACCOUNT_IS_MIRROR` (issue,
+  décision d'interface) ; registre et liste des issues à ouvrir mis à jour ; gates au dernier commit de code `acf670b8`
+  (backend 6253, frontend 4871, aucun E2E) ; revue de code P1 à lancer sur le nouveau HEAD (prompt réécrit).
