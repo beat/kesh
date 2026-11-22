@@ -4333,7 +4333,7 @@ stripe-gap-receipt-import = Import the statement of the destination account (Wis
 
 # Story 39-11d — écrans Wise : réglages du compte, page Wise (import des relevés et du zip), libellés
 wise-csv-line-field-count = number of cells differs from the header
-wise-csv-line-date = unreadable or malformed date (DD-MM-YYYY expected)
+wise-csv-line-date = unreadable or malformed date (DD-MM-YYYY or YYYY-MM-DD expected)
 wise-csv-line-date-time = unreadable timestamp
 wise-csv-line-amount = unreadable or empty amount (decimal point expected)
 wise-csv-line-rate = unreadable exchange rate
@@ -4350,6 +4350,7 @@ wise-import-error-fees-not-separated = The statement { $file } was exported with
 wise-import-error-fees-not-separated-how = Export it again from Wise with the option that shows fees as separate transactions ticked, then import the new file.
 wise-import-error-fees-not-separated-lines = { $count } operation(s) with fees but without their fee line (lines { $lines }).
 wise-import-error-duplicate-currency-file = Two files carry the statement in { $currency } ({ $filenames }): only one file per currency. Nothing was imported.
+wise-import-error-duplicate-file = A statement in this upload was already imported, under the name “{ $filename }”: nothing was imported.
 wise-import-error-missing-columns = The file { $file } is not a Wise statement: missing columns ({ $columns }). Export the balance statement from Wise in CSV format.
 wise-import-error-duplicate-column = The file { $file } has a duplicate column: { $columns }.
 wise-import-error-empty = The file { $file } is empty: no data line.

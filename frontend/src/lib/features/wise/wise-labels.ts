@@ -7,9 +7,11 @@
  * gabarit) : `i18n-keys.test.ts` les voit dès qu'elles manquent d'un catalogue.
  *
  * Les refus de l'archive (`WISE_ZIP_INVALID`, sept raisons) et ceux qui ne
- * sont pas propres à Wise (`PROVIDER_*`, `BANK_IMPORT_DUPLICATE_FILE`,
- * `BANK_ACCOUNT_CLOSED`…) se disent par le **message du serveur**, déjà
- * traduit : il nomme l'archive et dit quoi faire (amendement de la 39-11e).
+ * sont pas propres à Wise (`PROVIDER_*`, `BANK_ACCOUNT_CLOSED`…) se disent par
+ * le **message du serveur**, déjà traduit : il nomme l'archive et dit quoi
+ * faire (amendement de la 39-11e). Seul le refus de doublon
+ * (`BANK_IMPORT_DUPLICATE_FILE`), dont le message ne nomme rien, a sa phrase :
+ * elle dit le nom sous lequel le relevé a déjà été importé (revue P1, M1).
  */
 import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
 import { isApiError } from '$lib/shared/utils/api-error';
@@ -26,7 +28,7 @@ export function wiseLineErrorLabel(l: Pick<ProviderLineError, 'code'>): string {
 		case 'FIELD_COUNT':
 			return i18nMsg('wise-csv-line-field-count', 'nombre de cellules différent de l’en-tête');
 		case 'DATE':
-			return i18nMsg('wise-csv-line-date', 'date illisible ou hors format (JJ-MM-AAAA attendu)');
+			return i18nMsg('wise-csv-line-date', 'date illisible ou hors format (JJ-MM-AAAA ou AAAA-MM-JJ attendu)');
 		case 'DATE_TIME':
 			return i18nMsg('wise-csv-line-date-time', 'horodatage illisible');
 		case 'AMOUNT':
@@ -90,7 +92,10 @@ function fileOf(details: Details): string {
  * (`WISE_CSV_INVALID`) se dit par sa cause, le fichier nommé ; un relevé exporté
  * sans les frais séparés (`WISE_CSV_FEES_NOT_SEPARATED`), par la consigne de
  * l'exporter de nouveau, option cochée ; deux fichiers d'une même devise, par
- * leurs noms. Tout autre refus : le message du serveur.
+ * leurs noms ; un relevé déjà importé, par le nom sous lequel il l'a été
+ * (`details.existingFilename` — le serveur ne garde pas le zip d'un import
+ * passé, il ne peut donc pas le nommer). Tout autre refus : le message du
+ * serveur.
  */
 export function wiseImportErrorLines(err: unknown): string[] {
 	if (!isApiError(err)) return [errorMessageOf(err)];
@@ -132,6 +137,17 @@ export function wiseImportErrorLines(err: unknown): string[] {
 		}
 		case 'WISE_CSV_INVALID':
 			return wiseCsvInvalidLines(err, details);
+		case 'BANK_IMPORT_DUPLICATE_FILE': {
+			const filename = typeof details?.existingFilename === 'string' ? details.existingFilename : '';
+			if (filename === '') return [errorMessageOf(err)];
+			return [
+				i18nMsg(
+					'wise-import-error-duplicate-file',
+					'Un relevé de cet envoi a déjà été importé, sous le nom « { $filename } » : rien n’a été importé.',
+					{ filename },
+				),
+			];
+		}
 		default:
 			return [errorMessageOf(err)];
 	}

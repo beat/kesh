@@ -4408,7 +4408,7 @@ stripe-gap-receipt-import = Importez le relevé du compte de destination (Wise).
 
 # Story 39-11d — écrans Wise : réglages du compte, page Wise (import des relevés et du zip), libellés
 wise-csv-line-field-count = nombre de cellules différent de l’en-tête
-wise-csv-line-date = date illisible ou hors format (JJ-MM-AAAA attendu)
+wise-csv-line-date = date illisible ou hors format (JJ-MM-AAAA ou AAAA-MM-JJ attendu)
 wise-csv-line-date-time = horodatage illisible
 wise-csv-line-amount = montant illisible ou vide (point décimal attendu)
 wise-csv-line-rate = cours de change illisible
@@ -4425,6 +4425,7 @@ wise-import-error-fees-not-separated = Le relevé { $file } a été exporté san
 wise-import-error-fees-not-separated-how = Exportez-le de nouveau depuis Wise en cochant « Afficher les transactions dont les frais sont indiqués séparément », puis importez le nouveau fichier.
 wise-import-error-fees-not-separated-lines = { $count } opération(s) à frais sans leur ligne de frais (lignes { $lines }).
 wise-import-error-duplicate-currency-file = Deux fichiers portent le relevé en { $currency } ({ $filenames }) : un seul fichier par devise. Rien n’a été importé.
+wise-import-error-duplicate-file = Un relevé de cet envoi a déjà été importé, sous le nom « { $filename } » : rien n’a été importé.
 wise-import-error-missing-columns = Le fichier { $file } n’est pas un relevé Wise : colonnes manquantes ({ $columns }). Exportez de Wise le relevé du solde au format CSV.
 wise-import-error-duplicate-column = Le fichier { $file } porte une colonne en double : { $columns }.
 wise-import-error-empty = Le fichier { $file } est vide : aucune ligne de données.

@@ -331,8 +331,10 @@ async fn parse_form(mut multipart: Multipart) -> Result<WiseImportForm, AppError
 
 /// Traduit le refus du lecteur (39-11a) en `422 WISE_CSV_INVALID`, le fichier
 /// nommé — sauf le relevé exporté sans les frais séparés (Story 39-11e, D5),
-/// qui a son code propre, `422 WISE_CSV_FEES_NOT_SEPARATED`, avec l'archive
-/// d'où vient le fichier (`None` pour un fichier envoyé à part).
+/// qui a son code propre, `422 WISE_CSV_FEES_NOT_SEPARATED`. L'un et l'autre
+/// portent l'archive d'où vient le fichier (`None`, rendu `null`, pour un
+/// fichier envoyé à part) : deux zips d'un même envoi peuvent porter des
+/// entrées de même nom (Story 39-11d, revue P1, M2).
 fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError {
     if let WiseCsvError::FeesNotSeparated { lines, count } = e {
         return AppError::WiseCsvFeesNotSeparated {
@@ -343,7 +345,7 @@ fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError
         };
     }
     let reason = e.code();
-    let details = match &e {
+    let mut details = match &e {
         WiseCsvError::MissingColumns(columns) => serde_json::json!({ "columns": columns }),
         WiseCsvError::DuplicateColumn(column) => serde_json::json!({ "columns": [column] }),
         WiseCsvError::Lines(lines) => serde_json::json!({ "lines": lines }),
@@ -360,6 +362,9 @@ fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError
         // `FeesNotSeparated` est rendu plus haut, par son propre code.
         WiseCsvError::Empty | WiseCsvError::FeesNotSeparated { .. } => serde_json::json!({}),
     };
+    if let serde_json::Value::Object(map) = &mut details {
+        map.insert("archive".into(), serde_json::json!(archive));
+    }
     AppError::WiseCsvInvalid {
         filename: filename.to_string(),
         reason,

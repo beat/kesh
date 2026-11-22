@@ -1193,7 +1193,9 @@ const ATTENDU = {
 	// raccourci) : **3691** (« expected 3691 to be 3692 »), relevé par la garde.
 	// Story 39-11d (fusion d'epic/40-stripe, écrans de l'import Wise, case « Compte Wise ») :
 	// **3739** (« expected 3739 to be 3691 »), relevé par la garde, non additionné.
-	sitesTotal: 3739,
+	// Revue P1 de la 39-11d (M1 : phrase du refus de doublon `wise-import-error-duplicate-file`) :
+	// **3740** (« expected 3740 to be 3739 »), relevé par la garde.
+	sitesTotal: 3740,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/

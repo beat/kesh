@@ -4327,7 +4327,7 @@ stripe-gap-receipt-import = Importieren Sie den Kontoauszug des Zielkontos (Wise
 
 # Story 39-11d — écrans Wise : réglages du compte, page Wise (import des relevés et du zip), libellés
 wise-csv-line-field-count = Zellenzahl weicht von der Kopfzeile ab
-wise-csv-line-date = Datum unlesbar oder im falschen Format (TT-MM-JJJJ erwartet)
+wise-csv-line-date = Datum unlesbar oder im falschen Format (TT-MM-JJJJ oder JJJJ-MM-TT erwartet)
 wise-csv-line-date-time = Zeitstempel unlesbar
 wise-csv-line-amount = Betrag unlesbar oder leer (Dezimalpunkt erwartet)
 wise-csv-line-rate = Wechselkurs unlesbar
@@ -4344,6 +4344,7 @@ wise-import-error-fees-not-separated = Der Auszug { $file } wurde ohne separat a
 wise-import-error-fees-not-separated-how = Exportieren Sie ihn erneut aus Wise und kreuzen Sie dabei die Option an, welche die Gebühren als eigene Transaktionen anzeigt; importieren Sie dann die neue Datei.
 wise-import-error-fees-not-separated-lines = { $count } Vorgang/Vorgänge mit Gebühren ohne ihre Gebührenzeile (Zeilen { $lines }).
 wise-import-error-duplicate-currency-file = Zwei Dateien enthalten den Auszug in { $currency } ({ $filenames }): nur eine Datei pro Währung. Nichts wurde importiert.
+wise-import-error-duplicate-file = Ein Auszug dieser Sendung wurde bereits unter dem Namen «{ $filename }» importiert: Nichts wurde importiert.
 wise-import-error-missing-columns = Die Datei { $file } ist kein Wise-Auszug: fehlende Spalten ({ $columns }). Exportieren Sie aus Wise den Auszug des Saldos im Format CSV.
 wise-import-error-duplicate-column = Die Datei { $file } enthält eine doppelte Spalte: { $columns }.
 wise-import-error-empty = Die Datei { $file } ist leer: keine Datenzeile.

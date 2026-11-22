@@ -79,8 +79,21 @@ describe('wiseImportErrorLines (Story 39-11d)', () => {
 			}),
 		);
 		expect(out[0]).toBe('Lignes en erreur dans le fichier « chf.csv » (archive « r.zip »), rien n’a été importé :');
-		expect(out[1]).toBe('Ligne 3, Date : date illisible ou hors format (JJ-MM-AAAA attendu)');
+		expect(out[1]).toBe('Ligne 3, Date : date illisible ou hors format (JJ-MM-AAAA ou AAAA-MM-JJ attendu)');
 		expect(out[2]).toBe('Ligne 5, — : INCONNU');
+	});
+
+	// Revue P1, M1 — le refus de doublon nomme le relevé déjà importé (le serveur
+	// rend `existingFilename`) ; sans nom, le message du serveur.
+	it('relevé déjà importé : le nom sous lequel il l’a été', () => {
+		expect(
+			wiseImportErrorLines(
+				refus('BANK_IMPORT_DUPLICATE_FILE', { existingImportId: 12, existingFilename: 'statement_1_CHF.csv' }),
+			),
+		).toEqual(['Un relevé de cet envoi a déjà été importé, sous le nom « statement_1_CHF.csv » : rien n’a été importé.']);
+		expect(wiseImportErrorLines(refus('BANK_IMPORT_DUPLICATE_FILE', { existingImportId: 12 }, 'déjà importé'))).toEqual([
+			'déjà importé',
+		]);
 	});
 
 	it('raison inconnue, zip refusé, autre code, erreur non API : le message du serveur', () => {

@@ -161,7 +161,10 @@
 	let hasReview = $derived(api.getReview !== undefined);
 
 	onMount(async () => {
-		const [ba, fy] = await Promise.allSettled([listBankAccounts(), listFiscalYears(), onLoad?.()]);
+		// Revue P1 de la 39-11d (L7) — une page sans revue ne lit pas les exercices : un échec de
+		// cette lecture, dont elle n'a que faire, ne doit pas masquer son import.
+		const years = hasReview ? listFiscalYears() : Promise.resolve<FiscalYearResponse[]>([]);
+		const [ba, fy] = await Promise.allSettled([listBankAccounts(), years, onLoad?.()]);
 		if (ba.status === 'fulfilled') bankAccounts = ba.value;
 		else loadError = errorMessageOf(ba.reason);
 		if (fy.status === 'fulfilled') fiscalYears = fy.value;

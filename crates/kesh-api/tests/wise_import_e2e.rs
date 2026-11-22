@@ -724,6 +724,8 @@ async fn import_refus_dans_l_ordre_roles_et_cles(pool: MySqlPool) {
         .await;
     assert_eq!((s, code(&b)), (422, "WISE_CSV_INVALID"), "{b}");
     assert_eq!(b["error"]["details"]["filename"], "mauvais.csv");
+    // Story 39-11d (revue P1, M2) : `archive` toujours présent, nul à part.
+    assert_eq!(b["error"]["details"]["archive"], Value::Null);
     assert_eq!(b["error"]["details"]["reason"], "WISE_CSV_MISSING_COLUMNS");
     assert!(b["error"]["details"]["columns"].as_array().unwrap().len() > 3);
 
@@ -985,6 +987,25 @@ async fn creer_un_solde_wise_et_ses_refus(pool: MySqlPool) {
         "paypal": { "account": WISE }, "wise": { "account": WISE } }))
     .await;
     assert_eq!((s, code(&b)), (400, "VALIDATION_ERROR"), "{b}");
+    // Story 39-11d (revue P1, L1) — `wise` et `stripe` ensemble, règle née de
+    // la fusion des Epics 39 et 40 ; et `payoutBankAccountId`, propre à Stripe,
+    // refusé dans `wise`.
+    let (s, b) = creer(json!({ "bankName": "Wise", "journalAccountId": ctx.eur,
+        "wise": { "account": WISE }, "stripe": { "account": "Stripe fictif" } }))
+    .await;
+    assert_eq!(
+        (s, code(&b)),
+        (400, "VALIDATION_ERROR"),
+        "wise + stripe : {b}"
+    );
+    let (s, b) = creer(json!({ "bankName": "Wise", "journalAccountId": ctx.eur,
+        "wise": { "account": WISE, "payoutBankAccountId": usd } }))
+    .await;
+    assert_eq!(
+        (s, code(&b)),
+        (400, "VALIDATION_ERROR"),
+        "wise.payoutBankAccountId : {b}"
+    );
     // Un IBAN donné est contrôlé.
     let (s, b) = creer(
         json!({ "bankName": "Wise", "journalAccountId": ctx.eur, "iban": "CH00 0000",
@@ -1119,6 +1140,36 @@ async fn modifier_un_solde_wise(pool: MySqlPool) {
         (b2["provider"].clone(), b2["wise"].clone()),
         (Value::Null, Value::Null)
     );
+
+    // Story 39-11d (revue P1, L1) — un solde Wise sans transaction passe à
+    // Stripe par `PUT` (`wise` rendu nul) ; puis `wise: null` sur ce compte
+    // Stripe ne retire rien.
+    let b3 = ctx.solde(ctx.usd, None).await;
+    let chemin3 = format!("/api/v1/bank-accounts/{}", b3["id"].as_i64().unwrap());
+    let (s, b3) = ctx
+        .put(
+            &chemin3,
+            json!({ "bankName": "Stripe", "journalAccountId": ctx.usd, "version": b3["version"],
+                "stripe": { "account": "Stripe fictif" } }),
+        )
+        .await;
+    assert_eq!(s, 200, "Wise → Stripe : {b3}");
+    assert_eq!(b3["provider"], "stripe");
+    assert_eq!(b3["wise"], Value::Null);
+    assert_eq!(b3["stripe"]["account"], "Stripe fictif");
+    let (s, b3) = ctx
+        .put(
+            &chemin3,
+            json!({ "bankName": "Stripe", "journalAccountId": ctx.usd, "version": b3["version"],
+                "wise": null }),
+        )
+        .await;
+    assert_eq!(s, 200, "{b3}");
+    assert_eq!(
+        b3["provider"], "stripe",
+        "`wise: null` sans effet sur un compte Stripe"
+    );
+    assert_eq!(b3["stripe"]["account"], "Stripe fictif");
 }
 
 /// AC-2, AC-6 — un compte Wise ne reçoit ni relevé bancaire (CAMT, relevé
@@ -1549,6 +1600,17 @@ async fn import_zip_refus_et_cles(pool: MySqlPool) {
     assert_eq!((s, code(&b)), (422, "WISE_CSV_FEES_NOT_SEPARATED"), "{b}");
     assert_eq!(b["error"]["details"]["filename"], Z_CHF);
     assert_eq!(b["error"]["details"]["archive"], "wise.zip");
+
+    // Story 39-11d (revue P1, M2) — un relevé illisible dans un zip : le
+    // `WISE_CSV_INVALID` nomme l'entrée **et** son zip, ici le second de deux
+    // zips d'un même envoi.
+    let bon = zip_de(&[(Z_CHF, CHF)]);
+    let mauvais = zip_de(&[(Z_EUR, csv_illisible)]);
+    let (s, b) = ctx.importer(&[("a.zip", &bon), ("b.zip", &mauvais)]).await;
+    assert_eq!((s, code(&b)), (422, "WISE_CSV_INVALID"), "{b}");
+    assert_eq!(b["error"]["details"]["filename"], Z_EUR);
+    assert_eq!(b["error"]["details"]["archive"], "b.zip");
+    assert_eq!(b["error"]["details"]["reason"], "WISE_CSV_MISSING_COLUMNS");
 
     let lourd = zip_de(&[("../evasion.csv", CHF)]);
     let (s, b) = ctx.importer(&[("wise.zip", &lourd)]).await;

@@ -998,7 +998,9 @@ pub enum AppError {
 
     // ----- Story 39-11b (Epic 39) — l'import des relevés Wise -----
     /// Import Wise : un fichier est refusé par le lecteur (39-11a) → `422
-    /// WISE_CSV_INVALID`, `details: { filename, reason, … }` — `reason` est le
+    /// WISE_CSV_INVALID`, `details: { filename, archive, reason, … }` —
+    /// `archive` = le zip d'où vient le fichier, `null` pour un fichier envoyé
+    /// à part (Story 39-11d, revue P1, M2) ; `reason` est le
     /// code fermé du lecteur (`WISE_CSV_MISSING_COLUMNS`, `WISE_CSV_LINES`, …),
     /// avec `columns`, `lines` (forme `{ line, field, code, value }`),
     /// `currencies`, `id` et `lines`, ou `line`, `expected`, `found` selon le
