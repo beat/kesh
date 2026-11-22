@@ -15,11 +15,12 @@
 
 	/**
 	 * La colonne unique du bilan et du compte de résultat : le solde de la ligne
-	 * (revue P1 L3 — une seule définition pour les deux vues).
+	 * (revue P1 L3 — une seule définition pour les deux vues). Figée (revue P2
+	 * L3) : partagée par les deux vues, aucune ne peut la modifier pour l'autre.
 	 */
-	export const BALANCE_COLUMNS: GroupedAmountColumn[] = [
-		{ id: 'balance', amount: (row) => row.balance },
-	];
+	export const BALANCE_COLUMNS: readonly GroupedAmountColumn[] = Object.freeze([
+		Object.freeze({ id: 'balance', amount: (row: GroupedRow) => row.balance }),
+	]);
 
 	/** Retrait d'une profondeur, en rem ; borné pour que le nom garde sa place. */
 	const INDENT_REM = 1.25;
@@ -59,7 +60,7 @@
 	interface Props {
 		rows: GroupedRow[];
 		subtotalPosition: SubtotalPosition;
-		columns: GroupedAmountColumn[];
+		columns: readonly GroupedAmountColumn[];
 		/** Période affichée : le numéro d'un compte mène à son grand livre. */
 		period: { startDate: string; endDate: string };
 		/** Clic sur l'accordéon d'un groupe ; l'écran redemande le rapport. */

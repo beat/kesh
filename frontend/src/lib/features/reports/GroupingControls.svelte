@@ -64,7 +64,7 @@
 	<!-- Revue P1 L2 — le libellé du sélecteur reste court (« Niveau de détail ») ;
 	     l'info-bulle n'en est que la description (`aria-describedby`), hors du
 	     `<label>`. -->
-	<div class="flex items-center gap-2" title={hint}>
+	<div class="flex items-center gap-2">
 		<label for="reports-groups-level">{i18nMsg('reports-groups-level', 'Niveau de détail')}</label>
 		<select
 			id="reports-groups-level"
@@ -82,7 +82,8 @@
 			{/each}
 			<option value="all">{i18nMsg('reports-groups-level-all', 'Tous les comptes')}</option>
 		</select>
-		<span class="cursor-help text-gray-500" aria-hidden="true">ⓘ</span>
+		<!-- Revue P2 L4 — l'info-bulle visuelle ne paraît qu'au survol du ⓘ. -->
+		<span class="cursor-help text-gray-500" aria-hidden="true" title={hint}>ⓘ</span>
 		<span id="reports-groups-level-hint" class="sr-only">{hint}</span>
 	</div>
 

@@ -404,4 +404,91 @@ describe('page des rapports — demandes périmées et vue affichée (Story 46-2
 		await waitFor(() => expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('false'));
 		expect((r.getByRole('button', { name: 'Générer' }) as HTMLButtonElement).disabled).toBe(false);
 	});
+
+	it('X1 — retour sur le bilan désaccordé PENDANT le chargement d’un autre onglet : redemandé à sa fin (revue P2 M1)', async () => {
+		getBalanceSheetMock.mockImplementation(async (_q, p?: GroupingParams) => bilan(p, p?.detailLevel !== 1));
+		const r = render(Page, { data });
+		await generer(r);
+		await r.findByTestId('grouped-group-10');
+		const jetee = bilanSuspendu();
+		await fireEvent.change(r.getByTestId('grouping-level'), { target: { value: '1' } });
+		await fireEvent.click(r.getByRole('tab', { name: 'Compte de résultat' }));
+		let resoudreResultat!: () => void;
+		getIncomeStatementMock.mockImplementationOnce(
+			() => new Promise((res) => (resoudreResultat = () => res(resultatVide()))),
+		);
+		await generer(r);
+		await waitFor(() => expect(getIncomeStatementMock).toHaveBeenCalledTimes(1));
+		jetee.resoudre(false); // périmée par « Générer » sur le compte de résultat
+		await fireEvent.click(r.getByRole('tab', { name: 'Bilan' }));
+		await pause();
+		// le chargement du compte de résultat n'est pas périmé par le retour
+		expect(getBalanceSheetMock).toHaveBeenCalledTimes(2);
+		resoudreResultat();
+		await waitFor(() => expect(getBalanceSheetMock).toHaveBeenCalledTimes(3));
+		expect(getBalanceSheetMock.mock.calls[2][1]).toMatchObject({ detailLevel: 1 });
+		await waitFor(() => expect(r.queryByTestId('grouped-account-1000')).toBeNull());
+		expect((r.getByTestId('grouping-level') as HTMLSelectElement).value).toBe('1');
+		await pause();
+		expect(getBalanceSheetMock).toHaveBeenCalledTimes(3);
+	});
+
+	it('redemande en erreur : pas de redemande en boucle (revue P2 M1)', async () => {
+		const r = render(Page, { data });
+		await generer(r);
+		await r.findByTestId('grouped-group-10');
+		// en erreur cinq fois, puis de nouveau servi : une boucle se verrait au compte
+		let echecs = 0;
+		getBalanceSheetMock.mockImplementation(async (_q, p?: GroupingParams) => {
+			if (++echecs <= 5) throw new Error('réseau');
+			return bilan(p, true);
+		});
+		await fireEvent.change(r.getByTestId('grouping-level'), { target: { value: '1' } });
+		await waitFor(() => expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('false'));
+		await pause();
+		expect(getBalanceSheetMock).toHaveBeenCalledTimes(2);
+		expect(r.getByRole('alert')).toBeTruthy();
+	});
+
+	it('chargement périmé par un autre onglet : un changement de vue sans rapport affiché ne demande rien (revue P2 L1)', async () => {
+		bilanSuspendu(); // premier chargement du bilan, jamais affiché
+		const r = render(Page, { data });
+		await generer(r);
+		await fireEvent.click(r.getByRole('tab', { name: 'Balance âgée' }));
+		getAgedReceivablesMock.mockImplementationOnce(() => new Promise(() => {}));
+		await fireEvent.click(r.getByTestId('aged-report-generate'));
+		await waitFor(() => expect(getAgedReceivablesMock).toHaveBeenCalledTimes(1));
+		await fireEvent.click(r.getByRole('tab', { name: 'Bilan' }));
+		await fireEvent.click(r.getByTestId('grouping-shown'));
+		await pause();
+		expect(getBalanceSheetMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('export après un écho qui retire un groupe disparu : les listes de l’écho (revue P2 L1)', async () => {
+		localStorage.setItem(KEY, JSON.stringify({ shown: true, detailLevel: 'all', subtotalPosition: 'header', open: [90, 555], closed: [] }));
+		getBalanceSheetMock.mockImplementation(async (_q, p) => bilan(p, true, { open: [90] }));
+		const r = render(Page, { data });
+		await generer(r);
+		await r.findByTestId('grouped-group-10');
+		await fireEvent.click(r.getByRole('button', { name: 'Export CSV' }));
+		await waitFor(() => expect(downloadReportMock).toHaveBeenCalledTimes(1));
+		expect((downloadReportMock.mock.calls[0] as unknown[])[4]).toEqual({
+			detailLevel: 'all',
+			subtotalPosition: 'header',
+			open: [90],
+			closed: [],
+		});
+	});
+
+	it('changement de vue pendant le premier chargement : chargement plein, non redemande (revue P2 L1)', async () => {
+		bilanSuspendu();
+		const r = render(Page, { data });
+		await generer(r);
+		expect(r.queryByText('Génération du rapport en cours…')).not.toBeNull();
+		bilanSuspendu();
+		await fireEvent.click(r.getByTestId('grouping-shown'));
+		await waitFor(() => expect(getBalanceSheetMock).toHaveBeenCalledTimes(2));
+		expect(r.queryByText('Génération du rapport en cours…')).not.toBeNull();
+		expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('true');
+	});
 });

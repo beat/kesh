@@ -250,6 +250,34 @@
 		return sameGroupingParams(displayedGrouping[report], groupingParamsOf(groupingViews[report]));
 	}
 
+	/**
+	 * Remet l'onglet actif d'accord avec ses contrôles : si c'est le bilan ou le
+	 * compte de résultat, affiché avec une autre vue que celle des contrôles, et
+	 * qu'aucune génération n'est en vol, il est redemandé (affichage gardé).
+	 *
+	 * Appelée au retour sur l'onglet (`selectTab`) et à la fin d'une génération
+	 * d'un AUTRE onglet (revue P2 M1) : un retour pendant ce chargement-là ne
+	 * redemande rien — il périmerait la génération demandée sur l'autre onglet —,
+	 * la redemande attend donc qu'elle finisse.
+	 */
+	function resyncActiveGroupedTab(): void {
+		if (activeTab !== 'balance-sheet' && activeTab !== 'income-statement') return;
+		const displayed = activeTab === 'balance-sheet' ? balanceSheet : incomeStatement;
+		if (displayed && !loading && !displayedMatchesView(activeTab)) {
+			void generate({ keepDisplay: true });
+		}
+	}
+
+	/**
+	 * Fin d'une génération non périmée, lancée sur `finishedTab` : si l'utilisateur
+	 * a changé d'onglet entre-temps, l'onglet actif est remis d'accord avec ses
+	 * contrôles. La génération de l'onglet actif lui-même ne redemande jamais
+	 * (une redemande en erreur ne boucle pas).
+	 */
+	function afterGeneration(finishedTab: TabId): void {
+		if (finishedTab !== activeTab) resyncActiveGroupedTab();
+	}
+
 	function onToggleGroup(row: GroupedRow): void {
 		if (!activeGroupingView) return;
 		changeGrouping(toggleGroup(activeGroupingView, row.accountId, row.open === true));
@@ -379,6 +407,7 @@
 	 *   présentation ; l'affichage précédent reste jusqu'à la réponse (AC-3).
 	 */
 	async function generate(options: { keepDisplay?: boolean } = {}): Promise<void> {
+		const myTab = activeTab;
 		// Story 24-1 — grand livre : période libre, sans exercice.
 		if (isLedgerTab) {
 			const q = ledgerQuery();
@@ -392,7 +421,10 @@
 			} catch (e) {
 				if (mySeq === genSeq) errorMsg = formatError(e);
 			} finally {
-				if (mySeq === genSeq) loading = false;
+				if (mySeq === genSeq) {
+					loading = false;
+					afterGeneration(myTab);
+				}
 			}
 			return;
 		}
@@ -407,7 +439,10 @@
 			} catch (e) {
 				if (mySeq === genSeq) errorMsg = formatError(e);
 			} finally {
-				if (mySeq === genSeq) loading = false;
+				if (mySeq === genSeq) {
+					loading = false;
+					afterGeneration(myTab);
+				}
 			}
 			return;
 		}
@@ -429,7 +464,10 @@
 			} catch (e) {
 				if (mySeq === genSeq) errorMsg = formatError(e);
 			} finally {
-				if (mySeq === genSeq) loading = false;
+				if (mySeq === genSeq) {
+					loading = false;
+					afterGeneration(myTab);
+				}
 			}
 			return;
 		}
@@ -487,6 +525,7 @@
 				loading = false;
 				refreshing = false;
 				inFlightTab = null;
+				afterGeneration(myTab);
 			}
 		}
 	}
@@ -767,13 +806,9 @@
 			// Story 21-7 (D-7c) — rend l'onglet adressable (replaceState, pas d'empilement).
 			void goto(`?tab=${next}`, { replaceState: true, keepFocus: true, noScroll: true });
 			// Story 46-2, revue P1 M2 (b) — retour sur un rapport groupé dont la
-			// redemande a été jetée : l'écran est remis d'accord avec ses contrôles.
-			if (next === 'balance-sheet' || next === 'income-statement') {
-				const displayed = next === 'balance-sheet' ? balanceSheet : incomeStatement;
-				if (displayed && !loading && !displayedMatchesView(next)) {
-					void generate({ keepDisplay: true });
-				}
-			}
+			// redemande a été jetée : l'écran est remis d'accord avec ses contrôles
+			// (ou, si une génération est en vol, à sa fin — revue P2 M1).
+			resyncActiveGroupedTab();
 		}
 	}
 </script>
