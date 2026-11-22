@@ -10,18 +10,64 @@
   indiqués séparément » est refusé (`WISE_CSV_FEES_NOT_SEPARATED`), avec la
   même consigne.
 
-  ⚠️ Pas encore de revue ni d'acceptation : elles viennent de la revue Wise
-  (Story 39-11c, `GET /api/v1/wise/review`, `POST /api/v1/wise/accept`), qui
-  n'est pas dans cette branche. Sans `getReview`, la page commune n'affiche ni
-  exercice ni propositions.
+  Story 39-11d2 (AC-2 à AC-4) — la revue et l'acceptation Wise (39-11c,
+  `GET /api/v1/wise/review`, `POST /api/v1/wise/accept`) : exercice,
+  propositions à cocher — frais, conversion au cours de Wise, rattachement à
+  l'autre côté déjà passé, règle, paiement par carte groupé avec ses lignes en
+  sous-lignes —, leur genre et « ce qui sera fait » en clair, une phrase par
+  motif « à examiner » et par écart, acceptation par paquets. Libellés des
+  comptes et des règles lus au chargement (best-effort). Les liens propres à
+  Wise sous un « à examiner » : les écritures d'une part déjà rapprochée, la
+  page Stripe pour un versement Stripe sans son écriture (si la société a un
+  compte Stripe).
 -->
 <script lang="ts">
 	import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
+	import { fetchAccounts } from '$lib/features/accounts/accounts.api';
+	import type { AccountResponse } from '$lib/features/accounts/accounts.types';
+	import type { BankAccountSummary } from '$lib/features/bank-accounts/bank-accounts.api';
 	import { wiseAccountLabels } from '$lib/features/bank-accounts/provider';
 	import ProviderReviewPage from '$lib/features/provider/ProviderReviewPage.svelte';
-	import { importWiseFiles } from '$lib/features/wise/wise.api';
-	import { wiseFileReportLine, wiseImportErrorLines, wiseWarningLabel } from '$lib/features/wise/wise-labels';
-	import type { WiseImportResponse } from '$lib/features/wise/wise.types';
+	import { ruleLabelsById } from '$lib/features/provider/provider-rules';
+	import type { ProviderFinding } from '$lib/features/provider/provider-review.types';
+	import { acceptWiseProposals, getWiseReview, importWiseFiles } from '$lib/features/wise/wise.api';
+	import {
+		wiseFailedLabel,
+		wiseFileReportLine,
+		wiseGapLabel,
+		wiseImportErrorLines,
+		wiseLineLabel,
+		wisePartlyReconciledEntryIds,
+		wiseProposalActionLabel,
+		wiseProposalKindLabel,
+		wiseToReviewLabel,
+		wiseWarningLabel,
+	} from '$lib/features/wise/wise-labels';
+	import {
+		wiseFindingLines,
+		wiseProposalKey,
+		wiseProposalLines,
+		wiseProposalTransactionId,
+		wiseSelectedBodies,
+	} from '$lib/features/wise/wise-review';
+	import type { WiseImportResponse, WiseProposal } from '$lib/features/wise/wise.types';
+
+	// Comptes du plan : libellés des comptes de frais et de contrepartie (best-effort).
+	// fx-filtre-comptes : exempté — aucun sélecteur de compte : la liste ne sert qu'à nommer les
+	// comptes que la revue a choisis (en CHF ou dans la devise du solde).
+	let accounts = $state<AccountResponse[]>([]);
+	// Libellés des règles, par identifiant : la revue ne sert que `ruleId`.
+	let ruleLabels = $state<Map<number, string>>(new Map());
+	// Les comptes bancaires lus par la page commune : la société a-t-elle un compte Stripe ?
+	let bankAccounts = $state<BankAccountSummary[]>([]);
+	let hasStripe = $derived(bankAccounts.some((b) => b.provider === 'stripe'));
+
+	/** Lectures propres à Wise : comptes du plan et libellés des règles (best-effort). */
+	async function loadWise() {
+		const [acc, rules] = await Promise.allSettled([fetchAccounts(false), ruleLabelsById()]);
+		accounts = acc.status === 'fulfilled' ? acc.value : [];
+		ruleLabels = rules.status === 'fulfilled' ? rules.value : new Map();
+	}
 </script>
 
 {#snippet importReportMain(report: WiseImportResponse)}
@@ -60,6 +106,29 @@
 	{/if}
 {/snippet}
 
+{#snippet proposalAction(p: WiseProposal)}
+	{wiseProposalActionLabel(p, accounts, ruleLabels)}
+{/snippet}
+
+{#snippet toReviewExtra(f: ProviderFinding)}
+	{@const entryIds = wisePartlyReconciledEntryIds(f)}
+	{#if entryIds.length > 0}
+		<span class="block text-xs" data-testid="wise-to-review-entries">
+			{#each entryIds as id, i (id)}
+				{#if i > 0}·{/if}
+				<a class="text-primary underline" href="/journal-entries/{id}" data-testid="wise-to-review-entry-{id}">
+					{i18nMsg('wise-review-see-entry', 'Voir l’écriture')}
+				</a>
+			{/each}
+		</span>
+	{/if}
+	{#if f.code === 'stripe_payout_unmatched' && hasStripe}
+		<a class="block text-xs text-primary underline" href="/reconciliation/stripe" data-testid="wise-to-review-stripe-link">
+			{i18nMsg('wise-review-stripe-page', 'Ouvrir la page Stripe')}
+		</a>
+	{/if}
+{/snippet}
+
 <ProviderReviewPage
 	testId="wise"
 	fileAccept=".csv,text/csv,.zip,application/zip"
@@ -68,7 +137,7 @@
 		title: i18nMsg('wise-page-title', 'Wise'),
 		subtitle: i18nMsg(
 			'wise-page-subtitle',
-			'Importez les relevés d’un compte Wise : le zip que Wise vous fait télécharger, tel quel, ou ses fichiers CSV, un par devise. Chaque relevé va au compte bancaire de sa devise. Rien n’est écrit dans les livres à l’import.',
+			'Importez les relevés d’un compte Wise : le zip que Wise vous fait télécharger, tel quel, ou ses fichiers CSV, un par devise. Chaque relevé va au compte bancaire de sa devise. Puis acceptez les propositions de rapprochement : rien n’est écrit dans les livres sans votre acceptation.',
 		),
 		noAccount: i18nMsg(
 			'wise-no-account',
@@ -82,8 +151,22 @@
 		),
 		idColumn: i18nMsg('wise-col-id', 'Identifiant Wise'),
 	}}
-	api={{ importFiles: importWiseFiles }}
+	api={{ importFiles: importWiseFiles, getReview: getWiseReview, accept: acceptWiseProposals }}
 	accountLabels={wiseAccountLabels}
 	importErrorLines={wiseImportErrorLines}
+	failedLabel={(f) => wiseFailedLabel(f.errorCode, f.details)}
+	proposalKey={wiseProposalKey}
+	proposalTransactionId={wiseProposalTransactionId}
+	proposalKind={wiseProposalKindLabel}
+	acceptBodies={wiseSelectedBodies}
+	gapLabel={wiseGapLabel}
+	toReviewLabel={wiseToReviewLabel}
+	proposalLines={wiseProposalLines}
+	findingLines={wiseFindingLines}
+	lineLabel={wiseLineLabel}
+	onLoad={loadWise}
+	bind:bankAccounts
 	{importReportMain}
+	{proposalAction}
+	{toReviewExtra}
 />

@@ -32,6 +32,19 @@
 //!    l'état présent des relevés) ; `conversion_half_missing` vient de la
 //!    revue commune (paramétrage).
 //!
+//! # Ce que l'écran lit en plus (Story 39-11d2, AC-1)
+//!
+//! La revue se sert en [`WiseReviewProposal`], type **de revue** sérialisé
+//! seul (patron de `StripeReviewProposal`) : la proposition `card_group` y
+//! porte ses lignes (`lines`, les résumés dans l'ordre de
+//! `bankTransactionIds`, principale en tête) et le montant du marchand
+//! (`merchantAmount`, CHF, deux décimales) ; les quatre motifs `card_group_*`
+//! portent `details.lines` ; `card_group_statements_missing` porte
+//! `details.missingCurrencies` (posé par [`card_group_blocker`], donc servi
+//! aussi dans `failed[].details` d'un refus `PROVIDER_PROPOSAL_STALE` de même
+//! raison). Le corps de l'acceptation reste [`WiseProposal`] : un corps qui
+//! reprend ces champs d'affichage est admis, ils sont ignorés.
+//!
 //! ⛔ Le gestionnaire d'acceptation s'appelle [`accept_proposals`], **jamais**
 //! `post_accept` : l'exemption `RETRY_WITH_AUTORISE` du registre des routes
 //! désigne une fonction par son seul nom. Il rejoue sur interblocage par
@@ -57,8 +70,8 @@ use kesh_db::repositories::{
     reconciliation_rules,
 };
 use kesh_reconciliation::provider_review::{
-    EntryKind, EntrySummary, Proposal, ProviderKind, REVIEW_NO_RULE, Review, ReviewFinding,
-    ReviewProposal, TransactionSummary, matching_rule, payment_date,
+    ENTRY_DESCRIPTION_MAX_CHARS, EntryKind, EntrySummary, Proposal, ProviderKind, REVIEW_NO_RULE,
+    Review, ReviewFinding, ReviewProposal, TransactionSummary, matching_rule, payment_date,
 };
 use kesh_reconciliation::rule_matches;
 use kesh_reconciliation::wise::{
@@ -66,6 +79,7 @@ use kesh_reconciliation::wise::{
     WiseProposal,
 };
 use rust_decimal::Decimal;
+use serde::Serialize;
 use sqlx::MySql;
 
 use super::provider_accept::{
@@ -81,19 +95,49 @@ use crate::AppState;
 use crate::errors::AppError;
 use crate::middleware::auth::CurrentUser;
 
-/// Borne du libellé d'une écriture, en caractères (celle du moteur commun).
-const DESCRIPTION_MAX_CHARS: usize = 200;
+/// Borne du libellé d'une écriture, en caractères : celle du moteur commun
+/// (revue d'intégration de l'Epic 39, L1 : une seule définition).
+const DESCRIPTION_MAX_CHARS: usize = ENTRY_DESCRIPTION_MAX_CHARS;
 
 // ---------------------------------------------------------------------------
 // Revue
 // ---------------------------------------------------------------------------
+
+/// Une proposition de la **revue** Wise (Story 39-11d2, AC-1), sérialisée à
+/// plat (champ `type` compris) : un genre commun, ou un paiement par carte
+/// groupé avec ce que l'écran en montre. Type de revue seul : le corps de
+/// l'acceptation reste [`WiseProposal`].
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum WiseReviewProposal {
+    /// Paiement par carte converti (`type: "card_group"`), avec ses lignes.
+    CardGroup(CardGroupReview),
+    /// Les genres communs (`link_entry`, `fee`, `rule`, `conversion`).
+    Common(Proposal),
+}
+
+/// La proposition `card_group` de la revue : les champs du corps
+/// d'acceptation, ses lignes et le montant du marchand.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardGroupReview {
+    /// Les champs du corps (`type`, `bankTransactionIds`, `ruleId`,
+    /// `counterpartyAccountId`).
+    #[serde(flatten)]
+    pub proposal: CardGroupProposal,
+    /// Le résumé de chaque ligne, dans l'ordre de `bankTransactionIds`
+    /// (principale en tête).
+    pub lines: Vec<TransactionSummary>,
+    /// Le montant du marchand en CHF, deux décimales (chaîne décimale).
+    pub merchant_amount: String,
+}
 
 /// `GET /api/v1/wise/review` — voir l'en-tête du module.
 pub async fn review(
     State(state): State<AppState>,
     Extension(current_user): Extension<CurrentUser>,
     Query(query): Query<ReviewQuery>,
-) -> Result<Json<ReviewResponse<WiseProposal>>, AppError> {
+) -> Result<Json<ReviewResponse<WiseReviewProposal>>, AppError> {
     let mut tx = state
         .pool
         .begin()
@@ -131,13 +175,21 @@ fn entry_summary(c: &EntryCandidate) -> EntrySummary {
     }
 }
 
+/// Le montant du marchand d'un paiement groupé, en chaîne à deux décimales.
+fn merchant_amount(merchant_chf: Decimal) -> String {
+    let mut merchant = merchant_chf;
+    merchant.rescale(2);
+    merchant.to_string()
+}
+
 /// La revue Wise, dans la transaction de lecture : la revue commune, puis ce
-/// qu'y ajoute Wise (voir l'en-tête du module).
+/// qu'y ajoute Wise (voir l'en-tête du module), convertie à la fin en type de
+/// revue ([`WiseReviewProposal`]).
 async fn build_wise_review(
     tx: &mut sqlx::Transaction<'_, MySql>,
     company_id: i64,
     query: &ReviewQuery,
-) -> Result<Review<WiseProposal>, AppError> {
+) -> Result<Review<WiseReviewProposal>, AppError> {
     let loaded = provider_accept::load_review_in_tx(
         tx,
         company_id,
@@ -159,11 +211,17 @@ async fn build_wise_review(
     let grouped: HashSet<i64> = groups.iter().flat_map(|g| g.ids()).collect();
     remove_transactions(&mut review, &grouped);
     let chf_accounts = wise::chf_rule_accounts(&rule_accounts);
+    // Ce que l'écran montre d'une proposition `card_group`, par ligne
+    // principale : ses lignes et le montant du marchand (AC-1 de la 39-11d2).
+    let mut shown: HashMap<i64, (Vec<TransactionSummary>, String)> = HashMap::new();
     for g in &groups {
         let principal = g.principal();
+        let lines: Vec<TransactionSummary> =
+            g.lines.iter().map(|t| TransactionSummary::of(t)).collect();
         let mut details = serde_json::json!({
             "cardId": g.card_id,
             "bankTransactionIds": g.ids(),
+            "lines": lines,
         });
         match g.judgement {
             CardGroupJudgement::Unsupported(reason) => {
@@ -174,9 +232,8 @@ async fn build_wise_review(
                 });
             }
             CardGroupJudgement::Valid { merchant_chf } => {
-                let mut merchant = merchant_chf;
-                merchant.rescale(2);
-                details["merchantAmount"] = serde_json::json!(merchant.to_string());
+                let merchant = merchant_amount(merchant_chf);
+                details["merchantAmount"] = serde_json::json!(merchant);
                 let blocker = card_group_blocker(
                     &mut *tx,
                     company_id,
@@ -196,16 +253,19 @@ async fn build_wise_review(
                     .get(&principal.bank_account_id)
                     .and_then(|b| b.account.journal_account_id);
                 match matching_rule(&rules, principal, &chf_accounts, ledger) {
-                    Some(rule) => review.push_proposal(ReviewProposal {
-                        proposal: WiseProposal::CardGroup(CardGroupProposal::CardGroup {
-                            bank_transaction_ids: g.ids(),
-                            rule_id: rule.id,
-                            counterparty_account_id: rule.counterparty_account_id,
-                        }),
-                        transaction: TransactionSummary::of(principal),
-                        other_transaction: None,
-                        entry: None,
-                    }),
+                    Some(rule) => {
+                        shown.insert(principal.id, (lines, merchant));
+                        review.push_proposal(ReviewProposal {
+                            proposal: WiseProposal::CardGroup(CardGroupProposal::CardGroup {
+                                bank_transaction_ids: g.ids(),
+                                rule_id: rule.id,
+                                counterparty_account_id: rule.counterparty_account_id,
+                            }),
+                            transaction: TransactionSummary::of(principal),
+                            other_transaction: None,
+                            entry: None,
+                        })
+                    }
                     None => review.push_to_review(ReviewFinding {
                         details: Some(details),
                         ..ReviewFinding::on(wise::REVIEW_CARD_GROUP_NO_RULE, principal)
@@ -315,7 +375,36 @@ async fn build_wise_review(
     }
 
     review.sort();
-    Ok(review)
+    Ok(review.map_proposals(|p| to_review_proposal(p, &shown)))
+}
+
+/// Le type de revue d'une proposition : une proposition commune telle
+/// quelle ; un `card_group`, avec ce que `shown` tient pour sa ligne
+/// principale (lignes et montant du marchand, posés pendant la boucle des
+/// groupes de [`build_wise_review`]).
+fn to_review_proposal(
+    p: WiseProposal,
+    shown: &HashMap<i64, (Vec<TransactionSummary>, String)>,
+) -> WiseReviewProposal {
+    match p {
+        WiseProposal::Common(c) => WiseReviewProposal::Common(c),
+        WiseProposal::CardGroup(g) => {
+            let CardGroupProposal::CardGroup {
+                bank_transaction_ids,
+                ..
+            } = &g;
+            let (lines, merchant_amount) = bank_transaction_ids
+                .first()
+                .and_then(|id| shown.get(id))
+                .cloned()
+                .unwrap_or_default();
+            WiseReviewProposal::CardGroup(CardGroupReview {
+                proposal: g,
+                lines,
+                merchant_amount,
+            })
+        }
+    }
 }
 
 /// Les détails du motif
@@ -375,7 +464,10 @@ async fn reconciled_card_lines(
 ///    [`bank_imports::date_coverage`] : un relevé couvre la date, ou la
 ///    continuité des soldes l'atteste. Exigée du solde en CHF toujours (la
 ///    partielle le débite d'abord) ; d'un solde en devise quand ses relevés
-///    encadrent la date sans se suivre (`DateCoverage::Gap`).
+///    encadrent la date sans se suivre (`DateCoverage::Gap`). Avec les soldes,
+///    leurs devises (`details.missingCurrencies`, Story 39-11d2 AC-1 : la
+///    phrase de l'écran les nomme), triées avec eux par identifiant —
+///    `missingCurrencies[i]` est la devise de `missingBankAccountIds[i]`.
 ///
 /// ⚠️ Limites : un solde en devise dont aucun relevé n'encadre la date (rien
 /// d'importé après elle, ou rien avant) n'est pas exigé — sinon un solde
@@ -419,16 +511,22 @@ async fn card_group_blocker<'b>(
             DateCoverage::NoPrevious | DateCoverage::NothingAfter => currency == BASE_CURRENCY,
         };
         if required {
-            missing.push(id);
+            missing.push((id, currency));
         }
     }
     if missing.is_empty() {
         return Ok(None);
     }
+    // Paires triées ensemble : chaque devise reste celle de son solde.
     missing.sort_unstable();
+    let ids: Vec<i64> = missing.iter().map(|(id, _)| *id).collect();
+    let currencies: Vec<&str> = missing.iter().map(|(_, c)| *c).collect();
     Ok(Some((
         wise::REVIEW_CARD_GROUP_STATEMENTS_MISSING,
-        serde_json::json!({ "missingBankAccountIds": missing }),
+        serde_json::json!({
+            "missingBankAccountIds": ids,
+            "missingCurrencies": currencies,
+        }),
     )))
 }
 

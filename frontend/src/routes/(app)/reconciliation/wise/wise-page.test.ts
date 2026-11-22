@@ -1,8 +1,9 @@
 // Story 39-11d (AC-2) — la page Wise, sur la page commune des prestataires : aucun compte,
 // consigne d'export à l'écran, choix multiple (zip ou CSV), compte rendu par fichier
 // (archive, doublons, soldes, avertissement de continuité, entrées du zip non lues), refus
-// traduits (frais non séparés, zip illisible, deux fichiers d'une devise), et, faute de la
-// revue Wise (39-11c), ni exercice ni propositions.
+// traduits (frais non séparés, zip illisible, deux fichiers d'une devise). Story 39-11d2 —
+// la revue (tests retournés : l'exercice et les propositions sont là) : genres et « ce qui sera
+// fait », paiement par carte groupé et ses sous-lignes, phrases des motifs, acceptation.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
@@ -32,8 +33,21 @@ vi.mock('$lib/features/reconciliation/reconciliation.api', () => ({
 }));
 
 const importMock = vi.fn();
+const reviewMock = vi.fn();
+const acceptMock = vi.fn();
 vi.mock('$lib/features/wise/wise.api', () => ({
 	importWiseFiles: (...a: unknown[]) => importMock(...a),
+	getWiseReview: (...a: unknown[]) => reviewMock(...a),
+	acceptWiseProposals: (...a: unknown[]) => acceptMock(...a),
+}));
+vi.mock('$lib/features/accounts/accounts.api', () => ({
+	fetchAccounts: async () => [
+		{ id: 60, number: '6947', name: 'Frais Wise' },
+		{ id: 40, number: '4000', name: 'Achats' },
+	],
+}));
+vi.mock('$lib/features/reconciliation/rules/rules.api', () => ({
+	listRules: async () => ({ items: [{ id: 2, label: 'Boutique' }], total: 1 }),
 }));
 
 import Page from './+page.svelte';
@@ -100,6 +114,59 @@ function report(): WiseImportResponse {
 	};
 }
 
+function emptyReview() {
+	return { account: 'Wise Fictif', fiscalYearId: 5, proposals: [], gaps: [], toReview: [] };
+}
+
+const sum = (id: number, more: Record<string, unknown> = {}) => ({
+	id,
+	bankAccountId: 1,
+	date: '2020-03-10',
+	amount: '-86.60',
+	currency: 'CHF',
+	providerType: 'CARD',
+	name: 'Boutique Exemple',
+	transactionId: 'CARD-90000020',
+	counterpartyEmail: null,
+	...more,
+});
+const usd = sum(12, { bankAccountId: 2, amount: '-13.85', currency: 'USD' });
+const feeUsd = sum(11, { bankAccountId: 2, amount: '-0.04', currency: 'USD', transactionId: 'FEE-CARD-90000020', name: null });
+
+function review() {
+	return {
+		account: 'Wise Fictif',
+		fiscalYearId: 5,
+		proposals: [
+			{
+				type: 'card_group',
+				bankTransactionIds: [10, 11, 12],
+				ruleId: 2,
+				counterpartyAccountId: 40,
+				lines: [sum(10), feeUsd, usd],
+				merchantAmount: '97.95',
+				transaction: sum(10),
+			},
+			{
+				type: 'fee',
+				bankTransactionId: 3,
+				feeAccountId: 60,
+				transaction: sum(3, { date: '2020-02-12', amount: '-1.20', transactionId: 'FEE-TRANSFER-1', providerType: 'TRANSFER' }),
+			},
+		],
+		gaps: [],
+		toReview: [
+			{ code: 'stripe_payout_unmatched', transaction: sum(20, { amount: '1500.00', transactionId: 'BALANCE-8' }) },
+			{
+				code: 'card_group_statements_missing',
+				transaction: sum(30, { transactionId: 'CARD-5' }),
+				details: { lines: [sum(30), sum(31, { transactionId: 'FEE-CARD-5' })], missingCurrencies: ['CHF'] },
+			},
+			{ code: 'card_group_partly_reconciled', transaction: sum(40), details: { journalEntryIds: [77] } },
+		],
+	};
+}
+
 async function choose(r: { findByTestId: (id: string) => Promise<HTMLElement> }, files: File[]) {
 	const input = (await r.findByTestId('wise-file-input')) as HTMLInputElement;
 	await fireEvent.change(input, { target: { files } });
@@ -110,6 +177,7 @@ describe('page Wise (Story 39-11d)', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		listBankAccountsMock.mockResolvedValue([wiseAccount(1, 'Wise Fictif'), wiseAccount(2, 'Wise Fictif', 32)]);
+		reviewMock.mockResolvedValue(emptyReview());
 	});
 
 	it('sans compte Wise : le message et le lien vers les comptes bancaires ; un compte Stripe ne compte pas', async () => {
@@ -121,7 +189,7 @@ describe('page Wise (Story 39-11d)', () => {
 		expect(r.getByTestId('wise-no-account-link').getAttribute('href')).toBe('/bank-accounts');
 	});
 
-	it('la consigne d’export est à l’écran, le choix prend le zip et plusieurs CSV ; ni exercice ni revue', async () => {
+	it('la consigne d’export est à l’écran, le choix prend le zip et plusieurs CSV ; l’exercice et la revue', async () => {
 		const r = render(Page);
 		const input = (await r.findByTestId('wise-file-input')) as HTMLInputElement;
 		expect(input.getAttribute('accept')).toBe('.csv,text/csv,.zip,application/zip');
@@ -130,8 +198,9 @@ describe('page Wise (Story 39-11d)', () => {
 		expect(aide).toContain('Afficher les transactions dont les frais sont indiqués séparément');
 		expect(aide).toContain('zip');
 		expect(r.getByTestId('wise-import-button').textContent).toContain('Importer des relevés Wise');
-		expect(r.queryByTestId('wise-fiscal-year')).toBeNull();
-		expect(r.queryByTestId('wise-proposals')).toBeNull();
+		expect(r.getByTestId('wise-fiscal-year')).toBeTruthy();
+		expect(await r.findByTestId('wise-proposals')).toBeTruthy();
+		await waitFor(() => expect(reviewMock).toHaveBeenCalledWith('Wise Fictif', 5));
 		expect(document.body.textContent).not.toMatch(/automatiquement/i);
 	});
 
@@ -183,15 +252,13 @@ describe('page Wise (Story 39-11d)', () => {
 		expect((await r.findByTestId('wise-import-error')).textContent).toContain('ne contient aucun relevé CSV');
 	});
 
-	// Revue P1, L7 — la page sans revue ne lit pas les exercices : leur lecture en échec ne
-	// masque pas l'import.
-	it('les exercices ne sont pas lus : leur échec ne masque pas l’import', async () => {
+	// Revue P1 de la 39-11d, L7, retourné (39-11d2) : la page a sa revue, elle lit les exercices ;
+	// la page commune sans revue garde l'ancien comportement (`ProviderReviewPage.test.ts`).
+	it('les exercices sont lus : leur échec se dit', async () => {
 		listFiscalYearsMock.mockRejectedValueOnce(new Error('exercices indisponibles'));
 		const r = render(Page);
-		expect(await r.findByTestId('wise-file-input')).toBeTruthy();
-		expect(r.queryByTestId('wise-load-error')).toBeNull();
-		expect(listFiscalYearsMock).not.toHaveBeenCalled();
-		listFiscalYearsMock.mockReset();
+		expect(await r.findByTestId('wise-load-error')).toBeTruthy();
+		expect(listFiscalYearsMock).toHaveBeenCalled();
 	});
 
 	it('refus : relevé déjà importé, le nom sous lequel il l’a été', async () => {
@@ -219,5 +286,83 @@ describe('page Wise (Story 39-11d)', () => {
 		const r = render(Page);
 		await choose(r, [new File(['x'], 'a.csv'), new File(['x'], 'b.csv')]);
 		expect((await r.findByTestId('wise-import-error')).textContent).toContain('en EUR (a.csv, b.csv) : un seul fichier par devise');
+	});
+});
+
+describe('page Wise — la revue (Story 39-11d2)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		listBankAccountsMock.mockResolvedValue([wiseAccount(1, 'Wise Fictif'), wiseAccount(2, 'Wise Fictif', 32)]);
+		reviewMock.mockResolvedValue(review());
+	});
+
+	it('genres et « ce qui sera fait » ; le paiement groupé et ses sous-lignes ; rien de coché', async () => {
+		const r = render(Page);
+		const groupe = await r.findByTestId('wise-proposal-10');
+		expect(groupe.textContent).toContain('Paiement par carte');
+		await waitFor(() =>
+			expect(groupe.textContent).toContain(
+				'Une écriture : 97.95 CHF au compte 4000 — Achats (règle Boutique), chaque solde crédité de sa part',
+			),
+		);
+		expect(r.getByTestId('wise-proposal-line-11').textContent).toContain('-0.04 USD');
+		expect(r.getByTestId('wise-proposal-line-11').textContent).toContain('frais');
+		expect(r.getByTestId('wise-proposal-line-12').textContent).toContain('-13.85 USD');
+		expect(r.queryByTestId('wise-proposal-line-10')).toBeNull();
+		expect(r.queryByTestId('wise-check-11')).toBeNull();
+		expect(r.getByTestId('wise-proposal-3').textContent).toContain('Écriture au compte de frais 6947 — Frais Wise');
+		expect((r.getByTestId('wise-check-10') as HTMLInputElement).checked).toBe(false);
+		expect(r.getByTestId('wise-gaps-empty').textContent).toContain('Aucun écart.');
+	});
+
+	it('« à examiner » : la phrase de chaque motif, les sous-lignes et leur bouton, les liens', async () => {
+		const r = render(Page);
+		const versement = await r.findByTestId('wise-to-review-20');
+		expect(versement.textContent).toContain('Versement Stripe sans l’écriture de son versement');
+		// Sans compte Stripe, aucun lien vers la page Stripe.
+		expect(r.queryByTestId('wise-to-review-stripe-link')).toBeNull();
+		expect(r.getByTestId('wise-to-review-30').textContent).toContain('le relevé du solde CHF ne couvre pas cette date');
+		expect(r.getByTestId('wise-to-review-line-31').textContent).toContain('FEE-CARD-5');
+		expect(r.getByTestId('wise-link-line-31')).toBeTruthy();
+		expect(r.getByTestId('wise-link-30')).toBeTruthy();
+		const part = r.getByTestId('wise-to-review-40');
+		expect(part.textContent).toContain('Une part de ce paiement est déjà rapprochée');
+		expect(r.getByTestId('wise-to-review-entry-77').getAttribute('href')).toBe('/journal-entries/77');
+	});
+
+	it('avec un compte Stripe, le versement sans son écriture mène à la page Stripe', async () => {
+		listBankAccountsMock.mockResolvedValue([
+			wiseAccount(1, 'Wise Fictif'),
+			{ ...wiseAccount(9, 'x'), provider: 'stripe', wise: null, stripe: { account: 'S', feeAccountId: null, payoutBankAccountId: null } },
+		]);
+		const r = render(Page);
+		expect((await r.findByTestId('wise-to-review-stripe-link')).getAttribute('href')).toBe('/reconciliation/stripe');
+	});
+
+	it('acceptation : les corps dans l’ordre des dates (un groupe sans ses lignes), le compte rendu, la revue relue', async () => {
+		acceptMock.mockResolvedValue({
+			accepted: [{ type: 'fee', bankTransactionIds: [3], journalEntryIds: [1] }],
+			failed: [
+				{
+					bankTransactionId: 10,
+					errorCode: 'PROVIDER_PROPOSAL_STALE',
+					details: { reason: 'card_group_statements_missing', missingBankAccountIds: [1], missingCurrencies: ['CHF'] },
+				},
+			],
+		});
+		const r = render(Page);
+		await fireEvent.click(await r.findByTestId('wise-select-all'));
+		await fireEvent.click(r.getByTestId('wise-accept'));
+		await waitFor(() => expect(acceptMock).toHaveBeenCalledTimes(1));
+		expect(acceptMock).toHaveBeenCalledWith('Wise Fictif', [
+			{ type: 'fee', bankTransactionId: 3, feeAccountId: 60 },
+			{ type: 'card_group', bankTransactionIds: [10, 11, 12], ruleId: 2, counterpartyAccountId: 40 },
+		]);
+		const compteRendu = await r.findByTestId('wise-accept-report');
+		expect(compteRendu.textContent).toContain('1 proposition(s) acceptée(s), 1 refusée(s).');
+		expect(r.getByTestId('wise-accept-failed').textContent).toContain(
+			'#10 — Une ligne de ce paiement peut manquer : le relevé du solde CHF ne couvre pas cette date',
+		);
+		await waitFor(() => expect(reviewMock).toHaveBeenCalledTimes(2));
 	});
 });

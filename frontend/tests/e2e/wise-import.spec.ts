@@ -19,8 +19,24 @@
  * 4. Le même zip, donné de nouveau : refusé comme déjà importé, le relevé nommé
  *    (`BANK_IMPORT_DUPLICATE_FILE`, son texte propre), aucun import de plus.
  *
- * La revue et l'acceptation Wise (Story 39-11c) ne sont pas dans cette branche :
- * la page n'a que l'import (AC-3 reporté, voir la fiche).
+ * Story 39-11d2 (AC-6) — la revue et l'acceptation Wise à l'écran :
+ *
+ * 5. Cours mensuels de 2020 récupérés par l'API (source factice du mode test),
+ *    une règle « Boutique » par l'API (`counterparty_contains`, filtrée `CARD`).
+ *    Revue du premier compte, exercice 2020 : une proposition de frais, une
+ *    conversion, une règle ; « à examiner » `no_rule` et
+ *    `stripe_payout_unmatched` avec leur phrase ; « Aucun écart. ». Un frais et
+ *    une conversion acceptés par l'écran : « 2 proposition(s) acceptée(s),
+ *    0 refusée(s). », disparus à la relecture.
+ * 6. Un **second compte Wise** (« Wise Fictif Deux », trié après « Wise
+ *    Fictif » : celui-ci reste le compte choisi à l'ouverture), soldes CHF et
+ *    USD, relevés faits par la spec sur le patron de `releves_partielle` de
+ *    `wise_reconciliation_e2e.rs` (en-tête repris de la fixture CHF, lue par
+ *    chemin ; identifiants et noms fictifs) : un paiement par carte groupé, sa
+ *    ligne principale et ses deux sous-lignes ; accepté par l'écran (le corps
+ *    ne porte qu'un compte) : « 1 proposition(s) acceptée(s), 0 refusée(s). » ;
+ *    les trois transactions rapprochées sur **une** écriture, relu par
+ *    `GET /api/v1/reconciliation/transactions/{id}`.
  *
  * L'activation du multi-devises est irréversible : la spec reseede `with-company`
  * en fin de parcours. Captures d'écran (thème clair) dans `KESH_CAPTURES_DIR`.
@@ -227,7 +243,8 @@ test('2 — consigne d’export ; relevé sans les frais séparés refusé, rien
 	await login(page);
 	await page.goto('/reconciliation/wise');
 	await expect(page.getByTestId('wise-account')).toHaveValue(WISE);
-	await expect(page.getByTestId('wise-fiscal-year')).toHaveCount(0);
+	// Story 39-11d2 — retourné : la page a sa revue, l'exercice se choisit.
+	await expect(page.getByTestId('wise-fiscal-year')).toHaveCount(1);
 	await expect(page.getByTestId('wise-import-help')).toContainText(
 		'Afficher les transactions dont les frais sont indiqués séparément',
 	);
@@ -287,5 +304,203 @@ test('3 — le zip de Wise, d’un geste : compte rendu par fichier ; donné de 
 		]);
 	} finally {
 		await disposeContextSafe(ctx);
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Story 39-11d2 — la revue et l'acceptation
+// ---------------------------------------------------------------------------
+
+const WISE_DEUX = 'Wise Fictif Deux';
+const CARTE = 'CARD-90000030';
+
+interface ReviewTx {
+	id: number;
+	transactionId: string | null;
+}
+interface ReviewBody {
+	proposals: Array<{ type: string; transaction: ReviewTx; lines?: ReviewTx[]; bankTransactionIds?: number[] }>;
+	toReview: Array<{ code: string; transaction?: ReviewTx }>;
+	gaps: unknown[];
+}
+
+let fiscalYearId: number;
+
+/** La revue d'un compte Wise sur l'exercice 2020, lue par l'API. */
+async function revue(ctx: APIRequestContext, account: string): Promise<ReviewBody> {
+	const q = new URLSearchParams({ account, fiscalYearId: String(fiscalYearId) });
+	return api<ReviewBody>(ctx, 'get', `/api/v1/wise/review?${q.toString()}`);
+}
+
+/** L'en-tête des relevés de Wise, repris de la première ligne de la fixture CHF. */
+function header(): string {
+	return readFileSync(FIXTURE('chf'), 'utf8').split('\n')[0];
+}
+
+/**
+ * Un paiement par carte converti (patron de `releves_partielle`) : CHF −86.60 (solde vidé),
+ * USD −13.85 converti pour 11.35 CHF, frais USD −0.04. Rend les relevés CHF et USD.
+ */
+function relevesCarte(): { chf: Buffer; usd: Buffer } {
+	const h = header();
+	return {
+		chf: Buffer.from(
+			`${h}\n${CARTE},10-03-2020,10-03-2020 12:00:00.000,-86.60,CHF,Carte Boutique Exemple,,0.00,,,,,,,Boutique Exemple,,,,,,,DEBIT,CARD\n`,
+			'utf8',
+		),
+		usd: Buffer.from(
+			`${h}\n${CARTE},10-03-2020,10-03-2020 12:00:00.000,-13.85,USD,Carte Boutique Exemple,,0.00,USD,CHF,0.81950,,,,Boutique Exemple,,,,,0.04,11.35,DEBIT,CARD\n` +
+				`FEE-${CARTE},10-03-2020,10-03-2020 11:59:59.999,-0.04,USD,Frais de conversion,,13.85,,,,,,,,,,,,,,DEBIT,CARD\n`,
+			'utf8',
+		),
+	};
+}
+
+test('5 — la revue du premier compte ; un frais et une conversion acceptés par l’écran', async ({ page }) => {
+	await login(page);
+	const ctx = await authedApiContext(page);
+	let frais: number;
+	let conversion: number;
+	let regle: number;
+	try {
+		for (let month = 1; month <= 4; month++) {
+			await api(ctx, 'post', '/api/v1/exchange-rates/fetch', { year: 2020, month });
+		}
+		const years = await api<Array<{ id: number; startDate: string }>>(ctx, 'get', '/api/v1/fiscal-years');
+		fiscalYearId = years.find((y) => y.startDate === '2020-01-01')!.id;
+		const accounts = await api<Array<{ id: number; accountType: string; postable: boolean; active: boolean; currency?: string | null; number: string }>>(
+			ctx,
+			'get',
+			'/api/v1/accounts',
+		);
+		const charge = accounts.find(
+			(a) => a.accountType === 'Expense' && a.postable && a.active && !a.currency && !['6947', '6940'].includes(a.number),
+		)!.id;
+		await api(ctx, 'post', '/api/v1/reconciliation/rules', {
+			label: 'Boutique',
+			matchType: 'counterparty_contains',
+			matchValue: 'Boutique Exemple',
+			counterpartyAccountId: charge,
+			providerType: 'CARD',
+		});
+		const r = await revue(ctx, WISE);
+		const prop = (type: string, wiseId: string) =>
+			r.proposals.find((p) => p.type === type && p.transaction.transactionId === wiseId)!.transaction.id;
+		frais = prop('fee', 'FEE-TRANSFER-90000004');
+		conversion = prop('conversion', 'BALANCE-90000003');
+		regle = prop('rule', 'CARD-90000007');
+	} finally {
+		await disposeContextSafe(ctx);
+	}
+
+	await page.goto('/reconciliation/wise');
+	await expect(page.getByTestId('wise-account')).toHaveValue(WISE);
+	await expect(page.getByTestId('wise-fiscal-year')).toHaveValue(String(fiscalYearId));
+	const fraisRow = page.getByTestId(`wise-proposal-${frais}`);
+	await expect(fraisRow).toContainText('Frais');
+	await expect(fraisRow).toContainText('Écriture au compte de frais 6947 — Frais Wise');
+	const conv = page.getByTestId(`wise-proposal-${conversion}`);
+	await expect(conv).toContainText('Conversion');
+	await expect(conv).toContainText('Au cours de Wise : 500.00 CHF → 462.30 EUR, une écriture');
+	const rule = page.getByTestId(`wise-proposal-${regle}`);
+	await expect(rule).toContainText('Règle Boutique →');
+	await expect(page.getByTestId(`wise-check-${frais}`)).not.toBeChecked();
+	await capture(page, '10-revue-premier-compte');
+	const examen = page.getByTestId('wise-to-review');
+	await expect(examen).toContainText('Aucune règle ne reconnaît cette ligne');
+	await expect(examen).toContainText('Versement Stripe sans l’écriture de son versement');
+	await captureOf(page, 'wise-to-review', '11-a-examiner');
+	await expect(page.getByTestId('wise-gaps-empty')).toHaveText('Aucun écart.');
+	await captureOf(page, 'wise-gaps', '12-ecarts-aucun');
+
+	await page.getByTestId(`wise-check-${frais}`).check();
+	await page.getByTestId(`wise-check-${conversion}`).check();
+	await page.getByTestId('wise-accept').click();
+	await expect(page.getByTestId('wise-accept-report')).toHaveText('2 proposition(s) acceptée(s), 0 refusée(s).');
+	await expect(page.getByTestId(`wise-proposal-${frais}`)).toHaveCount(0);
+	await expect(page.getByTestId(`wise-proposal-${conversion}`)).toHaveCount(0);
+	await expect(page.getByTestId(`wise-proposal-${regle}`)).toHaveCount(1);
+	await captureOf(page, 'wise-accept-report', '13-compte-rendu-premier-compte');
+});
+
+test('6 — second compte Wise : le paiement par carte groupé et ses lignes, accepté en une écriture', async ({ page }) => {
+	await login(page);
+	const ctx = await authedApiContext(page);
+	let lignes: number[];
+	try {
+		const create = async (number: string, name: string, extra: object = {}) =>
+			(await api<{ id: number }>(ctx, 'post', '/api/v1/accounts', { number, name, accountType: 'Asset', ...extra })).id;
+		const chf = await create('1076', 'Wise Deux CHF');
+		const usd = await create('1077', 'Wise Deux USD', { currency: 'USD' });
+		for (const [bankName, journalAccountId] of [
+			['Wise Deux CHF', chf],
+			['Wise Deux USD', usd],
+		] as const) {
+			await api(ctx, 'post', '/api/v1/bank-accounts', {
+				bankName,
+				journalAccountId,
+				wise: { account: WISE_DEUX, feeAccountId: ids.fee },
+			});
+		}
+	} finally {
+		await disposeContextSafe(ctx);
+	}
+
+	await page.goto('/reconciliation/wise');
+	// « Wise Fictif » reste le compte choisi à l'ouverture.
+	await expect(page.getByTestId('wise-account')).toHaveValue(WISE);
+	await page.getByTestId('wise-account').selectOption(WISE_DEUX);
+	const { chf, usd } = relevesCarte();
+	await page.getByTestId('wise-file-input').setInputFiles([
+		{ name: 'deux-chf.csv', mimeType: 'text/csv', buffer: chf },
+		{ name: 'deux-usd.csv', mimeType: 'text/csv', buffer: usd },
+	]);
+	await expect(page.getByTestId('wise-import-report')).toBeVisible();
+	await expect(page.getByTestId('wise-import-error')).toHaveCount(0);
+
+	const ctx2 = await authedApiContext(page);
+	try {
+		const r = await revue(ctx2, WISE_DEUX);
+		const groupe = r.proposals.find((p) => p.type === 'card_group')!;
+		lignes = groupe.bankTransactionIds!;
+		expect(lignes).toHaveLength(3);
+		expect(groupe.lines!.map((l) => l.id)).toEqual(lignes);
+	} finally {
+		await disposeContextSafe(ctx2);
+	}
+	const [principale, ...autres] = lignes;
+	const row = page.getByTestId(`wise-proposal-${principale}`);
+	await expect(row).toContainText('Paiement par carte');
+	await expect(row).toContainText('Une écriture : 97.95 CHF au compte');
+	await expect(row).toContainText('-86.60 CHF');
+	for (const id of autres) await expect(page.getByTestId(`wise-proposal-line-${id}`)).toBeVisible();
+	await expect(page.locator('[data-testid^="wise-proposal-line-"]').filter({ hasText: 'frais' })).toHaveCount(1);
+	await captureOf(page, 'wise-proposals', '14-paiement-groupe-et-ses-lignes');
+
+	await page.getByTestId(`wise-check-${principale}`).check();
+	await page.getByTestId('wise-accept').click();
+	await expect(page.getByTestId('wise-accept-report')).toHaveText('1 proposition(s) acceptée(s), 0 refusée(s).');
+	await expect(page.getByTestId(`wise-proposal-${principale}`)).toHaveCount(0);
+	await expect(page.getByTestId('wise-proposals-empty')).toBeVisible();
+	await captureOf(page, 'wise-accept-report', '15-compte-rendu-paiement-groupe');
+	await capture(page, '16-page-wise-apres-acceptation');
+
+	// Une écriture : les trois transactions rapprochées sur la même.
+	const ctx3 = await authedApiContext(page);
+	try {
+		const ecritures = new Set<number | null>();
+		for (const id of lignes) {
+			const t = await api<{ status: string; matchedEntryId: number | null }>(
+				ctx3,
+				'get',
+				`/api/v1/reconciliation/transactions/${id}`,
+			);
+			expect(t.status, String(id)).toBe('reconciled');
+			ecritures.add(t.matchedEntryId);
+		}
+		expect(ecritures.size).toBe(1);
+		expect([...ecritures][0]).not.toBeNull();
+	} finally {
+		await disposeContextSafe(ctx3);
 	}
 });

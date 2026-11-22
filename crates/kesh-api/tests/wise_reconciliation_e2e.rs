@@ -1140,6 +1140,97 @@ async fn partielle_dont_un_seul_solde_est_importe(pool: MySqlPool) {
     );
 }
 
+/// Story 39-11d2 (AC-1) — ce que l'écran lit d'un paiement groupé : la
+/// proposition porte ses lignes (`lines`, dans l'ordre de
+/// `bankTransactionIds`, la ligne CHF en tête) et le montant du marchand
+/// (`merchantAmount`) ; un corps d'acceptation qui reprend ces champs
+/// d'affichage est accepté (ils sont ignorés), en une écriture.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn revue_du_groupe_avec_ses_lignes(pool: MySqlPool) {
+    let (ctx, regle, ids) = monter_partielle(&pool).await;
+    let revue = ctx.revue().await;
+    let p = &revue["proposals"][0];
+    assert_eq!(p["type"], "card_group", "{revue}");
+    assert_eq!(p["merchantAmount"], "97.95", "{revue}");
+    assert_eq!(p["ruleId"], regle, "{revue}");
+    let lignes = p["lines"].as_array().expect("lines");
+    assert_eq!(lignes.len(), 3, "{revue}");
+    let identifiants: Vec<i64> = lignes.iter().map(|l| l["id"].as_i64().unwrap()).collect();
+    assert_eq!(identifiants, ids.to_vec(), "l'ordre de bankTransactionIds");
+    assert_eq!(lignes[0], p["transaction"], "la principale en tête");
+    assert_eq!(lignes[0]["currency"], "CHF");
+    assert_eq!(lignes[0]["amount"], "-86.60");
+    assert_eq!(lignes[0]["transactionId"], "CARD-90000020");
+    let frais = lignes
+        .iter()
+        .find(|l| l["transactionId"] == "FEE-CARD-90000020")
+        .expect("la ligne de frais");
+    assert_eq!(
+        (&frais["amount"], &frais["currency"]),
+        (&json!("-0.04"), &json!("USD"))
+    );
+    // Le corps tel que la revue le sert, champs d'affichage compris.
+    let mut corps = p.clone();
+    corps.as_object_mut().unwrap().remove("transaction");
+    assert!(corps.get("lines").is_some() && corps.get("merchantAmount").is_some());
+    let (s, b) = ctx.accepter(vec![corps]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    assert_eq!(b["accepted"][0]["type"], "card_group", "{b}");
+    let ecriture = b["accepted"][0]["journalEntryIds"][0].as_i64().unwrap();
+    for id in ids {
+        assert_eq!(ctx.etat(id).await, ("reconciled".into(), Some(ecriture)));
+    }
+}
+
+/// Story 39-11d2 (AC-1) — un `card_group_statements_missing` porte, à la
+/// revue, les lignes du paiement (`details.lines`) et la devise de chaque
+/// solde manquant (`details.missingCurrencies`, rang pour rang avec
+/// `missingBankAccountIds`) ; refusé à l'acceptation, ses `failed[].details`
+/// ne portent que les champs du motif : `missingCurrencies`, sans `lines`.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn lignes_et_devises_d_un_groupe_a_examiner(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let (_, usd) = releves_partielle();
+    let (s, b) = ctx.importer(&[("usd.csv", &usd)]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let regle = regle_boutique(&ctx).await;
+    let revue = ctx.revue().await;
+    let examen = de_groupe(&revue["toReview"]);
+    assert_eq!(examen.len(), 1, "{revue}");
+    assert_eq!(examen[0]["code"], "card_group_statements_missing");
+    let details = &examen[0]["details"];
+    assert_eq!(details["missingCurrencies"], json!(["CHF"]), "{revue}");
+    let solde_chf: i64 =
+        sqlx::query_scalar("SELECT id FROM bank_accounts WHERE journal_account_id = ?")
+            .bind(ctx.chf)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+    assert_eq!(details["missingBankAccountIds"], json!([solde_chf]));
+    let lignes: Vec<&str> = details["lines"]
+        .as_array()
+        .expect("details.lines")
+        .iter()
+        .map(|l| l["transactionId"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        lignes,
+        vec!["CARD-90000020", "FEE-CARD-90000020"],
+        "{revue}"
+    );
+    let ids: Vec<i64> = serde_json::from_value(details["bankTransactionIds"].clone()).unwrap();
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!(s, 200, "{b}");
+    let refus = &b["failed"][0]["details"];
+    assert_eq!(refus["reason"], "card_group_statements_missing", "{b}");
+    assert_eq!(refus["missingCurrencies"], json!(["CHF"]), "{b}");
+    assert_eq!(refus["missingBankAccountIds"], json!([solde_chf]), "{b}");
+    assert!(
+        refus.get("lines").is_none(),
+        "seuls les champs du motif : {b}"
+    );
+}
+
 /// Revue P2, M1 : le relevé CHF importé **d'abord**, sa ligne `CARD-` est
 /// passée seule par la règle (une écriture) ; le relevé USD arrivé ensuite, la
 /// part USD du même paiement n'est ni proposée ni acceptée
