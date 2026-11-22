@@ -961,6 +961,20 @@ async fn import_raccord_reponses_traces_et_ordre_inchanges(pool: MySqlPool) {
         )
     );
 
+    // L'empreinte stockée : SHA-256(octets ‖ ":" ‖ devise), celle des relevés
+    // importés avant le raccord (validation P2, L1).
+    use sha2::{Digest, Sha256};
+    let attendue: String = Sha256::digest([chf_b.as_slice(), b":CHF"].concat())
+        .iter()
+        .map(|o| format!("{o:02x}"))
+        .collect();
+    let stockee: String = sqlx::query_scalar("SELECT file_hash FROM bank_imports WHERE id = ?")
+        .bind(id_chf)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stockee, attendue);
+
     // Tout en doublons, à écart de continuité (premier jour non couvert,
     // ouverture 3010 pour une clôture précédente de 2590) : pas d'entrée,
     // mais l'avertissement est rendu et tracé (validation P1, M3).

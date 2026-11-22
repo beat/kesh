@@ -361,9 +361,10 @@
 //!   la sentinelle `companies` en exclusif puis demande une de ces lignes ;
 //!   tenue par `import_rejoue_un_interblocage_avec_un_geste_de_compte`
 //!   (`paypal_import_e2e.rs`). Et — Story 39-11b — `wise_imports::create`
-//!   (opération `wise_imports::create`), pour la même raison : depuis la 39-11b,
-//!   les deux imports de prestataire passent par le cœur commun
-//!   `paypal_imports::run_provider_import`, qui porte l'enveloppe (et non plus
+//!   (opération `wise_imports::create`), pour la même raison : les imports de
+//!   prestataire passent par le cœur commun `provider_imports::import_lines`
+//!   (Story 38-12a ; Wise depuis la Story 39-14 — avant, la copie de la 39-11b,
+//!   `paypal_imports::run_provider_import`), qui porte l'enveloppe (et non plus
 //!   le corps du handler) ; tenue par
 //!   `import_wise_rejoue_un_interblocage_avec_un_geste_de_compte`
 //!   (`wise_import_e2e.rs`).
