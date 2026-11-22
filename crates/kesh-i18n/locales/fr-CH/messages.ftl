@@ -4165,6 +4165,7 @@ reports-groups-level = Niveau de détail
 reports-groups-level-n = Niveau { $level }
 reports-groups-level-all = Tous les comptes
 reports-groups-level-hint = Les sections légales du bilan restent (Actifs, Passifs, Capitaux propres). Un affichage replié, au niveau 1 en particulier, est un affichage de travail, non des comptes annuels.
+reports-groups-level-hint-trial-balance = Le total des débits et celui des crédits restent ceux de tous les comptes. Un groupe dont les comptes non nuls sont de natures contraires (débitrice et créditrice) n'est pas totalisé : ses sous-comptes paraissent à sa place. Un affichage replié est un affichage de travail.
 reports-groups-open-all = Tout ouvrir
 reports-groups-close-all = Tout fermer
 reports-groups-subtotals = Sous-totaux

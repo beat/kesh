@@ -33,8 +33,8 @@ use crate::balance_sheet::{AccountBalance, BalanceSheet};
 use crate::errors::ReportError;
 use crate::general_ledger::FiscalYearBreak;
 use crate::groupes::{
-    AvecGroupes, GenreLigne, Grouping, LigneRapport, NiveauDetail, PositionSousTotal,
-    SectionsBilan, SectionsResultat,
+    AvecGroupes, GenreLigne, Grouping, LigneBalanceGroupee, LigneGroupeeAffichee, LigneRapport,
+    NiveauDetail, PositionSousTotal, SectionsBilan, SectionsResultat,
 };
 use crate::income_statement::IncomeStatement;
 use crate::journal_report::JournalReport;
@@ -1194,21 +1194,103 @@ fn retrait_groupe_mm(depth: u32) -> f32 {
     (depth.saturating_sub(1) as f32 * GROUPE_RETRAIT_PAS_MM).min(GROUPE_RETRAIT_MAX_MM)
 }
 
-/// Le plus long libellé, en caractères, qu'une ligne groupée de profondeur
-/// `depth` imprime sans le tronquer : la limite d'un nom de compte (en devise
-/// si `en_devise`, [`ACCOUNT_NAME_MAX_CHARS_FX`], sinon
-/// [`GROUPE_NOM_MAX_CHARS`]), moins un caractère par 2,5 mm de retrait. Un
-/// libellé plus long finit par « … » ([`truncate_with_ellipsis`]).
+/// Où une ligne groupée écrit son libellé, et jusqu'où (Story 46-6b) : le
+/// bilan et le compte de résultat ont leur nom à 25 mm de la marge et une
+/// longue colonne de nom ; la balance, son intitulé à 20 mm
+/// ([`TB_COL_X`]) et une colonne de 55 mm ([`TB_NAME_MAX_CHARS`]).
+///
+/// Une ligne **sans numéro** (le sous-total « Total <nom> », ou une ligne dont
+/// le numéro est vide) a son propre départ et sa propre longueur
+/// ([`Self::x_sans_numero_mm`], [`Self::nom_max_sans_numero`]) : à la balance,
+/// son libellé part de la colonne du numéro, qu'elle n'occupe pas, et gagne
+/// les 20 mm de cette colonne (revue de code P1 de la 46-6b : à 22
+/// caractères, « Total Capitaux étrangers à court terme » et « … à long
+/// terme » s'abrégeaient tous deux en « Total Capitaux étra… »).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Gabarit {
+    /// Abscisse du libellé au retrait nul, en mm depuis la marge gauche (le
+    /// numéro est à la marge, plus le retrait).
+    x_nom_mm: f32,
+    /// Longueur maximale du libellé au retrait nul, en caractères.
+    nom_max: usize,
+    /// Abscisse du libellé d'une ligne sans numéro, au retrait nul.
+    x_sans_numero_mm: f32,
+    /// Longueur maximale du libellé d'une ligne sans numéro, au retrait nul.
+    nom_max_sans_numero: usize,
+}
+
+impl Gabarit {
+    /// Le bilan et le compte de résultat : [`ACCOUNT_NAME_MAX_CHARS_FX`] sur
+    /// une ligne en devise (`en_devise`), [`GROUPE_NOM_MAX_CHARS`] sinon.
+    /// Une ligne sans numéro y garde le départ et la longueur des autres.
+    fn bilan(en_devise: bool) -> Self {
+        let nom_max = if en_devise {
+            ACCOUNT_NAME_MAX_CHARS_FX
+        } else {
+            GROUPE_NOM_MAX_CHARS
+        };
+        Self {
+            x_nom_mm: 25.0,
+            nom_max,
+            x_sans_numero_mm: 25.0,
+            nom_max_sans_numero: nom_max,
+        }
+    }
+
+    /// La balance par groupes : l'intitulé dans sa colonne, en devise ou non
+    /// (la devise est sur la seconde ligne) ; une ligne sans numéro part de la
+    /// colonne du numéro ([`TB_NAME_MAX_CHARS_SANS_NUMERO`]). Le rendu à plat
+    /// de la balance n'emploie pas ce gabarit.
+    const BALANCE: Self = Self {
+        x_nom_mm: TB_COL_X[1],
+        nom_max: TB_NAME_MAX_CHARS,
+        x_sans_numero_mm: TB_COL_X[0],
+        nom_max_sans_numero: TB_NAME_MAX_CHARS_SANS_NUMERO,
+    };
+
+    /// Le plus long libellé qu'une ligne de profondeur `depth`, avec ou sans
+    /// numéro (`avec_numero`), imprime sans le tronquer : [`Self::nom_max`]
+    /// (ou [`Self::nom_max_sans_numero`]) moins un caractère par 2,5 mm de
+    /// retrait.
+    fn limite(self, depth: u32, avec_numero: bool) -> usize {
+        let max = if avec_numero {
+            self.nom_max
+        } else {
+            self.nom_max_sans_numero
+        };
+        max - (retrait_groupe_mm(depth) / 2.5) as usize
+    }
+
+    /// L'abscisse du libellé au retrait nul, avec ou sans numéro.
+    fn x(self, avec_numero: bool) -> f32 {
+        if avec_numero {
+            self.x_nom_mm
+        } else {
+            self.x_sans_numero_mm
+        }
+    }
+}
+
+/// Le plus long libellé, en caractères, qu'une ligne groupée du bilan ou du
+/// compte de résultat de profondeur `depth` imprime sans le tronquer : la
+/// limite d'un nom de compte (en devise si `en_devise`,
+/// [`ACCOUNT_NAME_MAX_CHARS_FX`], sinon [`GROUPE_NOM_MAX_CHARS`]), moins un
+/// caractère par 2,5 mm de retrait. Un libellé plus long finit par « … »
+/// ([`truncate_with_ellipsis`]).
 ///
 /// Publique pour les tests de fidélité (Story 46-3, AC-4), qui s'assurent
 /// qu'aucun libellé de leur jeu ne l'atteint.
 pub fn limite_nom_groupe(depth: u32, en_devise: bool) -> usize {
-    let base = if en_devise {
-        ACCOUNT_NAME_MAX_CHARS_FX
-    } else {
-        GROUPE_NOM_MAX_CHARS
-    };
-    base - (retrait_groupe_mm(depth) / 2.5) as usize
+    Gabarit::bilan(en_devise).limite(depth, true)
+}
+
+/// [`limite_nom_groupe`] pour la balance (Story 46-6b) : [`TB_NAME_MAX_CHARS`]
+/// pour une ligne qui porte un numéro (`avec_numero`), sinon — le sous-total
+/// « Total <nom> » — [`TB_NAME_MAX_CHARS_SANS_NUMERO`], moins un caractère par
+/// 2,5 mm de retrait. Publique pour le test de fidélité de la balance, qui en
+/// tronque ses libellés attendus.
+pub fn limite_nom_groupe_balance(depth: u32, avec_numero: bool) -> usize {
+    Gabarit::BALANCE.limite(depth, avec_numero)
 }
 
 /// La ligne de l'en-tête d'un rapport groupé (C-46-3-1) : « Niveau 2 » ou
@@ -1234,8 +1316,8 @@ fn any_foreign_grouped<'a>(lignes: impl IntoIterator<Item = &'a LigneRapport>) -
 }
 
 /// Ce qu'une ligne groupée imprime à gauche des montants, selon la règle de
-/// rendu de la 46-1 — partagé avec la balance par groupes (46-6b), qui y pose
-/// ses propres colonnes de montant.
+/// rendu de la 46-1 — partagé par le bilan, le compte de résultat et la
+/// balance par groupes (46-6b), qui y posent chacun leurs colonnes de montant.
 #[derive(Debug, Clone, PartialEq)]
 struct LibelleGroupe {
     /// Numéro du compte (absent d'une ligne de sous-total).
@@ -1244,15 +1326,19 @@ struct LibelleGroupe {
     texte: String,
     /// Gras : un groupe et son sous-total.
     gras: bool,
-    /// Le montant s'écrit sur cette ligne : pas sur le titre d'un groupe
+    /// Les montants s'écrivent sur cette ligne
+    /// ([`LigneGroupeeAffichee::porte_montant`]) : pas sur le titre d'un groupe
     /// ouvert dont le sous-total est en pied.
     montant: bool,
     /// Retrait, en mm ([`retrait_groupe_mm`]).
     retrait_mm: f32,
+    /// Abscisse du libellé au retrait nul ([`Gabarit::x_nom_mm`], ou
+    /// [`Gabarit::x_sans_numero_mm`] sans numéro).
+    x_nom_mm: f32,
 }
 
 impl LibelleGroupe {
-    /// Le libellé d'une ligne de genre `kind` (règle de rendu de la 46-1) :
+    /// Le libellé de la ligne `l` (règle de rendu de la 46-1) :
     ///
     /// - `Groupe` en gras, montant sur le titre si les sous-totaux sont sur le
     ///   titre (`header`) ou si le groupe est fermé, sinon sur son sous-total ;
@@ -1260,59 +1346,49 @@ impl LibelleGroupe {
     /// - `Propre` « <nom> (solde propre) » ;
     /// - `Compte` comme un compte du rendu à plat.
     ///
-    /// Le texte est tronqué à [`limite_nom_groupe`] (`en_devise` : la ligne
-    /// porte un solde en devise). Les champs d'une ligne sont passés un à un,
-    /// et non une `LigneRapport` : la balance (46-6b) a sa propre ligne.
-    #[allow(clippy::too_many_arguments)]
+    /// Le texte est tronqué à la limite du `gabarit` ([`Gabarit::limite`]) ;
+    /// une ligne sans numéro — un sous-total, ou un numéro vide — prend le
+    /// départ et la longueur des lignes sans numéro du gabarit.
     fn de(
-        kind: GenreLigne,
-        depth: u32,
-        numero: &str,
-        nom: &str,
-        open: Option<bool>,
+        l: &impl LigneGroupeeAffichee,
         position: PositionSousTotal,
-        en_devise: bool,
-        l: &SectionLabels,
+        gabarit: Gabarit,
+        labels: &SectionLabels,
     ) -> Self {
-        let (numero, texte, gras, montant) = match kind {
-            GenreLigne::Groupe => (
-                Some(numero),
-                nom.to_string(),
-                true,
-                position == PositionSousTotal::Titre || open == Some(false),
-            ),
+        let (numero, nom, depth) = (l.numero(), l.nom(), l.profondeur());
+        let (numero, texte, gras) = match l.genre() {
+            GenreLigne::Groupe => (Some(numero), nom.to_string(), true),
             GenreLigne::SousTotal => (
                 None,
-                format!("{} {nom}", l.grouped_subtotal_prefix),
-                true,
+                format!("{} {nom}", labels.grouped_subtotal_prefix),
                 true,
             ),
             GenreLigne::Propre => (
                 Some(numero),
-                format!("{nom} {}", l.grouped_own_suffix),
+                format!("{nom} {}", labels.grouped_own_suffix),
                 false,
-                true,
             ),
-            GenreLigne::Compte => (Some(numero), nom.to_string(), false, true),
+            GenreLigne::Compte => (Some(numero), nom.to_string(), false),
         };
+        let numero = numero.filter(|n| !n.is_empty());
+        let avec_numero = numero.is_some();
         Self {
             numero: numero.map(String::from),
-            texte: truncate_with_ellipsis(&texte, limite_nom_groupe(depth, en_devise)),
+            texte: truncate_with_ellipsis(&texte, gabarit.limite(depth, avec_numero)),
             gras,
-            montant,
+            montant: l.porte_montant(position),
             retrait_mm: retrait_groupe_mm(depth),
+            x_nom_mm: gabarit.x(avec_numero),
         }
     }
 
     /// Dessine le numéro et le libellé à la position courante, sans avancer ;
-    /// le titre d'un groupe ouvert réserve la place de sa première ligne de
-    /// contenu (garder-avec-la-suite, comme les sous-titres de rôle).
-    fn dessiner(&self, builder: &mut PdfBuilder, ouvert: bool) {
-        if ouvert {
-            builder.ensure_space_for_rows(2.0);
-        } else {
-            builder.ensure_space_for_row();
-        }
+    /// `lignes` est le nombre de lignes à garder ensemble sur la page : deux
+    /// pour le titre d'un groupe ouvert (sa première ligne de contenu,
+    /// garder-avec-la-suite, comme les sous-titres de rôle) ou une ligne de la
+    /// balance suivie de sa seconde ligne en devise, une sinon.
+    fn dessiner(&self, builder: &mut PdfBuilder, lignes: f32) {
+        builder.ensure_space_for_rows(lignes);
         if let Some(numero) = &self.numero {
             builder.write_inline(
                 numero,
@@ -1325,8 +1401,18 @@ impl LibelleGroupe {
             &self.texte,
             FONT_SIZE_PT,
             self.gras,
-            MARGIN_LEFT_MM + 25.0 + self.retrait_mm,
+            MARGIN_LEFT_MM + self.x_nom_mm + self.retrait_mm,
         );
+    }
+}
+
+/// Lignes à garder ensemble pour une ligne groupée : deux pour le titre d'un
+/// groupe ouvert, une sinon.
+fn lignes_liees(l: &impl LigneGroupeeAffichee) -> f32 {
+    if l.genre() == GenreLigne::Groupe && l.ouvert() == Some(true) {
+        2.0
+    } else {
+        1.0
     }
 }
 
@@ -1340,23 +1426,18 @@ fn draw_grouped_rows(
     g: &Grouping,
 ) {
     for ligne in lignes {
-        let fx = ligne.currency.as_deref().zip(ligne.balance_currency);
+        let fx = ligne.devise();
         let libelle = LibelleGroupe::de(
-            ligne.kind,
-            ligne.depth,
-            &ligne.account_number,
-            &ligne.account_name,
-            ligne.open,
+            ligne,
             g.subtotal_position,
-            fx.is_some(),
+            Gabarit::bilan(fx.is_some()),
             &ctx.section_labels,
         );
-        let ouvert = ligne.kind == GenreLigne::Groupe && ligne.open == Some(true);
-        libelle.dessiner(builder, ouvert);
+        libelle.dessiner(builder, lignes_liees(ligne));
         if libelle.montant {
-            if let Some((cur, montant)) = fx {
+            if let Some((cur, montants)) = &fx {
                 builder.write_right(
-                    &format!("{cur} {}", format_swiss_amount_arrondi(montant)),
+                    &format!("{cur} {}", format_swiss_amount_arrondi(montants[0])),
                     FONT_SIZE_PT,
                     libelle.gras,
                     FX_AMOUNT_RIGHT_MM,
@@ -1390,6 +1471,13 @@ const TB_AMOUNT_RIGHT_MM: [f32; 4] = [117.0, 143.0, 169.0, AMOUNT_RIGHT_MM];
 /// caractères tiennent dans 55 mm, même en capitales.
 const TB_NAME_MAX_CHARS: usize = 22;
 
+/// Longueur maximale, à la balance **par groupes**, du libellé d'une ligne sans
+/// numéro (le sous-total « Total <nom> ») : il part de la colonne du numéro et
+/// gagne ses 20 mm, soit 8 caractères à 2,5 mm — 30 caractères dans 75 mm,
+/// jusqu'au même bord que l'intitulé (revue de code P1 de la 46-6b). Le rendu
+/// à plat n'a pas de ligne sans numéro.
+const TB_NAME_MAX_CHARS_SANS_NUMERO: usize = TB_NAME_MAX_CHARS + 8;
+
 /// Dessine une ligne de la balance : six cellules, `None` = cellule vide. Les
 /// deux premières (N°, intitulé) s'écrivent à gauche de leur colonne, les
 /// quatre montants alignés à droite sur [`TB_AMOUNT_RIGHT_MM`].
@@ -1400,11 +1488,41 @@ fn draw_tb_row(builder: &mut PdfBuilder, cells: [Option<&str>; 6], bold: bool) {
             builder.write_inline(text, FONT_SIZE_PT, bold, MARGIN_LEFT_MM + x);
         }
     }
+    draw_tb_amounts(builder, amounts, bold);
+}
+
+/// Les montants d'une ligne de la balance, alignés à droite sur
+/// [`TB_AMOUNT_RIGHT_MM`], `None` = cellule vide — partagé par la ligne à plat
+/// et la ligne groupée (Story 46-6b).
+fn draw_tb_amounts(builder: &mut PdfBuilder, amounts: &[Option<&str>], bold: bool) {
     for (cell, right) in amounts.iter().zip(TB_AMOUNT_RIGHT_MM) {
         if let Some(text) = cell {
             builder.write_right(text, FONT_SIZE_PT, bold, right);
         }
     }
+}
+
+/// La seconde ligne en petit d'une ligne de la balance en devise (Story 37-4,
+/// AC-5) : « USD ouverture … · débit … · crédit … · clôture … », les quatre
+/// montants en devise écrits par `fmt`.
+fn tb_fx_text(l: &SectionLabels, cur: &str, m: [Decimal; 4], fmt: fn(Decimal) -> String) -> String {
+    format!(
+        "{cur} {} {} · {} {} · {} {} · {} {}",
+        l.fx_opening,
+        fmt(m[0]),
+        l.fx_debit,
+        fmt(m[1]),
+        l.fx_credit,
+        fmt(m[2]),
+        l.fx_closing,
+        fmt(m[3]),
+    )
+}
+
+/// Un montant en devise de la balance à plat : arrondi d'affichage, puis le
+/// format suisse (Story 37-4).
+fn format_tb_fx_flat(v: Decimal) -> String {
+    format_swiss_amount(round_for_display(v))
 }
 
 /// Génère le PDF de la balance des comptes — 6 colonnes : N°, Intitulé,
@@ -1414,13 +1532,47 @@ pub fn render_trial_balance_pdf(
     tb: &TrialBalance,
     ctx: &PdfContext,
 ) -> Result<Vec<u8>, ReportError> {
+    rendre_balance_pdf(tb, ctx, None)
+}
+
+/// Génère le PDF de la balance **telle que l'écran la groupe** (Story 46-6b,
+/// AC-2) : avec `grouping` et `groupedRows` (46-6a), le corps suit les lignes
+/// groupées — retrait par profondeur, groupes et sous-totaux en gras,
+/// sous-totaux sur le titre ou en pied, par le libellé partagé avec le bilan
+/// ([`LibelleGroupe`]) — et un groupe en devise unique porte sa seconde ligne
+/// en devise comme un compte ; l'en-tête dit le niveau. Sans eux, c'est
+/// [`render_trial_balance_pdf`], à l'identique (AC-3). Résultat reporté,
+/// totaux et contrôle d'ouverture sont ceux du rendu à plat, arrondis au
+/// centime ([`format_swiss_amount_arrondi`]).
+pub fn render_grouped_trial_balance_pdf(
+    report: &AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>,
+    ctx: &PdfContext,
+) -> Result<Vec<u8>, ReportError> {
+    let groupes = report.grouping.as_ref().zip(report.grouped_rows.as_deref());
+    rendre_balance_pdf(&report.rapport, ctx, groupes)
+}
+
+/// La balance, à plat (`groupes = None`) ou par groupes : un seul rendu, dont
+/// seuls l'en-tête, le corps et l'arrondi diffèrent (Story 46-6b).
+fn rendre_balance_pdf(
+    tb: &TrialBalance,
+    ctx: &PdfContext,
+    groupes: Option<(&Grouping, &[LigneBalanceGroupee])>,
+) -> Result<Vec<u8>, ReportError> {
+    let fmt: fn(Decimal) -> String = if groupes.is_some() {
+        format_swiss_amount_arrondi
+    } else {
+        format_swiss_amount
+    };
     let mut builder = PdfBuilder::new("Balance des comptes")?;
-    draw_header(
+    let detail = groupes.map(|(g, _)| grouped_level_line(g, &ctx.section_labels));
+    draw_header_with(
         &mut builder,
         ctx,
         "Balance des comptes",
         tb.period.start_date,
         tb.period.end_date,
+        detail.as_deref(),
     );
 
     if tb.rows.is_empty() {
@@ -1429,9 +1581,13 @@ pub fn render_trial_balance_pdf(
     }
 
     let l = &ctx.section_labels;
-    // Avec un compte en devise, les quatre colonnes disent leur devise
-    // (« Débit CHF ») : les montants en devise sont dans la seconde ligne.
-    let multi = tb.rows.iter().any(|r| r.currency.is_some());
+    // Avec un compte en devise (groupé : une ligne groupée en devise, comme au
+    // bilan), les quatre colonnes disent leur devise (« Débit CHF ») : les
+    // montants en devise sont dans la seconde ligne.
+    let multi = match groupes {
+        None => tb.rows.iter().any(|r| r.currency.is_some()),
+        Some((_, lignes)) => lignes.iter().any(|r| r.currency.is_some()),
+    };
     let [opening_h, debit_h, credit_h, closing_h] =
         [&l.col_opening, &l.col_debit, &l.col_credit, &l.col_closing]
             .map(|h| l.amount_header(h, multi));
@@ -1449,60 +1605,14 @@ pub fn render_trial_balance_pdf(
     );
     builder.cursor_y -= LINE_HEIGHT_MM * 1.5;
 
-    for row in &tb.rows {
-        // Un compte en devise garde sa seconde ligne sur la même page.
-        if row.currency.is_some() {
-            builder.ensure_space_for_rows(2.0);
-        } else {
-            builder.ensure_space_for_row();
-        }
-        // Pass 1 code-review H4 (BH1-H4) : un intitulé trop long déborderait sur la
-        // colonne suivante — tronqué avec ellipsis Unicode.
-        let name = truncate_with_ellipsis(&row.account_name, TB_NAME_MAX_CHARS);
-        let (opening, debit, credit, closing) = (
-            format_swiss_amount(row.opening_balance),
-            format_swiss_amount(row.total_debit),
-            format_swiss_amount(row.total_credit),
-            format_swiss_amount(row.closing_balance),
-        );
-        draw_tb_row(
-            &mut builder,
-            [
-                Some(&row.account_number),
-                Some(&name),
-                Some(&opening),
-                Some(&debit),
-                Some(&credit),
-                Some(&closing),
-            ],
-            false,
-        );
-        builder.cursor_y -= LINE_HEIGHT_MM;
-
-        // Story 37-4, AC-5 : sous un compte en devise, une seconde ligne en
-        // petit — ouverture, débit, crédit et clôture en devise. Aucune ligne de
-        // total en devise (devises mêlées).
-        if let Some(cur) = &row.currency {
-            let m =
-                |v: Option<Decimal>| format_swiss_amount(round_for_display(v.unwrap_or_default()));
-            let texte = format!(
-                "{cur} {} {} · {} {} · {} {} · {} {}",
-                l.fx_opening,
-                m(row.opening_currency),
-                l.fx_debit,
-                m(row.total_debit_currency),
-                l.fx_credit,
-                m(row.total_credit_currency),
-                l.fx_closing,
-                m(row.closing_currency),
-            );
-            builder.write_fx_line(&texte, MARGIN_LEFT_MM + TB_COL_X[1]);
-        }
+    match groupes {
+        None => draw_tb_flat_rows(&mut builder, l, &tb.rows),
+        Some((g, lignes)) => draw_tb_grouped_rows(&mut builder, l, lignes, g),
     }
 
     // Ligne calculée du résultat reporté : ouverture = clôture, sans mouvement.
     builder.ensure_space_for_row();
-    let retained = format_swiss_amount(tb.retained_earnings);
+    let retained = fmt(tb.retained_earnings);
     // Libellé fixe, non tronqué : « Résultat reporté (calculé) » ≈ 46 mm en casse
     // mixte, dans les 55 mm de la colonne.
     draw_tb_row(
@@ -1522,10 +1632,7 @@ pub fn render_trial_balance_pdf(
     // Totaux des mouvements.
     builder.cursor_y -= LINE_HEIGHT_MM * 0.5;
     builder.ensure_space_for_row();
-    let (total_debit, total_credit) = (
-        format_swiss_amount(tb.total_debit),
-        format_swiss_amount(tb.total_credit),
-    );
+    let (total_debit, total_credit) = (fmt(tb.total_debit), fmt(tb.total_credit));
     draw_tb_row(
         &mut builder,
         [
@@ -1549,6 +1656,104 @@ pub fn render_trial_balance_pdf(
     }
 
     builder.finalize()
+}
+
+/// Les comptes de la balance à plat (Story 25-5-b ; 37-4 : seconde ligne en
+/// devise).
+fn draw_tb_flat_rows(
+    builder: &mut PdfBuilder,
+    l: &SectionLabels,
+    rows: &[crate::trial_balance::TrialBalanceRow],
+) {
+    for row in rows {
+        // Un compte en devise garde sa seconde ligne sur la même page.
+        if row.currency.is_some() {
+            builder.ensure_space_for_rows(2.0);
+        } else {
+            builder.ensure_space_for_row();
+        }
+        // Pass 1 code-review H4 (BH1-H4) : un intitulé trop long déborderait sur la
+        // colonne suivante — tronqué avec ellipsis Unicode.
+        let name = truncate_with_ellipsis(&row.account_name, TB_NAME_MAX_CHARS);
+        let (opening, debit, credit, closing) = (
+            format_swiss_amount(row.opening_balance),
+            format_swiss_amount(row.total_debit),
+            format_swiss_amount(row.total_credit),
+            format_swiss_amount(row.closing_balance),
+        );
+        draw_tb_row(
+            builder,
+            [
+                Some(&row.account_number),
+                Some(&name),
+                Some(&opening),
+                Some(&debit),
+                Some(&credit),
+                Some(&closing),
+            ],
+            false,
+        );
+        builder.cursor_y -= LINE_HEIGHT_MM;
+
+        // Story 37-4, AC-5 : sous un compte en devise, une seconde ligne en
+        // petit — ouverture, débit, crédit et clôture en devise. Aucune ligne de
+        // total en devise (devises mêlées).
+        if let Some(cur) = &row.currency {
+            let m = [
+                row.opening_currency,
+                row.total_debit_currency,
+                row.total_credit_currency,
+                row.closing_currency,
+            ]
+            .map(Option::unwrap_or_default);
+            builder.write_fx_line(
+                &tb_fx_text(l, cur, m, format_tb_fx_flat),
+                MARGIN_LEFT_MM + TB_COL_X[1],
+            );
+        }
+    }
+}
+
+/// Les lignes groupées de la balance, dans l'ordre reçu (Story 46-6b) : le
+/// libellé partagé avec le bilan ([`LibelleGroupe`], gabarit
+/// [`Gabarit::BALANCE`]), puis, si la ligne porte ses montants, les quatre
+/// colonnes arrondies au centime et, pour une ligne en devise (un compte, ou un
+/// groupe en devise unique), la seconde ligne en devise, au retrait de la
+/// ligne.
+fn draw_tb_grouped_rows(
+    builder: &mut PdfBuilder,
+    l: &SectionLabels,
+    lignes: &[LigneBalanceGroupee],
+    g: &Grouping,
+) {
+    for ligne in lignes {
+        let libelle = LibelleGroupe::de(ligne, g.subtotal_position, Gabarit::BALANCE, l);
+        let fx = ligne.devise().filter(|_| libelle.montant);
+        // La seconde ligne en devise reste sur la page de sa ligne.
+        let liees = if fx.is_some() {
+            2.0
+        } else {
+            lignes_liees(ligne)
+        };
+        libelle.dessiner(builder, liees);
+        if libelle.montant {
+            let m: Vec<String> = ligne
+                .montants()
+                .into_iter()
+                .map(format_swiss_amount_arrondi)
+                .collect();
+            let cells: Vec<Option<&str>> = m.iter().map(|t| Some(t.as_str())).collect();
+            draw_tb_amounts(builder, &cells, libelle.gras);
+        }
+        builder.cursor_y -= LINE_HEIGHT_MM;
+        if let Some((cur, en_devise)) = fx {
+            let m: [Decimal; 4] = en_devise.try_into().unwrap_or_default();
+            builder.write_fx_line(
+                &tb_fx_text(l, cur, m, format_swiss_amount_arrondi),
+                MARGIN_LEFT_MM + TB_COL_X[1] + libelle.retrait_mm,
+            );
+        }
+    }
 }
 
 /// Bords droits des colonnes débit et crédit des journaux, en mm depuis le bord
@@ -3766,6 +3971,21 @@ mod tests {
         let debut = |t: &str, size: f32, bord: f32| right_aligned_x(t, size, true, bord);
         // Balance : l'intitulé (55 mm depuis 35 mm), puis quatre colonnes.
         let mut fin = MARGIN_LEFT_MM + TB_COL_X[1] + 55.0;
+        // Par groupes (46-6b), à chaque niveau, avec ou sans numéro : le plus
+        // long libellé admis, en capitales larges grasses, mesuré depuis son
+        // départ retrait compris, finit avant le plus long montant de la
+        // colonne d'ouverture.
+        for avec_numero in [true, false] {
+            for depth in 1..=8 {
+                let libelle = "E".repeat(limite_nom_groupe_balance(depth, avec_numero));
+                let x = MARGIN_LEFT_MM + Gabarit::BALANCE.x(avec_numero) + retrait_groupe_mm(depth);
+                assert!(
+                    x + largeur_mm(&libelle, FONT_SIZE_PT, true)
+                        < debut(long, FONT_SIZE_PT, TB_AMOUNT_RIGHT_MM[0]),
+                    "balance groupée, niveau {depth}, avec numéro : {avec_numero}"
+                );
+            }
+        }
         for bord in TB_AMOUNT_RIGHT_MM {
             assert!(
                 debut(long, FONT_SIZE_PT, bord) > fin,
@@ -4576,6 +4796,47 @@ mod tests {
         );
     }
 
+    /// AC-3 (revue P2 de la 46-6b, LOW-1) — le sous-total du bilan garde le
+    /// départ (25 mm de la marge, plus le retrait) et la longueur (48
+    /// caractères au retrait nul, un de moins par 2,5 mm de retrait) de ses
+    /// voisins : les champs « sans numéro » du gabarit n'y changent rien.
+    #[test]
+    fn bilan_groupe_sous_total_garde_depart_et_longueur_du_bilan() {
+        let noms: Vec<String> = (1..=4).map(|d| nom_long(&format!("Niveau{d} "))).collect();
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(1, &noms[0], None),
+            noeud(11, &noms[1], Some(1)),
+            noeud(111, &noms[2], Some(11)),
+            noeud(1111, &noms[3], Some(111)),
+        ]);
+        let bs = bilan(vec![ab(1111, &noms[3], dec!(5), AccountType::Asset)]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Pied, &[], &[]);
+        let env = AvecGroupes::bilan(bs, &arbre, &o);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let bytes = render_grouped_balance_sheet_pdf(&env, &ctx).unwrap();
+        let poses = pdf_poses(&bytes);
+        let l = crate::texte_pdf::lignes(&bytes);
+        let totaux: Vec<&String> = l.iter().filter(|t| t.starts_with("Total Niveau")).collect();
+        assert_eq!(totaux.len(), 3, "{l:?}");
+        // Les sous-totaux se ferment du plus profond au moins profond.
+        for (rang, (depth, attendu)) in [(3u32, 45usize), (2, 47), (1, 48)].into_iter().enumerate()
+        {
+            let ligne = totaux[rang].strip_suffix(" 5.00").expect("montant");
+            assert_eq!(ligne.chars().count(), attendu, "longueur, niveau {depth}");
+            assert!(ligne.ends_with('…'), "niveau {depth} : {ligne}");
+            let pose = poses
+                .iter()
+                .find(|p| p.text.starts_with(&format!("Total Niveau{depth} ")))
+                .unwrap_or_else(|| panic!("pose du sous-total, niveau {depth}"));
+            let x = MARGIN_LEFT_MM + 25.0 + retrait_groupe_mm(depth);
+            assert!(
+                (pose.x_mm - x).abs() < 0.01,
+                "abscisse, niveau {depth} : {} au lieu de {x}",
+                pose.x_mm
+            );
+        }
+    }
+
     /// AC-3 — une ligne groupée en devise a moins de place : son libellé finit
     /// par « … » à 34 caractères au retrait nul, 33 au premier retrait.
     #[test]
@@ -4622,5 +4883,269 @@ mod tests {
             vec!["4000 Achats 40.00"]
         );
         assert!(l.contains(&"Résultat net 110.00".to_string()), "{l:?}");
+    }
+
+    // ------------------------------------------------------------------
+    // Story 46-6b — la balance par groupes
+    // ------------------------------------------------------------------
+
+    use crate::essai_groupes::{balance, balance_essai_groupee, balance_usd_groupee};
+
+    /// Les lignes de texte du PDF groupé de la balance d'essai.
+    fn lignes_balance_groupee(o: &crate::groupes::OptionsGroupes) -> Vec<String> {
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        crate::texte_pdf::lignes(
+            &render_grouped_trial_balance_pdf(&balance_essai_groupee(o), &ctx).unwrap(),
+        )
+    }
+
+    /// AC-1, AC-2, AC-4 — sous-totaux sur le titre, tous les groupes : les
+    /// quatre colonnes, arrondies au centime ; le débit de `10` et de `100`
+    /// est l'arrondi de la somme exacte (10.011 → 10.01), non la somme des
+    /// arrondis (10.01 + 0.01) ; l'en-tête dit le niveau ; résultat reporté et
+    /// total après les groupes, hors d'eux.
+    #[test]
+    fn balance_groupee_header_tous_les_comptes() {
+        let l = lignes_balance_groupee(&options(
+            NiveauDetail::Tous,
+            PositionSousTotal::Titre,
+            &[],
+            &[],
+        ));
+        assert!(l.contains(&"Tous les comptes".to_string()), "{l:?}");
+        assert_eq!(
+            entre(
+                &l,
+                "N° compte Intitulé Ouverture Débit Crédit Clôture",
+                "Résultat reporté"
+            ),
+            vec![
+                "10 Actifs circulants 5.00 10.01 0.00 15.01",
+                "100 Liquidités 5.00 10.01 0.00 15.01",
+                "1000 Caisse 0.00 10.01 0.00 10.01",
+                "1020 Banque 5.00 0.01 0.00 5.01",
+                "14 Immobilisations 300.00 0.00 0.00 300.00",
+                "1500 Machines 300.00 0.00 0.00 300.00",
+                "2000 Fournisseurs 305.00 0.00 10.01 315.01",
+            ]
+        );
+        assert!(
+            l.contains(&"Résultat reporté (calculé) 0.00 0.00".to_string()),
+            "{l:?}"
+        );
+        assert!(
+            l.contains(&"Total général 10.01 10.01".to_string()),
+            "{l:?}"
+        );
+    }
+
+    /// AC-2 — sous-totaux en pied : titre ouvert sans montant, « Total <nom> »
+    /// après la descendance ; un groupe fermé à la main porte ses montants sur
+    /// son titre ; « détail ajusté à la main ».
+    #[test]
+    fn balance_groupee_footer_et_groupe_ferme() {
+        let l = lignes_balance_groupee(&options(
+            NiveauDetail::Niveau(2),
+            PositionSousTotal::Pied,
+            &[],
+            &[14],
+        ));
+        assert!(
+            l.contains(&"Niveau 2, détail ajusté à la main".to_string()),
+            "{l:?}"
+        );
+        assert_eq!(
+            entre(
+                &l,
+                "N° compte Intitulé Ouverture Débit Crédit Clôture",
+                "Résultat reporté"
+            ),
+            vec![
+                "10 Actifs circulants",
+                "100 Liquidités 5.00 10.01 0.00 15.01",
+                // « Total Actifs circulants » (23 caractères) passerait la colonne
+                // de l'intitulé (22) ; sans numéro, il part de la colonne du
+                // numéro et dispose de 30 caractères : entier (revue P1).
+                "Total Actifs circulants 5.00 10.01 0.00 15.01",
+                "14 Immobilisations 300.00 0.00 0.00 300.00",
+                "2000 Fournisseurs 305.00 0.00 10.01 315.01",
+            ]
+        );
+    }
+
+    /// AC-2 — un groupe en devise unique porte sa seconde ligne en devise,
+    /// comme un compte, arrondie au centime ; l'en-tête des colonnes dit la
+    /// devise principale.
+    #[test]
+    fn balance_groupee_groupe_en_devise_unique() {
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let l = crate::texte_pdf::lignes(
+            &render_grouped_trial_balance_pdf(&balance_usd_groupee(&o), &ctx).unwrap(),
+        );
+        assert_eq!(
+            entre(
+                &l,
+                "N° compte Intitulé Ouverture CHF Débit CHF Crédit CHF Clôture CHF",
+                "Résultat reporté"
+            ),
+            vec![
+                "10 Devises 90.00 9.45 0.00 99.45",
+                "USD ouverture 100.00 · débit 10.51 · crédit 0.00 · clôture 110.51",
+                "1000 Caisse USD 0.00 0.45 0.00 0.45",
+                "USD ouverture 0.00 · débit 0.51 · crédit 0.00 · clôture 0.51",
+                "1020 Banque USD 90.00 9.00 0.00 99.00",
+                "USD ouverture 100.00 · débit 10.00 · crédit 0.00 · clôture 110.00",
+                "2000 Fournisseurs 90.00 0.00 9.45 99.45",
+            ]
+        );
+        // Fermé : le groupe porte encore sa seconde ligne ; ses comptes sont cachés.
+        let o = options(NiveauDetail::Niveau(1), PositionSousTotal::Titre, &[], &[]);
+        let l = crate::texte_pdf::lignes(
+            &render_grouped_trial_balance_pdf(&balance_usd_groupee(&o), &ctx).unwrap(),
+        );
+        assert!(
+            l.contains(
+                &"USD ouverture 100.00 · débit 10.51 · crédit 0.00 · clôture 110.51".to_string()
+            ),
+            "{l:?}"
+        );
+        assert!(!l.iter().any(|x| x.starts_with("1020")), "{l:?}");
+    }
+
+    /// AC-2 — une balance vide groupée garde le message « rapport vide » du
+    /// rendu à plat.
+    #[test]
+    fn balance_groupee_vide() {
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let env = AvecGroupes::balance(balance(vec![]), &arbre_essai(), &o);
+        let l = crate::texte_pdf::lignes(&render_grouped_trial_balance_pdf(&env, &ctx).unwrap());
+        assert!(l.contains(&ctx.empty_message), "{l:?}");
+        assert!(!l.iter().any(|x| x.starts_with("N° compte")), "{l:?}");
+    }
+
+    /// AC-3 — sans `grouping`, le rendu groupé est le rendu à plat, aux mêmes
+    /// lignes de texte.
+    #[test]
+    fn balance_sans_groupes_est_le_rendu_a_plat() {
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let env = AvecGroupes::sans_groupes(crate::essai_groupes::balance_essai());
+        assert_eq!(
+            crate::texte_pdf::lignes(&render_grouped_trial_balance_pdf(&env, &ctx).unwrap()),
+            crate::texte_pdf::lignes(&render_trial_balance_pdf(&env.rapport, &ctx).unwrap())
+        );
+    }
+
+    /// AC-2 — un libellé de la balance groupée est tronqué à la colonne de
+    /// l'intitulé, moins son retrait ([`limite_nom_groupe_balance`]).
+    #[test]
+    fn balance_groupee_libelle_tronque_a_sa_colonne() {
+        assert_eq!(limite_nom_groupe_balance(1, true), TB_NAME_MAX_CHARS);
+        assert_eq!(limite_nom_groupe_balance(2, true), TB_NAME_MAX_CHARS - 1);
+        assert_eq!(limite_nom_groupe_balance(9, true), TB_NAME_MAX_CHARS - 8);
+        // Sans numéro (un sous-total), la colonne du numéro en plus.
+        assert_eq!(limite_nom_groupe_balance(1, false), 30);
+        assert_eq!(limite_nom_groupe_balance(2, false), 29);
+        assert_eq!(limite_nom_groupe_balance(9, false), 22);
+        let long = "Capitaux étrangers à court terme";
+        let arbre =
+            ArbreComptes::depuis_noeuds(vec![noeud(20, long, None), noeud(2000, long, Some(20))]);
+        let tb = balance(vec![crate::essai_groupes::tb_ligne(
+            2000,
+            long,
+            kesh_db::entities::AccountType::Liability,
+            [dec!(1), dec!(0), dec!(0), dec!(1)],
+        )]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let l = crate::texte_pdf::lignes(
+            &render_grouped_trial_balance_pdf(&AvecGroupes::balance(tb, &arbre, &o), &ctx).unwrap(),
+        );
+        let tronque = |n: usize| format!("{}…", long.chars().take(n - 1).collect::<String>());
+        assert!(
+            l.contains(&format!("20 {} 1.00 0.00 0.00 1.00", tronque(22))),
+            "{l:?}"
+        );
+        assert!(
+            l.contains(&format!("2000 {} 1.00 0.00 0.00 1.00", tronque(21))),
+            "{l:?}"
+        );
+    }
+
+    /// Revue de code P1 de la 46-6b, MEDIUM-1 — deux sous-totaux longs qui ne
+    /// diffèrent qu'en fin de libellé restent distincts au PDF : sans numéro,
+    /// « Total <nom> » part de la colonne du numéro (à la marge, plus le
+    /// retrait) et dispose de 30 caractères au retrait nul, 29 au deuxième
+    /// niveau ; les titres numérotés gardent la colonne de l'intitulé, et un
+    /// titre sans numéro à afficher (numéro vide) prend la place d'un
+    /// sous-total.
+    #[test]
+    fn balance_groupee_sous_totaux_longs_distincts() {
+        let (court, long) = (
+            "Capitaux étrangers à court terme",
+            "Capitaux étrangers à long terme",
+        );
+        let racine = "Capitaux étrangers et fonds propres";
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            crate::groupes::NoeudCompte {
+                numero: String::new(),
+                ..noeud(2, racine, None)
+            },
+            noeud(20, court, Some(2)),
+            noeud(2000, "Fournisseurs", Some(20)),
+            noeud(24, long, Some(2)),
+            noeud(2400, "Dettes bancaires", Some(24)),
+        ]);
+        let passif = kesh_db::entities::AccountType::Liability;
+        let tb = balance(vec![
+            crate::essai_groupes::tb_ligne(
+                2000,
+                "Fournisseurs",
+                passif,
+                [dec!(1), dec!(0), dec!(0), dec!(1)],
+            ),
+            crate::essai_groupes::tb_ligne(
+                2400,
+                "Dettes bancaires",
+                passif,
+                [dec!(2), dec!(0), dec!(0), dec!(2)],
+            ),
+        ]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Pied, &[], &[]);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let bytes =
+            render_grouped_trial_balance_pdf(&AvecGroupes::balance(tb, &arbre, &o), &ctx).unwrap();
+        let l = crate::texte_pdf::lignes(&bytes);
+        assert!(
+            l.contains(&"Total Capitaux étrangers à c… 1.00 0.00 0.00 1.00".to_string()),
+            "{l:?}"
+        );
+        assert!(
+            l.contains(&"Total Capitaux étrangers à l… 2.00 0.00 0.00 2.00".to_string()),
+            "{l:?}"
+        );
+        // Le titre numéroté garde sa colonne et sa limite (21 au deuxième niveau).
+        assert!(l.contains(&"20 Capitaux étrangers à…".to_string()), "{l:?}");
+        // Le titre sans numéro, 30 caractères au premier niveau, à la marge.
+        assert!(
+            l.contains(&"Capitaux étrangers et fonds p…".to_string()),
+            "{l:?}"
+        );
+        // Le sous-total part de la colonne du numéro, au retrait du deuxième
+        // niveau ; le titre, de la colonne de l'intitulé.
+        let x = |prefixe: &str| {
+            pdf_poses(&bytes)
+                .into_iter()
+                .find(|p| p.text.starts_with(prefixe))
+                .unwrap_or_else(|| panic!("« {prefixe} » absent"))
+                .x_mm
+        };
+        let retrait = retrait_groupe_mm(2);
+        assert!((x("Total Capitaux étrangers à") - (MARGIN_LEFT_MM + retrait)).abs() < 0.01);
+        assert!(
+            (x("Capitaux étrangers à") - (MARGIN_LEFT_MM + TB_COL_X[1] + retrait)).abs() < 0.01
+        );
+        assert!((x("Capitaux étrangers et") - MARGIN_LEFT_MM).abs() < 0.01);
     }
 }

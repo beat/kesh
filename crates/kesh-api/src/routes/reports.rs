@@ -37,9 +37,9 @@ use kesh_report::{
     render_aged_receivables_csv, render_general_ledger_csv, render_general_ledger_pdf,
     render_grouped_balance_sheet_csv, render_grouped_balance_sheet_pdf,
     render_grouped_income_statement_csv, render_grouped_income_statement_pdf,
-    render_journal_report_csv, render_journal_report_pdf, render_project_expenses_csv,
-    render_project_expenses_pdf, render_project_return_csv, render_project_return_pdf,
-    render_trial_balance_csv, render_trial_balance_pdf, render_vat_report_csv,
+    render_grouped_trial_balance_csv, render_grouped_trial_balance_pdf, render_journal_report_csv,
+    render_journal_report_pdf, render_project_expenses_csv, render_project_expenses_pdf,
+    render_project_return_csv, render_project_return_pdf, render_vat_report_csv,
     render_vat_report_pdf,
 };
 use serde::Deserialize;
@@ -830,11 +830,14 @@ pub async fn export_project_return(
     )
 }
 
-/// GET /api/v1/reports/trial-balance/export?format=pdf|csv
+/// GET /api/v1/reports/trial-balance/export?format=pdf|csv — avec
+/// `detailLevel`, la balance telle que l'écran la groupe (Story 46-6b) ; sans,
+/// l'export d'avant, à l'identique.
 pub async fn export_trial_balance(
     State(state): State<AppState>,
     Extension(current_user): Extension<CurrentUser>,
     Query(query): Query<ExportQuery>,
+    Query(paires): Query<Vec<(String, String)>>,
 ) -> Result<Response, AppError> {
     let format = validate_format(&query.format)?;
 
@@ -849,17 +852,24 @@ pub async fn export_trial_balance(
     let start = std::time::Instant::now();
 
     let acces = ContexteAcces::depuis_api(&current_user);
+    // Story 46-6b (AC-2) : format, puis accès, puis groupes — l'ordre du bilan
+    // (46-3) ; `ExportQuery` reste inchangé (paires brutes).
+    acces.exiger(rapports::EXIGENCES_BALANCE.export)?;
+    let groupes = groupes_de(&paires)?;
     let lecture = state.lecture();
-    let rapport = rapports::balance(&acces, &lecture, query.demande(), Export(format)).await?;
+    let rapport =
+        rapports::balance_par_groupes(&acces, &lecture, query.demande(), groupes, Export(format))
+            .await?;
     let (ctx, company_name) = load_pdf_context(&acces, &lecture).await?;
     let period = attendu(rapport.periode())?.clone();
 
     let body = rapport
         .exporter(&state.trace(), |report| {
+            // Sans groupes, les rendus groupés sont les rendus à plat, à l'identique.
             let body: Vec<u8> = match format {
-                ExportFormat::Pdf => render_trial_balance_pdf(&report.rapport, &ctx)?,
+                ExportFormat::Pdf => render_grouped_trial_balance_pdf(report, &ctx)?,
                 ExportFormat::Csv => {
-                    render_csv_to_vec(|w| render_trial_balance_csv(&report.rapport, w))?
+                    render_csv_to_vec(|w| render_grouped_trial_balance_csv(report, w))?
                 }
             };
             mesurer(&span, start, &body);

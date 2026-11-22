@@ -855,6 +855,68 @@ impl LigneRapport {
     }
 }
 
+/// Ce que les rendus PDF et CSV lisent d'une ligne groupée, quel que soit le
+/// rapport (Story 46-6b) : la ligne du bilan et du compte de résultat
+/// ([`LigneRapport`], un montant) et celle de la balance
+/// ([`LigneBalanceGroupee`], quatre). Une seule règle de rendu pour les deux,
+/// [`Self::porte_montant`].
+pub trait LigneGroupeeAffichee {
+    /// Genre de la ligne.
+    fn genre(&self) -> GenreLigne;
+    /// Profondeur dans l'arbre affiché (racines : 1).
+    fn profondeur(&self) -> u32;
+    /// Numéro du compte.
+    fn numero(&self) -> &str;
+    /// Nom du compte.
+    fn nom(&self) -> &str;
+    /// État d'un groupe (`group` seulement).
+    fn ouvert(&self) -> Option<bool>;
+    /// Les montants des colonnes imprimées, en devise principale, exacts.
+    fn montants(&self) -> Vec<Decimal>;
+    /// La devise et les montants en devise des mêmes colonnes, si la ligne en
+    /// porte (un compte en devise, ou un groupe dont toute la descendance non
+    /// nulle la partage).
+    fn devise(&self) -> Option<(&str, Vec<Decimal>)>;
+
+    /// Règle de rendu de la 46-1 : la ligne écrit ses montants, sauf le titre
+    /// d'un groupe **ouvert** dont le sous-total est en pied (sa ligne
+    /// `subtotal` les porte).
+    fn porte_montant(&self, position: PositionSousTotal) -> bool {
+        !(self.genre() == GenreLigne::Groupe
+            && self.ouvert() == Some(true)
+            && position == PositionSousTotal::Pied)
+    }
+}
+
+impl LigneGroupeeAffichee for LigneRapport {
+    fn genre(&self) -> GenreLigne {
+        self.kind
+    }
+    fn profondeur(&self) -> u32 {
+        self.depth
+    }
+    fn numero(&self) -> &str {
+        &self.account_number
+    }
+    fn nom(&self) -> &str {
+        &self.account_name
+    }
+    fn ouvert(&self) -> Option<bool> {
+        self.open
+    }
+    /// Le solde.
+    fn montants(&self) -> Vec<Decimal> {
+        vec![self.balance]
+    }
+    /// La devise et le solde en devise, si les deux sont présents.
+    fn devise(&self) -> Option<(&str, Vec<Decimal>)> {
+        self.currency
+            .as_deref()
+            .zip(self.balance_currency)
+            .map(|(c, m)| (c, vec![m]))
+    }
+}
+
 /// Les sections groupées du bilan (`groupedRows`). Les lignes calculées
 /// (`retainedEarnings`, `equityResult`) restent hors des groupes (D4).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1086,6 +1148,51 @@ impl LigneBalanceGroupee {
             account_number: l.numero,
             account_name: l.nom,
         }
+    }
+}
+
+impl LigneGroupeeAffichee for LigneBalanceGroupee {
+    fn genre(&self) -> GenreLigne {
+        self.kind
+    }
+    fn profondeur(&self) -> u32 {
+        self.depth
+    }
+    fn numero(&self) -> &str {
+        &self.account_number
+    }
+    fn nom(&self) -> &str {
+        &self.account_name
+    }
+    fn ouvert(&self) -> Option<bool> {
+        self.open
+    }
+    /// Les quatre colonnes imprimées de la balance : ouverture, débit, crédit,
+    /// clôture — le net des mouvements n'est imprimé nulle part (25-5-b).
+    fn montants(&self) -> Vec<Decimal> {
+        vec![
+            self.opening_balance,
+            self.total_debit,
+            self.total_credit,
+            self.closing_balance,
+        ]
+    }
+    /// La devise et les quatre mêmes colonnes en devise (un champ absent vaut
+    /// zéro).
+    fn devise(&self) -> Option<(&str, Vec<Decimal>)> {
+        self.currency.as_deref().map(|c| {
+            (
+                c,
+                [
+                    self.opening_currency,
+                    self.total_debit_currency,
+                    self.total_credit_currency,
+                    self.closing_currency,
+                ]
+                .map(Option::unwrap_or_default)
+                .to_vec(),
+            )
+        })
     }
 }
 

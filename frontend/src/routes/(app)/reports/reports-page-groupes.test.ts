@@ -7,11 +7,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/svelte';
-import type { BalanceSheetDto, GroupingParams } from '$lib/features/reports/reports.types';
+import type { BalanceSheetDto, GroupingParams, TrialBalanceDto } from '$lib/features/reports/reports.types';
 
 const {
 	getBalanceSheetMock,
 	getIncomeStatementMock,
+	getTrialBalanceMock,
 	downloadReportMock,
 	getAgedReceivablesMock,
 	getGeneralLedgerMock,
@@ -23,6 +24,7 @@ const {
 		listProjectsMock: vi.fn(async () => [] as unknown[]),
 		getBalanceSheetMock: vi.fn(),
 		getIncomeStatementMock: vi.fn(),
+		getTrialBalanceMock: vi.fn(),
 		downloadReportMock: vi.fn(async () => {}),
 		getAgedReceivablesMock: vi.fn(async () => ({ asOf: '2026-12-31', rows: [], totals: {} })),
 	}));
@@ -45,6 +47,7 @@ vi.mock('$lib/features/reports/reports.api', async (importOriginal) => {
 		getGeneralLedger: getGeneralLedgerMock,
 		getProjectExpenses: getProjectExpensesMock,
 		getIncomeStatement: getIncomeStatementMock,
+		getTrialBalance: getTrialBalanceMock,
 	};
 });
 
@@ -563,5 +566,116 @@ describe('page des rapports — demandes périmées et vue affichée (Story 46-2
 		await waitFor(() => expect(getBalanceSheetMock).toHaveBeenCalledTimes(2));
 		expect(r.queryByText('Génération du rapport en cours…')).not.toBeNull();
 		expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('true');
+	});
+});
+
+/** Balance groupée (Story 46-6b) : groupe 10 (id 90) ouvert ou fermé, écho de `params`. */
+function balance(params: GroupingParams | undefined, open = true): TrialBalanceDto {
+	const caisse = {
+		accountId: 1,
+		accountNumber: '1000',
+		accountName: 'Caisse',
+		openingBalance: '40',
+		totalDebit: '100',
+		totalCredit: '0',
+		balance: '100',
+		closingBalance: '140',
+	};
+	const base: TrialBalanceDto = {
+		period: { fiscalYearId: 1, startDate: '2026-01-01', endDate: '2026-12-31' },
+		rows: [{ ...caisse, accountType: 'Asset', active: true }],
+		totalDebit: '100',
+		totalCredit: '100',
+		balanced: true,
+		retainedEarnings: '40',
+		openingBalanced: true,
+	};
+	if (!params) return base;
+	return {
+		...base,
+		grouping: { ...params, maxDepth: 2 },
+		groupedRows: [
+			{ ...caisse, kind: 'group', depth: 1, accountId: 90, accountNumber: '10', accountName: 'Actifs circulants', open },
+			...(open ? [{ ...caisse, kind: 'account' as const, depth: 2, active: true }] : []),
+		],
+	};
+}
+
+describe('page des rapports — vue groupée de la balance (Story 46-6b)', () => {
+	const TB_KEY = 'kesh-report-grouping:7:trial-balance';
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		localStorage.clear();
+		getBalanceSheetMock.mockImplementation(async (_q, p?: GroupingParams) => bilan(p, true));
+		getTrialBalanceMock.mockImplementation(async (_q, p?: GroupingParams) => balance(p, true));
+	});
+
+	async function ouvrirBalance(r: {
+		getByRole: (role: 'tab' | 'button', opts: { name: string }) => HTMLElement;
+	}): Promise<void> {
+		await fireEvent.click(r.getByRole('tab', { name: 'Balance' }));
+		await generer(r);
+	}
+
+	it('première visite : balance groupée, tous les comptes, sous-totaux sur le titre (AC-1)', async () => {
+		const r = render(Page, { data });
+		await ouvrirBalance(r);
+		expect(getTrialBalanceMock).toHaveBeenCalledWith(expect.objectContaining({ fiscalYearId: 1 }), {
+			detailLevel: 'all',
+			subtotalPosition: 'header',
+			open: [],
+			closed: [],
+		});
+		await r.findByTestId('grouped-group-10');
+		expect(r.getByTestId('grouping-controls')).toBeTruthy();
+		// L'info-bulle du niveau est celle de la balance, non celle des sections du bilan.
+		expect(r.container.querySelector('#reports-groups-level-hint')?.textContent).toContain(
+			'Le total des débits et celui des crédits',
+		);
+	});
+
+	it('mémoire propre à la balance : le réglage du bilan ne la touche pas (AC-1)', async () => {
+		localStorage.setItem(
+			KEY,
+			JSON.stringify({ shown: true, detailLevel: 1, subtotalPosition: 'footer', open: [], closed: [] }),
+		);
+		const r = render(Page, { data });
+		await ouvrirBalance(r);
+		expect(getTrialBalanceMock.mock.calls[0][1]).toMatchObject({ detailLevel: 'all', subtotalPosition: 'header' });
+		await r.findByTestId('grouped-group-10');
+		await fireEvent.click(r.getByTestId('group-toggle-10'));
+		await waitFor(() => expect(getTrialBalanceMock).toHaveBeenCalledTimes(2));
+		expect(getTrialBalanceMock.mock.calls[1][1]).toMatchObject({ closed: [90] });
+		expect(JSON.parse(localStorage.getItem(TB_KEY)!).closed).toEqual([90]);
+		expect(JSON.parse(localStorage.getItem(KEY)!).detailLevel).toBe(1);
+	});
+
+	it('export : les paramètres de la dernière réponse affichée de la balance (AC-2)', async () => {
+		const r = render(Page, { data });
+		await ouvrirBalance(r);
+		await r.findByTestId('grouped-group-10');
+		await fireEvent.change(r.getByTestId('grouping-level'), { target: { value: '1' } });
+		await waitFor(() => expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('false'));
+		await fireEvent.click(r.getByRole('button', { name: 'Export CSV' }));
+		await waitFor(() => expect(downloadReportMock).toHaveBeenCalledTimes(1));
+		const args = downloadReportMock.mock.calls[0] as unknown[];
+		expect(args[0]).toBe('trial-balance');
+		expect(args[4]).toEqual({ detailLevel: 1, subtotalPosition: 'header', open: [], closed: [] });
+	});
+
+	it('hiérarchie masquée : requête et export sans paramètre, écran à plat', async () => {
+		localStorage.setItem(
+			TB_KEY,
+			JSON.stringify({ shown: false, detailLevel: 'all', subtotalPosition: 'header', open: [], closed: [] }),
+		);
+		const r = render(Page, { data });
+		await ouvrirBalance(r);
+		await r.findByTestId('tb-row');
+		expect(getTrialBalanceMock.mock.calls[0][1]).toBeUndefined();
+		expect(r.queryByTestId('grouped-group-10')).toBeNull();
+		await fireEvent.click(r.getByRole('button', { name: 'Export PDF' }));
+		await waitFor(() => expect(downloadReportMock).toHaveBeenCalledTimes(1));
+		expect((downloadReportMock.mock.calls[0] as unknown[])[4]).toBeUndefined();
 	});
 });
