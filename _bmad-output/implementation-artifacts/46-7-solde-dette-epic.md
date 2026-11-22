@@ -1,6 +1,6 @@
 # Story 46-7 : solde de la dette de l'epic
 
-Status: in-progress
+Status: review
 
 *Esquisse du 2026-11-18 (renumérotée 46-7 le 2026-11-19 : la balance prend le 46-6). Revue de Beat : approuvée. Story de solde (`CLAUDE.md` § *Priorités des défauts*, « Tarir la source, puis solder »).
 Plafond : **2 issues**, fixé au fichier d'epic (§ *Stories*). **Dernière story de l'epic**, après 46-1 à 46-6b (et
@@ -89,6 +89,60 @@ ne laisse pas de LOW sans suite.
   suffixe ; seul le nom est abrégé (sauf au plus profond niveau de la balance, dont la colonne est plus étroite que le
   suffixe).
 
+## Dev Agent Record
+
+**Prémisses vérifiées au code.**
+- D10 : `toggleGroup` (`reports-grouping.ts`, `eb7498376`) ajoutait toujours le groupe à la liste opposée ; fermer
+  puis rouvrir un groupe ouvert par le niveau laissait `open: [id]`, que l'API reprend dans son écho et que
+  `grouped_level_line` (`pdf.rs`) imprime « , détail ajusté à la main » dès qu'une liste est non vide. Vrai.
+- D4 : `LibelleGroupe::de` tronquait « <nom> (solde propre) » comme un tout par `truncate_with_ellipsis`. Vrai.
+
+**Correctifs.**
+- D10 : `openByLevel(detailLevel, depth)` reprend la règle d'`OptionsGroupes::est_ouvert` à listes vides (ouvert si
+  `all` ou `depth < niveau` ; `depth` de la ligne = la `profondeur` passée à `est_ouvert`, `groupes.rs:837`) ;
+  `toggleGroup` prend la profondeur de la ligne et n'inscrit le groupe dans une liste que si l'état voulu diffère de
+  celui du niveau. Une entrée redondante d'une mémoire ancienne se ferme encore d'un clic (test). Aucun affichage n'en
+  dépend : l'état montré reste celui que l'API rend. AC-3 de la 46-2 tenu à la lettre (« ouvrir un groupe fermé **par
+  le niveau** l'ajoute à `open` »).
+- D4 : `truncate_keeping_suffix(texte, suffixe, max)` abrège le nom seul ; le nom peut se réduire à « … » (numéro
+  imprimé à part) ; plus étroit que le suffixe et son espace (balance au retrait maximal, 14 caractères), le tout est
+  tronqué comme avant. Le test de fidélité de la balance suit, par `tronque_propre`, écrit indépendamment du rendu.
+- Manuel (`.tex`, PDF non commité) et `docs/api-external.md` : les deux comportements ; phrase du CSV groupé reprise
+  aux cinq sites (LOW-1), redite et parenthèse de la doc d'API (LOW-2), commentaires de l'E2E (LOW-3).
+
+**Tests ajoutés** (recomptés, de `eb7498376` à `HEAD`) : `#[test]` de `pdf.rs` 80 → 82
+(`truncate_keeping_suffix_garde_le_suffixe`, `ligne_solde_propre_a_nom_long_garde_son_suffixe`) ; `it(` de
+`reports-grouping.test.ts` 25 → 29 (deux tests réécrits avec la profondeur, quatre neufs).
+
+**Mutations** (hors dépôt, une à la fois, copie à cible cargo propre puis supprimée, témoin vert d'abord) :
+- M2, `LibelleGroupe::de` rendu à la troncature du tout : **tuée**, `ligne_solde_propre_a_nom_long_garde_son_suffixe`
+  panique sur son assertion (`pdf.rs:3409`, « profondeur 1 : Créances résultant de livraisons et prestations… ») ;
+  `kesh-gate-logs/s46-7/mut-temoin.log`, `mut-m2.log`.
+- M1, `toggleGroup` inscrivant toujours le groupe : **tuée**, trois tests en `AssertionError` (« fermer puis rouvrir
+  un groupe ouvert par le niveau : listes vides », « ouvrir puis refermer… », « « Tous les comptes » : rouvrir… ») ;
+  `mut-front-temoin.log` (29 passés), `mut-m1.log`.
+
+**Captures** (`kesh-gate-logs/s46-7/captures/`) : `46-7-solde-propre-avant.pdf` et `-apres.pdf` (bilan d'essai, compte
+de groupe à nom long, rendus `-1.png`) — avant : « Liquidités et placements à court terme cotés… », suffixe perdu ;
+après : « Liquidités et placements à co… (solde propre) ». D10 ne change aucun écran (seule la requête et l'en-tête du
+PDF) ; captures des écrans groupés reprises par les trois specs E2E au binaire de `cffecfc3c`.
+
+**Gates.**
+- Frontend, au dernier commit de code frontend (`cffecfc3c`, commentaires E2E compris ; rien de frontend depuis) :
+  `npm run check` 0 erreur, 29 avertissements ; `lint-i18n-ownership` vert ; Vitest **4723 passés, 283 fichiers** ;
+  `npm run build` vert (`front-*.log`).
+- Backend, au dernier commit de code (`b2fbe46be`, mise en forme rustfmt), base remise à zéro : `scripts/test-fast.sh
+  --ci` (`KESH_NO_MEMGUARD=1`, le bus systemd utilisateur refusant la connexion) : fmt et clippy workspace verts ;
+  nextest **6260 exécutés, 6260 passés, 14 ignorés** (`gate-backend-final3.log`). Deux essais antérieurs :
+  `final` (mem-guard sans bus, rien joué), `final2` (fmt rouge sur le test neuf, corrigé par `b2fbe46be`).
+- E2E partiel (**3 specs**, celles qui lisent l'aide commune touchée par LOW-3, et qui exercent les clics d'accordéon
+  et l'export) : `reports-balance-groupes`, `reports-groupes`, `reports-groupes-export` — **3 passés**, binaire et
+  frontend de `cffecfc3c` (le commit suivant ne fait que remettre en forme un test Rust) ; `e2e.log`.
+- E2E complet et `gate-ci.sh` : à la fin de l'epic, sur la branche d'intégration.
+
+**Restent ouverts (AC-3, « on trace toujours »)** : D1, D2, D3 (versé par cette story), D5, D6, D7, D8, D9, à la liste
+des issues à ouvrir de l'epic ; aucun retiré sans correctif.
+
 ## Change Log
 
 - 2026-11-20 — Plafond fixé (2), position en dernier, AC-3 ; statut `drafted`.
@@ -101,3 +155,6 @@ ne laisse pas de LOW sans suite.
   des Change Logs et Dev Agent Records des fiches 46-1 à 46-6b, la mention restant une aide. L : « `P1` puis `P4` » →
   « de `P1` à `P4` ». Plafond (2) et borne de cinq modules confrontés au fichier d'epic : conformes. Rapport :
   `kesh-gate-logs/epic-46/validation/46-7-P2.md`.
+- 2026-11-22 — Développement (`bmad-dev-story`) : amendement daté (dix points de dette, plafond 2 : D10 et D4
+  retenus), deux correctifs, LOW de la revue de fusion de la 46-6b corrigés, D3 versé à la liste ; gates ci-dessus ;
+  statut `review`. Prompt de la revue P1 : `kesh-gate-logs/s46-7/revue-p1-prompt.md`.
