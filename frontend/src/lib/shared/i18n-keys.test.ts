@@ -1210,7 +1210,13 @@ const ATTENDU = {
 	// 32 sites `i18nMsg(` ajoutés (28 `wise-labels.ts`, 1 `provider-labels.ts`, 2 page Wise,
 	// 1 `ProviderReviewPage.svelte`), 0 retiré. Puis les colonnes « Nom » et « Identifiant Wise » des
 	// lignes « à examiner » de la page Wise : **3816**, 2 sites ajoutés (`wise-col-name`, `wise-col-id`).
-	sitesTotal: 3816,
+	// Correctif de la destination d'un versement Stripe rejugée (revue d'intégration de l'Epic 39,
+	// M2 : libellé de `STRIPE_PAYOUT_ACCOUNT_INVALID` dans `stripeFailedLabel`) : **3734**
+	// (« expected 3734 to be 3733 »), relevé par la garde ; au diff : 1 site ajouté, 0 retiré.
+	// Fusion d'epic/40-stripe (destination d'un versement Stripe rejugée) dans epic/39-wise, après la
+	// 39-11d2 : **3817** (« expected 3817 to be 0 »), relevé par la garde = 3816 + 1 (le site du correctif,
+	// 3734 − 3733).
+	sitesTotal: 3817,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/
