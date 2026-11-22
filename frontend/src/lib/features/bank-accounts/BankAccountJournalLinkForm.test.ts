@@ -56,6 +56,8 @@ function makeBankAccount(journalAccountId: number | null): BankAccountSummary {
 		cardLast4: null,
 		provider: null,
 		paypal: null,
+		wise: null,
+		stripe: null,
 		isPrimary: true,
 		journalAccountId,
 		version: 3,

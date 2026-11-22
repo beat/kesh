@@ -29,6 +29,8 @@
 //!   prestataire (une écriture si un côté est en CHF, deux sinon).
 //! - [`wise`] : (Story 39-11c) le paramétrage Wise (classement, paiement par
 //!   carte converti groupé, écarts propres).
+//! - [`stripe`] : (Story 40-7c) le paramétrage Stripe (classement,
+//!   identifiants `ch_`/`py_`, libellés) et la revue de ses versements.
 
 pub mod conversion;
 pub mod errors;
@@ -39,6 +41,7 @@ pub mod paypal;
 pub mod provider_review;
 pub mod rules;
 pub mod split;
+pub mod stripe;
 pub mod wise;
 
 pub use errors::ReconciliationError;

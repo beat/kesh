@@ -80,6 +80,7 @@ use crate::routes::bank_statements_manual::MANUAL_STATEMENT_LOCK_TIMEOUT_SECS;
 pub const AUDIT_ACTIONS: &[&str] = &[
     "paypal_download.created",
     "paypal_import.created",
+    "stripe_import.created",
     "wise_import.created",
 ];
 
@@ -147,6 +148,9 @@ pub struct ProviderLine {
     /// Sens de la ligne ([`LineDirection`]) : `Some` fait juger le doublon sur
     /// (identifiant, sens) ; `None` (PayPal, Stripe), sur l'identifiant seul.
     pub direction: Option<LineDirection>,
+    /// Date de valeur (Stripe : disponibilité des fonds) ; `None` pour PayPal.
+    /// *Ajout de la 40-7b à la forme de la 38-12a.*
+    pub value_date: Option<NaiveDate>,
 }
 
 impl ProviderLine {
@@ -160,7 +164,7 @@ impl ProviderLine {
             company_id,
             bank_account_id,
             booking_date: self.booking_date,
-            value_date: None,
+            value_date: self.value_date,
             amount: self.amount,
             currency: self.currency,
             reference: self.reference,
@@ -847,6 +851,115 @@ async fn write_under_locks(
     Ok(reports)
 }
 
+// ---------------------------------------------------------------------------
+// Aides communes aux routes d'import de prestataire (ajout de la 40-7b ;
+// les copies de PayPal et de Wise y sont repliées à l'intégration des Epics
+// 39 et 40 : une seule définition, PayPal, Stripe et Wise s'en servent)
+// ---------------------------------------------------------------------------
+
+/// Borne des colonnes texte `details`, en caractères.
+pub const DETAILS_MAX_CHARS: usize = 500;
+/// Borne des noms et références, en caractères.
+pub const NAME_MAX_CHARS: usize = 255;
+/// Borne du type chez le prestataire, en caractères.
+pub const PROVIDER_TYPE_MAX_CHARS: usize = 64;
+/// Borne du nom de fichier, en octets.
+pub const FILENAME_MAX_BYTES: usize = 255;
+/// Longueur de la colonne `bank_transactions.transaction_id`, et de
+/// `reference`, en caractères.
+pub const TXID_COLUMN_MAX_CHARS: usize = 255;
+/// Suffixe de l'identifiant de la transaction des **frais** : `<id>:FEE`,
+/// celui du classement qui le lit (`kesh_reconciliation::paypal`, repris par
+/// `kesh_reconciliation::stripe`) — une seule définition.
+pub const FEE_SUFFIX: &str = kesh_reconciliation::paypal::PAYPAL_FEE_SUFFIX;
+
+/// Coupe `s` à `max` caractères.
+pub fn truncate_chars(s: &str, max: usize) -> String {
+    s.chars().take(max).collect()
+}
+
+/// Coupe `s` à `max` octets, sur une frontière de caractère.
+pub fn truncate_bytes(s: &str, max: usize) -> String {
+    let mut end = s.len().min(max);
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    s[..end].to_string()
+}
+
+/// Une valeur facultative, rognée, non vide, bornée à `max` caractères.
+pub fn bounded(value: &Option<String>, max: usize) -> Option<String> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| truncate_chars(s, max))
+}
+
+/// Le formulaire d'un import de fichier de prestataire : `file` et `account`.
+pub struct ProviderImportForm {
+    pub file_bytes: axum::body::Bytes,
+    pub filename: String,
+    pub account: String,
+}
+
+/// Lit le formulaire multipart (`file`, `account`) ; `default_filename` sert
+/// quand le fichier n'a pas de nom. Champ manquant ou en double → `400
+/// VALIDATION_ERROR`.
+pub async fn parse_form(
+    mut multipart: axum::extract::Multipart,
+    default_filename: &str,
+) -> Result<ProviderImportForm, AppError> {
+    let mut file: Option<(axum::body::Bytes, String)> = None;
+    let mut account: Option<String> = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::Validation(format!("multipart : {e}")))?
+    {
+        match field.name() {
+            Some("file") => {
+                if file.is_some() {
+                    return Err(AppError::Validation("champ `file` en double".into()));
+                }
+                let name = field.file_name().unwrap_or(default_filename).to_string();
+                let bytes = field
+                    .bytes()
+                    .await
+                    .map_err(|e| AppError::Validation(format!("multipart : {e}")))?;
+                file = Some((bytes, name));
+            }
+            Some("account") => {
+                if account.is_some() {
+                    return Err(AppError::Validation("champ `account` en double".into()));
+                }
+                let text = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::Validation(format!("multipart : {e}")))?;
+                account = Some(text);
+            }
+            _ => {}
+        }
+    }
+    let (file_bytes, filename) =
+        file.ok_or_else(|| AppError::Validation("champ `file` manquant".into()))?;
+    let account = account
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+        .ok_or_else(|| AppError::Validation("champ `account` manquant".into()))?;
+    let filename = truncate_bytes(filename.trim(), FILENAME_MAX_BYTES);
+    Ok(ProviderImportForm {
+        file_bytes,
+        filename: if filename.is_empty() {
+            default_filename.to_string()
+        } else {
+            filename
+        },
+        account,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -881,6 +994,7 @@ mod tests {
             balance_after: None,
             counterparty_iban: None,
             direction: None,
+            value_date: None,
         }
     }
 

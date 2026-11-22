@@ -80,6 +80,8 @@ const carte: BankAccountSummary = {
 	cardLast4: '4821',
 	provider: null,
 	paypal: null,
+	wise: null,
+	stripe: null,
 	isPrimary: false,
 	journalAccountId: PASSIF.id,
 	version: 3,

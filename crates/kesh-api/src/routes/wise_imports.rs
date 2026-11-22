@@ -75,21 +75,17 @@ use kesh_import::wise::{WiseCsv, WiseCsvError, WiseDirection, WiseRow, parse_wis
 use crate::AppState;
 use crate::errors::AppError;
 use crate::middleware::auth::CurrentUser;
-use crate::routes::paypal_imports::{
-    DETAILS_MAX_CHARS, NAME_MAX_CHARS, PROVIDER_TYPE_MAX_CHARS, TXID_COLUMN_MAX_CHARS,
-    truncate_bytes, truncate_chars,
-};
 use crate::routes::provider_imports::{
-    CurrencyReport, CurrencyStatement, ImportRequest, ImportSource, LineDirection, ProviderGroup,
-    ProviderLine, import_lines, load_balances,
+    CurrencyReport, CurrencyStatement, DETAILS_MAX_CHARS, FILENAME_MAX_BYTES, ImportRequest,
+    ImportSource, LineDirection, NAME_MAX_CHARS, PROVIDER_TYPE_MAX_CHARS, ProviderGroup,
+    ProviderLine, TXID_COLUMN_MAX_CHARS, import_lines, load_balances, truncate_bytes,
+    truncate_chars,
 };
 pub use crate::routes::provider_imports::{ImportWarning as FileWarning, WARNING_GAP};
 use crate::zip_read::{ZipRefusal, ZipRefusalReason, extract_csv_entries, looks_like_zip};
 
 /// Nom d'un fichier sans nom dans le formulaire.
 const DEFAULT_FILENAME: &str = "wise.csv";
-/// Borne de `bank_imports.filename`, en octets.
-const FILENAME_MAX_BYTES: usize = 255;
 /// Longueur maximale d'un IBAN (`counterparty_iban VARCHAR(34)`).
 const IBAN_MAX_CHARS: usize = 34;
 /// Séparateur des éléments du libellé.
@@ -254,6 +250,7 @@ pub fn line_of_row(row: &WiseRow) -> ProviderLine {
         rank: row.line,
         // Les soldes de l'entrée sont ceux du relevé (`CurrencyStatement`).
         balance_after: Some(row.running_balance),
+        value_date: None,
         counterparty_iban: iban,
         direction: Some(match row.direction {
             WiseDirection::Debit => LineDirection::Debit,
@@ -339,8 +336,10 @@ async fn parse_form(mut multipart: Multipart) -> Result<WiseImportForm, AppError
 
 /// Traduit le refus du lecteur (39-11a) en `422 WISE_CSV_INVALID`, le fichier
 /// nommé — sauf le relevé exporté sans les frais séparés (Story 39-11e, D5),
-/// qui a son code propre, `422 WISE_CSV_FEES_NOT_SEPARATED`, avec l'archive
-/// d'où vient le fichier (`None` pour un fichier envoyé à part).
+/// qui a son code propre, `422 WISE_CSV_FEES_NOT_SEPARATED`. L'un et l'autre
+/// portent l'archive d'où vient le fichier (`None`, rendu `null`, pour un
+/// fichier envoyé à part) : deux zips d'un même envoi peuvent porter des
+/// entrées de même nom (Story 39-11d, revue P1, M2).
 fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError {
     if let WiseCsvError::FeesNotSeparated { lines, count } = e {
         return AppError::WiseCsvFeesNotSeparated {
@@ -351,7 +350,7 @@ fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError
         };
     }
     let reason = e.code();
-    let details = match &e {
+    let mut details = match &e {
         WiseCsvError::MissingColumns(columns) => serde_json::json!({ "columns": columns }),
         WiseCsvError::DuplicateColumn(column) => serde_json::json!({ "columns": [column] }),
         WiseCsvError::Lines(lines) => serde_json::json!({ "lines": lines }),
@@ -368,6 +367,9 @@ fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError
         // `FeesNotSeparated` est rendu plus haut, par son propre code.
         WiseCsvError::Empty | WiseCsvError::FeesNotSeparated { .. } => serde_json::json!({}),
     };
+    if let serde_json::Value::Object(map) = &mut details {
+        map.insert("archive".into(), serde_json::json!(archive));
+    }
     AppError::WiseCsvInvalid {
         filename: filename.to_string(),
         reason,

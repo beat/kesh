@@ -85,6 +85,47 @@ describe('FiscalYearChecks — contenus et liens', () => {
 		);
 	});
 
+	// Story 40-7d — un compte Stripe en attente mène à la page Stripe, non à la page PayPal.
+	it('K2 : un compte Stripe lie la page Stripe', () => {
+		render(FiscalYearChecks, {
+			loadState: 'ready',
+			checks: closingChecks({
+				PENDING_BANK_TRANSACTIONS: {
+					status: 'attention',
+					count: 2,
+					details: {
+						accounts: [{ bankAccountId: 7, name: 'Stripe', count: 2, rejectedCount: 0, provider: 'stripe' }]
+					}
+				}
+			})
+		});
+		expect(screen.getByTestId('fiscal-year-checks-k2-stripe-7').getAttribute('href')).toBe('/reconciliation/stripe');
+		expect(screen.queryByTestId('fiscal-year-checks-k2-paypal-7')).toBeNull();
+		expect(screen.queryByTestId('fiscal-year-checks-link-PENDING_BANK_TRANSACTIONS')).toBeNull();
+	});
+
+	// Story 39-11d (revue P1, L2) — un compte Wise en attente mène à la page Wise, ni à PayPal ni à Stripe.
+	it('K2 : un compte Wise lie la page Wise', () => {
+		render(FiscalYearChecks, {
+			loadState: 'ready',
+			checks: closingChecks({
+				PENDING_BANK_TRANSACTIONS: {
+					status: 'attention',
+					count: 4,
+					details: {
+						accounts: [{ bankAccountId: 8, name: 'Wise', count: 4, rejectedCount: 0, provider: 'wise' }]
+					}
+				}
+			})
+		});
+		const lien = screen.getByTestId('fiscal-year-checks-k2-wise-8');
+		expect(lien.getAttribute('href')).toBe('/reconciliation/wise');
+		expect(lien.textContent?.trim()).toBe('Ouvrir la page Wise');
+		expect(screen.queryByTestId('fiscal-year-checks-k2-paypal-8')).toBeNull();
+		expect(screen.queryByTestId('fiscal-year-checks-k2-stripe-8')).toBeNull();
+		expect(screen.queryByTestId('fiscal-year-checks-link-PENDING_BANK_TRANSACTIONS')).toBeNull();
+	});
+
 	// Story 38-11d (revue P1, M1) — un compte PayPal en attente mène à la page PayPal ; le lien
 	// générique ne paraît que s'il reste un compte ordinaire.
 	it('K2 : un compte PayPal lie la page PayPal ; le lien générique seulement pour un compte ordinaire', () => {
