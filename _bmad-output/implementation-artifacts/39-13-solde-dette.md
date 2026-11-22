@@ -24,7 +24,9 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
 ## État de départ (relevé au code, `0a414376f`)
 
 1. **`check_single_currency`** (`crates/kesh-import/src/wise.rs:530-541`, Story 39-11a, LOW L2 de la revue P2) :
-   pour chaque ligne, `Vec::contains` sur les devises déjà vues — quadratique en nombre de devises distinctes. Le refus
+   pour chaque ligne, `Vec::contains` sur les devises déjà vues — coût en O(lignes × devises distinctes), et une
+   allocation par fichier même à une seule devise ; les devises étant des codes de trois lettres validés
+   (`wise.rs:686-688`), le gain réel est mince : c'est surtout un chemin normal linéaire et sans allocation. Le refus
    `WiseCsvError::MixedCurrencies(Vec<String>)` porte les devises **dans l'ordre de leur première apparition** dans le
    fichier (doc de la variante, `wise.rs:298-301`), ordre relu par `routes/wise_imports.rs:358` (détail
    `currencies` du `422 WISE_CSV_INVALID`) et figé par `tests/wise_csv.rs:308-314` (deux devises seulement).
@@ -44,26 +46,37 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
   l'ordre de première apparition par un `HashSet` des devises vues (un passage). Sortie **identique** à l'actuelle,
   pour tout fichier.
 - **D2 — `existing_transaction_ids` écrite sur `existing_transactions_by_ids`.** Elle garde sa signature publique
-  (`HashSet<String>` des identifiants tels que stockés) — une branche d'epic non fusionnée l'appelle encore — mais ne
+  (`HashSet<String>` des identifiants tels que stockés) — `epic/40-stripe` l'appelle encore
+  (`routes/provider_imports.rs:504` sur cette branche, relevé le 2026-11-22), si bien que la supprimer casserait la
+  compilation de sa prochaine reprise ; la suppression reste possible quand plus aucune branche ne l'appelle — mais ne
   porte plus sa propre requête : elle projette les identifiants du résultat de `existing_transactions_by_ids`. Même
   filtre SQL, mêmes paquets, même collation ; deux colonnes lues en plus, sans effet.
 - **D3 — Commentaires rendus vrais** : `existing_transactions_by_ids` nomme son appelant réel (le cœur commun des
-  imports de prestataire, Story 39-14, doublons par (identifiant, sens) via `ExistingKeys`), sans renvoi à 39-12a3 ;
-  `existing_transaction_ids` dit qu'elle n'a plus d'appelant dans `kesh-api` depuis la 39-14 et pourquoi elle reste
-  (lecture par identifiant seul, sans sens).
+  imports de prestataire, Story 39-14, doublons par (identifiant, sens) via `ExistingKeys`), sans renvoi à 39-12a3, et
+  porte **seule** le contrat commun (transaction de l'import et ses verrous, index
+  `idx_bank_transactions_account_txid`, collation sans casse, valeurs telles que stockées, paquets de 500) — le renvoi
+  « même contrat que `existing_transaction_ids` » (`bank_transactions.rs:139`), devenu circulaire, disparaît ;
+  `existing_transaction_ids` renvoie à ce contrat, dit qu'elle n'a plus d'appelant dans `kesh-api` depuis la 39-14 et
+  pourquoi elle reste (lecture par identifiant seul, sans sens, encore appelée par une branche d'epic).
 
 ## Critères d'acceptation
 
 - **AC-1** — `check_single_currency` ne fait qu'un passage sur les lignes, sans `Vec::contains` ; un fichier à une
   devise ne construit aucune liste.
-- **AC-2** — Un fichier à trois devises, dont une revient après une autre (p. ex. CHF, EUR, CHF, USD), est refusé par
-  `MixedCurrencies(vec!["CHF", "EUR", "USD"])` : ordre de première apparition, sans doublon. Test neuf dans
-  `crates/kesh-import/tests/wise_csv.rs`, qui rougit si l'ordre ou l'unicité se perdent (mutations).
+- **AC-2** — Un fichier dont les lignes portent, dans l'ordre du fichier, CHF, USD, EUR, USD, CHF (une devise non
+  initiale répétée, un retour de la première, un ordre qui n'est pas l'alphabétique) est refusé par
+  `MixedCurrencies(vec!["CHF", "USD", "EUR"])`. Test neuf dans `crates/kesh-import/tests/wise_csv.rs` (fixture CHF,
+  lignes 0 à 4 par `set` emboîtés). **Test de caractérisation** : l'ancien code rend le même résultat ; il vaut
+  contre les mutations (a) et (b), qui doivent le faire rougir.
 - **AC-3** — `two_currencies_are_refused` reste vert sans modification.
 - **AC-4** — `existing_transaction_ids` ne contient plus de requête SQL ; elle délègue à
   `existing_transactions_by_ids`. Test neuf `#[sqlx::test(migrations = "./test-schema")]` dans
-  `crates/kesh-db/tests/bank_transactions_repository.rs` : identifiant présent au débit et au crédit rendu une fois,
-  identifiant absent non rendu, autre compte et autre société exclus.
+  `crates/kesh-db/tests/bank_transactions_repository.rs`, de caractérisation lui aussi (l'ancien code le passe) :
+  identifiant présent au débit et au crédit rendu une fois, identifiant absent non rendu ; **une vraie seconde
+  société**, avec son compte et le même identifiant importé, exclue ; un autre compte de la société portant le même
+  identifiant exclu ; et des identifiants de société et de compte **distincts** pour le compte visé (seconde société
+  créée d'abord, ou compte visé qui n'est pas le premier), afin qu'une délégation qui permute `company_id` et
+  `bank_account_id` rougisse. Le test porte lui-même ses assertions de compte et de société.
 - **AC-5** — Les commentaires des deux fonctions décrivent leurs appelants réels (D3) ; aucun renvoi à 39-12a3 ni à
   « l'import PayPal » comme seul appelant.
 - **AC-6** — Liste des issues à ouvrir (hors dépôt) : les deux entrées soldées barrées, avec le commit.
@@ -82,9 +95,10 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
 
 - Unitaires (`kesh-import`, sans base) : AC-2, AC-3 ; le test `wise_csv.rs` passe par `parse_wise_csv`, chemin public.
 - Intégration (`kesh-db`, base éphémère) : AC-4.
-- Mutations visées : (a) ne pas dédoublonner (pousser chaque devise différente de la première) ; (b) perdre l'ordre
-  (trier) ; (c) `existing_transaction_ids` qui rend un ensemble vide ; (d) filtre de compte retiré (déjà gardé par le
-  test d'`existing_transactions_by_ids`, rejoué par délégation).
+- Mutations visées, chacune tuée sur une assertion nommée : (a) ne pas dédoublonner (pousser chaque devise différente
+  de la première) → test d'AC-2 ; (b) perdre l'ordre (trier) → test d'AC-2 ; (c) `existing_transaction_ids` qui rend
+  un ensemble vide → test d'AC-4 ; (d) filtre de compte retiré de la requête → test d'AC-4 (et celui
+  d'`existing_transactions_by_ids`) ; (e) `company_id` et `bank_account_id` permutés à la délégation → test d'AC-4.
 
 ## Modules touchés (2)
 
@@ -119,3 +133,8 @@ Aucune ligne de CHANGELOG : rien de visible ne change (dette interne).
 ## Change Log
 
 - 2026-11-22 — Fiche rédigée (plafond pris à deux, faute de nombre au fichier d'epic).
+- 2026-11-22 — Validation P1 (Sonnet, `kesh-gate-logs/s39-13/validation-p1-rapport.md`) : 0 C, 0 H, 2 M, 4 L. M1 :
+  séquence d'AC-2 changée (CHF, USD, EUR, USD, CHF), les tests déclarés de caractérisation ; M2 : AC-4 avec une vraie
+  seconde société et des identifiants distincts, mutation (e) ajoutée ; L1 : « quadratique » nuancé ; L2 : contrat
+  décrit une fois, renvoi circulaire retiré (D3) ; L3 : raison de garder la fonction écrite avec le fait relevé
+  (D2) ; L4 : mutations nommées par assertion. Passe P2 à lancer (un MEDIUM rendu).
