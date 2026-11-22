@@ -1,6 +1,6 @@
 # Story 39-11d : écrans, manuel et E2E de l'import Wise
 
-Status: in-progress
+Status: review
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, revérifiée à la validation P1. Epic 39, **phase 1 KISS**.
 **Dépend de** : 39-11a à 39-11c, **38-11d** (écrans PayPal, validée P1 : case « Compte PayPal » du formulaire des
@@ -119,10 +119,24 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
 
 ## Tâches
 
-- [ ] T1 — Choix du prestataire, `provider.ts`, filtre de type générique (AC-1).
-- [ ] T2 — Composant de la page PayPal généralisé, page Wise, menu (AC-2, AC-3).
-- [ ] T3 — Manuel utilisateur, `docs/api-external.md` (AC-4).
-- [ ] T4 — E2E, captures (AC-5).
+- [x] T1 — Choix du prestataire, `provider.ts`, filtre de type générique (AC-1).
+- [x] T2 — Composant de la page PayPal généralisé, page Wise, menu (AC-2, AC-3).
+- [x] T3 — Manuel utilisateur, `docs/api-external.md` (AC-4).
+- [x] T4 — E2E, captures (AC-5).
+
+## Dev Agent Record
+
+*Développée le 2026-11-22, branche `story/39-11d` (partie d'`epic/39-wise`, `epic/40-stripe` fusionné en `3a721279`, page commune des prestataires). Dernier commit de code `d1ded344` ; `5bfe2478` ne touche que deux tests Vitest (gardes i18n recomptées).*
+
+**Livré** (amendement A1 à A5) : case « Compte Wise » du formulaire des comptes bancaires (exclusive des autres, compte de frais, aucun compte de versement) et ligne « Wise » de la liste ; page `reconciliation/wise` sur la page commune (`ProviderReviewPage` : `fileAccept`, `multiple`, `importFiles`, fragment `importReportMain`, revue facultative), consigne d'export sous le bouton, refus traduits (`WISE_CSV_FEES_NOT_SEPARATED`, `WISE_CSV_INVALID` par raison, `WISE_DUPLICATE_CURRENCY_FILE`, `WISE_ZIP_INVALID` par le message du serveur), compte rendu par fichier ; filtre de règle « Type chez le prestataire » générique ; menu et liens (Stripe vers Wise, contrôles de clôture) ; 48 clés i18n aux quatre locales ; manuel (`sec:comptes-wise`, `.tex` seul) et `docs/api-external.md` (« L'écran Wise »). **Reporté (A3, validé)** : revue et acceptation Wise, à la 39-11d2 (la 39-11c n'est pas dans `epic/39-wise`).
+
+**Gates** (règle de la nuit du 22.11 : E2E de la seule spec ajoutée, pas de `gate-ci.sh`, déclaré tel quel) :
+- backend : `nextest` complet au commit `d1ded344` (journal `kesh-gate-logs/s39-11d/nextest-1.log`) : 6614 exécutés, 6614 passés, 17 ignorés, rc 0. `5bfe2478` ne touche aucun fichier Rust.
+- frontend au commit `5bfe2478` (`s39-11d/front-2.rc`) : `npm run check` rc 0, `lint-i18n-ownership` rc 0, Vitest 297 fichiers, 5063 tests passés, `npm run build` rc 0. Tests neufs de la story : 29 `it`/`test` Vitest ajoutés au diff `e194fb84..HEAD` (+ fichiers neufs `provider-wise`, `bank-accounts-page-wise`, `wise-labels`, `wise-page`).
+- E2E partiel, 1 spec : `wise-import.spec.ts` (3 tests, nouvelle spec de la story ; aucune autre spec jouée), au commit `5bfe2478` (`e2e.head`), 3 passés (`s39-11d/e2e.log`).
+- Non joués : `cargo fmt --check` et clippy workspace n'ont pas été relancés par cette reprise (ceux de l'agent précédent, `lint.sh`/`lint-fusion.log`, sont au journal) ; `gate-ci.sh` et E2E complet à l'intégration finale.
+
+**Captures** (thème clair) : `kesh-gate-logs/s39-11d/captures/` (hors dépôt) — 00 aucun compte, 01 formulaire, 02 liste, 03 page Wise avec la consigne de cocher « Afficher les transactions dont les frais sont indiqués séparément » (vérifié à l'image), 04 refus des frais non séparés (consigne et lignes 6, 7), 05 compte rendu du zip par fichier (CHF, EUR, USD ; entrée PDF non lue), 06 page après import, 07 zip déjà importé.
 
 ## Modules touchés (4)
 
@@ -151,3 +165,5 @@ manuel utilisateur.
   de la phase 1 de 38-11b (facture fournisseur, angle mort de la réconciliation générale, plus lourd pour un solde Wise en francs
   qui reçoit conversions et frais). LOW : « écart Stripe » est un motif « à examiner », non un écart.
 - 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : `provider.ts` / `withoutProviders` déjà livrés par 38-11d sur cinq sites (paiement de facture fournisseur compris) : réutilisés, plus de `paypal.ts` à généraliser ni de « quatre sites » ; `providerOf` retiré. Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.
+
+- 2026-11-22 — développée, en `review` (gates ci-dessus) ; revue P1 à lancer (`kesh-gate-logs/s39-11d/revue-p1-prompt.md`).
