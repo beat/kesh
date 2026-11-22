@@ -26,15 +26,16 @@
 //! d'écriture). Un verrou de compte non obtenu rend `409
 //! RECONCILIATION_ACCOUNT_LOCKED`.
 //!
-//! **Rangement** : par le cœur commun de la Story 38-11b
-//! ([`run_provider_import`], [`insert_currency_import`]), paramétré par le
-//! prestataire — verrous de chaque compte visé par identifiant croissant, une
-//! seule transaction pour tous les fichiers (tout ou rien), relecture
-//! verrouillante des soldes, empreinte, rejeu sur interblocage. Par fichier,
-//! une entrée `bank_imports` (`CSV`, période `first_date..last_date`, soldes
-//! d'ouverture et de clôture du relevé) ; une ligne = une transaction
-//! ([`transaction_of_row`]) ; `Total fees` n'en est jamais une (les frais sont
-//! leurs propres lignes).
+//! **Rangement** : par le cœur commun des imports de prestataire
+//! ([`import_lines`], Story 38-12a ; Wise y passe depuis la Story 39-14), un
+//! relevé par devise ([`ImportSource::Statements`], dans l'ordre du formulaire)
+//! — verrous de chaque compte visé par identifiant croissant, une seule
+//! transaction pour tous les fichiers (tout ou rien), relecture verrouillante
+//! des soldes, empreinte, rejeu sur interblocage (opération
+//! `wise_imports::create`). Par fichier, une entrée `bank_imports` (`CSV`,
+//! période `first_date..last_date`, soldes d'ouverture et de clôture du
+//! relevé) ; une ligne = une transaction ([`line_of_row`]) ; `Total fees`
+//! n'en est jamais une (les frais sont leurs propres lignes).
 //!
 //! **Doublons** : une ligne dont l'identifiant Wise est déjà sur le compte
 //! bancaire **dans le même sens** est ignorée et comptée (la fenêtre
@@ -42,17 +43,24 @@
 //! fichier tout en doublons ne crée pas d'entrée. La clé est (identifiant,
 //! sens), comme au lecteur : Wise écrit sous un même identifiant le débit puis
 //! le recrédit d'une réserve de carte expirée ou d'une vérification de carte
-//! (Story 39-11a2, [`existing_keys`]). **Continuité** : avertissement `gap` quand le relevé ne
-//! prolonge pas le précédent du compte
+//! (Story 39-11a2 ; `ProviderLine::direction`, jugée par
+//! `provider_imports::ExistingKeys`). **Continuité** : avertissement `gap`
+//! quand le relevé ne prolonge pas le précédent du compte
 //! (`kesh_db::repositories::bank_imports::continuity_gap`, la règle unique
-//! que relit aussi la revue de la Story 39-11c) ; l'import passe.
+//! que relit aussi la revue de la Story 39-11c, appelée par le cœur) ;
+//! l'import passe.
+//!
+//! **Trace** `wise_import.created` : `provider`, `provider_account`, `files`
+//! (le compte rendu de chaque fichier, tel que la réponse) et
+//! `ignoredEntries`.
 //!
 //! ⚠️ Les règles de doublon propres à Wise R1 à R3 (frais de conversion inclus,
-//! conversion automatique) n'ont d'objet qu'avec le téléchargement par l'API
-//! (Story 39-12a3, `wise_duplicates.rs`, point d'accroche `rules` du cœur
-//! commun) : sans ligne téléchargée en base, aucune ne se déclenche.
+//! conversion automatique) n'ont d'objet qu'avec le téléchargement par l'API,
+//! sorti de l'epic (branche `futur/wise-api`) : sans ligne téléchargée en base,
+//! aucune ne se déclenche, et le cœur commun n'en porte pas encore le point
+//! d'accroche.
 
-use std::collections::HashSet;
+use std::collections::BTreeMap;
 
 use axum::extract::{Multipart, State};
 use axum::http::StatusCode;
@@ -60,33 +68,28 @@ use axum::{Extension, Json};
 use rust_decimal::Decimal;
 use serde::Serialize;
 
-use kesh_db::entities::audit_log::NewAuditLogEntry;
 use kesh_db::entities::bank_account::PROVIDER_WISE;
 use kesh_db::entities::bank_transaction::NewBankTransaction;
-use kesh_db::repositories::bank_accounts::{self, ProviderBalance};
-use kesh_db::repositories::{audit_log, bank_imports, bank_transactions};
 use kesh_import::wise::{WiseCsv, WiseCsvError, WiseDirection, WiseRow, parse_wise_csv};
 
 use crate::AppState;
 use crate::errors::AppError;
 use crate::middleware::auth::CurrentUser;
-use crate::routes::paypal_imports::{
-    CurrencyImport, DETAILS_MAX_CHARS, LockedTarget, NAME_MAX_CHARS, PROVIDER_TYPE_MAX_CHARS,
-    ProviderWrite, TXID_COLUMN_MAX_CHARS, WriteFuture, file_currency_hash, insert_currency_import,
-    resolve_currency_balances, run_provider_import, truncate_bytes, truncate_chars,
+use crate::routes::provider_imports::{
+    CurrencyReport, CurrencyStatement, DETAILS_MAX_CHARS, FILENAME_MAX_BYTES, ImportRequest,
+    ImportSource, LineDirection, NAME_MAX_CHARS, PROVIDER_TYPE_MAX_CHARS, ProviderGroup,
+    ProviderLine, TXID_COLUMN_MAX_CHARS, import_lines, load_balances, truncate_bytes,
+    truncate_chars,
 };
+pub use crate::routes::provider_imports::{ImportWarning as FileWarning, WARNING_GAP};
 use crate::zip_read::{ZipRefusal, ZipRefusalReason, extract_csv_entries, looks_like_zip};
 
 /// Nom d'un fichier sans nom dans le formulaire.
 const DEFAULT_FILENAME: &str = "wise.csv";
-/// Borne de `bank_imports.filename`, en octets.
-const FILENAME_MAX_BYTES: usize = 255;
 /// Longueur maximale d'un IBAN (`counterparty_iban VARCHAR(34)`).
 const IBAN_MAX_CHARS: usize = 34;
 /// Séparateur des éléments du libellé.
 const DETAILS_SEPARATOR: &str = " · ";
-/// Code de l'avertissement de continuité.
-pub const WARNING_GAP: &str = "gap";
 /// Nombre maximal d'entrées d'un zip de relevés (Story 39-11e, D4) : trois
 /// aujourd'hui, une par solde ; la marge couvre un compte à nombreuses devises.
 pub const WISE_ZIP_MAX_ENTRIES: usize = 64;
@@ -94,18 +97,6 @@ pub const WISE_ZIP_MAX_ENTRIES: usize = 64;
 // ---------------------------------------------------------------------------
 // DTO
 // ---------------------------------------------------------------------------
-
-/// Avertissement d'un fichier — Story 39-11b (AC-5) : `gap`, le relevé ne
-/// prolonge pas le précédent du compte (`expected` = sa clôture, `found` =
-/// l'ouverture du fichier).
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FileWarning {
-    pub code: &'static str,
-    pub expected: Decimal,
-    pub found: Decimal,
-    pub previous_import_id: i64,
-}
 
 /// Compte rendu d'un fichier : son compte bancaire, l'entrée `bank_imports`
 /// créée (`null` si toutes ses lignes étaient des doublons), les nombres de
@@ -178,18 +169,17 @@ pub fn iban_shaped(account: &str) -> Option<String> {
     shaped.then_some(compact)
 }
 
-/// La transaction d'une ligne du relevé Wise — Story 39-11b (AC-4) : montant
+/// La ligne neutre ([`ProviderLine`]) d'une ligne du relevé Wise — Story
+/// 39-11b (AC-4), pour le cœur commun depuis la Story 39-14 : montant
 /// signé, date de la ligne, identifiant Wise, référence de paiement,
 /// contrepartie (`Merchant`, sinon `Payee Name` d'un débit ou `Payer Name`
 /// d'un crédit), IBAN du bénéficiaire s'il en a la forme, type = préfixe de
 /// l'identifiant (filtre des règles, G5), libellé = description, type de
 /// détail, numéro de compte non IBAN, conversion et note, joints par « · » et
-/// tronqués à la frontière d'un caractère.
-pub fn transaction_of_row(
-    row: &WiseRow,
-    company_id: i64,
-    bank_account_id: i64,
-) -> NewBankTransaction {
+/// tronqués à la frontière d'un caractère. Un groupe = une ligne
+/// (`group_id` = identifiant Wise), sens du lecteur (doublon sur
+/// (identifiant, sens), Story 39-11a2).
+pub fn line_of_row(row: &WiseRow) -> ProviderLine {
     let account = non_empty(&row.payee_account);
     let iban = account.and_then(iban_shaped);
     let other_account = if iban.is_none() { account } else { None };
@@ -244,23 +234,38 @@ pub fn transaction_of_row(
         WiseDirection::Debit => non_empty(&row.payee_name),
         WiseDirection::Credit => non_empty(&row.payer_name),
     });
-    NewBankTransaction {
-        company_id,
-        bank_account_id,
+    ProviderLine {
+        group_id: row.id.clone(),
+        transaction_id: row.id.clone(),
         booking_date: row.date,
-        value_date: None,
         amount: row.amount,
         currency: row.currency.clone(),
         reference: non_empty(&row.payment_reference)
             .map(|s| truncate_chars(s, TXID_COLUMN_MAX_CHARS)),
         details: truncate_chars(&details, DETAILS_MAX_CHARS),
         end_to_end_id: None,
-        transaction_id: Some(row.id.clone()),
-        counterparty_iban: iban,
         counterparty_name: counterparty.map(|s| truncate_chars(s, NAME_MAX_CHARS)),
-        provider_type: Some(truncate_chars(&row.id_prefix, PROVIDER_TYPE_MAX_CHARS)),
         counterparty_email: None,
+        provider_type: Some(truncate_chars(&row.id_prefix, PROVIDER_TYPE_MAX_CHARS)),
+        rank: row.line,
+        // Les soldes de l'entrée sont ceux du relevé (`CurrencyStatement`).
+        balance_after: Some(row.running_balance),
+        value_date: None,
+        counterparty_iban: iban,
+        direction: Some(match row.direction {
+            WiseDirection::Debit => LineDirection::Debit,
+            WiseDirection::Credit => LineDirection::Credit,
+        }),
     }
+}
+
+/// La transaction bancaire d'une ligne du relevé ([`line_of_row`]).
+pub fn transaction_of_row(
+    row: &WiseRow,
+    company_id: i64,
+    bank_account_id: i64,
+) -> NewBankTransaction {
+    line_of_row(row).into_new_bank_transaction(company_id, bank_account_id)
 }
 
 // ---------------------------------------------------------------------------
@@ -331,8 +336,10 @@ async fn parse_form(mut multipart: Multipart) -> Result<WiseImportForm, AppError
 
 /// Traduit le refus du lecteur (39-11a) en `422 WISE_CSV_INVALID`, le fichier
 /// nommé — sauf le relevé exporté sans les frais séparés (Story 39-11e, D5),
-/// qui a son code propre, `422 WISE_CSV_FEES_NOT_SEPARATED`, avec l'archive
-/// d'où vient le fichier (`None` pour un fichier envoyé à part).
+/// qui a son code propre, `422 WISE_CSV_FEES_NOT_SEPARATED`. L'un et l'autre
+/// portent l'archive d'où vient le fichier (`None`, rendu `null`, pour un
+/// fichier envoyé à part) : deux zips d'un même envoi peuvent porter des
+/// entrées de même nom (Story 39-11d, revue P1, M2).
 fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError {
     if let WiseCsvError::FeesNotSeparated { lines, count } = e {
         return AppError::WiseCsvFeesNotSeparated {
@@ -343,7 +350,7 @@ fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError
         };
     }
     let reason = e.code();
-    let details = match &e {
+    let mut details = match &e {
         WiseCsvError::MissingColumns(columns) => serde_json::json!({ "columns": columns }),
         WiseCsvError::DuplicateColumn(column) => serde_json::json!({ "columns": [column] }),
         WiseCsvError::Lines(lines) => serde_json::json!({ "lines": lines }),
@@ -360,6 +367,9 @@ fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError
         // `FeesNotSeparated` est rendu plus haut, par son propre code.
         WiseCsvError::Empty | WiseCsvError::FeesNotSeparated { .. } => serde_json::json!({}),
     };
+    if let serde_json::Value::Object(map) = &mut details {
+        map.insert("archive".into(), serde_json::json!(archive));
+    }
     AppError::WiseCsvInvalid {
         filename: filename.to_string(),
         reason,
@@ -450,13 +460,37 @@ fn duplicate_currency(read: &[(String, WiseCsv)]) -> Option<AppError> {
 // Handler
 // ---------------------------------------------------------------------------
 
-/// Un fichier lu et son compte bancaire.
-struct Target<'a> {
-    filename: String,
-    archive: Option<String>,
-    csv: WiseCsv,
-    balance: &'a ProviderBalance,
-    file_hash: String,
+/// La partie « fichier » du compte rendu d'un fichier : ce qui ne dépend que
+/// du fichier lu. Portée à la trace avec le compte rendu de la devise
+/// (`CurrencyStatement::trace`), si bien que `files` de la trace égale `files`
+/// de la réponse.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FilePart<'a> {
+    filename: &'a str,
+    archive: Option<&'a str>,
+    rows: usize,
+    opening_balance: Decimal,
+    closing_balance: Decimal,
+}
+
+impl FilePart<'_> {
+    /// Le compte rendu du fichier, complété de celui de sa devise.
+    fn report(&self, currency: CurrencyReport) -> FileReport {
+        FileReport {
+            filename: self.filename.to_string(),
+            archive: self.archive.map(str::to_string),
+            currency: currency.currency,
+            bank_account_id: currency.bank_account_id,
+            import_id: currency.import_id,
+            rows: self.rows,
+            inserted: currency.inserted,
+            duplicates: currency.duplicates,
+            opening_balance: self.opening_balance,
+            closing_balance: self.closing_balance,
+            warnings: currency.warnings.unwrap_or_default(),
+        }
+    }
 }
 
 /// `POST /api/v1/wise-imports` — voir l'en-tête du module.
@@ -466,19 +500,13 @@ pub async fn create(
     multipart: Multipart,
 ) -> Result<(StatusCode, Json<WiseImportResponse>), AppError> {
     let form = parse_form(multipart).await?;
-
-    let balances = bank_accounts::list_provider_balances(
+    let balances = load_balances(
         &state.pool,
         current_user.company_id,
         PROVIDER_WISE,
         &form.account,
     )
     .await?;
-    if balances.is_empty() {
-        return Err(AppError::ProviderAccountNotFound {
-            account: form.account,
-        });
-    }
 
     let max_bytes = u64::from(state.config.bank_import_max_mib) * 1024 * 1024;
     let (files, ignored_entries) =
@@ -496,51 +524,67 @@ pub async fn create(
         return Err(refusal);
     }
 
-    let currencies: Vec<String> = read.iter().map(|(_, csv)| csv.currency.clone()).collect();
-    let resolved = resolve_currency_balances(&balances, &form.account, &currencies)?;
-    let targets: Vec<Target<'_>> = read
-        .into_iter()
+    let parts: Vec<FilePart<'_>> = read
+        .iter()
         .zip(&files)
-        .zip(resolved)
-        .map(|(((filename, csv), file), balance)| Target {
-            file_hash: file_currency_hash(&file.bytes, &csv.currency),
-            archive: file.archive.clone(),
+        .map(|((filename, csv), file)| FilePart {
             filename,
-            csv,
-            balance,
+            archive: file.archive.as_deref(),
+            rows: csv.rows.len(),
+            opening_balance: csv.opening_balance,
+            closing_balance: csv.closing_balance,
+        })
+        .collect();
+    let mut statements = Vec::with_capacity(read.len());
+    for (((filename, csv), file), part) in read.iter().zip(&files).zip(&parts) {
+        let trace = match serde_json::to_value(part) {
+            Ok(serde_json::Value::Object(trace)) => trace,
+            other => {
+                return Err(AppError::Internal(format!(
+                    "trace d'un fichier Wise : {other:?}"
+                )));
+            }
+        };
+        statements.push(CurrencyStatement {
+            currency: csv.currency.clone(),
+            filename: filename.clone(),
+            bytes: &file.bytes,
+            period_from: csv.first_date,
+            period_to: csv.last_date,
+            opening_balance: csv.opening_balance,
+            closing_balance: csv.closing_balance,
+            trace,
+        });
+    }
+    let by_currency: BTreeMap<String, Vec<ProviderGroup>> = read
+        .iter()
+        .map(|(_, csv)| {
+            let groups = csv.rows.iter().map(|r| vec![line_of_row(r)]).collect();
+            (csv.currency.clone(), groups)
         })
         .collect();
 
-    let locked: Vec<LockedTarget> = targets
-        .iter()
-        .map(|t| LockedTarget {
-            currency: t.csv.currency.clone(),
-            bank_account_id: t.balance.account.id,
-            file_hash: t.file_hash.clone(),
-        })
-        .collect();
-    let audit_entity_id = balances
-        .iter()
-        .map(|b| b.account.id)
-        .min()
-        .expect("au moins un compte, contrôlé ci-dessus");
-    let writer = WiseWriter {
-        current_user: &current_user,
+    let mut audit_details = serde_json::Map::new();
+    audit_details.insert("provider".into(), serde_json::json!(PROVIDER_WISE));
+    audit_details.insert("provider_account".into(), serde_json::json!(form.account));
+    audit_details.insert("ignoredEntries".into(), serde_json::json!(ignored_entries));
+    let request = ImportRequest {
+        provider: PROVIDER_WISE,
         account: &form.account,
-        targets: &targets,
-        ignored_entries: &ignored_entries,
-        audit_entity_id,
+        // Ignoré pour des relevés : chacun porte son nom.
+        filename: DEFAULT_FILENAME,
+        source: ImportSource::Statements(&statements),
+        retry_operation: "wise_imports::create",
+        audit_action: "wise_import.created",
+        audit_details,
+        by_currency,
     };
-    let files = run_provider_import(
-        &state.pool,
-        &current_user,
-        PROVIDER_WISE,
-        &form.account,
-        &locked,
-        "wise_imports::create",
-        &writer,
-    )
-    .await?;
+    let reports = import_lines(&state.pool, &current_user, &balances, &request).await?;
+    let files = parts
+        .iter()
+        .zip(reports)
+        .map(|(part, report)| part.report(report))
+        .collect();
 
     Ok((
         StatusCode::CREATED,
@@ -552,179 +596,10 @@ pub async fn create(
     ))
 }
 
-/// Les clés (identifiant, sens) des transactions déjà sur le compte (Story
-/// 39-11a2) : le sens d'une transaction en base se lit au signe de son
-/// montant (débit ≤ 0, crédit ≥ 0, garanti par le lecteur). Une transaction de
-/// montant **nul** vaut pour les deux sens : elle ne fait jamais insérer une
-/// seconde ligne, et une ligne nulle ne change pas le solde. Les identifiants
-/// sont comparés exactement : la base les rend tels que stockés, et le
-/// lecteur les écrit en majuscules.
-fn existing_keys(
-    existing: &[bank_transactions::ExistingTransaction],
-) -> HashSet<(&str, WiseDirection)> {
-    let mut keys = HashSet::with_capacity(existing.len());
-    for t in existing {
-        if t.amount <= Decimal::ZERO {
-            keys.insert((t.transaction_id.as_str(), WiseDirection::Debit));
-        }
-        if t.amount >= Decimal::ZERO {
-            keys.insert((t.transaction_id.as_str(), WiseDirection::Credit));
-        }
-    }
-    keys
-}
-
-/// L'écriture propre à Wise, dans la transaction du cœur commun : par fichier,
-/// doublons lus dans la transaction, continuité jugée avant l'insertion, une
-/// entrée `bank_imports` s'il reste au moins une ligne ; puis la trace
-/// `wise_import.created`.
-struct WiseWriter<'a> {
-    current_user: &'a CurrentUser,
-    account: &'a str,
-    targets: &'a [Target<'a>],
-    ignored_entries: &'a [IgnoredEntry],
-    audit_entity_id: i64,
-}
-
-impl ProviderWrite for WiseWriter<'_> {
-    type Output = Vec<FileReport>;
-
-    fn write<'a>(
-        &'a self,
-        tx: &'a mut sqlx::Transaction<'static, sqlx::MySql>,
-    ) -> WriteFuture<'a, Self::Output> {
-        Box::pin(async move {
-            let current_user = self.current_user;
-            let company_id = current_user.company_id;
-            let mut reports = Vec::with_capacity(self.targets.len());
-            for target in self.targets {
-                let bank_account_id = target.balance.account.id;
-                let csv = &target.csv;
-                let ids: Vec<String> = csv.rows.iter().map(|r| r.id.clone()).collect();
-                let existing = bank_transactions::existing_transactions_by_ids(
-                    tx,
-                    company_id,
-                    bank_account_id,
-                    &ids,
-                )
-                .await?;
-                let existing = existing_keys(&existing);
-                let new_txs: Vec<NewBankTransaction> = csv
-                    .rows
-                    .iter()
-                    .filter(|r| !existing.contains(&(r.id.as_str(), r.direction)))
-                    .map(|r| transaction_of_row(r, company_id, bank_account_id))
-                    .collect();
-                let duplicates = csv.rows.len() - new_txs.len();
-                let warnings: Vec<FileWarning> = bank_imports::continuity_gap(
-                    tx,
-                    company_id,
-                    bank_account_id,
-                    csv.first_date,
-                    csv.opening_balance,
-                    None,
-                )
-                .await?
-                .into_iter()
-                .map(|gap| FileWarning {
-                    code: WARNING_GAP,
-                    expected: gap.expected,
-                    found: gap.found,
-                    previous_import_id: gap.previous_import_id,
-                })
-                .collect();
-                let inserted = new_txs.len();
-                let import_id = if new_txs.is_empty() {
-                    None
-                } else {
-                    Some(
-                        insert_currency_import(
-                            tx,
-                            current_user,
-                            CurrencyImport {
-                                provider: PROVIDER_WISE,
-                                account: self.account,
-                                currency: &csv.currency,
-                                bank_account_id,
-                                filename: &target.filename,
-                                file_hash: &target.file_hash,
-                                period_from: csv.first_date,
-                                period_to: csv.last_date,
-                                opening_balance: Some(csv.opening_balance),
-                                closing_balance: Some(csv.closing_balance),
-                                transactions: new_txs,
-                                duplicates,
-                            },
-                        )
-                        .await?,
-                    )
-                };
-                reports.push(FileReport {
-                    filename: target.filename.clone(),
-                    archive: target.archive.clone(),
-                    currency: csv.currency.clone(),
-                    bank_account_id,
-                    import_id,
-                    rows: csv.rows.len(),
-                    inserted,
-                    duplicates,
-                    opening_balance: csv.opening_balance,
-                    closing_balance: csv.closing_balance,
-                    warnings,
-                });
-            }
-
-            audit_log::insert_in_tx(
-                tx,
-                NewAuditLogEntry::for_actor(
-                    current_user.user_id,
-                    current_user.api_key_id,
-                    "wise_import.created",
-                    "bank_account",
-                    self.audit_entity_id,
-                    Some(serde_json::json!({
-                        "provider": PROVIDER_WISE,
-                        "provider_account": self.account,
-                        "files": reports,
-                        "ignoredEntries": self.ignored_entries,
-                    })),
-                ),
-            )
-            .await?;
-            Ok(reports)
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use rust_decimal_macros::dec;
-
-    /// Story 39-11a2 — clés (identifiant, sens) des transactions en base : le
-    /// signe du montant donne le sens, un montant nul vaut pour les deux.
-    #[test]
-    fn existing_keys_read_the_direction_from_the_sign() {
-        let t = |id: &str, amount| bank_transactions::ExistingTransaction {
-            transaction_id: id.into(),
-            amount,
-            booking_date: chrono::NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-        };
-        let existing = [
-            t("CARD-1", dec!(-32.10)),
-            t("CARD-2", dec!(0.50)),
-            t("CARD-3", dec!(0.00)),
-        ];
-        let keys = existing_keys(&existing);
-        let has = |id, d| keys.contains(&(id, d));
-        assert!(has("CARD-1", WiseDirection::Debit));
-        assert!(!has("CARD-1", WiseDirection::Credit));
-        assert!(has("CARD-2", WiseDirection::Credit));
-        assert!(!has("CARD-2", WiseDirection::Debit));
-        assert!(has("CARD-3", WiseDirection::Debit));
-        assert!(has("CARD-3", WiseDirection::Credit));
-        assert_eq!(keys.len(), 4);
-    }
 
     const CHF: &[u8] =
         include_bytes!("../../../kesh-import/tests/fixtures/wise-releve-chf-fictif.csv");

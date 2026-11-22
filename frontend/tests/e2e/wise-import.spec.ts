@@ -11,12 +11,13 @@
  * 2. La consigne d'export est à l'écran. Un relevé CHF exporté **sans** les frais
  *    séparés (la fixture CHF sans ses lignes `FEE-`, montants frais compris :
  *    le patron de `chf_sans_frais` de `wise_import_e2e.rs`) est refusé, la
- *    consigne dite, rien d'importé.
+ *    consigne dite, rien d'importé (relu au serveur : aucun import `chf.csv`).
  * 3. Le **zip** des trois fixtures fictives de 39-11a (lues par chemin, ni copie
  *    ni seconde fixture ; le zip est fait par la spec, avec une entrée PDF que
  *    l'import ignore) s'importe **par l'écran**, d'un geste : compte rendu par
  *    fichier (archive, insérées, soldes), entrée non lue nommée.
- * 4. Le même zip, donné de nouveau : refusé comme déjà importé.
+ * 4. Le même zip, donné de nouveau : refusé comme déjà importé, le relevé nommé
+ *    (`BANK_IMPORT_DUPLICATE_FILE`, son texte propre), aucun import de plus.
  *
  * La revue et l'acceptation Wise (Story 39-11c) ne sont pas dans cette branche :
  * la page n'a que l'import (AC-3 reporté, voir la fiche).
@@ -239,6 +240,14 @@ test('2 — consigne d’export ; relevé sans les frais séparés refusé, rien
 	await expect(refus).toContainText('2 opération(s) à frais sans leur ligne de frais (lignes 6, 7)');
 	await expect(page.getByTestId('wise-import-report')).toHaveCount(0);
 	await captureOf(page, 'wise-import-error', '04-refus-frais-non-separes');
+	// Rien d'importé, relu au serveur : aucun import du relevé refusé.
+	const ctx = await authedApiContext(page);
+	try {
+		const imports = await api<{ items: Array<{ filename: string }> }>(ctx, 'get', '/api/v1/bank-imports?limit=100');
+		expect(imports.items.map((i) => i.filename)).not.toContain('chf.csv');
+	} finally {
+		await disposeContextSafe(ctx);
+	}
 });
 
 test('3 — le zip de Wise, d’un geste : compte rendu par fichier ; donné de nouveau, refusé', async ({ page }) => {
@@ -260,9 +269,12 @@ test('3 — le zip de Wise, d’un geste : compte rendu par fichier ; donné de 
 	await captureOf(page, 'wise-import-report', '05-compte-rendu-zip');
 	await capture(page, '06-page-wise-apres-import');
 
-	// Le même zip, de nouveau : déjà importé, rien de plus.
+	// Le même zip, de nouveau : refusé comme déjà importé (texte propre à BANK_IMPORT_DUPLICATE_FILE,
+	// le premier relevé du zip nommé), rien de plus.
 	await page.getByTestId('wise-file-input').setInputFiles({ name: ZIP_NAME, mimeType: 'application/zip', buffer: zip });
-	await expect(page.getByTestId('wise-import-error')).toBeVisible();
+	await expect(page.getByTestId('wise-import-error-line')).toHaveText(
+		'Un relevé de cet envoi a déjà été importé, sous le nom « statement_1_CHF_2020-01-01_2020-12-31.csv » : rien n’a été importé.',
+	);
 	await expect(page.getByTestId('wise-import-report')).toHaveCount(0);
 	await captureOf(page, 'wise-import-error', '07-zip-deja-importe');
 	const ctx = await authedApiContext(page);

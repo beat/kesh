@@ -724,6 +724,9 @@ async fn import_refus_dans_l_ordre_roles_et_cles(pool: MySqlPool) {
         .await;
     assert_eq!((s, code(&b)), (422, "WISE_CSV_INVALID"), "{b}");
     assert_eq!(b["error"]["details"]["filename"], "mauvais.csv");
+    // Story 39-11d (revue P1, M2) : `archive` toujours présent, nul à part
+    // (une clé absente se lirait aussi `Null` : sa présence est contrôlée).
+    assert_eq!(b["error"]["details"].get("archive"), Some(&Value::Null));
     assert_eq!(b["error"]["details"]["reason"], "WISE_CSV_MISSING_COLUMNS");
     assert!(b["error"]["details"]["columns"].as_array().unwrap().len() > 3);
 
@@ -828,6 +831,212 @@ async fn import_refus_dans_l_ordre_roles_et_cles(pool: MySqlPool) {
             .all(|(t, k)| t == "api_key" && *k == Some(cle_id)),
         "{acteurs:?}"
     );
+}
+
+/// Story 39-14 (AC-5) — le raccord au cœur commun ne change rien : deux
+/// relevés envoyés USD puis CHF (hors de l'ordre alphabétique), le second à
+/// doublon partiel, à recrédit au même identifiant et à écart de continuité.
+/// Corps entier attendu, `files` de la trace = `files` de la réponse, entrées
+/// `bank_imports` du **fichier entier** (période, soldes, nom), créées dans
+/// l'ordre du formulaire ; deux comptes clos, envoyés USD puis EUR : le refus
+/// nomme le premier du formulaire. Joué vert avant le raccord et après.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn import_raccord_reponses_traces_et_ordre_inchanges(pool: MySqlPool) {
+    let ctx = monter(&pool).await;
+    let (c, e, u) = ctx.trois_soldes().await;
+    let (s, b) = ctx.importer(&[("chf.csv", CHF)]).await;
+    assert_eq!(s, 201, "{b}");
+    let premier = par_fichier(&b, "chf.csv")["importId"].as_i64().unwrap();
+
+    // Du 01-04 au 10-04 : ouverture 2600 pour une clôture précédente de
+    // 2433.55 ; CARD-90000007 au débit est déjà en base (doublon), au crédit
+    // non (inséré).
+    let chf_b = releve(&[
+        ligne("CARD-90000060", "10-04-2020", "-10.00", "CHF", "2590.00"),
+        ligne("CARD-90000007", "05-04-2020", "19.00", "CHF", "2600.00"),
+        ligne("CARD-90000007", "01-04-2020", "-19.00", "CHF", "2581.00"),
+    ]);
+    let (s, b) = ctx
+        .importer(&[("usd.csv", USD), ("b.csv", chf_b.as_slice())])
+        .await;
+    assert_eq!(s, 201, "{b}");
+    let id_usd = b["files"][0]["importId"].as_i64().unwrap();
+    let id_chf = b["files"][1]["importId"].as_i64().unwrap();
+    assert!(id_usd < id_chf, "entrées créées dans l'ordre du formulaire");
+    assert_eq!(
+        b,
+        json!({
+            "account": WISE,
+            "files": [
+                {
+                    "filename": "usd.csv", "archive": null, "currency": "USD",
+                    "bankAccountId": u, "importId": id_usd, "rows": 3, "inserted": 3,
+                    "duplicates": 0, "openingBalance": "0.00", "closingBalance": "317.01",
+                    "warnings": [],
+                },
+                {
+                    "filename": "b.csv", "archive": null, "currency": "CHF",
+                    "bankAccountId": c, "importId": id_chf, "rows": 3, "inserted": 2,
+                    "duplicates": 1, "openingBalance": "2600.00", "closingBalance": "2590.00",
+                    "warnings": [{
+                        "code": "gap", "expected": "2433.55", "found": "2600.00",
+                        "previousImportId": premier,
+                    }],
+                },
+            ],
+            "ignoredEntries": [],
+        })
+    );
+
+    let traces: Vec<Value> = sqlx::query_scalar(
+        "SELECT details_json FROM audit_log WHERE action = 'wise_import.created' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let trace = &traces[1];
+    assert_eq!(
+        trace.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["files", "ignoredEntries", "provider", "provider_account"]
+    );
+    assert_eq!(trace["files"], b["files"], "la trace porte le compte rendu");
+    // L'entité de la trace : le plus petit des comptes du prestataire.
+    let entites: Vec<Option<i64>> = sqlx::query_scalar(
+        "SELECT entity_id FROM audit_log WHERE action = 'wise_import.created' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(entites[1], Some(c.min(e).min(u)), "entity_id de la trace");
+    assert_eq!(trace["provider"], "wise");
+    let modif: Value = sqlx::query_scalar(
+        "SELECT details_json FROM audit_log WHERE action = 'bank_import.created' AND entity_id = ?",
+    )
+    .bind(id_chf)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (
+            modif["provider"].clone(),
+            modif["provider_account"].clone(),
+            modif["currency"].clone(),
+            modif["duplicates_skipped"].clone()
+        ),
+        (json!("wise"), json!(WISE), json!("CHF"), json!(1))
+    );
+
+    type Entree = (
+        String,
+        NaiveDate,
+        NaiveDate,
+        Option<Decimal>,
+        Option<Decimal>,
+        i32,
+    );
+    let entree = |id: i64| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_as::<_, Entree>(
+                "SELECT filename, period_from, period_to, opening_balance, closing_balance, \
+                 transaction_count FROM bank_imports WHERE id = ?",
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+        }
+    };
+    let d = |s: &str| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    assert_eq!(
+        entree(id_chf).await,
+        (
+            "b.csv".into(),
+            d("2020-04-01"),
+            d("2020-04-10"),
+            Some(dec!(2600.00)),
+            Some(dec!(2590.00)),
+            2
+        ),
+        "période et soldes du fichier entier, doublon compris"
+    );
+    assert_eq!(
+        entree(id_usd).await,
+        (
+            "usd.csv".into(),
+            d("2020-02-10"),
+            d("2020-03-25"),
+            Some(dec!(0.00)),
+            Some(dec!(317.01)),
+            3
+        )
+    );
+
+    // L'empreinte stockée : SHA-256(octets ‖ ":" ‖ devise), celle des relevés
+    // importés avant le raccord (validation P2, L1).
+    use sha2::{Digest, Sha256};
+    let attendue: String = Sha256::digest([chf_b.as_slice(), b":CHF"].concat())
+        .iter()
+        .map(|o| format!("{o:02x}"))
+        .collect();
+    let stockee: String = sqlx::query_scalar("SELECT file_hash FROM bank_imports WHERE id = ?")
+        .bind(id_chf)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stockee, attendue);
+
+    // Tout en doublons, à écart de continuité (premier jour non couvert,
+    // ouverture 3010 pour une clôture précédente de 2590) : pas d'entrée,
+    // mais l'avertissement est rendu et tracé (validation P1, M3).
+    let chf_c = releve(&[ligne(
+        "CARD-90000060",
+        "20-04-2020",
+        "-10.00",
+        "CHF",
+        "3000.00",
+    )]);
+    let avant = ctx.ecrit().await;
+    let (s, b) = ctx.importer(&[("c.csv", chf_c.as_slice())]).await;
+    assert_eq!(s, 201, "{b}");
+    assert_eq!(
+        b["files"],
+        json!([{
+            "filename": "c.csv", "archive": null, "currency": "CHF",
+            "bankAccountId": c, "importId": null, "rows": 1, "inserted": 0,
+            "duplicates": 1, "openingBalance": "3010.00", "closingBalance": "3000.00",
+            "warnings": [{
+                "code": "gap", "expected": "2590.00", "found": "3010.00",
+                "previousImportId": id_chf,
+            }],
+        }])
+    );
+    assert_eq!(ctx.ecrit().await, (avant.0, avant.1, avant.2 + 1));
+    let traces: Vec<Value> = sqlx::query_scalar(
+        "SELECT details_json FROM audit_log WHERE action = 'wise_import.created' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(traces[2]["files"], b["files"]);
+
+    // Relu tel quel : l'empreinte (octets ‖ devise) le reconnaît.
+    let (s, b) = ctx.importer(&[("b.csv", chf_b.as_slice())]).await;
+    assert_eq!((s, code(&b)), (422, "BANK_IMPORT_DUPLICATE_FILE"), "{b}");
+    assert_eq!(b["error"]["details"]["existingImportId"], id_chf, "{b}");
+
+    // Deux comptes clos : le refus nomme le premier du formulaire (USD).
+    sqlx::query("UPDATE bank_accounts SET closed_on = '2026-01-31' WHERE id IN (?, ?)")
+        .bind(u)
+        .bind(e)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let avant = ctx.ecrit().await;
+    let (s, b) = ctx.importer(&[("usd.csv", USD), ("eur.csv", EUR)]).await;
+    assert_eq!((s, code(&b)), (409, "BANK_ACCOUNT_CLOSED"), "{b}");
+    assert_eq!(b["error"]["details"]["bankAccountId"], u, "{b}");
+    assert_eq!(ctx.ecrit().await, avant);
 }
 
 /// Story 38-11c1, étendue à Wise — **l'import, victime d'un interblocage avec
@@ -985,6 +1194,25 @@ async fn creer_un_solde_wise_et_ses_refus(pool: MySqlPool) {
         "paypal": { "account": WISE }, "wise": { "account": WISE } }))
     .await;
     assert_eq!((s, code(&b)), (400, "VALIDATION_ERROR"), "{b}");
+    // Story 39-11d (revue P1, L1) — `wise` et `stripe` ensemble, règle née de
+    // la fusion des Epics 39 et 40 ; et `payoutBankAccountId`, propre à Stripe,
+    // refusé dans `wise`.
+    let (s, b) = creer(json!({ "bankName": "Wise", "journalAccountId": ctx.eur,
+        "wise": { "account": WISE }, "stripe": { "account": "Stripe fictif" } }))
+    .await;
+    assert_eq!(
+        (s, code(&b)),
+        (400, "VALIDATION_ERROR"),
+        "wise + stripe : {b}"
+    );
+    let (s, b) = creer(json!({ "bankName": "Wise", "journalAccountId": ctx.eur,
+        "wise": { "account": WISE, "payoutBankAccountId": usd } }))
+    .await;
+    assert_eq!(
+        (s, code(&b)),
+        (400, "VALIDATION_ERROR"),
+        "wise.payoutBankAccountId : {b}"
+    );
     // Un IBAN donné est contrôlé.
     let (s, b) = creer(
         json!({ "bankName": "Wise", "journalAccountId": ctx.eur, "iban": "CH00 0000",
@@ -1119,6 +1347,36 @@ async fn modifier_un_solde_wise(pool: MySqlPool) {
         (b2["provider"].clone(), b2["wise"].clone()),
         (Value::Null, Value::Null)
     );
+
+    // Story 39-11d (revue P1, L1) — un solde Wise sans transaction passe à
+    // Stripe par `PUT` (`wise` rendu nul) ; puis `wise: null` sur ce compte
+    // Stripe ne retire rien.
+    let b3 = ctx.solde(ctx.usd, None).await;
+    let chemin3 = format!("/api/v1/bank-accounts/{}", b3["id"].as_i64().unwrap());
+    let (s, b3) = ctx
+        .put(
+            &chemin3,
+            json!({ "bankName": "Stripe", "journalAccountId": ctx.usd, "version": b3["version"],
+                "stripe": { "account": "Stripe fictif" } }),
+        )
+        .await;
+    assert_eq!(s, 200, "Wise → Stripe : {b3}");
+    assert_eq!(b3["provider"], "stripe");
+    assert_eq!(b3["wise"], Value::Null);
+    assert_eq!(b3["stripe"]["account"], "Stripe fictif");
+    let (s, b3) = ctx
+        .put(
+            &chemin3,
+            json!({ "bankName": "Stripe", "journalAccountId": ctx.usd, "version": b3["version"],
+                "wise": null }),
+        )
+        .await;
+    assert_eq!(s, 200, "{b3}");
+    assert_eq!(
+        b3["provider"], "stripe",
+        "`wise: null` sans effet sur un compte Stripe"
+    );
+    assert_eq!(b3["stripe"]["account"], "Stripe fictif");
 }
 
 /// AC-2, AC-6 — un compte Wise ne reçoit ni relevé bancaire (CAMT, relevé
@@ -1549,6 +1807,17 @@ async fn import_zip_refus_et_cles(pool: MySqlPool) {
     assert_eq!((s, code(&b)), (422, "WISE_CSV_FEES_NOT_SEPARATED"), "{b}");
     assert_eq!(b["error"]["details"]["filename"], Z_CHF);
     assert_eq!(b["error"]["details"]["archive"], "wise.zip");
+
+    // Story 39-11d (revue P1, M2) — un relevé illisible dans un zip : le
+    // `WISE_CSV_INVALID` nomme l'entrée **et** son zip, ici le second de deux
+    // zips d'un même envoi.
+    let bon = zip_de(&[(Z_CHF, CHF)]);
+    let mauvais = zip_de(&[(Z_EUR, csv_illisible)]);
+    let (s, b) = ctx.importer(&[("a.zip", &bon), ("b.zip", &mauvais)]).await;
+    assert_eq!((s, code(&b)), (422, "WISE_CSV_INVALID"), "{b}");
+    assert_eq!(b["error"]["details"]["filename"], Z_EUR);
+    assert_eq!(b["error"]["details"]["archive"], "b.zip");
+    assert_eq!(b["error"]["details"]["reason"], "WISE_CSV_MISSING_COLUMNS");
 
     let lourd = zip_de(&[("../evasion.csv", CHF)]);
     let (s, b) = ctx.importer(&[("wise.zip", &lourd)]).await;

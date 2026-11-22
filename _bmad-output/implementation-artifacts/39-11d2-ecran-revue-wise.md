@@ -1,6 +1,6 @@
 # Story 39-11d2 : la revue et l'acceptation Wise à l'écran
 
-Status: ready-for-dev
+Status: in-progress
 
 *Fiche rédigée le 2026-11-22, branche `story/39-11d2`, partie de `story/39-11d` (`440ae42c` à la rédaction ; la branche avance par sa revue P1, reprise par la condition préalable). Epic 39, phase 1
 KISS. **Reprend l'AC-3 de la 39-11d**, reporté par son amendement A3 (la revue Wise, Story 39-11c, n'était pas dans la

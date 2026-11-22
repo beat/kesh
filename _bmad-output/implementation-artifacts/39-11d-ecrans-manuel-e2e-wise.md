@@ -1,6 +1,6 @@
 # Story 39-11d : écrans, manuel et E2E de l'import Wise
 
-Status: review
+Status: done
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, revérifiée à la validation P1. Epic 39, **phase 1 KISS**.
 **Dépend de** : 39-11a à 39-11c, **38-11d** (écrans PayPal, validée P1 : case « Compte PayPal » du formulaire des
@@ -128,7 +128,7 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
 
 *Développée le 2026-11-22, branche `story/39-11d` (partie d'`epic/39-wise`, `epic/40-stripe` fusionné en `3a721279`, page commune des prestataires). Dernier commit de code `d1ded344` ; `5bfe2478` ne touche que deux tests Vitest (gardes i18n recomptées).*
 
-**Livré** (amendement A1 à A5) : case « Compte Wise » du formulaire des comptes bancaires (exclusive des autres, compte de frais, aucun compte de versement) et ligne « Wise » de la liste ; page `reconciliation/wise` sur la page commune (`ProviderReviewPage` : `fileAccept`, `multiple`, `importFiles`, fragment `importReportMain`, revue facultative), consigne d'export sous le bouton, refus traduits (`WISE_CSV_FEES_NOT_SEPARATED`, `WISE_CSV_INVALID` par raison, `WISE_DUPLICATE_CURRENCY_FILE`, `WISE_ZIP_INVALID` par le message du serveur), compte rendu par fichier ; filtre de règle « Type chez le prestataire » générique ; menu et liens (Stripe vers Wise, contrôles de clôture) ; 48 clés i18n aux quatre locales ; manuel (`sec:comptes-wise`, `.tex` seul) et `docs/api-external.md` (« L'écran Wise »). **Reporté (A3, validé)** : revue et acceptation Wise, à la 39-11d2 (la 39-11c n'est pas dans `epic/39-wise`).
+**Livré** (amendement A1 à A5) : case « Compte Wise » du formulaire des comptes bancaires (exclusive des autres, compte de frais, aucun compte de versement) et ligne « Wise » de la liste ; page `reconciliation/wise` sur la page commune (`ProviderReviewPage` : `fileAccept`, `multiple`, `importFiles`, fragment `importReportMain`, revue facultative), consigne d'export sous le bouton, refus traduits (`WISE_CSV_FEES_NOT_SEPARATED`, `WISE_CSV_INVALID` par raison, `WISE_DUPLICATE_CURRENCY_FILE`, `WISE_ZIP_INVALID` par le message du serveur), compte rendu par fichier ; filtre de règle « Type chez le prestataire » générique ; menu et liens (Stripe vers Wise, contrôles de clôture) ; 48 clés i18n aux quatre locales *(annoté le 2026-11-22, revue P1, L6 : **49** au diff `e194fb84..440ae42c`, `reconciliation-rules-help-provider-type` comprise, 3 clés modifiées ; 50 après la remédiation P1)* ; manuel (`sec:comptes-wise`, `.tex` seul) et `docs/api-external.md` (« L'écran Wise »). **Reporté (A3, validé)** : revue et acceptation Wise, à la 39-11d2 (la 39-11c n'est pas dans `epic/39-wise`).
 
 **Gates** (règle de la nuit du 22.11 : E2E de la seule spec ajoutée, pas de `gate-ci.sh`, déclaré tel quel) :
 - backend : `nextest` complet au commit `d1ded344` (journal `kesh-gate-logs/s39-11d/nextest-1.log`) : 6614 exécutés, 6614 passés, 17 ignorés, rc 0. `5bfe2478` ne touche aucun fichier Rust.
@@ -144,8 +144,35 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
 
 ## Note de version
 
-*Ajouté* — Écrans de l'import Wise : réglage des comptes, import des relevés, propositions et écarts ; section Wise au
-manuel utilisateur.
+*Ajouté* — Écrans de l'import Wise : réglage des comptes Wise (case « Compte Wise » des comptes bancaires), import des
+relevés par la page *Mensuel* → *Wise* (le zip de Wise tel quel ou plusieurs CSV, un par devise), compte rendu par
+fichier et refus qui nomment le fichier en cause ; section Wise au manuel utilisateur. La revue et l'acceptation des
+transactions Wise viennent avec la 39-11d2 : d'ici là, les transactions importées restent en attente.
+
+*Modifié (API, additif)* — les `details` du refus `422 WISE_CSV_INVALID` portent une clé `archive` : le nom du zip
+d'où vient le relevé refusé, `null` pour un fichier envoyé à part (comme `WISE_CSV_FEES_NOT_SEPARATED`). Aucune clé
+retirée ni renommée ; `docs/api-external.md` le dit.
+
+## Limites du rapprochement à reprendre au manuel (revue de code P3 de la 39-11c)
+
+*Annoté à l'intégration de la 39-11d (2026-11-22) : à reprendre par la 39-11d2 (revue Wise à l'écran et son manuel).*
+
+À écrire dans la sous-section « Comptes Wise » (AC-4), en termes d'utilisateur, à côté des motifs « à examiner » du
+paiement par carte converti (`docs/api-external.md`, section du rapprochement Wise, fait foi) :
+
+- **Continuité des relevés** : Kesh tient pour complet un intervalle entre deux relevés d'un solde quand l'ouverture du
+  second égale la clôture du premier. Des lignes non importées qui s'annulent (une recharge et une dépense du même
+  montant, ou un solde resté à zéro des deux côtés) n'y paraissent pas : le paiement se propose sans elles. Conseil :
+  exporter chaque solde sur des périodes jointives, sans trou.
+- **Solde en devise peu utilisé** : si ses relevés encadrent la date d'un paiement sans se suivre (exports épars), **tout**
+  paiement par carte daté entre eux passe « à examiner », même sans rapport avec ce solde. Remède : importer le relevé qui
+  comble l'intervalle, ou traiter la ligne à la main.
+- **Part arrivée après coup** : un paiement par carte groupé dont une ligne de carte est déjà rapprochée passe « à
+  examiner » (« une part du paiement est déjà rapprochée ») ; la ligne en francs d'une partielle importée après le groupe
+  de sa part en devise se propose seule par la règle (deux écritures, aucun montant compté deux fois) ; un frais de carte
+  passé seul ne bloque rien : il va au compte de frais au lieu de la différence de change, et la conversion en deux
+  morceaux peut ajouter un centime d'arrondi (aucune écriture n'est fausse). La somme des deux écritures est celle de
+  l'écriture unique dans le cas de la ligne en francs seule.
 
 ## Change Log
 
@@ -165,5 +192,69 @@ manuel utilisateur.
   de la phase 1 de 38-11b (facture fournisseur, angle mort de la réconciliation générale, plus lourd pour un solde Wise en francs
   qui reçoit conversions et frais). LOW : « écart Stripe » est un motif « à examiner », non un écart.
 - 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : `provider.ts` / `withoutProviders` déjà livrés par 38-11d sur cinq sites (paiement de facture fournisseur compris) : réutilisés, plus de `paypal.ts` à généraliser ni de « quatre sites » ; `providerOf` retiré. Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.
+- 2026-11-22 — limites du rapprochement Wise à reprendre au manuel, notées par la remédiation de la revue de code P3 de la
+  39-11c (continuité tenue pour preuve, solde en devise épars, part arrivée après coup).
 
 - 2026-11-22 — développée, en `review` (gates ci-dessus) ; revue P1 à lancer (`kesh-gate-logs/s39-11d/revue-p1-prompt.md`).
+- 2026-11-22 — revue de code P1 (Claude Opus 5.5, contexte frais, complète) : 0 CRITICAL, 0 HIGH, 3 MEDIUM, 7 LOW
+  (rapport `kesh-gate-logs/s39-11d/revue-p1-rapport.md`). Remédiation :
+  - **M1** : le refus `BANK_IMPORT_DUPLICATE_FILE` se dit par sa phrase, qui nomme le relevé sous le nom où il a déjà été
+    importé (`details.existingFilename`, clé `wise-import-error-duplicate-file` aux quatre locales ; repli : message du
+    serveur sans nom). Le zip d'un import passé n'est pas nommé : `bank_imports` ne le garde pas (pas de migration dans
+    cette story). Tests Vitest (`wise-labels`, `wise-page`), E2E étape 3 (texte exact).
+  - **M2** (choix de l'orchestrateur) : `csv_error` ajoute `archive` (nul pour un fichier à part) aux `details` de
+    `WISE_CSV_INVALID`, comme `WISE_CSV_FEES_NOT_SEPARATED` ; tests d'intégration (`archive` nul à part ; entrée
+    illisible du second de deux zips : entrée et zip nommés). Le cas `wise-labels.test.ts` « WISE_CSV_LINES … archive »
+    décrit désormais une forme rendue. `errors.rs`, `docs/api-external.md` (ordre des refus, table) ; manuel : la phrase
+    « dit le fichier en cause » ventilée par refus (relevé refusé à la lecture : avec son zip ; deux fichiers d'une
+    devise : leurs noms ; déjà importé : le nom sous lequel il l'a été ; zip refusé : son nom).
+  - **M3** : note de version ramenée à ce qui est livré ; E2E étape 3 affirme le texte du refus de doublon, étape 2 relit
+    au serveur qu'aucun import `chf.csv` n'existe.
+  - **L1** : quatre assertions dans `wise_import_e2e.rs` (`wise` + `stripe` refusés, `wise.payoutBankAccountId` refusé,
+    Wise → Stripe par `PUT` sans transaction, `wise: null` sans effet sur un compte Stripe).
+  - **L2** (le plus simple : garder le lien, la clé existait aux quatre locales) : manuel des contrôles de clôture,
+    « Ouvrir la page Wise », avec la limite (la page n'y fait qu'importer) ; test `FiscalYearChecks` d'un compte Wise.
+  - **L3** : `docs/api-external.md`, paragraphes Wise et Stripe généralisés (deux prestataires ensemble,
+    `payoutBankAccountId` refusé dans `wise`, `wise: null` sans effet sur Stripe).
+  - **L4** : `wise-csv-line-date` dit les deux formes admises (JJ-MM-AAAA ou AAAA-MM-JJ), quatre locales.
+  - **L6** : décompte annoté au Dev Agent Record (49, puis 50).
+  - **L7** : `ProviderReviewPage` ne lit les exercices que si la page a une revue ; test (lecture en échec, import
+    visible, `listFiscalYears` non appelé).
+  - **L5** noté, non traité : aucune garde des codes Wise contre leur source (patron des 38-11d/40-7d) ; à reprendre avec
+    la 39-11d2.
+  - `sitesTotal` 3739 → **3740**, relevé par la garde.
+  - Gates de la remédiation (journaux `kesh-gate-logs/s39-11d/`) :
+    - `cargo fmt --check` et clippy workspace `-D warnings` : rc 0 au commit `a60904e7` (`lint-p1r.log`), et de nouveau au
+      commit `bcb66301` (`cible-p1r.log`).
+    - nextest complet au commit `a60904e7` : 6614 exécutés, 6614 passés, 17 ignorés, rc 0 (`nextest-p1r.log`) ; après lui,
+      `bcb66301` ne change qu'une assertion de `wise_import_e2e.rs` : binaire `wise_import_e2e` rejoué, 13 passés, 1 ignoré
+      (`cible-p1r.log`).
+    - frontend au commit `a60904e7` : `npm run check` rc 0, `lint-i18n-ownership` rc 0, Vitest 297 fichiers, 5067 tests
+      passés (+4 : `FiscalYearChecks` compte Wise, `wise-labels` doublon, `wise-page` doublon et exercices non lus),
+      `npm run build` rc 0 (`front-p1r.rc`). `2f2e259a` ne touche que la spec E2E (non rejoué au front).
+    - E2E partiel, `wise-import.spec.ts` seule (règle de la nuit) : au commit `a60904e7`, 2 passés, 1 échec (l'étape 3
+      affirmait le texte sur le bloc entier, qui porte aussi le lien « Comptes bancaires » : `e2e-p1r.log`) ; corrigé
+      (`2f2e259a`, la ligne du refus) : 3 passés (`e2e-p1r2.log`). Ni E2E complet ni `gate-ci.sh`.
+    - Mutations hors dépôt, une à la fois, depuis un témoin vert (Vitest 51 passés ; nextest 2 passés) : M1 (cas
+      `BANK_IMPORT_DUPLICATE_FILE` neutralisé) tuée par `wise-labels` « relevé déjà importé … » et `wise-page` « refus :
+      relevé déjà importé … » (AssertionError) ; L7 (garde `hasReview` retirée) tuée par `wise-page` « les exercices ne
+      sont pas lus … » ; L2 (lien Wise neutralisé) tuée par `FiscalYearChecks` « K2 : un compte Wise lie la page Wise » ;
+      M2 (`archive` retiré de `csv_error`) tuée par `import_zip_refus_et_cles` (`panicked at wise_import_e2e.rs:1612`,
+      `left: Null, right: "b.zip"`). L'assertion « à part » de `import_refus_dans_l_ordre_roles_et_cles` survivait (clé
+      absente lue `Null`) : exigée présente en `bcb66301`. Journaux `kesh-gate-logs/s39-11d/mut-p1r/`.
+    - Manuel : PDF régénéré dans une copie (`make user`, rc 0), aplati et grepé : « Ouvrir la page Wise pour un compte Wise
+      (§14.4) — dans cette version, la page Wise ne fait qu'importer … », la phrase des refus ventilée ; aucun `??`.
+  - Passe suivante : P2 complète, Sonnet (`kesh-gate-logs/s39-11d/revue-p2-prompt.md`).
+- 2026-11-22 — revue de code P2 (Claude Sonnet 5.5, contexte frais, complète) : 0 CRITICAL, 0 HIGH, 0 MEDIUM, 4 LOW
+  (rapport `kesh-gate-logs/s39-11d/revue-p2-rapport.md`) ; aucune remédiation P1 n'introduit de défaut. Clôture :
+  - **L3** : test Vitest `wise-labels.test.ts`, `archive` sur les sept autres raisons de `WISE_CSV_INVALID` (7 cas
+    d'un `it.each`, test seul) ; 34 passés (`cloture/vitest-l3.log`) ; mutation (archive ignorée dans `fileOf`) tuée
+    par les sept cas neufs, AssertionError (`cloture/vitest-l3-mut.log`).
+  - **L4** : note de version, `archive` ajouté aux `details` de `WISE_CSV_INVALID` (changement additif de l'API).
+  - **L1** (`WISE_DUPLICATE_CURRENCY_FILE` ne nomme pas le zip de chaque fichier) et **L2** (le refus de doublon ne
+    nomme que le premier relevé déjà importé, sans le dire) : non traités, versés à la liste des issues à ouvrir.
+  - Trend de la boucle de revue de code : P1 (Opus) 0/0/3/7 → P2 (Sonnet) 0/0/0/4. Close sur la P2, rien au-dessus de
+    LOW. Story `done`. Intégration dans `epic/39-wise` (avec `epic/40-stripe` à jour) : gates au commit de fusion.
+- 2026-11-22 — intégrée dans `epic/39-wise` (fusion non squash, puis `epic/40-stripe` à jour). La section « Limites du
+  rapprochement à reprendre au manuel », venue de la 39-11c, n'est pas écrite au manuel par cette story : la page Wise
+  n'y fait qu'importer, la revue Wise à l'écran et son manuel sont à la 39-11d2, qui reprend ces limites.

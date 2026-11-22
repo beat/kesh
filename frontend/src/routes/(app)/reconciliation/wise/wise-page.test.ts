@@ -183,6 +183,32 @@ describe('page Wise (Story 39-11d)', () => {
 		expect((await r.findByTestId('wise-import-error')).textContent).toContain('ne contient aucun relevé CSV');
 	});
 
+	// Revue P1, L7 — la page sans revue ne lit pas les exercices : leur lecture en échec ne
+	// masque pas l'import.
+	it('les exercices ne sont pas lus : leur échec ne masque pas l’import', async () => {
+		listFiscalYearsMock.mockRejectedValueOnce(new Error('exercices indisponibles'));
+		const r = render(Page);
+		expect(await r.findByTestId('wise-file-input')).toBeTruthy();
+		expect(r.queryByTestId('wise-load-error')).toBeNull();
+		expect(listFiscalYearsMock).not.toHaveBeenCalled();
+		listFiscalYearsMock.mockReset();
+	});
+
+	it('refus : relevé déjà importé, le nom sous lequel il l’a été', async () => {
+		importMock.mockRejectedValue({
+			code: 'BANK_IMPORT_DUPLICATE_FILE',
+			status: 422,
+			message: 'Ce fichier a déjà été importé.',
+			details: { existingImportId: 9, existingFilename: 'statement_1_CHF_2020-01-01_2020-12-31.csv' },
+		});
+		const r = render(Page);
+		await choose(r, [new File(['PK'], 'statement_csv.zip')]);
+		expect((await r.findByTestId('wise-import-error')).textContent).toContain(
+			'sous le nom « statement_1_CHF_2020-01-01_2020-12-31.csv » : rien n’a été importé',
+		);
+		expect(r.queryByTestId('wise-import-report')).toBeNull();
+	});
+
 	it('refus : deux fichiers d’une même devise, nommés', async () => {
 		importMock.mockRejectedValue({
 			code: 'WISE_DUPLICATE_CURRENCY_FILE',

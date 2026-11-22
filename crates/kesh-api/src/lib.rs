@@ -1010,6 +1010,10 @@ pub fn build_router_avec_registre(
             "/api/v1/paypal/accept",
             post(routes::paypal::accept_proposals),
         )
+        // Story 39-11c (Epic 39) : revue et acceptation Wise, sur le même
+        // moteur (mêmes rôles et clés ; acceptation rejouée sur interblocage).
+        .route("/api/v1/wise/review", get(routes::wise::review))
+        .route("/api/v1/wise/accept", post(routes::wise::accept_proposals))
         // Story 40-7c (Epic 40) : revue et acceptation Stripe, sur le même
         // moteur (mêmes droits ; propositions `link_entry`, `fee`, `payout`).
         .route("/api/v1/stripe/review", get(routes::stripe::review))

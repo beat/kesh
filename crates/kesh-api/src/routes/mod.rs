@@ -61,6 +61,7 @@ pub mod supplier_invoices;
 pub mod test_endpoints;
 pub mod users;
 pub mod vat;
+pub mod wise;
 pub mod wise_imports;
 
 use serde::Serialize;
