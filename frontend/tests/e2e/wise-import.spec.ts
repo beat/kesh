@@ -272,7 +272,7 @@ test('3 — le zip de Wise, d’un geste : compte rendu par fichier ; donné de 
 	// Le même zip, de nouveau : refusé comme déjà importé (texte propre à BANK_IMPORT_DUPLICATE_FILE,
 	// le premier relevé du zip nommé), rien de plus.
 	await page.getByTestId('wise-file-input').setInputFiles({ name: ZIP_NAME, mimeType: 'application/zip', buffer: zip });
-	await expect(page.getByTestId('wise-import-error')).toHaveText(
+	await expect(page.getByTestId('wise-import-error-line')).toHaveText(
 		'Un relevé de cet envoi a déjà été importé, sous le nom « statement_1_CHF_2020-01-01_2020-12-31.csv » : rien n’a été importé.',
 	);
 	await expect(page.getByTestId('wise-import-report')).toHaveCount(0);
