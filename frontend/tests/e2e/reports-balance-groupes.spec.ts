@@ -10,7 +10,8 @@
  * que le fichier téléchargé est groupé comme l'écran.
  *
  * Plan : le preset `with-company`, plus l'arbre `19` > `190` > `1900`, `1910`
- * créé ici, mouvementé contre `3000`.
+ * mouvementé contre `3000`, créé par `preparerArbre` de l'aide commune
+ * (`helpers/reports-groupes.ts`).
  *
  * Captures : `KESH_CAPTURES_DIR` (thème clair), une par état, et les deux
  * fichiers exportés.

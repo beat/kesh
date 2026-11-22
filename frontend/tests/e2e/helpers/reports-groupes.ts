@@ -1,5 +1,6 @@
 /**
- * Aide commune des specs du bilan par groupes (Stories 46-2 et 46-3) : connexion,
+ * Aide commune des specs des rapports par groupes — bilan (Stories 46-2 et 46-3)
+ * et balance (Story 46-6b) : connexion,
  * création d'un arbre de comptes `19` > `190` > `1900`, `1910` et d'une écriture
  * qui le mouvemente (1250.00 contre le compte 3000 du preset `with-company`).
  */
