@@ -110,7 +110,9 @@ paiement par carte converti (`docs/api-external.md`, section du rapprochement Wi
 - **Part arrivée après coup** : un paiement par carte groupé dont une ligne de carte est déjà rapprochée passe « à
   examiner » (« une part du paiement est déjà rapprochée ») ; la ligne en francs d'une partielle importée après le groupe
   de sa part en devise se propose seule par la règle (deux écritures, aucun montant compté deux fois) ; un frais de carte
-  passé seul ne bloque rien.
+  passé seul ne bloque rien : il va au compte de frais au lieu de la différence de change, et la conversion en deux
+  morceaux peut ajouter un centime d'arrondi (aucune écriture n'est fausse). La somme des deux écritures est celle de
+  l'écriture unique dans le cas de la ligne en francs seule.
 
 ## Change Log
 

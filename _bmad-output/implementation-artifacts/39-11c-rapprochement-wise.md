@@ -1,6 +1,6 @@
 # Story 39-11c : rapprochement des lignes Wise — frais, conversions, autre côté déjà passé (virements, versements Stripe), règles, écarts
 
-Status: review
+Status: done
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, numéros de ligne relevés au code de `origin/main` (`fd04099f`),
 revérifiés à la validation P1. Epic 39, **phase 1 KISS** (G5 à G10, § *Ce que la phase 1 attend de l'Epic 38*).
@@ -539,6 +539,13 @@ Champ `known_chf` de `ProviderEntry` : non employé (le paiement groupé écrit 
   nextest) **6504 exécutés, 6504 passés, 16 ignorés** (`p3fix-gate-backend.log` ; 6498 + 6 tests neufs), `KESH_NO_MEMGUARD=1`
   sous `heavy.sh`. Frontend non touché, non rejoué ; aucun E2E (aucune spec neuve) ; E2E complet et `gate-ci.sh` à la fin
   de l'epic.
+
+- **Revue de code P4 (ciblée, une lentille sur `3fa3c97f`)** : 0 CRITICAL, 0 HIGH, 0 MEDIUM, 2 LOW, remédiés sans code de
+  production (rapport `kesh-gate-logs/s39-11c/revue-p4-rapport.md`). L1-P4 : la phrase de `docs/api-external.md` bornée au
+  cas de la ligne CHF seule ; frais à part au compte de frais, un centime d'arrondi possible ; même nuance à la fiche 39-11d.
+  L2-P4 : commentaire du test `frais_apres_le_groupe_passe_seul` corrigé. **Tendance** P1 -> P4 : revue P1 à P3 avec
+  remédiations, P4 sans rien au-dessus de LOW, boucle close. Modèles : rotation Sonnet/Opus, P4 ciblée. Décision M1-P3
+  retenue : deux écritures sans double comptage (décision A-3). Gate : `cargo test -p kesh-api --test textes_coherents`, fmt.
 
 ### Notes de version
 

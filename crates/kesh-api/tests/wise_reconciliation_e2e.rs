@@ -1485,10 +1485,12 @@ async fn frais_d_abord_puis_la_carte(pool: MySqlPool) {
     assert_eq!(usd_credite, vec![Some(dec!(13.85))], "{lignes:?}");
 }
 
-/// Revue P3, L1 (le frais arrivé après coup) : le groupe de la part
+/// Revue P3, M1/A-3 (le frais arrivé après coup) : le groupe de la part
 /// USD passé sans son frais, le frais importé ensuite par un second fichier
 /// du même solde se propose seul (`fee`) et s'accepte : une écriture de frais
-/// à part, que le groupe n'a pas comptée.
+/// à part, que le groupe n'a pas comptée. Ce test fige qu'un frais hors groupe
+/// n'est pas retiré par un contrôle de ses sœurs ; la réduction du motif 1 à
+/// la carte est gardée par `frais_d_abord_puis_la_carte`.
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
 async fn frais_apres_le_groupe_passe_seul(pool: MySqlPool) {
     let ctx = monter_sans_import(&pool).await;
