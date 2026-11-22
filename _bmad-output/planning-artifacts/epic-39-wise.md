@@ -1,9 +1,8 @@
-# Epic 39 — Compte Wise : import des relevés (phase 1 KISS), puis téléchargement par l'API (phase 2)
+# Epic 39 — Compte Wise : import des relevés CSV (le téléchargement par l'API est sorti de l'epic le 22.11)
 
 **Refonte du 2026-11-20** (décision de Beat, sur le modèle de l'Epic 38 PayPal, page approuvée « Epic 38 PayPal,
 version minimale ») : l'epic se fait en **deux phases**. La **phase 1 KISS** importe à la demande le relevé CSV que
-l'on exporte de Wise, par un bouton et une route d'API, sans aucun automatisme. La **phase 2** télécharge les mêmes
-mouvements par l'API de Wise (activités, jeton lecture seule, sans SCA : réécrite le 2026-11-20). L'automatisme (téléchargement périodique) vient plus tard encore, hors de cet epic. Le
+l'on exporte de Wise, par un bouton et une route d'API, sans aucun automatisme. La phase 2 (téléchargement par l'API de Wise) **est sortie de l'epic le 2026-11-22** (§ *Téléchargement par l'API : sorti de l'epic*, branche `futur/wise-api`). L'automatisme (téléchargement périodique) vient plus tard encore, hors de cet epic. Le
 cadrage du 2026-11-15 (connexions, coffre des secrets, SCA par clé RSA, relevé JSON, relevé PDF) reste plus bas comme
 historique, **remplacé (2026-11-20)** ; ce qui en survit est cité nommément.
 
@@ -134,75 +133,17 @@ d'acceptation paramétré par le prestataire ; gardes qui lisent `provider IS NO
 
 **Ordre** : 39-11a → 39-11b → 39-11c → 39-11d. 39-11a peut s'écrire dès que 38-11a est fixée.
 
-## Phase 2
+## Téléchargement par l'API : sorti de l'epic le 22.11
 
-### Ce que fait la phase 2
+Le téléchargement des mouvements Wise par l'API (ex-phase 2 : client, activités en lignes, route et import,
+doublons CSV, conversions partielles, écran et manuels) **sort de l'Epic 39** sur décision du responsable de
+l'epic, le 2026-11-22 : l'Epic 39 se limite à l'import du CSV. Raison : il attend le support Wise ; aucune voie
+API exacte n'est établie pour ce compte (recherche hors dépôt). Tout le travail est conservé sur la **branche
+locale `futur/wise-api`** (partie de `7c2af959`, avant le retrait), pour un epic futur : client Wise (la story
+39-12a1, `done`, fusionnée dans l'epic puis retirée par un `revert`) et fiches 39-12a2, 39-12a2b, 39-12a3, 39-12a3b,
+39-12a4a1, 39-12a4a2, 39-12a4b et 39-12b, telles quelles. Les fiches ne sont plus dans `epic/39-wise`.
 
-Le même import, mais les mouvements viennent de l'**API de Wise** : un bouton et une route, une période choisie, Kesh
-lit les **activités** du profil d'entreprise (tous les mouvements des soldes), les frais des virements sortants par
-leurs devis et les soldes actuels, en fait **les mêmes lignes que le relevé CSV** (mêmes identifiants), contrôle le
-solde reconstruit contre les relevés déjà dans Kesh, puis les passe au cœur de l'import de la phase 1 (doublons par
-identifiant : CSV et téléchargement se mélangent sans doublon, dans les deux ordres). Aucun automatisme (plus tard,
-story à part, comme pour PayPal).
-
-**Réécrite le 2026-11-20 sur la voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
-métadonnées seulement) : la voie « relevé de solde + signature SCA » des recettes 1 et 2 est **abandonnée** (H5).
-
-### Décisions (H1…)
-
-- **H1 — Jeton en variable d'environnement**, comme le mot de passe SMTP (`Config::smtp_password`, champ privé,
-  jamais journalisé : `crates/kesh-api/src/config.rs:329-332`, `:380`, `:399`) : une série par compte Wise, rattachée à son
-  libellé (`KESH_WISE_<n>_ACCOUNT` = libellé du compte Wise de G2, `KESH_WISE_<n>_TOKEN` = jeton personnel **lecture
-  seule**, `KESH_WISE_<n>_PROFILE_ID` facultatif). **Aucune clé de signature** : `KESH_WISE_<n>_SCA_KEY_FILE`, exigée
-  par la version précédente de cette décision, est **retirée** (H5). Rien en base, rien en sauvegarde, pas de coffre.
-  Lue par le **lecteur unique du socle S1** (`KESH_PAYPAL_<n>_…` de l'Epic 38, `KESH_STRIPE_<n>_…` de l'Epic 40, même
-  forme ; G10).
-- **H2 — Ce qui se lit** (jeton seul, aucun défi, constaté à la recherche du 2026-11-20 sur 2024 et 2025) :
-  `GET /v1/profiles/{business}/activities?since&until&size=100`, paginé par `cursor` → `nextCursor`, activités
-  `COMPLETED` seules ; `GET /v1/transfers?profile=…` pour le `quoteUuid` des virements ;
-  `GET /v3/profiles/{p}/quotes/{quoteUuid}` → `paymentOptions[payIn=BALANCE].fee.total` pour les **frais des virements
-  sortants** (ligne séparée `FEE-TRANSFER-<id>`, comme le CSV) ; `GET /v4/profiles/{p}/balances?types=STANDARD` pour le
-  **solde actuel**. Identifiant stable = `<TYPE>-<resource.id>`, la partie numérique étant celle du « TransferWise ID » du
-  CSV (`TRANSFER-`, `CARD-`, `BALANCE-` ; 176 des 177 identifiants 2024 retrouvés ; le `CONVERSION_ORDER-…` manquant
-  vient d'une activité `AUTO_CONVERSION`, identifiant `AUTO_CONVERSION-<id>` définitif : la recette du 2026-11-20 n'a trouvé
-  le numéro nulle part dans l'API). Montants **en texte balisé** (`<positive>`, `<negative>`, `<strong>`, `+`, « 1,234.56 USD ») lus par une
-  **forme fermée** ; frais de **conversion inclus** dans le montant débité (pas de ligne séparée, l'API ne les ventile
-  pas) ; solde courant de chaque ligne **reconstruit** depuis le solde actuel, puis **contrôlé** contre la clôture des
-  relevés déjà dans Kesh (un écart refuse tout). Les lignes produites sont des `WiseRow` dans des `WiseCsv` de 39-11a,
-  par **une** fonction pure (39-12a2). La doc des activités ne fixe **aucune borne de période** (relue le 2026-11-20) :
-  fenêtres du socle à **`max_days` = 366** (découpage de la progression seulement ; une année civile, bissextile comprise,
-  en une fenêtre).
-- **H3 — Séquentiel d'abord, reprise du socle** : activités et transferts lus dans l'ordre (curseur, `offset`), **sans
-  pause fixe**, reprise sur `429` et 5xx par la **politique commune** du socle S2 (`Retry-After` entier borné à 120 s sinon
-  5, 10, 20, 40, 60 s ; six essais ; pause commune) ; progression en étapes (profil, soldes, activités, transferts, un
-  devis chacun). Parallélisme **en option**, sur les devis : `KESH_WISE_PARALLEL`, défaut 1, maximum 6, comme
-  `KESH_PAYPAL_PARALLEL`. Tout est lu **avant** toute écriture : un échec n'écrit rien.
-- **H4 — Recettes 1 et 2 (2026-11-20, onze appels) : le relevé de solde est refusé au jeton personnel pour le compte de
-  Beat** (403 `x-2fa-approval`, `REJECTED`, avec ou sans rejeu signé) ; profil et soldes lus (200). Historique, conservé
-  pour la trace (`data-not-committed/wise-recette-ac0*.md`).
-- **H5 — Voie relevé + SCA abandonnée** (remplace la H5 « signature SCA intégrée ») : la recherche du 2026-11-20 a
-  établi que Wise **refuse par règle** — une signature invalide et une signature valide rendent la même réponse (403
-  `REJECTED`, sans nouveau défi) ; la page des clés publiques de Wise dit ne plus prendre en charge la signature SCA des
-  comptes personnels pour les relevés ; le compte est tenu par Wise Payments Limited (Royaume-Uni), hors des six pays
-  où la doc des jetons personnels sert les relevés. Retirés : `KESH_WISE_<n>_SCA_KEY_FILE`, module de signature, code
-  `WISE_SCA_REJECTED`, clé de test, paire de clés au manuel. L'ancienne 39-2 n'est pas reprise.
-- **H6 — Voie de secours, hors périmètre** : l'Open Banking britannique de Wise par un agrégateur régulé (**Enable
-  Banking**, mode restreint gratuit, consentement à renouveler tous les 90 jours avec 2FA) donnerait un relevé « officiel »
-  avec les frais de conversion en lignes séparées. **Option future**, aucune fiche ; à reconsidérer seulement si Beat veut
-  cette ventilation ou si l'API des activités se ferme.
-
-### Décisions de la recette réelle AC-0 (a) sur 2024 (2026-11-20)
-
-Recette réelle (34 appels, jeton personnel lecture seule, profil business) comparée au CSV 2024 du site (CHF, EUR, USD) :
-concordance exacte (176 identifiants sur 177, 22 frais de virement sur 22, soldes égaux en clôture, 12 fins de mois sur 12,
-163 fins de jour sur 163, 230 soldes courants sur 230). Décisions (détail : `kesh-gate-logs/epic-39-40-kiss/wise-ac0-decisions.md`) :
-
-- **Date** d'une ligne = jour **de Zurich** de `createdOn` pour les débits et les conversions, de `updatedOn` pour les entrants ; jamais de comparaison ni de dédoublonnage sur l'heure (le CSV est en UTC+1 constant, même en été) ; ligne de frais à la date de son origine. Un débit terminé après un relevé arrive avec une date antérieure : le contrôle de 39-12a2 AC-5 le refuse, voulu (manuel 39-12b). Le filtre `since` de `/activities` porte sur `updatedOn` : la reprise à `readFrom` ne perd rien.
-- **Conversion automatique** : `AUTO_CONVERSION-<resource_id>` définitif (le numéro `CONVERSION_ORDER-…` n'est nulle part dans l'API) ; le doublon avec un CSV déjà importé se traite par la règle R3 de 39-12a3.
-- **Solde** : `amount.value` (égal à `cashAmount.value`). **Sens** : `+` sur `primary` pour les entrants ; devise débitée d'un virement = `sourceCurrency` du devis (22 sur 22). **Type de détail** et **`reference`** (= `Payment Reference`) : table de 39-12a2 AC-3. **Virement sans frais** : option `BALANCE` à `fee.total` 0, aucune ligne de frais.
-- **Virement remboursé** : non relevé (2024, 2025) ; suffixe provisoire de 39-12a2 maintenu. **Cartes en devise étrangère** : non relevées (règle inchangée).
-
-**Restes ouverts** : l'année **2025** (AC-0 (c), un mois comparé au CSV du site, non bloquant) ; l'effet des activités **non terminées** sur `amount` (couvert par le contrôle de 39-12a2 AC-5) ; le décalage **UTC+1** de l'heure du CSV, à revérifier avec un CSV 2025. Non confirmé et sans recette prévue : la forme d'un `429` ; les types d'activité non rencontrés (intérêts, cashback, remboursements de frais : refus du téléchargement, H2). Reste aussi la recette finale AC-0 (b), après 39-12a2.
+Le socle commun ci-dessous (S1 à S9) reste : il est partagé avec les Epics 38 et 40.
 
 ## Socle commun de la phase 2 (Epics 38, 39, 40) — contrat S1 à S9
 
@@ -267,38 +208,20 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 - **S9 — Secrets.** Un test au marqueur commun : aucun secret (jeton, clé, secret client) dans un journal, une réponse, une
   erreur ou une trace d'audit.
 
-### Stories de la phase 2
-
-| Story | Objet | Modules (≤ 5) | Dépend de | Migration |
-|---|---|---|---|---|
-| 39-12a1 | configuration (jeton seul), client Wise (profil, soldes, activités paginées, transferts, devis), erreurs, serveur simulé ; recette AC-0 (2024 comparé au CSV 2024 du site, en local ; un mois 2025 plus tard, non bloquant) | `kesh-api` (config, client) | **recette préalable (AC-0 a)**, socle S1/S2/S5 (38-12a) | aucune |
-| 39-12a2 | activités → `WiseRow`/`WiseCsv` : forme fermée des montants, sens, identifiants du CSV, frais des virements, solde reconstruit et contrôlé (fonction pure) ; amendée le 21.11 : totale par carte (débit du secondaire), capture tardive, partielle refusée (décision (a)), virement sortant à secondaire de même devise (`TransferFeeMismatch`) | `kesh-import` | 39-11a, recette 39-12a1 AC-0 (a) | aucune |
-| 39-12a2b | activités de 2026 : approvisionnement (`BALANCE_DEPOSIT` → `TRANSFER-<id>`, `MONEY_ADDED`) et prélèvement (`DIRECT_DEBIT_TRANSACTION` → `DIRECT_DEBIT-<id>`), préfixes relevés sur les relevés CSV 2026 ; formes non vues refusées | `kesh-import` | 39-12a2 | aucune |
-| 39-12a3 | route, tâche en fond, ordre de lecture et points de contrôle, import par le cœur de 39-11b, partielle refusée en `WISE_CARD_PARTIAL_CONVERSION` (amendement du 21.11 ; doublons R1 à R3 passés à 39-12a3b), parallélisme, audit, erreurs, tests | `kesh-api` (route, tâche, cœur d'import), `kesh-i18n` | 39-12a1, 39-12a2, 39-12a2b, 39-11b, 39-11c, 39-14, socle S2/S3/S4/S6 | aucune |
-| 39-12a3b | doublons CSV ↔ téléchargement R1 à R3 (ex-AC-4 de 39-12a3), étendus au paiement par carte converti (`CARD-`, `FEE-CARD-`) ; réutilise `existing_transactions_by_ids` de 39-11a2 | `kesh-api` (cœur commun : point d'accroche), `kesh-db` (une lecture), `kesh-reconciliation` (un préfixe) | 39-12a3, 39-11a2, 39-14, 39-11c | aucune |
-| 39-12a4a1 | partielles par continuité des soldes : ancrages (points de contrôle placés par identifiant d'import), segments, parts déduites, « à vérifier », trou de solde refusé (fonction pure ; ex-39-12a4a, scindée à la validation P1) | `kesh-import` (+ raccord d'une ligne de `kesh-api`) | 39-12a2, 39-12a2b, 39-12a3 | aucune |
-| 39-12a4a2 | estimation au cours : étalonnage des frais, confirmation à tolérance proportionnelle, import des partielles exactes ; décision du 22.11 (ajustement d'au plus un centime par part), en attente | `kesh-import` | 39-12a4a1 | aucune |
-| 39-12a4b | cours de Wise (`/v1/rates`), lignes déjà dans Kesh (deux champs de la lecture de 39-11a2), compte rendu « à vérifier », `WISE_BALANCE_GAP`, `WISE_CARD_SPLIT_UNRESOLVED` | `kesh-api`, `kesh-db` (deux champs), `kesh-i18n` | 39-12a4a1, 39-12a4a2, 39-12a3, 39-12a3b, 39-11a2 | aucune |
-| 39-12b | bouton et dialogue générique de 38-12b, manuels (jeton, ce que Kesh lit et ne lit pas, partielles), E2E ; amendée le 21.11 (liste « à vérifier », codes neufs) | `frontend`, `kesh-i18n`, `docs/manual` (`.tex`), E2E | 39-12a3, 39-12a4b, 39-11d, 38-12b | aucune |
-
 ## Registre (stories de l'epic)
 
 | Clé | Statut | Note |
 |---|---|---|
 | `39-0-kickoff` | done | cadrage du 2026-11-15 (historique) |
-| `39-1-client-wise` | superseded | remplacée par 39-12a1 (jeton en variable d'environnement, sans connexion ni coffre) |
-| `39-2-authentification-forte` | superseded | le défi SCA constaté à la recette 1 (2026-11-20) ; reprise un temps par 39-12a1, puis **abandonnée** avec la voie relevé + SCA (H5, 2026-11-20) |
-| `39-3-releve-json-mouvements` | superseded | remplacée par 39-11a (lecteur) et 39-12a1 à 39-12a3 (téléchargement par les activités) |
+| `39-1-client-wise` | superseded | remplacée par le téléchargement par l'API, sorti de l'epic le 22.11 (branche `futur/wise-api`) |
+| `39-2-authentification-forte` | superseded | le défi SCA constaté à la recette 1 (2026-11-20) ; reprise un temps par le client Wise, puis **abandonnée** avec la voie relevé + SCA (H5, 2026-11-20) |
+| `39-3-releve-json-mouvements` | superseded | remplacée par 39-11a (lecteur) ; le téléchargement par les activités est sorti de l'epic (branche `futur/wise-api`) |
 | `39-4-classement-des-types-wise` | superseded | remplacée par 39-11c (préfixes d'identifiant, règles) |
-| `39-5-releve-pdf` | deferred | hors des phases 1 et 2 |
-| `39-6-ecrans-et-manuels` | superseded | remplacée par 39-11d et 39-12b |
+| `39-5-releve-pdf` | deferred | hors de l'epic |
+| `39-6-ecrans-et-manuels` | superseded | remplacée par 39-11d (la part API est sortie de l'epic : branche `futur/wise-api`) |
+| `39-13-solde-dette`, `39-14-raccord-epic-38` | backlog | story de solde et raccord avec l'Epic 38 |
+| `39-12*` (téléchargement par l'API) | sorties | retirées de l'epic le 22.11 ; la 39-12a1 était `done` ; branche `futur/wise-api` |
 | `39-11a` à `39-11d` | ready-for-dev | fiches du 2026-11-20, phase 1 validée |
-| `39-12a1-client-wise-activites` | done | développée le 2026-11-20 |
-| `39-12a2-activites-en-lignes-wise`, `39-12a3-telechargement-wise-route-et-import`, `39-12b-ecran-manuels-wise-api` | deferred | **en attente depuis le 2026-11-22** : téléchargement par l'API suspendu jusqu'à la réponse du support Wise ; validation P3 non remédiée (`kesh-gate-logs/s39-12a-specs/validation-p3-rapport.md`). Avant : phase 2 **réécrite sur la voie activités le 2026-11-20** (avant : `deferred` après les recettes 1 et 2) ; 39-12a1 renommée (ex-`39-12a1-client-wise-et-sca`), 39-12a2 neuve (conversion), 39-12a3 = l'ancienne 39-12a2 (route et import) renumérotée ; à revalider |
-| `39-12a2b-types-activite-wise-2026`, `39-12a3b-doublons-wise-csv-telechargement`, `39-12a4a1-partielles-wise-continuite-des-soldes`, `39-12a4a2-partielles-wise-estimation-au-cours`, `39-12a4b-partielles-wise-telechargement` | deferred | **en attente depuis le 2026-11-22** (même raison) ; 39-12a4a2 porte la décision du 22.11 (règle du centime), non propagée. Avant : 2026-11-21 : 39-12a3b née du découpage de 39-12a3 (doublons R1 à R3) ; 39-12a4a puis, à la validation P1, 39-12a4a1 (continuité) et 39-12a4a2 (estimation, décision ouverte), 39-12a4b : suivi de la décision (a) ; 39-12a2b née de la validation P1 (types de 2026) ; fiches `drafted`, validation P2 à lancer |
-| `39-12a-telechargement-api-wise` | split | scindée en 39-12a1 et 39-12a2 (2026-11-20), puis, sur la voie activités, en 39-12a1, 39-12a2 et 39-12a3 |
-| `39-12a4a-partielles-wise-continuite-des-soldes` | split | scindée le 2026-11-21 (validation P1, M15) en 39-12a4a1 et 39-12a4a2 |
-| `39-12a1-client-wise-et-sca`, `39-12a2-telechargement-wise-route-et-import` | superseded | clés renommées le 2026-11-20 (voie activités) : `39-12a1-client-wise-activites`, `39-12a3-telechargement-wise-route-et-import` |
 
 ## Questions ouvertes (2026-11-20)
 
@@ -319,6 +242,8 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 - **Q-39-17 — Recette sur 2024 (orchestrateur, 2026-11-20 ; elle n'attend pas Beat)** : avant toute ligne de la phase 2, comparer 2024 de l'API (≈ 45 appels, réponses brutes sauvées hors du dépôt) au CSV 2024 du site, en local, et trancher l'horodatage de la date, l'identifiant d'une conversion automatique, le champ de solde (`amount` ou `cashAmount`), la règle du sens, le type de détail par type d'activité, la `reference` des transferts et le devis d'un virement sans frais (39-12a1 AC-0 a) ; puis, après 39-12a2, rejouer la conversion de Kesh sur 2024 comme au 2024-12-31, ligne à ligne, solde courant compris (AC-0 b). **Un mois 2025** se compare plus tard, quand Beat aura son CSV 2025, avec les soldes réels (AC-0 c) : non bloquant. Constats (métadonnées) à écrire ici. **Close (2026-11-20)** : AC-0 (a) faite, décisions au paragraphe « Décisions de la recette réelle AC-0 (a) » ; restent AC-0 (b), AC-0 (c) (2025), les activités non terminées sur `amount` et le décalage UTC+1 à revérifier avec un CSV 2025.
 
 ## Change Log (refonte)
+
+- 2026-11-22 — **Téléchargement par l'API sorti de l'epic** (décision du responsable de l'epic) : code de la 39-12a1 retiré par un `revert` de sa fusion, fiches 39-12* retirées, tout conservé sur la branche locale `futur/wise-api` ; l'epic garde 39-0, 39-11a, 39-11a2, 39-11b, 39-11c, 39-11d, 39-13, 39-14.
 
 - 2026-11-22 — **Téléchargement par l'API mis en attente** par le responsable de l'epic (inutile pour la comptabilité 2025 ; le support Wise est à contacter d'abord) : 39-12a2, 39-12a2b, 39-12a3, 39-12a3b, 39-12a4a1, 39-12a4a2, 39-12a4b et 39-12b passent `deferred` ; validation P3 (1 H, 5 M, 9 L) non remédiée ; la décision du 22.11 (règle du centime) est écrite dans 39-12a4a2, sans propagation.
 - 2026-11-21 — Remédiation de la validation P1 des fiches 39-12a2 à 39-12a4b et 39-12b (Claude Sonnet 5.5, rapport `kesh-gate-logs/s39-12a-specs/validation-p1-rapport.md` : 0 C, 2 H, 15 M, 18 L) : points de contrôle placés par identifiant d'import (H1) ; virement de même devise dans 39-12a2 (H2) ; fiche neuve 39-12a2b, approvisionnement et prélèvement de 2026 (M1) ; 39-12a4a scindée en 39-12a4a1 (continuité) et 39-12a4a2 (estimation au cours recalibrée, M3 à M6) ; **décision ouverte** de 39-12a4a2, « le cours confirme ou fixe une part » (M10), à soumettre au responsable de l'epic ; dépendances à 39-14 et 39-11a2, lecture réutilisée (M13) ; 39-12b amendée (M14). Fiches 39-12a2, 39-12a3 et 39-12b repassées `drafted`. Ordre de développement : 39-12a2, 39-12a2b, 39-12a3, 39-12a3b, 39-12a4a1, 39-12a4a2, 39-12a4b, 39-12b. Validation P2 à lancer.

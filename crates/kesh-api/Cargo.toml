@@ -37,9 +37,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Story v011-1 — logs fichier avec rotation native (alternative à `docker logs`).
 tracing-appender = "0.2"
 serde = { version = "1", features = ["derive"] }
-# Story 39-12a1 (revue P1, M1) : `RawValue`, le texte exact d'un montant reçu ; déjà au graphe
-# (par axum et sqlx), `Cargo.lock` inchangé. Sans `arbitrary_precision`.
-serde_json = { version = "1", features = ["raw_value"] }
+serde_json = "1"
 
 # Story 1.5 — authentification
 argon2 = "0.5"

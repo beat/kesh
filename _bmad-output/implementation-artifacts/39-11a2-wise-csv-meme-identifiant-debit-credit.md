@@ -35,7 +35,7 @@ montant. Le fichier entier est refusé, et le relevé CHF 2025 comme celui de 20
   (le lecteur garantit crédit ≥ 0, débit ≤ 0, `SIGN_MISMATCH` sinon). Une transaction en base de montant **nul**
   compte pour les deux sens (elle ne fait jamais insérer une seconde ligne ; une ligne nulle n'a aucun effet sur le
   solde). `transaction_id` reste l'identifiant Wise tel quel : le rapprochement (39-11c, frais `FEE-<x>` → `<x>`)
-  et le téléchargement (39-12a3, comparaison aux identifiants de l'API) n'en voient pas changer la forme.
+  et le téléchargement (39-12a3 (fiche sortie de l'epic, branche `futur/wise-api`), comparaison aux identifiants de l'API) n'en voient pas changer la forme.
 
 **Formes écartées, et pourquoi.**
 

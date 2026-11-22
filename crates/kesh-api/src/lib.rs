@@ -41,7 +41,6 @@ pub mod retry;
 pub mod routes;
 pub mod services;
 pub(crate) mod util;
-pub mod wise;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;

@@ -244,7 +244,7 @@ Claude Opus 5.5 (`bmad-dev-story`), worktree `kesh-wt3911b`, branche `story/39-1
 - Un fichier tout en doublons : pas d'entrée, mais il figure au compte rendu (soldes, avertissement éventuel) et à la
   trace `wise_import.created`.
 - Règles R1 à R3 (`wise_duplicates.rs`, `rules: Option<&dyn DuplicateRules>`) : **hors de cette story** — elles
-  n'ont d'objet qu'avec des lignes téléchargées (39-12a3) ; aucune ne se déclenche sur un import CSV seul. Rien n'est
+  n'ont d'objet qu'avec des lignes téléchargées (39-12a3 (fiche sortie de l'epic, branche `futur/wise-api`)) ; aucune ne se déclenche sur un import CSV seul. Rien n'est
   écrit qui les empêche (le cœur reçoit déjà l'écriture du prestataire).
 - Manuel utilisateur : non touché (39-11d, écrans et manuel).
 
