@@ -1076,33 +1076,33 @@ async fn export_pme(
         .unwrap()
 }
 
-/// Chemin d'une fixture d'export de la Story 46-3.
-fn fixture_46_3(nom: &str) -> std::path::PathBuf {
+/// Chemin d'une fixture d'export des rapports par groupes (Stories 46-3, 46-6b).
+fn fixture_groupes(nom: &str) -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/rapports-groupes")
         .join(nom)
 }
 
-/// AC-2 (NFR-46-1) — sans paramètre de groupes, l'export CSV du bilan et du
-/// compte de résultat est **identique à l'octet**, et l'export PDF a les
-/// **mêmes lignes de texte** (extracteur partagé `kesh_report::texte_pdf`),
-/// qu'au commit de base de la Story 46-3, fixtures écrites dans
-/// `tests/fixtures/rapports-groupes/export-*` avant toute modification du
-/// rendu. `KESH_ECRIRE_FIXTURES_46_3=1` les réécrit — à ne faire qu'au commit
-/// de base.
-#[sqlx::test(migrations = "../kesh-db/test-schema")]
-async fn exports_sans_parametre_identiques_a_la_fixture_de_base(pool: MySqlPool) {
-    let jeu = jeu_pme(&pool).await;
-    let app = spawn_app(pool).await;
-    let ecrire = std::env::var("KESH_ECRIRE_FIXTURES_46_3").as_deref() == Ok("1");
-    for (route, nom) in [("balance-sheet", "bilan"), ("income-statement", "resultat")] {
+/// Compare les exports sans paramètre de groupes de `rapports` (`(route,
+/// nom)`), pour les deux exercices du jeu PME et les deux formats, à leurs
+/// fixtures `export-<nom>-<année>.{csv,pdf.txt}` : CSV **à l'octet**, PDF aux
+/// **mêmes lignes de texte** (extracteur partagé `kesh_report::texte_pdf`).
+/// `ecrire` réécrit les fixtures — à ne faire qu'au commit de base de la story
+/// qui les pose.
+async fn comparer_aux_fixtures(
+    app: &TestApp,
+    jeu: &JeuPme,
+    rapports: &[(&str, &str)],
+    ecrire: bool,
+) {
+    for (route, nom) in rapports {
         for (fy, annee) in [(jeu.fy_2025, 2025), (jeu.fy_2026, 2026)] {
             for format in ["csv", "pdf"] {
-                let resp = export_pme(&app, &jeu, route, fy, format, "").await;
+                let resp = export_pme(app, jeu, route, fy, format, "").await;
                 assert_eq!(resp.status(), 200, "{route} {annee} {format}");
                 let corps = resp.bytes().await.unwrap().to_vec();
                 let (chemin, obtenu) = if format == "csv" {
-                    (fixture_46_3(&format!("export-{nom}-{annee}.csv")), corps)
+                    (fixture_groupes(&format!("export-{nom}-{annee}.csv")), corps)
                 } else {
                     let lignes = kesh_report::texte_pdf::lignes(&corps);
                     assert!(
@@ -1110,7 +1110,7 @@ async fn exports_sans_parametre_identiques_a_la_fixture_de_base(pool: MySqlPool)
                         "{route} {annee} : PDF illisible ({lignes:?})"
                     );
                     (
-                        fixture_46_3(&format!("export-{nom}-{annee}.pdf.txt")),
+                        fixture_groupes(&format!("export-{nom}-{annee}.pdf.txt")),
                         (lignes.join("\n") + "\n").into_bytes(),
                     )
                 };
@@ -1123,12 +1123,45 @@ async fn exports_sans_parametre_identiques_a_la_fixture_de_base(pool: MySqlPool)
                 assert_eq!(
                     String::from_utf8_lossy(&obtenu),
                     String::from_utf8_lossy(&attendu),
-                    "{route} {annee} {format} sans paramètre : l'export a changé (AC-2)"
+                    "{route} {annee} {format} sans paramètre : l'export a changé (NFR-46-1)"
                 );
                 assert_eq!(obtenu, attendu, "{route} {annee} {format} : octets");
             }
         }
     }
+}
+
+/// AC-2 (NFR-46-1) — sans paramètre de groupes, l'export CSV du bilan et du
+/// compte de résultat est **identique à l'octet**, et l'export PDF a les
+/// **mêmes lignes de texte**, qu'au commit de base de la Story 46-3, fixtures
+/// écrites dans `tests/fixtures/rapports-groupes/export-*` avant toute
+/// modification du rendu. `KESH_ECRIRE_FIXTURES_46_3=1` les réécrit — à ne
+/// faire qu'au commit de base.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn exports_sans_parametre_identiques_a_la_fixture_de_base(pool: MySqlPool) {
+    let jeu = jeu_pme(&pool).await;
+    let app = spawn_app(pool).await;
+    let ecrire = std::env::var("KESH_ECRIRE_FIXTURES_46_3").as_deref() == Ok("1");
+    comparer_aux_fixtures(
+        &app,
+        &jeu,
+        &[("balance-sheet", "bilan"), ("income-statement", "resultat")],
+        ecrire,
+    )
+    .await;
+}
+
+/// Story 46-6b, AC-3 (NFR-46-1) — sans paramètre de groupes, l'export de la
+/// **balance** est inchangé : CSV à l'octet, PDF aux mêmes lignes de texte,
+/// contre les fixtures `export-balance-*` écrites au commit de base de la
+/// 46-6b, avant toute modification du rendu. `KESH_ECRIRE_FIXTURES_46_6B=1`
+/// les réécrit — à ne faire qu'au commit de base.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn export_balance_sans_parametre_identique_a_la_fixture_de_base(pool: MySqlPool) {
+    let jeu = jeu_pme(&pool).await;
+    let app = spawn_app(pool).await;
+    let ecrire = std::env::var("KESH_ECRIRE_FIXTURES_46_6B").as_deref() == Ok("1");
+    comparer_aux_fixtures(&app, &jeu, &[("trial-balance", "balance")], ecrire).await;
 }
 
 /// Un montant de `groupedRows` (chaîne décimale exacte) tel que le PDF groupé
