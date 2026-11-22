@@ -32,14 +32,14 @@ use kesh_report::pdf::{ProjectExpensesPdfLabels, ProjectReturnPdfLabels, VatPdfL
 use kesh_report::project_report::ProjectPeriodMode;
 use kesh_report::{
     AgedReceivables, AvecGroupes, BalanceSheet, GeneralLedger, HomepageSummary, IncomeStatement,
-    JournalReport, PdfContext, ProjectExpensesReport, ProjectReturnReport, ReportPeriod,
-    SectionsBilan, SectionsResultat, TrialBalance, VatReport, render_aged_receivables_csv,
-    render_balance_sheet_csv, render_balance_sheet_pdf, render_general_ledger_csv,
-    render_general_ledger_pdf, render_income_statement_csv, render_income_statement_pdf,
-    render_journal_report_csv, render_journal_report_pdf, render_project_expenses_csv,
-    render_project_expenses_pdf, render_project_return_csv, render_project_return_pdf,
-    render_trial_balance_csv, render_trial_balance_pdf, render_vat_report_csv,
-    render_vat_report_pdf,
+    JournalReport, LigneBalanceGroupee, PdfContext, ProjectExpensesReport, ProjectReturnReport,
+    ReportPeriod, SectionsBilan, SectionsResultat, TrialBalance, VatReport,
+    render_aged_receivables_csv, render_balance_sheet_csv, render_balance_sheet_pdf,
+    render_general_ledger_csv, render_general_ledger_pdf, render_income_statement_csv,
+    render_income_statement_pdf, render_journal_report_csv, render_journal_report_pdf,
+    render_project_expenses_csv, render_project_expenses_pdf, render_project_return_csv,
+    render_project_return_pdf, render_trial_balance_csv, render_trial_balance_pdf,
+    render_vat_report_csv, render_vat_report_pdf,
 };
 use serde::Deserialize;
 
@@ -78,8 +78,8 @@ impl ReportQuery {
     }
 }
 
-/// Les quatre paramètres de groupes (Story 46-1) du bilan et du compte de
-/// résultat.
+/// Les quatre paramètres de groupes (Story 46-1) du bilan, du compte de
+/// résultat et de la balance (Story 46-6a).
 const PARAMETRES_GROUPES: [&str; 4] = ["detailLevel", "subtotalPosition", "open", "closed"];
 
 /// La demande de groupes (Story 46-1), lue dans les paires de la requête ;
@@ -87,9 +87,9 @@ const PARAMETRES_GROUPES: [&str; 4] = ["detailLevel", "subtotalPosition", "open"
 ///
 /// Les paires brutes, et non des champs de [`ReportQuery`] : un paramètre
 /// répété y serait un rejet de désérialisation d'Axum, sans le code
-/// `VALIDATION_ERROR`, et frapperait aussi la balance et la TVA, qui partagent
-/// `ReportQuery` et doivent ignorer ces paramètres. Ici, un paramètre de groupes
-/// répété est un 400 `VALIDATION_ERROR` qui le nomme.
+/// `VALIDATION_ERROR`, et frapperait aussi la TVA, qui partage `ReportQuery` et
+/// doit ignorer ces paramètres. Ici, un paramètre de groupes répété est un 400
+/// `VALIDATION_ERROR` qui le nomme.
 fn groupes_de(paires: &[(String, String)]) -> Result<Option<DemandeGroupes>, AppError> {
     let mut valeurs: [Option<&str>; 4] = [None; 4];
     for (cle, valeur) in paires {
@@ -398,13 +398,27 @@ pub async fn export_general_ledger(
     )
 }
 
+/// GET /api/v1/reports/trial-balance — avec `detailLevel`, aussi `grouping`
+/// et `groupedRows` (un tableau : la balance n'a pas de sections, Story
+/// 46-6a) ; sans, la réponse d'avant, à l'octet. Même ordre que le bilan :
+/// l'accès d'abord, puis les paramètres de groupes.
 pub async fn get_trial_balance(
     State(state): State<AppState>,
     Extension(current_user): Extension<CurrentUser>,
     Query(query): Query<ReportQuery>,
-) -> Result<Json<TrialBalance>, AppError> {
+    Query(paires): Query<Vec<(String, String)>>,
+) -> Result<Json<AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>>, AppError> {
     let acces = ContexteAcces::depuis_api(&current_user);
-    let rapport = rapports::balance(&acces, &state.lecture(), query.demande(), Affichage).await?;
+    acces.exiger(rapports::EXIGENCES_BALANCE.affichage)?;
+    let groupes = groupes_de(&paires)?;
+    let rapport = rapports::balance_par_groupes(
+        &acces,
+        &state.lecture(),
+        query.demande(),
+        groupes,
+        Affichage,
+    )
+    .await?;
     Ok(Json(rapport.afficher(&state.trace()).await))
 }
 
@@ -825,8 +839,10 @@ pub async fn export_trial_balance(
     let body = rapport
         .exporter(&state.trace(), |report| {
             let body: Vec<u8> = match format {
-                ExportFormat::Pdf => render_trial_balance_pdf(report, &ctx)?,
-                ExportFormat::Csv => render_csv_to_vec(|w| render_trial_balance_csv(report, w))?,
+                ExportFormat::Pdf => render_trial_balance_pdf(&report.rapport, &ctx)?,
+                ExportFormat::Csv => {
+                    render_csv_to_vec(|w| render_trial_balance_csv(&report.rapport, w))?
+                }
             };
             mesurer(&span, start, &body);
             Ok(body)
