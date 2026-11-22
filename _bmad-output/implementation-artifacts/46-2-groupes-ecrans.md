@@ -161,7 +161,7 @@ reçoivent les mêmes réglages que l'écran.
 
 **Changed** — L'export CSV ou PDF du bilan et du compte de résultat lancé depuis l'écran suit la hiérarchie affichée
 (par défaut, tous les comptes) : le CSV porte les colonnes `Niveau;TypeLigne` et les sous-totaux de groupe (sur la ligne du titre par défaut, en lignes `soustotal` en pied). Mais
-le CSV groupé ne s'additionne pas tel quel (un groupe fermé n'y porte que son sous-total) : chaque section porte sa ligne de total ; pour additionner la colonne `Solde` dans un tableur, décocher « Hiérarchie des groupes » pour l'export à plat d'avant ; les montants groupés sont arrondis au centime.
+le CSV groupé (bilan, compte de résultat ou balance) ne s'additionne pas tel quel : le titre et le sous-total d'un groupe répètent les montants de ses comptes, et un groupe fermé n'y porte que son sous-total. Chaque section du bilan et du compte de résultat porte sa ligne de total, la balance sa ligne `Total` ; pour additionner les montants dans un tableur, décocher « Hiérarchie des groupes » pour l'export à plat d'avant, qui porte lui aussi ses lignes de total (à filtrer par `Section` au bilan et au compte de résultat, à écarter à la balance : ligne `Total`) et n'a pas de colonne `TypeLigne` ; les montants groupés sont arrondis au centime.
 
 ## Dev Agent Record
 
