@@ -29,7 +29,7 @@
 	import { wiseAccountLabels } from '$lib/features/bank-accounts/provider';
 	import ProviderReviewPage from '$lib/features/provider/ProviderReviewPage.svelte';
 	import { ruleLabelsById } from '$lib/features/provider/provider-rules';
-	import type { ProviderFinding } from '$lib/features/provider/provider-review.types';
+	import type { ProviderFinding, ProviderReviewTransaction } from '$lib/features/provider/provider-review.types';
 	import { acceptWiseProposals, getWiseReview, importWiseFiles } from '$lib/features/wise/wise.api';
 	import {
 		wiseFailedLabel,
@@ -129,6 +129,25 @@
 	{/if}
 {/snippet}
 
+{#snippet toReviewHead()}
+	<th class="py-2 pr-4 font-semibold">{i18nMsg('wise-col-name', 'Nom')}</th>
+	<th class="py-2 pr-4 font-semibold">{i18nMsg('wise-col-id', 'Identifiant Wise')}</th>
+{/snippet}
+
+<!-- Le nom et l'identifiant Wise d'une ligne « à examiner » et de ses sous-lignes : de quoi la retrouver. -->
+{#snippet transactionCells(t: ProviderReviewTransaction | undefined)}
+	<td class="py-2 pr-4">{t?.name ?? ''}</td>
+	<td class="py-2 pr-4 font-mono text-xs whitespace-nowrap">{t?.transactionId ?? ''}</td>
+{/snippet}
+
+{#snippet toReviewCells(f: ProviderFinding)}
+	{@render transactionCells(f.transaction)}
+{/snippet}
+
+{#snippet toReviewLineCells(t: ProviderReviewTransaction)}
+	{@render transactionCells(t)}
+{/snippet}
+
 <ProviderReviewPage
 	testId="wise"
 	fileAccept=".csv,text/csv,.zip,application/zip"
@@ -169,4 +188,7 @@
 	{importReportMain}
 	{proposalAction}
 	{toReviewExtra}
+	{toReviewHead}
+	{toReviewCells}
+	{toReviewLineCells}
 />

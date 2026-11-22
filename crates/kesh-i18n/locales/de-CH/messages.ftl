@@ -4409,6 +4409,7 @@ wise-no-account = Kein Wise-Konto. Erstellen Sie unter den Bankkonten ein Bankko
 wise-label-account = Wise-Konto
 wise-import-button = Wise-Auszüge importieren (ZIP oder CSV)
 wise-import-help = Öffnen Sie in Wise den Export der Auszüge: Wählen Sie den Zeitraum und das Format CSV, und kreuzen Sie die Option an, welche die Gebühren als eigene Transaktionen anzeigt — ohne diese Option wird der Auszug abgelehnt. Geben Sie dann hier das heruntergeladene ZIP unverändert an.
+wise-col-name = Name
 wise-col-id = Wise-Kennung
 # Story 39-11d2 — Durchsicht und Annahme Wise am Bildschirm
 wise-kind-fee = Gebühren

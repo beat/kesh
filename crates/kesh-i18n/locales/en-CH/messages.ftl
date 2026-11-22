@@ -4415,6 +4415,7 @@ wise-no-account = No Wise account. In the bank accounts, create one bank account
 wise-label-account = Wise account
 wise-import-button = Import Wise statements (zip or CSV)
 wise-import-help = In Wise, open the statement export: choose the period and the CSV format, and tick the option that shows fees as separate transactions — without it, the statement is refused. Then give the downloaded zip here, as is.
+wise-col-name = Name
 wise-col-id = Wise ID
 # Story 39-11d2 — Wise review and acceptance on screen
 wise-kind-fee = Fees

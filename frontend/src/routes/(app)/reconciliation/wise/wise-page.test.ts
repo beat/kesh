@@ -319,6 +319,9 @@ describe('page Wise — la revue (Story 39-11d2)', () => {
 		const r = render(Page);
 		const versement = await r.findByTestId('wise-to-review-20');
 		expect(versement.textContent).toContain('Versement Stripe sans l’écriture de son versement');
+		// Le nom et l'identifiant Wise de la ligne, et de chaque sous-ligne : de quoi la retrouver.
+		expect(versement.textContent).toContain('BALANCE-8');
+		expect(versement.textContent).toContain('Boutique Exemple');
 		// Sans compte Stripe, aucun lien vers la page Stripe.
 		expect(r.queryByTestId('wise-to-review-stripe-link')).toBeNull();
 		expect(r.getByTestId('wise-to-review-30').textContent).toContain('le relevé du solde CHF ne couvre pas cette date');

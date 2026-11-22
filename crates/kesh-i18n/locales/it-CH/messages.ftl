@@ -4410,6 +4410,7 @@ wise-no-account = Nessun conto Wise. Create nei conti bancari un conto bancario 
 wise-label-account = Conto Wise
 wise-import-button = Importa estratti Wise (zip o CSV)
 wise-import-help = In Wise aprite l’esportazione degli estratti: scegliete il periodo e il formato CSV, e spuntate l’opzione che mostra le commissioni come transazioni separate — senza questa opzione l’estratto è rifiutato. Date poi qui lo zip scaricato, così com’è.
+wise-col-name = Nome
 wise-col-id = Identificativo Wise
 # Story 39-11d2 — revisione e accettazione Wise a schermo
 wise-kind-fee = Commissioni

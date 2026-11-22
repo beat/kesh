@@ -4490,6 +4490,7 @@ wise-no-account = Aucun compte Wise. Créez un compte bancaire par devise (un pa
 wise-label-account = Compte Wise
 wise-import-button = Importer des relevés Wise (zip ou CSV)
 wise-import-help = Dans Wise, ouvrez l’export des relevés : choisissez la période et le format CSV, et cochez « Afficher les transactions dont les frais sont indiqués séparément » — sans cette option, le relevé est refusé. Donnez ensuite ici le zip téléchargé, tel quel.
+wise-col-name = Nom
 wise-col-id = Identifiant Wise
 # Story 39-11d2 — revue et acceptation Wise à l'écran
 wise-kind-fee = Frais

@@ -103,14 +103,20 @@
 		proposalLines?: (p: P) => ProviderReviewTransaction[];
 		/**
 		 * Story 39-11d2 — les lignes d'une ligne « à examiner » hors sa transaction (sous-lignes,
-		 * chacune avec son bouton « Rattacher à une écriture » ; défaut : aucune). Les sous-lignes
-		 * ne portent pas les cellules de `toReviewCells` : un prestataire qui en a ne s'en sert pas.
+		 * chacune avec son bouton « Rattacher à une écriture » ; défaut : aucune). Un prestataire
+		 * qui a des colonnes propres (`toReviewHead`) passe aussi `toReviewLineCells`.
 		 */
 		findingLines?: (f: ProviderFinding) => ProviderReviewTransaction[];
 		/** Story 39-11d2 — le texte après une sous-ligne (« frais »), ou `null`. */
 		lineLabel?: (t: ProviderReviewTransaction) => string | null;
 		/** Story 39-11d2 — ce qui suit le libellé d'un « à examiner » (liens), facultatif. */
 		toReviewExtra?: Snippet<[ProviderFinding]>;
+		/**
+		 * Story 39-11d2 — les cellules propres au prestataire d'une sous-ligne « à examiner »
+		 * (mêmes colonnes que `toReviewCells`) ; données, la cellule du motif ne répète pas
+		 * l'identifiant de la sous-ligne.
+		 */
+		toReviewLineCells?: Snippet<[ProviderReviewTransaction]>;
 		/** Le compte rendu propre au prestataire, sous les lignes par devise. */
 		importReportExtra?: Snippet<[R]>;
 		/**
@@ -168,6 +174,7 @@
 		findingLines = () => [],
 		lineLabel = () => null,
 		toReviewExtra,
+		toReviewLineCells,
 		importReportExtra,
 		importReport: importReportView,
 		importActions,
@@ -357,7 +364,7 @@
 <!-- Story 39-11d2 — l'identifiant d'une sous-ligne, et le texte qui le suit (« frais »). -->
 {#snippet subLineId(line: ProviderReviewTransaction)}
 	{@const label = lineLabel(line)}
-	<span class="font-mono text-xs">↳ {line.transactionId ?? ''}</span>
+	<span class="font-mono text-xs whitespace-nowrap">↳ {line.transactionId ?? ''}</span>
 	{#if label !== null}<span class="ml-1 text-xs" data-testid="{testId}-line-label-{line.id}">{label}</span>{/if}
 {/snippet}
 
@@ -688,8 +695,16 @@
 							{#each findingLines(t) as line (line.id)}
 								<tr class="border-b border-border text-text-muted" data-testid="{testId}-to-review-line-{line.id}">
 									<td class="py-1 pr-4 pl-4 whitespace-nowrap">{formatSwissDate(line.date)}</td>
-									<td class="py-1 pr-4">{@render subLineId(line)}</td>
+									<td class="py-1 pr-4">
+										{#if toReviewLineCells}
+											{@const label = lineLabel(line)}
+											<span class="text-xs">↳ {label ?? ''}</span>
+										{:else}
+											{@render subLineId(line)}
+										{/if}
+									</td>
 									<td class="py-1 pr-4 text-right font-mono whitespace-nowrap">{line.amount} {line.currency}</td>
+									{@render toReviewLineCells?.(line)}
 									<td class="py-1 whitespace-nowrap">
 										<button
 											type="button"
