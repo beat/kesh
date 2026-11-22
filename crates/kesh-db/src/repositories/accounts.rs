@@ -1186,8 +1186,9 @@ async fn guard_parent_change_in_tx(
 /// verrou, quand le geste porte des comptes propres), les réglages de
 /// facturation en partage, le compte `FOR UPDATE` (son `company_id` relu est
 /// comparé à la lecture hors transaction : écart → `NotFound`), puis, sous ce
-/// verrou, les désignations, la ligne d'écriture et les liens en lecture
-/// verrouillante.
+/// verrou, la cible du miroir `FOR UPDATE` (avant le parent), les comptes qui
+/// désignent celui-ci comme cible en lecture verrouillante, les désignations,
+/// la ligne d'écriture et les liens en lecture verrouillante.
 pub async fn update(
     pool: &MySqlPool,
     id: i64,
@@ -1495,7 +1496,8 @@ pub async fn archive(
 /// qui nomme les réglages et ne consomme pas la version. Confirmé, le réglage reste
 /// tel quel, et l'audit nomme ce qui le désignait.
 ///
-/// **Ordre des refus (C-e334-29)** : sous-comptes actifs, désignation, version. La
+/// **Ordre des refus (C-e334-29)** : sous-comptes actifs, comptes de différence de
+/// change, compte miroir, désignation, version (détail plus bas). La
 /// désignation se lit sur l'état courant, juste avant l'`UPDATE` qui contrôle la
 /// version : un écran périmé non confirmé reçoit donc d'abord le refus de désignation,
 /// puis, s'il confirme, le conflit de version.
@@ -1521,7 +1523,8 @@ pub async fn archive(
 /// **Verrous** : `company_id` lu sur le pool avant `begin()` (immuable ; voir
 /// [`update`]), puis `companies` en partage, les réglages de facturation en
 /// partage, le compte `FOR UPDATE` (`company_id` relu comparé), puis les
-/// désignations propres en lecture verrouillante par index : deux archivages
+/// désignations propres et les sources du miroir (`LOCK IN SHARE MODE`) en
+/// lecture verrouillante par index : deux archivages
 /// concurrents de comptes différents ne se verrouillent pas mutuellement.
 pub async fn archive_guarded(
     pool: &MySqlPool,

@@ -1,6 +1,6 @@
 # Story 47-5 : solde de la dette de l'Epic 47
 
-Status: review
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — règle « une story de solde à la fin de chaque
 epic » (`CLAUDE.md` § *Priorités des défauts*, puce « Une story de solde à la fin de chaque epic »). Fin d'epic, avant
@@ -9,7 +9,7 @@ le tag. **Dépend de** la clôture des stories 47-1 à 47-4 ; part du **registre
 
 ## Modules touchés (règle de splitting préventif)
 
-Selon les issues retenues (deux au plus) ; au plus cinq modules, sinon la ligne n'est pas retenue.
+Selon les issues retenues (deux au plus) ; au plus cinq modules, sinon la ligne n'est pas retenue. *(Annoté le 2026-11-22, revue de code P1, L6 : la décision du responsable de l'epic du 22.11 — corriger aussi les LOW reportés des 47-1 et 47-2 — a fait dépasser les cinq modules au second temps (kesh-api, kesh-db, kesh-i18n, kesh-report, manuel, E2E, audit des migrations) ; le plafond de **deux issues** tient, lui, pour les issues ouvertes ou à ouvrir.)*
 
 ## Story
 
@@ -27,7 +27,7 @@ afin que l'epic ne fasse pas monter le compte d'issues plus que nécessaire.
    la liste des issues, fait foi** : une ligne dont l'issue n'est pas encore ouverte reste candidate (AC 1). Le
    registre **vide** à la date de la story, la 47-5 est close sans code, le constat écrit (AC 3 et 5 sans objet ;
    le décompte de l'AC 4 s'écrit quand même).
-1. **Plafond : deux issues**, fixé au kickoff (fichier d'epic, § *Décomptes d'issues*) : au plus deux lignes du
+1. **Plafond : deux issues** *(annoté le 2026-11-22 : le second temps, décidé par le responsable de l'epic le 22.11, a corrigé les LOW reportés des 47-1 et 47-2 en plus des deux lignes retenues ; le plafond vaut pour les issues, non pour ces corrections)*, fixé au kickoff (fichier d'epic, § *Décomptes d'issues*) : au plus deux lignes du
    registre (issues ouvertes ou à ouvrir) sont traitées. **Critère de choix**, dans l'ordre : priorité (P1 avant
    P2…), puis effet visible pour l'utilisateur, puis le plus ancien. Une ligne qui exigerait une **migration** ou
    sortirait du périmètre de l'epic n'est pas retenue (elle va à un epic ultérieur, et le dit). La story **propose**
@@ -76,6 +76,9 @@ plutôt qu'attendre ce solde.
   le compte de résultat ne naît que d'un solde **de sens inverse** ; la figure de la balance montre les noms du plan
   PME. (Aucun changement d'écran ni d'API ; le journal du serveur nomme l'invariant rompu si la présentation miroir
   devait se replier sur le brut.)
+- **Changed** — Comptes miroirs : le refus d'archiver ou de modifier un compte miroir désigné par plusieurs comptes
+  s'écrit au pluriel (« réactivez-les d'abord », quatre langues) ; l'epic n'étant pas publié, aucune release antérieure
+  n'avait la phrase au singulier pour plusieurs sources.
 
 ## Dev Agent Record
 
@@ -93,18 +96,18 @@ Journaux hors dépôt, dossier `s47-5/` des journaux de gate du contributeur : `
 
 **T0 — registre (AC 0).** Le registre du fichier d'epic était vide : les revues des 47-1 à 47-4 avaient consigné leur
 dette dans leurs fiches (47-1, 47-2) ou dans la liste des issues à ouvrir tenue hors dépôt (47-3, 47-4), non au
-registre. Reporté au registre (§ *Registre de la dette de l'epic*), sept lignes, regroupées comme les issues à ouvrir
+registre. Reporté au registre (§ *Registre de la dette de l'epic*), huit lignes, regroupées comme les issues à ouvrir
 (le Project Lead peut les scinder, une issue par problème) :
 
 | Story | Passe | Sévérité | Objet | Issue | Sort |
 |---|---|---|---|---|---|
 | 47-1 | P1 | LOW | phrase « réactivez-le d'abord » au singulier pour plusieurs sources (L5), visible | non ouverte (`bug`, P4) | corrigée en 47-5 (second temps) |
 | 47-1 | P1 | LOW | liste des sources du refus non bornée (L5, second point) | à ouvrir (`enhancement`, P4) | reportée (décision d'interface) |
-| 47-1 | P1 | LOW ×8 | L1 course, L2 doc-comments, L3 commentaire `Set`, L4 verrous, L6 test `update_in_tx`, L7 rédaction, L8 sauvegarde 0.20.0, L9 table G9 | non ouverte (`technical-debt`, P4) | corrigée en 47-5 (second temps) |
+| 47-1 | P1 | LOW ×7 | L1 course, L2 doc-comments, L3 commentaire `Set`, L4 verrous, L6 test `update_in_tx`, L7 rédaction, L8 sauvegarde 0.20.0, L9 table G9 | non ouverte (`technical-debt`, P4) | corrigée en 47-5 (second temps) |
 | 47-2 | P2 | LOW ×3 | commentaire du rejeu de l'archivage, doc de `create`, ordre des refus non testé | non ouverte (`technical-debt`, P4) | corrigée en 47-5 (second temps) |
 | 47-3 | P2 | LOW ×3 | `presentation.rs` : `ecart_conserve` non testé ; message de repli ; filtre de type non tué | non ouverte (`technical-debt`, P4) | corrigée en 47-5 |
 | 47-4 | P1 | LOW ×4 | manuel : phrase de l'accueil, « 959a CO attend », figure `mi-balance.png`, rangement des clés `.ftl` | non ouverte (`documentation`, P4) | corrigée en 47-5 |
-| 47-4 | gate E2E | — | `bank-import.spec.ts:130`, course (compte avant chargement) | tracée hors epic (`known-failure`, P3) | reportée |
+| 47-4 | gate E2E | — | `bank-import.spec.ts:130`, course (compte avant chargement) | #1283 (`known-failure`, P3) ; `backup-restore-new-install.spec.ts` : #1282 | reportée |
 | 47-3 (L-5) | décision du point e | — | avertissement non bloquant, miroir sous un groupe d'un autre type | à ouvrir (`enhancement`, P3) | reportée |
 
 (L7 de la 47-1 — deux échecs E2E hors liste — est depuis identifié : #1282 ; seule la rédaction est reprise.)
@@ -231,7 +234,7 @@ tirée de l'E2E) :
 
 ### Change Log
 
-- 2026-11-21 — développement (Opus 5.5) : registre reporté (sept lignes), deux corrigées (47-3 P2, 47-4 P1), cinq reportées en issues ;
+- 2026-11-21 — développement (Opus 5.5) : registre reporté (huit lignes), deux corrigées (47-3 P2, 47-4 P1), cinq reportées en issues, une ligne déjà tracée hors epic ;
   gates au dernier commit de code `7fdb0fa9` (backend, frontend, E2E complet verts ; gate-ci interrompu, dû à
   l'intégration) ; revue de code P1 à lancer (prompt
   `s47-5/revue-p1-prompt.md` du dossier des journaux).
@@ -253,3 +256,4 @@ tirée de l'E2E) :
   L9) et 47-2 (P2-L1 à P2-L3) corrigés, sauf la borne de la liste des sources du refus `ACCOUNT_IS_MIRROR` (issue,
   décision d'interface) ; registre et liste des issues à ouvrir mis à jour ; gates au dernier commit de code `acf670b8`
   (backend 6253, frontend 4871, aucun E2E) ; revue de code P1 à lancer sur le nouveau HEAD (prompt réécrit).
+- 2026-11-22 — revue de code P1 (Sonnet 5.5) : 0 C / 0 H / 0 M / 6 L (rapport `kesh-gate-logs/s47-5/revue-p1-rapport.md`), remédiés sans toucher la production : commentaires d'`accounts.rs` (ordre des refus, verrous), test de la clause « miroir, toujours » sur une cible imputable, tests du repli et de l'écart dans les deux sens de `present_balance_sheet`, numéros d'issue du registre, annotations du plafond. Les chemins fixes `/tmp/kesh-e2e-47-4-*` de `reports-mirror.spec.ts` (47-4 L6), sans effet en série, sont notés ici faute de mieux. Gates ciblés au dernier commit de code : fmt, clippy workspace, `kesh-report` lib 152 passés, binaire `account_mirror` 13 passés ; sondes par mutation hors dépôt (`mut3-*.log`) : clause miroir limitée au flux automatique, repli de `present_balance_sheet` jamais pris et `!=` devenu `>`, toutes trois tuées par un test en échec. Story `done`.

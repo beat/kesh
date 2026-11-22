@@ -258,7 +258,7 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
 | 47-2 `47-2-miroir-api-et-ecran-du-plan` | API des comptes (`mirrorAccountId`), un `<select>` au dialogue, refus à l'écran, archivage refusé, manuel utilisateur (plan comptable), manuel d'administration (mise à jour), `api-external.md` (comptes), E2E | 5 | 12 | non | 47-1 |
 | 47-3 `47-3-miroir-presentation-rapports` | fonction pure de présentation, service toujours présenté, `mirrorOf`, MCP (descriptions), accueil brut, exemple rejoué, `api-external.md` (rapports) | 5 | 14 | non | 47-1 ; **avant** le regroupement de l'Epic 46 (recâblage à sa fusion) |
 | 47-4 `47-4-miroir-ecrans-rapports-manuel-e2e` | mention « Solde de … » aux écrans des rapports, E2E du parcours, manuel utilisateur (rapports, exemple), garde G26 | 5 | 10 | non | 47-2, 47-3 |
-| 47-5 `47-5-solde-dette-epic` | solde de la dette de l'epic (**plafond : 2 issues**, fixé au kickoff) | selon les issues | 6 | non | 47-1 à 47-4 closes (fin d'epic, avant le tag) |
+| 47-5 `47-5-solde-dette-epic` | solde de la dette de l'epic (**plafond : 2 issues**, fixé au kickoff ; annoté le 2026-11-22 : le second temps, décidé par le responsable de l'epic, a corrigé en plus les LOW reportés des 47-1 et 47-2, hors plafond d'issues) | selon les issues | 6 | non | 47-1 à 47-4 closes (fin d'epic, avant le tag) |
 
 **Dans la borne de six** (`CLAUDE.md` § *Numérotation des versions* : au plus six stories, solde comprise) : cinq
 stories hors kickoff. La dérogation dite au kickoff (huit stories) **tombe** ; elle n'a plus à être signalée à Guy.
@@ -305,7 +305,7 @@ Les revues de chaque story consignent ici, à la clôture de leur boucle (chaque
 | 47-2 | P2 (revue de code, ciblée) | LOW ×3 | commentaire du rejeu de l'archivage (`routes/accounts.rs:598-606`) qui allègue un mécanisme faux (P2-L1) ; doc publique de `create` sans le refus du miroir ni le verrou de sa cible (P2-L2) ; ordre des refus à la création non fixé par un test (P2-L3) — `technical-debt`, P4 | non ouverte | corrigée en 47-5 (décision du responsable de l'epic du 22.11) |
 | 47-3 | P2 (revue de code, ciblée) | LOW ×3 | `presentation.rs` : repli `ecart_conserve` exercé par aucun test (LOW-1) ; message de repli qui parle de l'équation quand seul l'écart diffère, écart non journalisé (LOW-2) ; filtre `mirror_account_type != section_type` retirable sans test rouge (LOW-3) — une issue `technical-debt`, P4 | non ouverte | corrigée en 47-5 |
 | 47-4 | P1 (revue de code) | LOW ×4 | manuel et E2E : phrase de l'accueil (« solde de sens inverse ») non revérifiée au PDF (L1, L5 b) ; « la présentation que l'art. 959a CO attend » trop forte (L5 a) ; figure `mi-balance.png` avec des comptes du jeu d'essai au lieu du plan PME (L4) ; clés `reports-mirror-of-*` à ranger avec les clés des rapports (L6) — une issue `documentation`, P4 | non ouverte | corrigée en 47-5 (avec la reprise de `tjDe` dans `invoice-qr-caracteres.spec.ts`, L6) |
-| 47-4 | gate E2E | — | `bank-import.spec.ts:130` compte les lignes avant le chargement de la liste (course connue, spec antérieure à l'epic) — `known-failure`, P3 | tracée hors epic | reportée : non retenue en 47-5 (spec antérieure à l'epic, hors de son périmètre) |
+| 47-4 | gate E2E | — | `bank-import.spec.ts:130` compte les lignes avant le chargement de la liste (course connue, spec antérieure à l'epic) — `known-failure`, P3 | #1283 (le gate de la 47-4 a aussi tracé #1282, `backup-restore-new-install.spec.ts`) | reportée : non retenue en 47-5 (spec antérieure à l'epic, hors de son périmètre) |
 | 47-3 (L-5) | décision du responsable de l'epic du 2026-11-21, point e | — | avertissement non bloquant pour un compte miroir rangé sous un groupe d'un autre type (puis contrôle sur tous les comptes) — `enhancement`, P3 | à ouvrir | reportée : la fiche 47-5 ne la prévoit pas ; dépend des groupes de l'Epic 46 |
 
 ## Dépendance à l'Epic 46
@@ -362,7 +362,7 @@ avant la 47-4 ; ordre des migrations contrôlé à cette reprise si l'Epic 46 en
 | P1 ouvertes | 14 | 14 | 14 |
 
 Hors les 56 issues masquées du compte de l'agent de Beat (#1266–#1271, #1277–#1326), non comptées (décision de Guy).
-**Plafond de la story de solde (47-5)** : **2 issues**, fixé ici au kickoff (`CLAUDE.md` § *Priorités des défauts*).
+**Plafond de la story de solde (47-5)** : **2 issues**, fixé ici au kickoff (`CLAUDE.md` § *Priorités des défauts*) ; annoté le 2026-11-22 : le plafond vaut pour les issues, les LOW des 47-1 et 47-2 corrigés au second temps (décision du 22.11) n'en comptent pas.
 **Objectif de l'epic** : moins d'issues ouvertes au tag de cette release que **au tag précédent, v0.20.0** (CLAUDE.md § *Priorités des défauts* : objectif, non barrière) ; ce compte n'existe pas encore (la 0.20.0 n'est pas taguée) et se relève au tag par le Project Lead, comme le compte du tag de l'epic à la PR de release et à la rétrospective, avec l'écart et sa cause. Le tableau ci-dessus est la base du kickoff, non la référence de l'objectif.
 
 **Objectif de l'epic** (règle de release, non barrière) : moins d'issues ouvertes au tag de sa release qu'au tag de la

@@ -480,6 +480,11 @@ mod tests {
             controler_bilan(&raw, dec!(1300), dec!(500)),
             (false, Some(DefautBilan::Ecart))
         );
+        // Écart rompu dans l'autre sens : présenté inférieur au brut (400 pour 500).
+        assert_eq!(
+            controler_bilan(&raw, dec!(1200), dec!(800)),
+            (false, Some(DefautBilan::Ecart))
+        );
         // Écart conservé, mais l'équation brute déclarée fausse ne l'est plus en présenté.
         let mut faux = raw.clone();
         faux.equation_holds = false;
@@ -505,6 +510,44 @@ mod tests {
                 .message()
                 .contains("l'équation du bilan")
         );
+    }
+
+    /// Revue P1 de la 47-5, L4 : le repli de `present_balance_sheet` lui-même. Un
+    /// bilan brut dont un invariant est forgé (le reclassement, lui, est juste)
+    /// est rendu **tel quel**, sections brutes comprises, quel que soit le sens de
+    /// l'écart, plutôt que présenté.
+    #[test]
+    fn invariant_rompu_rend_le_bilan_brut() {
+        let brut = bilan(
+            vec![
+                ligne(1, "1020", Asset, dec!(-300)),
+                ligne(2, "1100", Asset, dec!(1000)),
+            ],
+            vec![ligne(3, "2000", Liability, dec!(200))],
+        );
+        let links = [lien(1, 9, "1020.1", Liability)];
+        let j = |b: &BalanceSheet| serde_json::to_string(b).unwrap();
+        // Sanité : sans défaut, le même bilan se présente (le miroir paraît).
+        assert_eq!(
+            present_balance_sheet(brut.clone(), &links)
+                .liabilities
+                .len(),
+            2
+        );
+        // Équation brute déclarée fausse alors qu'elle tient en présenté.
+        let mut equation = brut.clone();
+        equation.equation_holds = false;
+        // Écart brut forgé, supérieur puis inférieur à l'écart présenté.
+        let mut grand = brut.clone();
+        grand.total_assets += dec!(5);
+        let mut petit = brut.clone();
+        petit.total_assets -= dec!(5);
+        for forge in [equation, grand, petit] {
+            let p = present_balance_sheet(forge.clone(), &links);
+            assert_eq!(j(&p), j(&forge));
+            assert_eq!(p.liabilities.len(), 1);
+            assert!(p.liabilities.iter().all(|l| l.mirror_of.is_empty()));
+        }
     }
 
     /// Un lien vers un miroir **du même type** que sa source (état que l'API refuse,

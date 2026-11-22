@@ -661,6 +661,55 @@ async fn aucune_ecriture_ne_se_passe_sur_un_compte_miroir(pool: MySqlPool) {
     .expect("saisie manuelle après retrait");
 }
 
+/// Revue P1 de la 47-5, L3 : la clause « miroir, toujours » de la garde des
+/// lignes (`journal_entries.rs`) tient seule, côté saisie manuelle et
+/// modification, quand la cible est **imputable** (état forgé en SQL, que
+/// l'AC-4 interdit par l'API). Sans elle, seul `!postable` refuserait, et ce
+/// test ne verrait rien : la cible de `paire()` est non imputable.
+#[sqlx::test(migrations = "./test-schema")]
+async fn la_clause_miroir_tient_seule_sur_une_cible_imputable(pool: MySqlPool) {
+    let s = seed_accounting_company(&pool).await.unwrap();
+    let (source, cible) = paire(&pool, &s).await;
+    poser(&pool, &s, source, cible).await.unwrap();
+    sqlx::query("UPDATE accounts SET postable = TRUE WHERE id = ?")
+        .bind(cible)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let nomme = |e: DbError| match e {
+        DbError::AccountsNotPostable(list) => list.numbers().join(","),
+        other => panic!("AccountsNotPostable attendu, reçu {other:?}"),
+    };
+    let manuelle = journal_entries::create(
+        &pool,
+        s.fiscal_year_id,
+        Acteur::utilisateur(s.admin_user_id),
+        ecriture(&s, cible, s.accounts["1000"]),
+    )
+    .await
+    .expect_err("saisie manuelle refusée sur un miroir imputable");
+    assert_eq!(nomme(manuelle), "1179");
+    let passee = journal_entries::create(
+        &pool,
+        s.fiscal_year_id,
+        Acteur::utilisateur(s.admin_user_id),
+        ecriture(&s, source, s.accounts["1000"]),
+    )
+    .await
+    .expect("écriture sur la source");
+    let deplacee = journal_entries::update(
+        &pool,
+        s.company_id,
+        passee.entry.id,
+        passee.entry.version,
+        Acteur::utilisateur(s.admin_user_id),
+        ecriture(&s, cible, s.accounts["1000"]),
+    )
+    .await
+    .expect_err("modification vers un miroir imputable refusée");
+    assert_eq!(nomme(deplacee), "1179");
+}
+
 // ---------------------------------------------------------------------------
 // AC-7 — concurrence
 // ---------------------------------------------------------------------------
