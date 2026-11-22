@@ -2547,6 +2547,35 @@ La session ouverte doit être \textbf{rouverte} --- reconnexion, ou au plus la d
 
 \textbf{Limite} : les données de démonstration laissées par une réinitialisation antérieure (taux de TVA, réglages de facturation, contacts, articles, factures, avoirs) qui désignent la société effacée restent en base, invisibles et inertes (\#546).
 
+\subsubsection{Lire le numéro de version}\label{sec:lire-numero-version}
+
+Le numéro de version de Kesh s'écrit \texttt{a.b.c}, et chacun de ses chiffres dit ce qu'une mise à jour vous demande. Cette lecture vaut pour les versions publiées après la 0.19.1 ; les versions antérieures montaient le deuxième chiffre à chaque version planifiée, qu'elle porte ou non une migration (les sections suivantes disent, version par version, ce qui change).
+
+\begin{itemize}
+    \item \textbf{Le dernier chiffre (\texttt{c}) monte} : la version ne porte \textbf{aucune migration} de la base. Remplacez l'image dans le compose et redémarrez (\S\ref{sec:mise-a-jour}). Pour revenir en arrière, remettez l'image précédente : la base n'a pas changé de schéma, et ce qui a été saisi entre-temps reste.
+    \item \textbf{Le chiffre du milieu (\texttt{b}) monte} : la version porte une migration de la base, ou une rupture du contrat de l'API pour les intégrations. \textbf{Lisez les notes de version avant de mettre à jour.} S'il y a une migration, \textbf{la sauvegarde complète est obligatoire avant la mise à jour} --- la base, un \keshcommand{.keshbackup} et le dossier des documents ---, et le retour en arrière passe par cette sauvegarde : l'image précédente ne démarre plus sur une base migrée. La sauvegarde que Kesh écrit seul dans \keshpath{backup/pre-upgrade/} (\S\ref{sec:sauvegarde-avant-maj}) ne remplace pas la vôtre.
+    \item \textbf{Le premier chiffre (\texttt{a})} reste à 0 tant que Kesh ne tient pas complètement les comptes d'un utilisateur ordinaire.
+\end{itemize}
+
+Le numéro ne suit pas le calendrier : plusieurs versions peuvent paraître dans la même semaine, et une version qui porte une migration paraît de préférence un vendredi.
+
+\subsubsection{Passer à la release de l'Epic 47}\label{sec:maj-epic-47}
+% Story 47-2 (AC-10) : titre provisoire, renommé au tag (numéro de la release) ;
+% le refus d'une sauvegarde de cette release par la précédente est lu au code
+% (`check_schema_compat`, colonne inconnue) et reste à constater par la recette
+% de montée de la release, qui complète ce paragraphe.
+\sloppy
+
+Cette release se pose sur la 0.19.1 (\S\ref{sec:maj-0-19-1}) ; depuis une version antérieure, appliquez d'abord les sections suivantes, dans l'ordre. \textbf{Prenez avant la mise à jour une sauvegarde manuelle complète} --- la base, un \keshcommand{.keshbackup} et le dossier des documents. \textbf{Le retour à la version précédente passe uniquement par la sauvegarde d'avant la mise à jour.}
+
+\paragraph{Une migration.} Cette release porte \textbf{une migration} (96 au total), \texttt{20261119000001\_account\allowbreak\_mirror} : chaque compte peut désigner un \textbf{compte miroir}, un compte de présentation sur lequel les rapports présentent son solde quand il est de sens inverse (manuel utilisateur, section \emph{Compte miroir}). Elle ajoute une colonne vide à la table des comptes, sans modifier de ligne existante : aucun compte n'a de miroir après la mise à jour. Elle \textbf{ne relève pas} \texttt{kesh\_version\_min\_required}, qui reste à \texttt{0.17.6}. Au démarrage, avant de migrer, Kesh écrit une sauvegarde complète dans \keshpath{backup/pre-upgrade/} et refuse de migrer si elle échoue (\S\ref{sec:sauvegarde-avant-maj}) ; elle ne dispense pas de la vôtre.
+
+\paragraph{Le retour à la version précédente.} Comme pour toute migration, la version précédente \textbf{ne démarre plus} sur la base migrée (le journal nomme la migration \texttt{20261119000001}). Le retour se fait sur une base neuve, par la sauvegarde d'avant la mise à jour --- celle de \keshpath{backup/pre-upgrade/}, ou la vôtre ---, comme au \S\ref{sec:revenir-version-precedente}. \textbf{Tout ce qui a été saisi depuis la mise à jour est perdu}, miroirs compris.
+
+\paragraph{Pour les intégrations.} L'API des comptes porte un champ neuf, \texttt{mirrorAccountId}, absent quand le compte n'a pas de miroir ; au \texttt{PUT /api/v1/accounts/\{id\}}, son absence laisse le miroir inchangé. \textbf{La présentation des rapports change} dès qu'un compte désigne un miroir : le bilan (\texttt{GET /api/v1/reports/balance-sheet}), le compte de résultat (\texttt{GET /api/v1/reports/income-statement}), leurs exports PDF et CSV et les outils MCP \texttt{kesh\_bilan} et \texttt{kesh\_compte\_de\_resultat} déplacent le compte de sens inverse dans l'autre section et le présentent sur la ligne de son miroir, qui porte le champ \texttt{mirrorOf}. Aucun champ n'est retiré, renommé ni changé de type, et un rapport sans miroir posé rend le même JSON qu'avant : un client existant ne voit rien tant que personne ne pose de miroir, mais un client qui recalcule depuis les lignes du bilan doit lire la balance (\texttt{GET /api/v1/reports/trial-balance}), qui reste sur les soldes réels. Deux codes de refus naissent : \texttt{MIRROR\_ACCOUNT\_INVALID} (\texttt{400}) et \texttt{ACCOUNT\_IS\_MIRROR} (\texttt{409}). Dans l'export global, \texttt{accounts.csv} gagne la colonne \texttt{mirror\_account\_id} \textbf{en fin de ligne}, après \texttt{updated\_at} : les colonnes d'avant ne bougent pas. Le détail est dans \texttt{docs/api-external.md}, section \emph{Compte miroir}.
+
+\fussy
+
 \subsubsection{Passer à la 0.19.1}\label{sec:maj-0-19-1}
 \sloppy
 
@@ -2559,23 +2588,6 @@ La 0.19.1 est une version intermédiaire, qui se pose sur la 0.19.0 : elle n'exi
 \begin{sloppypar}
 \paragraph{Pour les intégrations.} Les routes de création et de modification des contacts refusent (\texttt{400 VALIDATION\_ERROR}) un prénom ou un nom de plus de 70 caractères, une adresse faite du seul pays quand ce pays n'est pas \texttt{CH} (elle était acceptée et ignorée) et un prénom, un nom ou une raison sociale entièrement invisible ; la route de l'e-mail de la société refuse une adresse de plus de 320 caractères ; la route des coordonnées de l'assistant refuse un prénom ou un nom de plus de 70 caractères, un nom de société de plus de 70 caractères ou portant un caractère que la QR-facture n'admet pas. Aucune donnée enregistrée n'est modifiée ni refusée après coup. Le message (\texttt{error.message}) de vingt et un refus n'est plus la clé interne : un client qui comparait ce texte doit lire \texttt{error.code}. \texttt{PUT /api/v1/accounts/\allowbreak\{id\}} accepte \texttt{parentId} (absent : inchangé ; \texttt{null} : le compte devient racine), avec les refus \texttt{409 ACCOUNT\_PARENT\_CYCLE} et \texttt{409 ACCOUNT\_PARENT\_HAS\_ENTRIES} ; changement additif.
 \end{sloppypar}
-
-\fussy
-
-\subsubsection{Passer à la release de l'Epic 47}\label{sec:maj-epic-47}
-% Story 47-2 (AC-10) : titre provisoire, renommé au tag (numéro de la release) ;
-% le refus d'une sauvegarde de cette release par la précédente est lu au code
-% (`check_schema_compat`, colonne inconnue) et reste à constater par la recette
-% de montée de la release, qui complète ce paragraphe.
-\sloppy
-
-\textbf{Prenez avant la mise à jour une sauvegarde manuelle complète} --- la base, un \keshcommand{.keshbackup} et le dossier des documents. \textbf{Le retour à la version précédente passe uniquement par la sauvegarde d'avant la mise à jour.}
-
-\paragraph{Une migration.} Cette release porte \textbf{une migration} (96 au total), \texttt{20261119000001\_account\allowbreak\_mirror} : chaque compte peut désigner un \textbf{compte miroir}, un compte de présentation sur lequel les rapports présentent son solde quand il est de sens inverse (manuel utilisateur, section \emph{Compte miroir}). Elle ajoute une colonne vide à la table des comptes, sans modifier de ligne existante : aucun compte n'a de miroir après la mise à jour. Elle \textbf{ne relève pas} \texttt{kesh\_version\_min\_required}, qui reste à \texttt{0.17.6}. Au démarrage, avant de migrer, Kesh écrit une sauvegarde complète dans \keshpath{backup/pre-upgrade/} et refuse de migrer si elle échoue (\S\ref{sec:sauvegarde-avant-maj}) ; elle ne dispense pas de la vôtre.
-
-\paragraph{Le retour à la version précédente.} Comme pour toute migration, la version précédente \textbf{ne démarre plus} sur la base migrée (le journal nomme la migration \texttt{20261119000001}). Le retour se fait sur une base neuve, par la sauvegarde d'avant la mise à jour --- celle de \keshpath{backup/pre-upgrade/}, ou la vôtre ---, comme au \S\ref{sec:revenir-version-precedente}. \textbf{Tout ce qui a été saisi depuis la mise à jour est perdu}, miroirs compris.
-
-\paragraph{Pour les intégrations.} L'API des comptes porte un champ neuf, \texttt{mirrorAccountId}, absent quand le compte n'a pas de miroir ; au \texttt{PUT /api/v1/accounts/\{id\}}, son absence laisse le miroir inchangé, si bien qu'un client existant n'a rien à changer. Deux codes de refus naissent : \texttt{MIRROR\_ACCOUNT\_INVALID} (\texttt{400}) et \texttt{ACCOUNT\_IS\_MIRROR} (\texttt{409}). Dans l'export global, \texttt{accounts.csv} gagne la colonne \texttt{mirror\_account\_id} \textbf{en fin de ligne}, après \texttt{updated\_at} : les colonnes d'avant ne bougent pas. Le détail est dans \texttt{docs/api-external.md}, section \emph{Compte miroir}.
 
 \fussy
 
