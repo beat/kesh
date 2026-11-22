@@ -1,6 +1,6 @@
 # Story 39-11e : le zip de Wise tel que téléchargé, et le bon format des frais
 
-Status: ready-for-dev
+Status: review
 
 *Fiche rédigée le 2026-11-22, branche `story/39-11e` partie d'`epic/39-wise` (`b3826e2d`), numéros de ligne relevés à
 ce commit. Epic 39, **phase 1 KISS** (amende G1 et tranche Q-39-11). **Dépend de** : 39-11a et 39-11a2 (lecteur),
@@ -228,14 +228,14 @@ place, rien recopié ; mesure par un script hors dépôt, `python3 -I`, comptes 
 l'import à plat) **d'abord, dans un commit séparé**, puis T2 et T3 (zip). Si une passe de revue de code stagne, c'est
 la couture d'un découpage.
 
-- [ ] T0 — Relire au code les lignes citées ; inventaire de l'AC-4 (entrées de test à *Total fees* sans `FEE-`),
+- [x] T0 — Relire au code les lignes citées ; inventaire de l'AC-4 (entrées de test à *Total fees* sans `FEE-`),
   écrit au Change Log avant tout changement.
-- [ ] T1 — Lecteur : `FeesNotSeparated` et son contrôle, tests (AC-4).
-- [ ] T2 — `read_bounded` extrait, `lire_borne` réécrite dessus (AC-6) ; module de lecture des CSV d'une archive,
+- [x] T1 — Lecteur : `FeesNotSeparated` et son contrôle, tests (AC-4).
+- [x] T2 — `read_bounded` extrait, `lire_borne` réécrite dessus (AC-6) ; module de lecture des CSV d'une archive,
   bornes et refus, tests unitaires (AC-2).
-- [ ] T3 — Route : développement des zips, `rows`/`archive`/`ignoredEntries`, trace, erreurs `WISE_ZIP_INVALID` et
+- [x] T3 — Route : développement des zips, `rows`/`archive`/`ignoredEntries`, trace, erreurs `WISE_ZIP_INVALID` et
   `WISE_CSV_FEES_NOT_SEPARATED`, quatre locales ; tests HTTP (AC-1, AC-3, AC-4).
-- [ ] T4 — `docs/api-external.md`, manuel utilisateur (AC-5, AC-7) ; *Note de version*.
+- [x] T4 — `docs/api-external.md`, manuel utilisateur (AC-5, AC-7) ; *Note de version*.
 
 ## Stratégie de tests
 
@@ -291,6 +291,80 @@ est refusé avec la marche à suivre, pour que les frais ne se perdent jamais da
 - La limite du corps de la route (`DefaultBodyLimit`, `lib.rs:977-980`) borne déjà la taille **compressée** reçue.
 - Le contrôle D5 ne lit que `is_fee` et `total_fees` de `WiseRow` (`wise.rs:133`, `:169`), déjà lus.
 
+## Dev Agent Record
+
+*Développé le 2026-11-22 (Claude Opus 5.5), branche `story/39-11e`. Commits : `e18be4cb` (D5, seul, d'abord, L9),
+`3174200e` (zip), `ac3e1fe4` (assertion `rows` avec doublons) — dernier commit de code `ac3e1fe4`.*
+
+### Ce qui est livré
+
+- **D5** (`crates/kesh-import/src/wise.rs`) : `check_fees_separated`, après `check_running_balance` ; règles (a) et (b) de
+  D5 ; `WiseCsvError::FeesNotSeparated { lines, count }` (lignes triées, au plus `MAX_CSV_LINE_ERRORS`), code
+  `WISE_CSV_FEES_NOT_SEPARATED`. À l'API, `AppError::WiseCsvFeesNotSeparated` (`422`, `details: { filename, archive,
+  lines, count }`) rendu par `csv_error` à la place de `WISE_CSV_INVALID`.
+- **Archive** (`crates/kesh-api/src/zip_read.rs`, neuf, `pub`) : `read_bounded` (partagée ; `lire_borne` de
+  `admin_backup/import.rs` réécrite dessus, messages inchangés), `looks_like_zip`, `extract_csv_entries` (D3, D4 : 
+  métadonnées par `by_index_raw`, lecture des retenues par `by_index`, ordre des contrôles de la fiche, budget cumulé).
+- **Route** (`routes/wise_imports.rs`) : `expand_archives` en `spawn_blocking` après le `404`, `WISE_ZIP_MAX_ENTRIES` = 64,
+  budget = `bank_import_max_mib` Mio ; `entry_name` (caractères de contrôle → `?`, 255 octets) pour les noms retenus,
+  ignorés et `details.entry` ; `FileReport.{archive, rows}`, `WiseImportResponse.ignoredEntries`, `IgnoredEntry` ; trace
+  `wise_import.created` avec `ignoredEntries`. `AppError::WiseZipInvalid` (`422 WISE_ZIP_INVALID`, `max`/`maxBytes`).
+- **i18n** : trois clés (`error-wise-csv-fees-not-separated`, `error-wise-zip-no-csv`, `error-wise-zip-invalid`) aux
+  quatre locales, replis de `errors.rs` égaux au fr-CH. Choix (AC-4) : DE, IT, EN décrivent l'option sans en citer de
+  libellé.
+- **Docs** : `docs/api-external.md` (ordre des refus, réponse, paragraphe du zip, exemple `curl`, deux lignes à la table
+  des erreurs) ; manuel `sec:wise-export` (`.tex` seul ; PDF contrôlé dans une copie hors dépôt, `latexmk -xelatex` vert,
+  texte aplati relu ; aucun PDF commité). DE, IT, EN : à traduire.
+
+### Inventaire de l'AC-4 (T0)
+
+Entrées de test portant un *Total fees* non nul, relevées au commit `a9d5130d` : les trois fixtures (chaque ligne à
+frais a sa `FEE-`) et `wise_csv.rs:450` (`Total fees` = « 0,35 », refusé avant par le lecteur, `AMOUNT`). Aucune autre
+(`ligne()` de l'E2E et `wise_line()` laissent la colonne vide). **Aucune entrée existante modifiée, aucune attente changée** ;
+les tests de 39-11b gardent leurs assertions (aucune ne compare la réponse ou la trace entière).
+
+### Tests ajoutés (recomptés, `#[test]` + `#[sqlx::test]`, de `a9d5130d` à `ac3e1fe4`)
+
+- `crates/kesh-import/tests/wise_csv.rs` : 34 → 42 (+8, D5).
+- `crates/kesh-api/src/zip_read.rs` : 0 → 12 (archive, AC-2).
+- `crates/kesh-api/tests/wise_import_e2e.rs` : 8 → 14 (+6 : D5 à plat, zip tel quel, à part puis zip et même devise,
+  refus et clés, noms bornés ; `real_zips_are_read`, ignoré) ; plus une assertion `rows` dans
+  `import_continuite_et_doublons_de_lignes`.
+- Total : **26 tests neufs**, dont 1 ignoré.
+
+### Relevés réels (test ignoré `real_zips_are_read`)
+
+Joué le 2026-11-22 sur les zips du responsable de l'epic, hors dépôt, chemins passés par `KESH_WISE_REAL_ZIPS_ACCEPTED`,
+`…_FEES_NOT_SEPARATED`, `…_NO_CSV` (rien recopié, seuls comptes et codes imprimés ; journal
+`kesh-gate-logs/s39-11e/zips-reels.log`) : les **2** zips CSV « avec » s'ouvrent en 3 relevés chacun, tous lus ; le zip
+CSV « sans » s'ouvre en 3 relevés, **les 3 refusés `WISE_CSV_FEES_NOT_SEPARATED`** ; les **7** zips CAMT et PDF refusés
+`NO_CSV`. Vert.
+
+### Sondes par mutation (hors dépôt, `kesh-gate-logs/s39-11e/mutations.sh`, `mutations.log`)
+
+Copie `git archive` de `ac3e1fe4`, témoins verts d'abord (lecteur 41, archive 12, route 24 tests). **18 mutations, 18
+tuées**, chacune par un test nommé en échec sur une assertion (`panicked at`) : D5 par ligne, seuil 3, règle (a) retirée,
+contrôle retiré ; borne non cumulée, borne infinie, `enclosed_name` ignoré, `:` non contrôlé, métadonnées par `by_index`,
+`.csv` sensible à la casse, dossier retenu, tri retiré, 65 entrées admises ; nom non rogné, caractères de contrôle gardés,
+archive oubliée au refus, trace sans `ignoredEntries`, `rows` = insérées. (Un premier passage, qui recompilait tous les
+binaires de test à chaque mutation, a été arrêté après le témoin et la première mutation, et relancé à portée étroite.)
+
+### Gates (au dernier commit de code `ac3e1fe4`)
+
+- Ciblés en cours : `binary(wise_csv)`, `binary(wise_import_e2e)`, `wise_imports`, `zip_read`, `admin_backup_e2e`,
+  `admin_full_import_e2e` : 61 puis 166 passés.
+- **Gate backend** (`scripts/test-fast.sh --ci`, base remise à zéro, `kesh-mariadb-dev6` par `heavy.sh`) : fmt, clippy
+  workspace `-D warnings`, nextest **6498 passés, 17 ignorés** (journal `kesh-gate-logs/s39-11e/gate-backend.log`).
+- **Frontend** : non joué — aucun fichier de `frontend/` touché.
+- **E2E** : aucun — aucune spec ajoutée (règle de la nuit du 22.11). `gate-ci.sh` et E2E complet : à la fin de l'epic.
+
+### Écarts et points relevés
+
+- La limite de D5 (bon fichier à une seule ligne à frais coupée par la borne) est écrite au manuel, non levée.
+- Nom d'archive (`archive`) et `ignoredEntries` ne se relisent pas par `GET /bank-imports/{id}` (AC-3 ; une migration
+  serait nécessaire).
+- Écran (bouton qui accepte le zip, traduction des refus) : 39-11d.
+
 ## Change Log
 
 - 2026-11-22 — fiche rédigée (Claude Opus 5.5), `drafted` ; constats mesurés sur les relevés réels (métadonnées
@@ -306,3 +380,6 @@ est refusé avec la marche à suivre, pour que les frais ne se perdent jamais da
   scission ; D5 développé en premier, dans un commit séparé (ordre écrit aux Tâches). L10 : hors périmètre (noms dans
   le fichier d'epic), rien ici. Citation `wise.rs:451-499` corrigée en `:451-509`. Aucune remédiation ne touchant du
   code et la passe ne rendant rien au-dessus de LOW, la boucle se clôt : `ready-for-dev`.
+- 2026-11-22 — développement (Claude Opus 5.5) : D5 d'abord (`e18be4cb`), puis le zip (`3174200e`, `ac3e1fe4`) ; 26 tests
+  neufs (1 ignoré), 18 mutations tuées, relevés réels vérifiés par le test ignoré, gate backend vert (6498 / 17 ignorés).
+  `review` ; prompt de la revue P1 : `kesh-gate-logs/s39-11e/revue-p1-prompt.md`.
