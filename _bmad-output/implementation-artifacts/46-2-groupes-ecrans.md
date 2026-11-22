@@ -1,6 +1,6 @@
 # Story 46-2 : écrans du bilan et du compte de résultat par groupes
 
-Status: review
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D3, D4, D9 (étendue), Q2, Q3, Q10 ; FR-46-2,
 FR-46-7 à FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Approuvée par le responsable de l'epic et par Guy (revue 1,
@@ -348,6 +348,19 @@ résultat.
   aucun `.rs` touché), captures dans `captures-p2rem/`. Aucun gate Rust. Manuel : copie compilée (`latexmk -g
   -xelatex`, rc 0), PDF aplati : les deux phrases neuves présentes, aucun « ?? » (`user-manual-controle-p2rem.pdf`,
   hors dépôt).
+- Revue P3 ciblée (`623bb649`, Claude Opus 5.5) : 0 C / 0 H / 0 M / 4 L, remédiés sans code de production.
+  L1 : tests `describe.each` (balance âgée, grand livre, rapport par projet comme « autre chargement » d'X1), mutations
+  **N4** (balance âgée), **N5** (grand livre), **N7** (projet) retirant `afterGeneration` de leur `finally`, rejouées
+  une à une sur une copie hors dépôt (vrai `node_modules`, `mutations-p3/`, témoin 206 vert) : **toutes tuées** sur
+  l'assertion nommée « retour sur le bilan désaccordé pendant … redemandé à la fin de ce chargement ». L2 : phrase au
+  manuel (changer la présentation pendant le chargement d'un autre rapport l'interrompt, relancer *Générer*) et
+  amélioration tracée (`issues-a-ouvrir.md`, `enhancement`, P4). L3 : noté, **non remédié** — la redemande du bilan
+  efface l'erreur de l'autre onglet (`errorMsg = null`) ; ce n'est pas une régression (avant `623bb649`, l'erreur
+  s'affichait sur le mauvais onglet et `selectTab` l'effaçait), plutôt une amélioration ; correctif possible : ne
+  resynchroniser qu'après une génération réussie. L4 : `TestingLibraryElementError` ajouté à l'expression du verdict de
+  `mut.sh` (hors dépôt). Gates frontend au dernier commit de code : `npm run check` 0 erreur, 29 avertissements ;
+  `lint-i18n-ownership` vert ; Vitest **4707 passés, 283 fichiers** ; `npm run build` vert (`front-p3rem.log`). Le
+  typage du test (`Ecran`) a été corrigé après les mutations (erreurs `svelte-check`), sans changer son comportement.
 
 ### File List
 
@@ -417,3 +430,8 @@ résultat.
   P2D survivantes ; L2 : redemande en erreur ; L3 : `BALANCE_COLUMNS` mutable ; L4 : `title` sur le conteneur. Tous
   remédiés (`623bb649`, détail au Dev Agent Record ; L2 dit au manuel). Boucle non close (un M remédié, production
   touchée) : passe P3 ciblée sur `623bb649`, prompt `kesh-gate-logs/s46-2/revue-p3-prompt.md`.
+- 2026-11-22 — Revue de code P3 ciblée (Claude Opus 5.5, une lentille, contexte frais, sur `623bb649`) : 0 C / 0 H / 0 M
+  / 4 L, tous traités sans code de production (tests, manuel, trace d'amélioration, script de mutation ; L3 noté).
+  **Boucle close.** Tendance : P1 0 C / 0 H / 2 M / 6 L (Opus 5.5) → P2 0 / 0 / 1 M / 4 L (Sonnet 5.5) → P3 0 / 0 / 0 / 4 L
+  (Opus 5.5, au lieu de Haiku : la remédiation changeait la logique d'état de la page). Gates frontend verts :
+  Vitest 4707 / 283 fichiers. `done`.

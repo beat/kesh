@@ -9,8 +9,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/svelte';
 import type { BalanceSheetDto, GroupingParams } from '$lib/features/reports/reports.types';
 
-const { getBalanceSheetMock, getIncomeStatementMock, downloadReportMock, getAgedReceivablesMock } =
-	vi.hoisted(() => ({
+const {
+	getBalanceSheetMock,
+	getIncomeStatementMock,
+	downloadReportMock,
+	getAgedReceivablesMock,
+	getGeneralLedgerMock,
+	getProjectExpensesMock,
+	listProjectsMock,
+} = vi.hoisted(() => ({
+		getGeneralLedgerMock: vi.fn(),
+		getProjectExpensesMock: vi.fn(),
+		listProjectsMock: vi.fn(async () => [] as unknown[]),
 		getBalanceSheetMock: vi.fn(),
 		getIncomeStatementMock: vi.fn(),
 		downloadReportMock: vi.fn(async () => {}),
@@ -23,7 +33,7 @@ vi.mock('$lib/shared/utils/i18n.svelte', () => ({
 	i18nMsg: (_key: string, fallback: string, args?: Record<string, string | number>) =>
 		args ? fallback.replace(/\{ \$(\w+) \}/g, (_m, k) => String(args[k])) : fallback,
 }));
-vi.mock('$lib/features/projects/projects.api', () => ({ listProjects: async () => [] }));
+vi.mock('$lib/features/projects/projects.api', () => ({ listProjects: listProjectsMock }));
 vi.mock('$lib/features/accounts/accounts.api', () => ({ fetchAccounts: async () => [] }));
 vi.mock('$lib/features/reports/reports.api', async (importOriginal) => {
 	const vrai = await importOriginal<typeof import('$lib/features/reports/reports.api')>();
@@ -32,6 +42,8 @@ vi.mock('$lib/features/reports/reports.api', async (importOriginal) => {
 		downloadReport: downloadReportMock,
 		getAgedReceivables: getAgedReceivablesMock,
 		getBalanceSheet: getBalanceSheetMock,
+		getGeneralLedger: getGeneralLedgerMock,
+		getProjectExpenses: getProjectExpensesMock,
 		getIncomeStatement: getIncomeStatementMock,
 	};
 });
@@ -255,6 +267,12 @@ describe('page des rapports — vue groupée du bilan (Story 46-2)', () => {
 	});
 });
 
+/** Ce que les scénarios demandent au rendu : onglets et contrôles par rôle ou identifiant. */
+type Ecran = {
+	getByRole: (role: string, opts: { name: string }) => HTMLElement;
+	getByTestId: (id: string) => HTMLElement;
+};
+
 /** Compte de résultat vide, sans groupe : seule la génération compte ici. */
 const resultatVide = async () => ({
 	period: { fiscalYearId: 1, startDate: '2026-01-01', endDate: '2026-12-31' },
@@ -431,6 +449,61 @@ describe('page des rapports — demandes périmées et vue affichée (Story 46-2
 		expect((r.getByTestId('grouping-level') as HTMLSelectElement).value).toBe('1');
 		await pause();
 		expect(getBalanceSheetMock).toHaveBeenCalledTimes(3);
+	});
+
+	// Revue P3 L1 : le `finally` de chaque branche appelle `afterGeneration` ; X1 ne garde que celle des rapports
+	// classiques. Même scénario avec la balance âgée, le grand livre et un rapport par projet comme « autre chargement ».
+	describe.each([
+		{
+			nom: 'la balance âgée',
+			ouvrir: async (r: Ecran) => {
+				await fireEvent.click(r.getByRole('tab', { name: 'Balance âgée' }));
+				return () => r.getByTestId('aged-report-generate');
+			},
+			mock: getAgedReceivablesMock,
+		},
+		{
+			nom: 'le grand livre',
+			ouvrir: async (r: Ecran) => {
+				await fireEvent.click(r.getByRole('tab', { name: 'Grand livre' }));
+				await fireEvent.input(r.getByTestId('ledger-from'), { target: { value: '2026-01-01' } });
+				await fireEvent.input(r.getByTestId('ledger-to'), { target: { value: '2026-12-31' } });
+				return () => r.getByTestId('ledger-generate');
+			},
+			mock: getGeneralLedgerMock,
+		},
+		{
+			nom: 'un rapport par projet',
+			ouvrir: async (r: Ecran) => {
+				await fireEvent.click(r.getByRole('tab', { name: 'Dépenses par compte analytique' }));
+				await fireEvent.change(r.getByTestId('project-report-project'), { target: { value: '5' } });
+				return () => r.getByTestId('project-report-generate');
+			},
+			mock: getProjectExpensesMock,
+		},
+	])('retour sur le bilan désaccordé pendant $nom (revue P3 L1)', ({ ouvrir, mock }) => {
+		it('redemandé à la fin de ce chargement', async () => {
+			listProjectsMock.mockResolvedValue([{ id: 5, code: 'P5', name: 'Projet', parentId: null }]);
+			getBalanceSheetMock.mockImplementation(async (_q, p?: GroupingParams) => bilan(p, p?.detailLevel !== 1));
+			const r = render(Page, { data });
+			await generer(r);
+			await r.findByTestId('grouped-group-10');
+			const jetee = bilanSuspendu();
+			await fireEvent.change(r.getByTestId('grouping-level'), { target: { value: '1' } });
+			const generer2 = await ouvrir(r);
+			let finir!: () => void;
+			mock.mockImplementationOnce(() => new Promise((_res, rej) => (finir = () => rej(new Error('autre')))));
+			await fireEvent.click(generer2());
+			await waitFor(() => expect(mock).toHaveBeenCalledTimes(1));
+			jetee.resoudre(false);
+			await fireEvent.click(r.getByRole('tab', { name: 'Bilan' }));
+			await pause();
+			expect(getBalanceSheetMock).toHaveBeenCalledTimes(2);
+			finir();
+			await waitFor(() => expect(getBalanceSheetMock).toHaveBeenCalledTimes(3));
+			expect(getBalanceSheetMock.mock.calls[2][1]).toMatchObject({ detailLevel: 1 });
+			await waitFor(() => expect(r.queryByTestId('grouped-account-1000')).toBeNull());
+		});
 	});
 
 	it('redemande en erreur : pas de redemande en boucle (revue P2 M1)', async () => {
