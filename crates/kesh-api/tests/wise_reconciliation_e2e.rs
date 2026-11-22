@@ -782,6 +782,29 @@ fn releve_usd_carte(date: &str) -> Vec<u8> {
     .into_bytes()
 }
 
+/// Les deux exports USD d'un paiement coupé par la borne de leurs périodes :
+/// la carte `CARD-90000020` passée le 10 mars à minuit pile, son frais
+/// `FEE-CARD-90000020` une milliseconde avant, le 9 mars. L'export qui finit
+/// le 9 mars ne porte que le frais ; celui qui commence le 10 porte la carte
+/// sans son frais, et — export « avec frais séparés » — un virement envoyé
+/// dont le frais est sa propre ligne `FEE-`. C'est la seule coupure qu'un
+/// export de Wise produise (ses périodes sont des jours), et la seule que la
+/// garde de la Story 39-11e reçoive (`check_fees_separated`, `kesh-import`) :
+/// une ligne à frais sans sa `FEE-`, dans un fichier qui en porte. Rend
+/// `(frais, carte)`.
+fn releves_usd_coupes() -> (Vec<u8>, Vec<u8>) {
+    let frais = format!(
+        "{HEADER}\nFEE-CARD-90000020,09-03-2020,09-03-2020 23:59:59.999,-0.04,USD,Frais de conversion,,13.85,,,,,,,,,,,,,,DEBIT,CARD\n"
+    );
+    let carte = format!(
+        "{HEADER}\nTRANSFER-70000032,10-03-2020,10-03-2020 11:00:00.000,-5.00,USD,Virement envoyé,,14.50,,,,,Fournisseur Fictif,,,,,,,0.50,,DEBIT,TRANSFER\n\
+         FEE-TRANSFER-70000032,10-03-2020,10-03-2020 10:59:59.999,-0.50,USD,Frais de virement,,19.50,,,,,,,,,,,,,,DEBIT,TRANSFER\n\
+         TRANSFER-70000031,10-03-2020,10-03-2020 09:00:00.000,20.00,USD,Virement reçu,,20.00,,,,Client Fictif,,,,,,,,,,CREDIT,TRANSFER\n\
+         CARD-90000020,10-03-2020,10-03-2020 00:00:00.000,-13.85,USD,Carte Boutique Exemple,,0.00,USD,CHF,0.81950,,,,Boutique Exemple,,,,,0.04,11.35,DEBIT,CARD\n"
+    );
+    (frais.into_bytes(), carte.into_bytes())
+}
+
 /// Un relevé d'une devise fait de virements reçus `(identifiant, date,
 /// montant, solde après)` — des lignes sans rapport avec le paiement par
 /// carte, qui fixent la période et les soldes du relevé.
@@ -1424,22 +1447,17 @@ async fn partielle_usd_d_abord_puis_ligne_chf(pool: MySqlPool) {
     assert_eq!(ctx.mouvement(ctx.perte).await.0, dec!(1.15));
 }
 
-/// Revue P3, L1 : le frais `FEE-CARD` importé seul d'abord et passé au compte
-/// de frais ne bloque pas le paiement dont les lignes de carte arrivent
-/// ensuite : le groupe (sans le frais) se propose et s'écrit, la part USD
+/// Revue P3, L1 : le frais `FEE-CARD` importé seul d'abord (l'export qui finit
+/// la veille, `releves_usd_coupes`) et passé au compte de frais ne bloque pas
+/// le paiement dont les lignes de carte arrivent ensuite : le groupe (sans le frais) se propose et s'écrit, la part USD
 /// créditée de la seule ligne de carte (13.85), le frais n'étant pas compté
 /// deux fois.
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
 async fn frais_d_abord_puis_la_carte(pool: MySqlPool) {
     let ctx = monter_sans_import(&pool).await;
-    let (chf, usd) = releves_partielle();
-    let usd = String::from_utf8(usd).unwrap();
-    let (entete, lignes) = usd.split_once('\n').unwrap();
-    let (carte, frais) = lignes.trim_end().split_once('\n').unwrap();
-    let seul = |ligne: &str| format!("{entete}\n{ligne}\n").into_bytes();
-    let (s, b) = ctx
-        .importer(&[("chf.csv", &chf), ("f.csv", &seul(frais))])
-        .await;
+    let (chf, _) = releves_partielle();
+    let (frais, carte) = releves_usd_coupes();
+    let (s, b) = ctx.importer(&[("chf.csv", &chf), ("f.csv", &frais)]).await;
     assert_eq!(s, 201, "import : {b}");
     let regle = regle_boutique(&ctx).await;
     let id_frais = ctx.tx("FEE-CARD-90000020", ctx.usd).await;
@@ -1450,7 +1468,7 @@ async fn frais_d_abord_puis_la_carte(pool: MySqlPool) {
     assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
     let avant = ctx.count("SELECT COUNT(*) FROM journal_entries").await;
 
-    let (s, b) = ctx.importer(&[("c.csv", &seul(carte))]).await;
+    let (s, b) = ctx.importer(&[("c.csv", &carte)]).await;
     assert_eq!(s, 201, "import : {b}");
     let revue = ctx.revue().await;
     assert_eq!(
@@ -1486,23 +1504,18 @@ async fn frais_d_abord_puis_la_carte(pool: MySqlPool) {
 }
 
 /// Revue P3, M1/A-3 (le frais arrivé après coup) : le groupe de la part
-/// USD passé sans son frais, le frais importé ensuite par un second fichier
-/// du même solde se propose seul (`fee`) et s'accepte : une écriture de frais
+/// USD passé sans son frais (l'export qui commence à la carte,
+/// `releves_usd_coupes`), le frais importé ensuite par l'export de la veille,
+/// du même solde, se propose seul (`fee`) et s'accepte : une écriture de frais
 /// à part, que le groupe n'a pas comptée. Ce test fige qu'un frais hors groupe
 /// n'est pas retiré par un contrôle de ses sœurs ; la réduction du motif 1 à
 /// la carte est gardée par `frais_d_abord_puis_la_carte`.
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
 async fn frais_apres_le_groupe_passe_seul(pool: MySqlPool) {
     let ctx = monter_sans_import(&pool).await;
-    let usd = String::from_utf8(releve_usd_carte("10-03-2020")).unwrap();
-    let (entete, lignes) = usd.split_once('\n').unwrap();
-    let (carte, frais) = lignes.trim_end().split_once('\n').unwrap();
-    let seul = |ligne: &str| format!("{entete}\n{ligne}\n").into_bytes();
+    let (frais, carte) = releves_usd_coupes();
     let (s, b) = ctx
-        .importer(&[
-            ("chf.csv", &releve_chf_sans_la_carte()),
-            ("c.csv", &seul(carte)),
-        ])
+        .importer(&[("chf.csv", &releve_chf_sans_la_carte()), ("c.csv", &carte)])
         .await;
     assert_eq!(s, 201, "import : {b}");
     let regle = regle_boutique(&ctx).await;
@@ -1513,7 +1526,7 @@ async fn frais_apres_le_groupe_passe_seul(pool: MySqlPool) {
     let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
     assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
 
-    let (s, b) = ctx.importer(&[("f.csv", &seul(frais))]).await;
+    let (s, b) = ctx.importer(&[("f.csv", &frais)]).await;
     assert_eq!(s, 201, "import : {b}");
     let id_frais = ctx.tx("FEE-CARD-90000020", ctx.usd).await;
     let revue = ctx.revue().await;
