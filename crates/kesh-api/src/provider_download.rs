@@ -601,7 +601,8 @@ impl Downloads {
 
     /// Ouvre une tâche sur la période `period` (début, fin lue), ou rend
     /// celle qui tourne déjà pour ce prestataire, cette société et ce libellé
-    /// (sans casse), **quelle que soit sa période** : son identifiant et sa
+    /// (sans casse ni accents, [`crate::provider_env::account_label_key`]),
+    /// **quelle que soit sa période** : son identifiant et sa
     /// période, que le refus `409` transmet (revue P1 de la 38-12b, M1).
     pub fn start(
         self: &Arc<Self>,
@@ -611,7 +612,7 @@ impl Downloads {
         period: (NaiveDate, NaiveDate),
         steps_total: Option<u32>,
     ) -> Result<JobHandle, RunningJob> {
-        let account_key = account.trim().to_lowercase();
+        let account_key = crate::provider_env::account_label_key(account);
         let mut guard = self.jobs.lock().expect("jobs");
         let (next, jobs) = &mut *guard;
         Self::purge(jobs);
@@ -699,6 +700,13 @@ impl JobHandle {
     /// Une étape faite.
     pub fn step_done(&self) {
         self.downloads.update(self.id, |j| j.steps_done += 1);
+    }
+
+    /// Pose le nombre d'étapes en tout, inconnu jusque-là (Stripe, Story
+    /// 40-8b : le nombre de versements n'est connu qu'une fois leur liste lue).
+    pub fn set_total(&self, total: u32) {
+        self.downloads
+            .update(self.id, |j| j.steps_total = Some(total));
     }
 
     /// `n` étapes de plus (une fenêtre coupée en deux en ajoute une).
@@ -1190,6 +1198,18 @@ mod tests {
                 to: p.1
             })
         );
+        // Le même libellé sans ses accents est le même compte (Story 38-13).
+        let accents = downloads
+            .start(
+                "paypal",
+                1,
+                "BÕUTIQUE",
+                (d("2020-03-01"), d("2020-03-02")),
+                None,
+            )
+            .err()
+            .map(|r| r.id);
+        assert_eq!(accents, Some(h.id));
         // Autre société, autre libellé, autre prestataire : libres.
         assert!(downloads.start("paypal", 2, "Boutique", p, None).is_ok());
         assert!(downloads.start("paypal", 1, "Autre", p, None).is_ok());
@@ -1216,6 +1236,17 @@ mod tests {
         // Finie, elle ne bloque plus la suivante ; une fin ne s'écrase pas.
         let h2 = downloads.start("paypal", 1, "Boutique", p, None).unwrap();
         assert!(h2.id > h.id);
+        // Un total inconnu au départ se pose une fois connu (Stripe, 40-8b) ;
+        // `add_steps` ne le crée pas.
+        h2.add_steps(1);
+        assert_eq!(
+            downloads.view("paypal", h2.id, 1).unwrap().steps.total,
+            None
+        );
+        h2.set_total(12);
+        h2.step_done();
+        let v = downloads.view("paypal", h2.id, 1).unwrap();
+        assert_eq!((v.steps.done, v.steps.total), (1, Some(12)));
         h.finish(JobState::Failed, None, None);
         assert_eq!(
             downloads.view("paypal", h.id, 1).unwrap().state,

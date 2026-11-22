@@ -1216,7 +1216,14 @@ const ATTENDU = {
 	// Fusion d'epic/40-stripe (destination d'un versement Stripe rejugée) dans epic/39-wise, après la
 	// 39-11d2 : **3817** (« expected 3817 to be 0 »), relevé par la garde = 3816 + 1 (le site du correctif,
 	// 3734 − 3733).
-	sitesTotal: 3817,
+	// Story 40-8b (bouton, aide, dialogue et compte rendu du téléchargement Stripe) : +7 net sur
+	// 3733 (9 sites `i18nMsg(` ajoutés, 2 retirés), soit **3741** après la fusion dans
+	// epic/40-stripe, relevé par la garde (3734 + 7).
+	// Story 40-9 (option « Destination actuelle (introuvable) » du compte de versement) :
+	// **3742** (« expected 3742 to be 3741 »), relevé par la garde ; au diff : 1 site ajouté,
+	// 0 retiré.
+	// Propagation d'epic/40-stripe (38-13, 40-8b, 40-9) dans epic/39-wise : relevé par la garde.
+	sitesTotal: 3825,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/

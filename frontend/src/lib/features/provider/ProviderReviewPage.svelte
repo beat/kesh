@@ -42,7 +42,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
 	import { errorMessageOf } from '$lib/shared/utils/error-message';
-	import { todayLocal } from '$lib/shared/utils/local-date';
+	import { todayInZurich } from '$lib/shared/utils/local-date';
 	import { formatSwissDate } from '$lib/features/reports/reports.api';
 	import { listBankAccounts, type BankAccountSummary } from '$lib/features/bank-accounts/bank-accounts.api';
 	import { listFiscalYears } from '$lib/features/fiscal-years/fiscal-years.api';
@@ -51,7 +51,12 @@
 	import ProviderImportReport from './ProviderImportReport.svelte';
 	import type { LinkTarget } from '$lib/features/reconciliation/reconciliation.types';
 	import { chunkProposals } from './provider-review.api';
-	import { defaultFiscalYearId, findingDate } from './provider-review';
+	import {
+		defaultFiscalYearId,
+		findingDate,
+		importErrorCode,
+		importErrorConcernsAccounts,
+	} from './provider-review';
 	import type {
 		ProviderFailedProposal,
 		ProviderFinding,
@@ -201,6 +206,9 @@
 	let importing = $state(false);
 	let importReport = $state<R | null>(null);
 	let importErrors = $state<string[]>([]);
+	// Story 40-9 — le code du refus d'import : le lien « Comptes bancaires » n'est
+	// proposé que pour un refus qui se règle à cet écran.
+	let importErrorCodeValue = $state<string | null>(null);
 
 	// Revue
 	let review = $state<ProviderReview<P> | null>(null);
@@ -231,7 +239,8 @@
 		if (fy.status === 'fulfilled') fiscalYears = fy.value;
 		else loadError = errorMessageOf(fy.reason);
 		selectedAccount = providerAccounts[0] ?? null;
-		selectedYearId = defaultFiscalYearId(fiscalYears, todayLocal());
+		// Story 40-9 — le jour de Zurich, comme la période proposée au téléchargement.
+		selectedYearId = defaultFiscalYearId(fiscalYears, todayInZurich());
 		loading = false;
 		await reload();
 	});
@@ -267,6 +276,7 @@
 	async function onSelectionChange() {
 		importReport = null;
 		importErrors = [];
+		importErrorCodeValue = null;
 		acceptReport = null;
 		await reload();
 	}
@@ -278,6 +288,7 @@
 		if (files.length === 0 || selectedAccount === null) return;
 		importing = true;
 		importErrors = [];
+		importErrorCodeValue = null;
 		try {
 			// Story 39-11d — plusieurs fichiers d'un geste quand la page les prend (Wise).
 			if (api.importFiles) importReport = await api.importFiles(files, selectedAccount);
@@ -287,6 +298,7 @@
 		} catch (err) {
 			importReport = null;
 			importErrors = importErrorLines(err);
+			importErrorCodeValue = importErrorCode(err);
 		} finally {
 			importing = false;
 		}
@@ -464,9 +476,11 @@
 			{#each importErrors as line, i (i)}
 				<p data-testid="{testId}-import-error-line">{line}</p>
 			{/each}
-			<a href="/bank-accounts" class="text-primary underline">
-				{i18nMsg('provider-bank-accounts-link', 'Comptes bancaires')}
-			</a>
+			{#if importErrorConcernsAccounts(importErrorCodeValue)}
+				<a href="/bank-accounts" class="text-primary underline" data-testid="{testId}-import-error-accounts-link">
+					{i18nMsg('provider-bank-accounts-link', 'Comptes bancaires')}
+				</a>
+			{/if}
 		</div>
 	{/if}
 
