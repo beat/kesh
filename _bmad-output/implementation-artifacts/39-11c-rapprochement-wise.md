@@ -300,6 +300,13 @@ depuis votre banque, versement Stripe), le reste par vos règles ; ce qui ne se 
   `bank_imports::date_coverage`), solde en devise exigé quand ses relevés encadrent la date sans se suivre (écart au remède
   « chaque solde », limite écrite), L-a à L-d. Trend : P1 1 MEDIUM → P2 2 MEDIUM (défauts de la garde ajoutée en P1) ;
   passe P3 ciblée à lancer (`kesh-gate-logs/s39-11c/revue-p3-prompt.md`).
+- 2026-11-22 — revue de code P3 (passe complète, une lentille ; 0 C, 0 H, 1 MEDIUM, 4 LOW, rapport
+  `kesh-gate-logs/s39-11c/revue-p3-rapport.md`), remédiée (`3fa3c97f`) : M1-P3 traité par la documentation et un test,
+  non par le code (le remède de code retiré : il contredisait l'amendement A-3, et la prémisse « même charge écrite deux
+  fois » est fausse au chiffre) ; L1 corrigé (frais passé seul sans effet sur le groupe) ; L2 tests de `Gap` (relevé sans
+  solde d'ouverture) et `NoPrevious` ; L3, L4 limites écrites, notées pour le manuel (fiche de la 39-11d). Trend : P1 1
+  MEDIUM → P2 2 MEDIUM → P3 1 MEDIUM (une promesse de la documentation) ; passe P4 ciblée à lancer
+  (`kesh-gate-logs/s39-11c/revue-p4-prompt.md`).
 
 ## Dev Agent Record
 
@@ -491,6 +498,47 @@ Champ `known_chf` de `ProviderEntry` : non employé (le paiement groupé écrit 
   lancé avec `KESH_NO_MEMGUARD=1` sous `heavy.sh` : le bus systemd utilisateur de la station refusait la connexion
   (`mem-guard` ne pouvait pas créer de portée ; premier passage arrêté là, rc 1, aucun test joué). Frontend non touché, non rejoué. Aucun E2E (aucune spec
   neuve) ; E2E complet et `gate-ci.sh` à la fin de l'epic.
+
+### Remédiation de la revue de code P3 (2026-11-22, rapport `kesh-gate-logs/s39-11c/revue-p3-rapport.md`)
+
+0 CRITICAL, 0 HIGH, 1 MEDIUM, 4 LOW à la revue. Commit de code `3fa3c97f` ; périmètre des décomptes : `08c5f6c5..3fa3c97f`.
+
+- **M1-P3 (documentation et test, remède de code retiré)** : le remède demandé — juger aussi les propositions `rule` et
+  `fee` d'une ligne `CARD-`/`FEE-CARD-` contre ses sœurs rapprochées — a été écrit (contrôle commun à la revue et à
+  l'acceptation), puis retiré : il faisait rougir `partielle_traitee_a_la_main_par_l_api`, le test de l'amendement A-3
+  (une ligne d'un paiement groupé se traite à la main, « une écriture par ligne », puis le reste suit la revue : la ligne
+  CHF par règle). Prémisse vérifiée au chiffre : il n'y a **pas** de seconde écriture de la même charge. Le groupe passé
+  sans la ligne CHF a pour marchand la seule part USD (11.35) ; la ligne CHF par règle, sa seule part (86.60) ; les deux
+  écritures font la charge (97.95), les crédits CHF (86.60) et USD (12.50, 13.89 USD) et la perte de change (1.15) de
+  l'écriture unique de `partielle_en_une_ecriture_puis_annulation`. La sonde `p3_sonde_usd_d_abord_puis_chf` devient le
+  test `partielle_usd_d_abord_puis_ligne_chf`, qui l'affirme sur le mouvement des quatre comptes. La phrase « jamais une
+  seconde écriture » de `docs/api-external.md` devient vraie autrement : deux écritures possibles, **aucun montant compté
+  deux fois** ; la doc de `card_group_blocker` dit pourquoi le motif 1 ne vaut que pour un groupe. Décision soumise à
+  l'orchestrateur (voir le rapport de remédiation).
+- **L1 (corrigé)** : motif 1 réduit aux lignes de carte (`reconciled_card_lines`, `routes/wise.rs`) : un frais
+  `FEE-CARD-<id>` passé seul ne bloque plus le groupe, proposé sans lui (son écriture crédite le solde USD de la seule
+  carte, 13.85) ; un frais importé après le groupe se propose seul (`fee`). Tests `frais_d_abord_puis_la_carte`,
+  `frais_apres_le_groupe_passe_seul`.
+- **L2 (tests)** : `totale_releve_chf_suivant_sans_solde_d_ouverture` (relevé suivant à `opening_balance` NULL, `Gap`),
+  `totale_sans_releve_chf_anterieur` (`NoPrevious`, solde CHF exigé), `partielle_solde_en_devise_ouvert_apres`
+  (`NoPrevious`, solde en devise non exigé). M5 (retrait de `period_to < date`) : mutant équivalent, laissé.
+- **L3, L4 (écrits)** : `docs/api-external.md` et doc de `card_group_blocker` — continuité tenue pour preuve (lignes qui
+  s'annulent, solde à zéro, deux relevés du même jour), solde en devise épars qui met tout paiement « à examiner » ;
+  section « Limites du rapprochement à reprendre au manuel » de la fiche de la 39-11d.
+- **Tests** (recomptés aux deux bornes) : `#[sqlx::test]` de `wise_reconciliation_e2e.rs` 17 → 23. Aucune clé i18n,
+  aucun écran, aucune migration.
+- **Sondes par mutation** (copie `git archive` dans `kesh-gate-logs/s39-11c/p3fix/src`, cible propre
+  `kesh-targets/s39-11c-mut`, base `kesh_s3911c_mut`, une mutation par invocation de `heavy.sh`, `CARGO_BUILD_JOBS=4` ;
+  copie, cible et base supprimées ; journal `kesh-gate-logs/s39-11c/p3fix/mutations.log`) : témoin 7/7 vert avant et
+  après ; tuées sur assertion nommée — C (frais compté au motif 1) → `frais_d_abord_puis_la_carte` `:1456` ; M7
+  (ouverture absente prise pour couverte) → `totale_releve_chf_suivant_sans_solde_d_ouverture` `:1564` ; N1 (`NoPrevious`
+  pris pour couvert) → `totale_sans_releve_chf_anterieur` `:1602` ; N2 (`NoPrevious` d'un solde en devise exigé) →
+  `partielle_solde_en_devise_ouvert_apres` `:1636`.
+- **Gates** : ciblé (`p3fix-cible.sh` : fmt, clippy workspace `-D warnings`, nextest `wise_reconciliation_e2e` et
+  `kesh-reconciliation wise::`) **38 / 38** (`p3fix-cible.log`) ; **backend complet** au commit de code `3fa3c97f` : `scripts/test-fast.sh --ci` (fmt, clippy workspace `-D warnings`,
+  nextest) **6504 exécutés, 6504 passés, 16 ignorés** (`p3fix-gate-backend.log` ; 6498 + 6 tests neufs), `KESH_NO_MEMGUARD=1`
+  sous `heavy.sh`. Frontend non touché, non rejoué ; aucun E2E (aucune spec neuve) ; E2E complet et `gate-ci.sh` à la fin
+  de l'epic.
 
 ### Notes de version
 
