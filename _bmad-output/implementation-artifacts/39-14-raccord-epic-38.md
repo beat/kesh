@@ -1,6 +1,6 @@
 # Story 39-14 : l'import Wise branché sur le cœur commun des prestataires
 
-Status: drafted
+Status: in-progress
 
 *Fiche rédigée le 2026-11-22 au gabarit de `bmad-create-story`, branche `story/39-14` partie d'`epic/39-wise`
 (`1f03f180`, qui porte la 39-11e et `epic/38-paypal` à `8b8cd338`, fusionnée par `aaaf7875`). Epic 39. **Dépend
@@ -100,7 +100,7 @@ disparaisse.
 
 - **AC-1 — Un seul cœur** : `paypal_imports.rs` ne porte plus aucune des onze fonctions et types du cœur 39-11b ;
   `wise_imports.rs` appelle `provider_imports::load_balances` et `import_lines` ; `grep -rn
-  "run_provider_import\|insert_currency_import\|ProviderWrite\|LockedTarget\|resolve_currency_balances\|file_currency_hash\|WriteFuture\|CurrencyImport\b\|WiseWriter\|fn existing_keys"
+  "run_provider_import\|insert_currency_import\|ProviderWrite\|LockedTarget\|resolve_currency_balances\|file_currency_hash\|WriteFuture\|CurrencyImport\b\|WiseWriter\|fn existing_keys("
   crates/` ne rend que des mentions historiques datées (fiches, commentaires « avant la 39-14 »).
 - **AC-2 — Réponses inchangées** : pour Wise, mêmes statuts, codes, corps (`files` dans l'ordre du formulaire,
   `rows`, `inserted`, `duplicates`, `importId`, `openingBalance`, `closingBalance`, `warnings` toujours présent,
@@ -158,7 +158,10 @@ disparaisse.
 2. T2 — Wise : `line_of_row`, `create` par `load_balances` + `import_lines`, `FileReport` depuis `CurrencyReport` ;
    retrait de `WiseWriter`, `Target`, `existing_keys` (son test passe au cœur).
 3. T3 — PayPal : retrait du cœur 39-11b et des imports devenus inutiles ; littéraux `ProviderLine` complétés.
-4. T4 — Test AC-5 écrit **d'abord**, joué vert sur le code d'avant.
+4. T4 — Test AC-5 écrit **d'abord**, joué vert sur le code d'avant ; assertions des clés exactes de `currencies` dans
+   `paypal_import_e2e::import_ventile_par_devise_puis_doublons` et dans le test du téléchargement de
+   `paypal_download_e2e` qui relit la trace `paypal_download.created` (AC-2) ; `les_cles_existantes_lisent_le_sens_au_signe`
+   (cœur) couvre la ligne sans sens au débit, au crédit et à zéro.
 5. T5 — Doc (AC-6), grep des symboles retirés, fiche.
 
 ## Stratégie de tests
@@ -170,7 +173,8 @@ unitaires du cœur. Gates : fmt, clippy workspace, nextest complet ; aucun écra
 ## Modules touchés (1)
 
 `kesh-api` : `routes/provider_imports.rs`, `routes/wise_imports.rs`, `routes/paypal_imports.rs`,
-`tests/wise_import_e2e.rs`, `tests/audit_label_registry.rs` (inventaire), `tests/audit_route_registry.rs`
+`tests/wise_import_e2e.rs`, `tests/paypal_import_e2e.rs` et `tests/paypal_download_e2e.rs` (clés exactes du compte
+rendu, AC-2 ; T4), `tests/audit_label_registry.rs` (inventaire), `tests/audit_route_registry.rs`
 (commentaire). E2E partiel : aucun — aucune spec neuve, aucun écran (règle de la nuit du 22.11) ; selon la règle du
 22.11 00:30, les specs des écrans d'import Wise et PayPal auraient été retenues.
 
@@ -186,7 +190,9 @@ unitaires du cœur. Gates : fmt, clippy workspace, nextest complet ; aucun écra
 de Wise à compléter de `value_date: None` (sa valeur d'avant), ceux de Stripe de `counterparty_iban: None, direction:
 None`, et `into_new_bank_transaction` recopie les trois ; (3) `dedupe_groups` garde sa signature (D3) : les tests de
 `stripe_imports.rs` compilent ; (4) Stripe déplace les bornes et `truncate_*` en `pub` dans `provider_imports.rs` :
-une seule définition après la fusion (celles de `paypal_imports.rs` retirées, les `use` de Wise repointés).
+une seule définition après la fusion (celles de `paypal_imports.rs` retirées, les `use` de Wise **et** les usages
+propres de PayPal repointés ; Stripe y ajoute aussi `FEE_SUFFIX`, `bounded`, `parse_form`, `ProviderImportForm`, sans
+conflit).
 
 ## Note de version
 
@@ -198,6 +204,13 @@ Aucune ligne au CHANGELOG : réorganisation interne, sans effet visible (journal
 
 ## Change Log
 
+- 2026-11-22 — Validation P3 (Claude Sonnet 5.5, ciblée sur la remédiation `41cb5018`, `validation-p3-rapport.md`) :
+  0 C, 0 H, 1 M, 3 L. M-A (grep de l'AC-1 insatisfiable : `fn existing_keys` rendait `existing_keys_with_texts`) :
+  motif corrigé en `fn existing_keys(`. L-A : le test nommé existe dans le développement (le relecteur lisait
+  `8b17e53b`), cité en T4 ; L-B : fichiers PayPal aux modules touchés et en T4 ; L-C : point 4 d'epic/40 complété.
+  **Validation close au plafond de trois passes fixé pour cette story**, sur un MEDIUM corrigé sans passe de plus
+  (remédiation de fiche seule) : recontrôle à l'étape 0 du développement, déclaré au Dev Agent Record. Tendance :
+  P1 1 H / 3 M → P2 2 M → P3 1 M (ciblée).
 - 2026-11-22 — Validation P2 (Claude Opus 5.5, contexte frais, lecture seule, `validation-p2-rapport.md`) : 0 C, 0 H,
   2 M, 7 L. Remédiations de P1 tenues. M1 : clés exactes du compte rendu PayPal (réponse, trace, fichier et
   téléchargement) en AC-2 ; M2 : `epic/40-stripe` aux fichiers communs, `dedupe_groups` gardé (D3). LOW : L1
