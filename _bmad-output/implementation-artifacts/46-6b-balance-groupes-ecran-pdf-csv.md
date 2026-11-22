@@ -1,6 +1,6 @@
 # Story 46-6b : balance par groupes — écran, PDF et CSV
 
-Status: ready-for-dev
+Status: in-progress
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D11 modifiée (Q6), D9 étendue (Q10) ; FR-46-6,
 FR-46-9, FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Fiche écrite le 2026-11-20 (remarque 2
@@ -75,6 +75,45 @@ extensions ci-dessous portent sur ces quatre colonnes ; aucune cinquième n'est 
    deux natures y portent un montant non nul (plan PME : classes 6 à 8 ; un compte à zéro, un compte miroir par
    exemple, ne dissout rien : 46-6a AC-2, C-46-6a-3), que `2 Passifs` y reste un groupe, et qu'un compte de groupe sans solde ni mouvement n'y a pas
    de ligne propre (46-6a AC-3 (d) : un groupe dissous à zéro, `6`, `7`, `70`, `8`, `80` du plan PME, n'y paraît pas).
+
+## Amendement du 2026-11-22 (T0, au code de `epic/46-rapports-groupes` `416547b14`)
+
+La fiche est relue contre le code réel avant le développement ; sept écarts, tranchés ici.
+
+1. **48-11.** Elle n'est pas dans `main` : la balance groupée arrondit par le **remplaçant provisoire posé par la
+   46-3**, `kesh_core::types::format_two_decimals` (CSV) et `pdf::format_swiss_amount_arrondi` (PDF), comme le
+   bilan groupé ; les rendus à plat gardent `format_swiss_amount` et `format_amount_iso` (AC-3). Aucun `{:.2}` neuf.
+2. **« La fonction de ligne groupée de la 46-3, étendue aux quatre colonnes »** (AC-2). Au PDF, `LibelleGroupe`
+   (le libellé d'une ligne groupée) lit la ligne par un trait neuf de `groupes.rs`, `LigneGroupeeAffichee`
+   (genre, profondeur, numéro, nom, état, montants imprimés, devise), implémenté par `LigneRapport` (un montant)
+   et `LigneBalanceGroupee` (quatre : ouverture, débit, crédit, clôture — le net n'est imprimé nulle part) ; la
+   règle de rendu de la 46-1 y devient une méthode unique, `porte_montant`. Un `Gabarit` (abscisse et longueur
+   du libellé) distingue le bilan (nom à 25 mm, 48 ou 34 caractères) de la balance (intitulé à 20 mm, 22
+   caractères, `TB_NAME_MAX_CHARS`, un de moins par 2,5 mm de retrait). Au CSV, `cellules_groupees` sert le
+   bilan, le compte de résultat et la balance.
+3. **Colonnes en devise du CSV, et « CHF » des en-têtes du PDF, en mode groupé.** La fiche dit « un compte en
+   devise au rapport » (`csv.rs:364`, règle à plat). Le rendu groupé suit la règle de la 46-3 pour le bilan : les
+   colonnes paraissent si **une ligne groupée** porte une devise. La différence ne joue que pour un compte en
+   devise caché sous un groupe fermé qui mêle les devises (aucune ligne en devise visible : pas de colonnes vides).
+4. **`data-testid` de l'écran groupé** (AC-1). Une ligne de tableau n'en porte qu'un : en mode groupé, les lignes
+   viennent du composant partagé et gardent ses identifiants (`grouped-<genre>-<numéro>`, `group-toggle-<numéro>`) ;
+   `tb-row` reste celui des lignes à plat (hiérarchie masquée). Sont conservés en mode groupé : `tb-fx-row-<numéro>`
+   (seconde ligne en devise d'un compte), `tb-retained`, `tb-opening-check`, `tb-movements-check`, `tb-col-opening`,
+   `tb-col-closing`, et les liens des numéros vers le grand livre. La seconde ligne d'un groupe s'appelle
+   `tb-group-fx-row-<genre>-<numéro>`. Les specs d'aujourd'hui (`reports.spec.ts:409`, `reports-currency.spec.ts:155`)
+   ne lisent que ces identifiants conservés : elles passent **sans changement** en mode groupé (aucune assertion
+   perdue) ; elles ne sont pas jouées cette nuit (règle des gates de la nuit du 22.11 : seules les specs ajoutées).
+5. **Composant paramétré** (AC-1). `GroupedReportRows.svelte` devient générique sur le type de ligne
+   (`GroupedRowBase`) ; `TRIAL_BALANCE_COLUMNS` (quatre colonnes) s'ajoute à `BALANCE_COLUMNS`, et une
+   `currencyRow` facultative (un `snippet`) porte la seconde ligne en devise de la balance, à la place du solde en
+   devise à côté du libellé (`AccountCurrencyBalance`) du bilan ; le badge « archivé » de la balance à plat est
+   repris (`archivedBadge`).
+6. **Info-bulle du niveau.** Celle de `GroupingControls` parle des « sections légales du bilan » ; la balance reçoit
+   la sienne (`levelHint`, clé `reports-groups-level-hint-trial-balance`, quatre locales).
+7. **Test axe** (AC-1) et **E2E** (AC-6, T5). Le contrôle axe de l'onglet Balance groupé est dans la spec neuve
+   `reports-balance-groupes.spec.ts` (seules les specs ajoutées se jouent cette nuit) ; T5 suit la règle de la nuit :
+   fmt, clippy, nextest complet, frontend complet, E2E de la seule spec ajoutée ; ni `gate-ci.sh` ni E2E complet
+   (à la branche d'intégration).
 
 ## Tâches / sous-tâches
 
