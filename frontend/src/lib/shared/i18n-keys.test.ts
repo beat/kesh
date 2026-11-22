@@ -1150,6 +1150,19 @@ const ATTENDU = {
 	// fusions de l'Epic 43, d'epic/v0190-correction et d'epic/42 (« expected 3495 to be 3468 »,
 	// `kesh-gate-logs/rel0190/vitest-compteurs-1.log`), non additionné — il égale 3468 + 10
 	// (v0190-correction et v0190-nom-societe) + 17 (36-16a), les côtés gardés.
+	// Story 48-10 (#1177, D5) : **3495 → 3496** (« expected 3496 to be 3495 »,
+	// `kesh-gate-logs/e4810/check-1.log`), relevé par la garde : le seul site neuf est
+	// `journal-entries-filter-amount-not-applied` (liste des écritures). Les messages du prix, des
+	// frais et du minimum passent par `amountEntryMessage` (aucun site neuf). Compteur partagé
+	// avec les autres stories de l'Epic 48 : à relever de nouveau après la fusion (AC8).
+	// Revue P1 de la 48-10 : **3496 → 3502** (« expected 3502 to be 3496 »,
+	// `kesh-gate-logs/e4810/remed-p1-front.log`), relevé par la garde : cinq sites dans
+	// `nonPriceMessages()` (fiche article : nom, doublon, taux de TVA) et un dans `onFeeInput()`
+	// (rappels : le message du délai), tous de clés existantes.
+	// Story v0200-corrections-mineures (#1342) : **3502 → 3503** (« expected 3503 to be 3502 »,
+	// `kesh-gate-logs/v0200cm/vert-vitest.log`), relevé par la garde : le seul site neuf est
+	// `contact-error-address-country-alone` (page des contacts, pays seul). La ligne du motif
+	// d'un bouton grisé (#1349) affiche `formValidation` : aucun site neuf.
 	// Correctif `fix-api-parent-compte` (2026-11-18) : **3388 → 3392**, relevé par la garde
 	// (« expected 3392 to be 3388 », `kesh-gate-logs/fix-api-parent-compte/front-test-unit.log`) —
 	// le champ parent du dialogue de modification (`accounts/+page.svelte`) : son libellé
@@ -1166,7 +1179,18 @@ const ATTENDU = {
 	// `kesh-gate-logs/s46-6b/front-test-unit.log`) — l'info-bulle du niveau propre à la balance
 	// (`reports-groups-level-hint-trial-balance`, `reports/+page.svelte`) et le badge « archivé »
 	// des lignes groupées de la balance (`reports-archived-label`, `GroupedReportRows.svelte`).
-	sitesTotal: 3517,
+	// Reprise de main dans epic/48 (2026-11-20, après les fusions de #1346, #1327, #1351) : les deux côtés gardés,
+	// total relevé par la garde, non additionné : **3507** (« expected 3507 to be +0 »,
+	// `kesh-gate-logs/e48-reprise-main/vitest-compteur.log`).
+	// Story 48-14 (#1263, D1) : **3503 → 3504** (« expected 3504 to be 3503 »), relevé par la
+	// garde : le seul site neuf est `reconciliation-group-reread-blocked` (règlement groupé,
+	// demande de compte après relecture sans sélecteur).
+	// Fusion de la 48-14 dans epic/48 (2026-11-20) : les deux côtés gardés, total relevé par la garde,
+	// non additionné : **3508** (« expected 3508 to be +0 », `kesh-gate-logs/e4814/fusion-epic-i18n.log`).
+	// Reprise de main (0.19.1, #1459 à #1461) dans epic/46 (2026-11-22) : les deux côtés gardés, total
+	// relevé par la garde, non additionné : **3526** (« expected 3526 to be +0 », `kesh-gate-logs/integration/
+	// finale/reprise-main/e46-i18n-1.log`) — il égale 3517 (46-6b) + 9 (main : 3499 → 3508).
+	sitesTotal: 3526,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/
