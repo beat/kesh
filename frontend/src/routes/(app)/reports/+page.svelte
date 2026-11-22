@@ -19,6 +19,16 @@
 	import GeneralLedgerView from '$lib/features/reports/GeneralLedgerView.svelte';
 	import JournalReportView from '$lib/features/reports/JournalReportView.svelte';
 	import VatReportView from '$lib/features/reports/VatReportView.svelte';
+	import GroupingControls from '$lib/features/reports/GroupingControls.svelte';
+	import {
+		groupingParamsOf,
+		readGroupingView,
+		toggleGroup,
+		withEcho,
+		writeGroupingView,
+		type GroupedReport,
+		type GroupingView,
+	} from '$lib/features/reports/reports-grouping';
 	import {
 		buildExportFilename,
 		downloadReport,
@@ -61,6 +71,8 @@
 		GeneralLedgerDto,
 		LedgerQuery,
 		AgedReceivablesDto,
+		GroupedRow,
+		GroupingParams,
 	} from '$lib/features/reports/reports.types';
 	import type { FiscalYearResponse } from '$lib/features/fiscal-years/fiscal-years.types';
 
@@ -76,6 +88,8 @@
 		fiscalYears: FiscalYearResponse[];
 		// Story 9-2a — Nom de la company pour construire les filenames d'export.
 		companyName: string;
+		// Story 46-2 (AC-10) — clé de la vue groupée mémorisée ; `null` si inconnue.
+		companyId?: number | null;
 	}
 	let { data }: { data: PageData } = $props();
 
@@ -148,6 +162,77 @@
 	// P20 — race guard : sequence counter pattern (cf. ReconciliationProposals).
 	let genSeq = 0;
 
+	// Story 46-2 — vue groupée du bilan et du compte de résultat (AC-1 à AC-6, AC-10).
+	// Relue de la mémoire du navigateur AVANT la première requête : la première
+	// demande part avec la vue retenue, sans passer par la vue par défaut.
+	const companyId = untrack(() => data.companyId ?? null);
+	let groupingViews = $state<Record<GroupedReport, GroupingView>>({
+		'balance-sheet': readGroupingView(companyId, 'balance-sheet'),
+		'income-statement': readGroupingView(companyId, 'income-statement'),
+	});
+	// Paramètres de la dernière réponse AFFICHÉE de chaque rapport : l'export les
+	// reprend tels quels (AC-6), et non la vue en cours de redemande.
+	let displayedGrouping: Record<GroupedReport, GroupingParams | undefined> = {
+		'balance-sheet': undefined,
+		'income-statement': undefined,
+	};
+	// Redemande après un changement de présentation : l'écran garde l'affichage
+	// précédent (sans clignotement), marqué `aria-busy` (AC-3).
+	let refreshing = $state(false);
+	const isGroupedTab = $derived(
+		activeTab === 'balance-sheet' || activeTab === 'income-statement',
+	);
+	const activeGroupingView = $derived(
+		isGroupedTab ? groupingViews[activeTab as GroupedReport] : null,
+	);
+	const activeMaxDepth = $derived(
+		activeTab === 'balance-sheet'
+			? (balanceSheet?.grouping?.maxDepth ?? null)
+			: activeTab === 'income-statement'
+				? (incomeStatement?.grouping?.maxDepth ?? null)
+				: null,
+	);
+
+	/** Retient la vue d'un rapport, à l'écran et dans la mémoire du navigateur. */
+	function setGroupingView(report: GroupedReport, view: GroupingView): void {
+		groupingViews[report] = view;
+		writeGroupingView(companyId, report, view);
+	}
+
+	/**
+	 * Un changement de présentation (contrôles ou accordéon) : la vue est retenue,
+	 * et le rapport affiché est redemandé à l'API, seule à connaître la règle
+	 * d'ouverture (C-46-2-1). Sans rapport affiché, rien n'est demandé.
+	 */
+	function changeGrouping(next: GroupingView): void {
+		if (!isGroupedTab) return;
+		const report = activeTab as GroupedReport;
+		setGroupingView(report, next);
+		const displayed = report === 'balance-sheet' ? balanceSheet : incomeStatement;
+		if (displayed) void generate({ keepDisplay: true });
+	}
+
+	function onToggleGroup(row: GroupedRow): void {
+		if (!activeGroupingView) return;
+		changeGrouping(toggleGroup(activeGroupingView, row.accountId, row.open === true));
+	}
+
+	/**
+	 * Une réponse du bilan ou du compte de résultat est affichée : ses paramètres
+	 * deviennent ceux de l'export, et la mémoire reprend les listes de l'écho (les
+	 * groupes disparus du plan, ignorés par l'API, en sortent — AC-10).
+	 */
+	function acceptGrouped(
+		report: GroupedReport,
+		params: GroupingParams | undefined,
+		dto: BalanceSheetDto | IncomeStatementDto,
+	): void {
+		displayedGrouping[report] = params;
+		if (params && dto.grouping) {
+			setGroupingView(report, withEcho(groupingViews[report], dto.grouping));
+		}
+	}
+
 	// P17 — reset period dates when fiscal year changes (avoid silent cross-FY 400).
 	let lastFyId: number | null = selectedFiscalYearId;
 	$effect(() => {
@@ -168,6 +253,7 @@
 			// du même coup la même race préexistante sur les 5 rapports classiques.
 			genSeq++;
 			loading = false;
+			refreshing = false;
 			lastFyId = selectedFiscalYearId;
 		}
 	});
@@ -242,7 +328,11 @@
 		};
 	}
 
-	async function generate(): Promise<void> {
+	/**
+	 * @param options.keepDisplay — Story 46-2 : redemande après un changement de
+	 *   présentation ; l'affichage précédent reste jusqu'à la réponse (AC-3).
+	 */
+	async function generate(options: { keepDisplay?: boolean } = {}): Promise<void> {
 		// Story 24-1 — grand livre : période libre, sans exercice.
 		if (isLedgerTab) {
 			const q = ledgerQuery();
@@ -299,7 +389,13 @@
 		}
 		if (selectedFiscalYearId === null) return;
 		const mySeq = ++genSeq;
-		loading = true;
+		if (options.keepDisplay) {
+			refreshing = true;
+			loading = false;
+		} else {
+			loading = true;
+			refreshing = false;
+		}
 		errorMsg = null;
 		const query = {
 			fiscalYearId: selectedFiscalYearId,
@@ -309,13 +405,21 @@
 		try {
 			switch (activeTab) {
 				case 'balance-sheet': {
-					const result = await getBalanceSheet(query);
-					if (mySeq === genSeq) balanceSheet = result;
+					const params = groupingParamsOf(groupingViews['balance-sheet']);
+					const result = await getBalanceSheet(query, params);
+					if (mySeq === genSeq) {
+						balanceSheet = result;
+						acceptGrouped('balance-sheet', params, result);
+					}
 					break;
 				}
 				case 'income-statement': {
-					const result = await getIncomeStatement(query);
-					if (mySeq === genSeq) incomeStatement = result;
+					const params = groupingParamsOf(groupingViews['income-statement']);
+					const result = await getIncomeStatement(query, params);
+					if (mySeq === genSeq) {
+						incomeStatement = result;
+						acceptGrouped('income-statement', params, result);
+					}
 					break;
 				}
 				case 'trial-balance': {
@@ -337,7 +441,10 @@
 		} catch (e) {
 			if (mySeq === genSeq) errorMsg = formatError(e);
 		} finally {
-			if (mySeq === genSeq) loading = false;
+			if (mySeq === genSeq) {
+				loading = false;
+				refreshing = false;
+			}
 		}
 	}
 
@@ -367,6 +474,7 @@
 
 	let canExport = $derived(
 		!loading &&
+			!refreshing &&
 			!exporting &&
 			selectedFiscalYearId !== null &&
 			data.fiscalYears.length > 0 &&
@@ -472,7 +580,11 @@
 				{ start: period.startDate, end: period.endDate },
 				format,
 			);
-			await downloadReport(activeTab as ReportType, query, format, filename);
+			// Story 46-2 (AC-6) — les paramètres de la dernière réponse affichée.
+			const grouping = isGroupedTab
+				? displayedGrouping[activeTab as GroupedReport]
+				: undefined;
+			await downloadReport(activeTab as ReportType, query, format, filename, grouping);
 		} catch (e) {
 			// Pass 1 code-review M13 (AA4-F2) : code structuré → message i18n
 			// du backend (formatError) ; sinon fallback générique AC #23.
@@ -629,7 +741,7 @@
 			bind:periodStart
 			bind:periodEnd
 			{loading}
-			onGenerate={generate}
+			onGenerate={() => generate()}
 			onExportPdf={exportPdf}
 			onExportCsv={exportCsv}
 			{canExport}
@@ -687,7 +799,7 @@
 			<button
 				type="button"
 				class="rounded bg-primary px-3 py-1 text-sm text-white disabled:opacity-50"
-				onclick={generate}
+				onclick={() => generate()}
 				disabled={loading || !ledgerFrom || !ledgerTo}
 				data-testid="ledger-generate"
 			>
@@ -762,7 +874,7 @@
 			<button
 				type="button"
 				class="rounded bg-primary px-3 py-1 text-sm text-white disabled:opacity-50"
-				onclick={generate}
+				onclick={() => generate()}
 				disabled={loading || selectedProjectId === null}
 				data-testid="project-report-generate"
 			>
@@ -797,7 +909,7 @@
 			<button
 				type="button"
 				class="rounded bg-primary px-3 py-1 text-sm text-white disabled:opacity-50"
-				onclick={generate}
+				onclick={() => generate()}
 				disabled={loading}
 				data-testid="aged-report-generate"
 			>
@@ -845,15 +957,24 @@
 		role="tabpanel"
 		id="reports-tabpanel-{activeTab}"
 		aria-labelledby="reports-tab-{activeTab}"
+		aria-busy={loading || refreshing}
+		class="space-y-3"
 	>
+		{#if activeGroupingView}
+			<GroupingControls
+				view={activeGroupingView}
+				maxDepth={activeMaxDepth}
+				onChange={changeGrouping}
+			/>
+		{/if}
 		{#if loading}
 			<p class="text-sm italic text-gray-500" role="status">
 				{i18nMsg('reports-loading', 'Génération du rapport en cours…')}
 			</p>
 		{:else if activeTab === 'balance-sheet' && balanceSheet}
-			<BalanceSheetView dto={balanceSheet} />
+			<BalanceSheetView dto={balanceSheet} {onToggleGroup} />
 		{:else if activeTab === 'income-statement' && incomeStatement}
-			<IncomeStatementView dto={incomeStatement} />
+			<IncomeStatementView dto={incomeStatement} {onToggleGroup} />
 		{:else if activeTab === 'trial-balance' && trialBalance}
 			<TrialBalanceView dto={trialBalance} />
 		{:else if activeTab === 'journals' && journalReport}

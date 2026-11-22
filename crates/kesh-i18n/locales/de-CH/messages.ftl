@@ -4078,3 +4078,20 @@ projects-reassign-warning-locked = Buchungen gesperrt bis zum { $date }.
 projects-reassign-warning-reports = Die analytischen Berichte dieser Periode ändern sich.
 projects-reassign-confirm = Bestätigen
 projects-reassign-done = Analytisches Konto geändert.
+
+# Story 46-2 — Bilanz und Erfolgsrechnung nach Kontogruppen (Bildschirme)
+reports-groups-controls-label = Darstellung nach Kontogruppen
+reports-groups-hierarchy = Gruppenhierarchie
+reports-groups-level = Detailstufe
+reports-groups-level-n = Stufe { $level }
+reports-groups-level-all = Alle Konten
+reports-groups-level-hint = Die gesetzlichen Abschnitte der Bilanz bleiben bestehen (Aktiven, Passiven, Eigenkapital). Eine zusammengeklappte Darstellung, insbesondere auf Stufe 1, ist eine Arbeitsansicht und keine Jahresrechnung.
+reports-groups-open-all = Alle öffnen
+reports-groups-close-all = Alle schliessen
+reports-groups-subtotals = Zwischensummen
+reports-groups-subtotals-header = auf der Titelzeile
+reports-groups-subtotals-footer = am Ende
+reports-groups-toggle-open = Gruppe { $number } { $name } öffnen
+reports-groups-toggle-close = Gruppe { $number } { $name } schliessen
+reports-groups-subtotal = Total { $name }
+reports-groups-own-balance = { $name } (eigener Saldo)

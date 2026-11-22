@@ -28,6 +28,69 @@ export interface AccountBalance {
 	balanceCurrency?: string;
 }
 
+// --- Story 46-2 — bilan et compte de résultat par groupes (contrat de la 46-1) ---
+
+/** Niveau de détail : `1` à `20`, ou `all` (tous les groupes ouverts). */
+export type DetailLevel = number | 'all';
+
+/** Place du sous-total d'un groupe ouvert : sur la ligne du titre, ou en pied. */
+export type SubtotalPosition = 'header' | 'footer';
+
+/**
+ * Paramètres de groupement d'une demande de bilan ou de compte de résultat
+ * (46-1 § *Le contrat*) ; les mêmes vont à l'export (46-3).
+ */
+export interface GroupingParams {
+	detailLevel: DetailLevel;
+	subtotalPosition: SubtotalPosition;
+	/** Groupes ouverts à la main (identifiants de comptes de groupe). */
+	open: number[];
+	/** Groupes fermés à la main. */
+	closed: number[];
+}
+
+/**
+ * Écho `grouping` de la réponse : les choix **retenus** (identifiants ignorés
+ * retirés, listes triées) et `maxDepth`, la profondeur de l'arbre affiché,
+ * indépendante de l'ouverture (`0` rapport vide, `1` plan sans groupe).
+ */
+export interface GroupingEcho extends GroupingParams {
+	maxDepth: number;
+}
+
+/** Genre d'une ligne groupée. */
+export type GroupedRowKind = 'group' | 'account' | 'own' | 'subtotal';
+
+/**
+ * Une ligne de `groupedRows`, déjà dans l'ordre d'affichage. `balance` est le
+ * sous-total d'un groupe ; `open` n'est présent que sur `group`, `active` sur
+ * `account` et `own`.
+ */
+export interface GroupedRow {
+	kind: GroupedRowKind;
+	depth: number;
+	accountId: number;
+	accountNumber: string;
+	accountName: string;
+	balance: string;
+	currency?: string;
+	balanceCurrency?: string;
+	open?: boolean;
+	active?: boolean;
+	role?: AccountRole | null;
+}
+
+export interface BalanceSheetGroupedRows {
+	assets: GroupedRow[];
+	liabilities: GroupedRow[];
+	equity: GroupedRow[];
+}
+
+export interface IncomeStatementGroupedRows {
+	revenues: GroupedRow[];
+	expenses: GroupedRow[];
+}
+
 export interface BalanceSheetDto {
 	period: ReportPeriod;
 	assets: AccountBalance[];
@@ -44,6 +107,9 @@ export interface BalanceSheetDto {
 	retainedEarnings: string;
 	equityResult: string;
 	equationHolds: boolean;
+	/** Story 46-2 — présents seulement si la demande portait `detailLevel`. */
+	grouping?: GroupingEcho;
+	groupedRows?: BalanceSheetGroupedRows;
 }
 
 export interface IncomeStatementDto {
@@ -53,6 +119,9 @@ export interface IncomeStatementDto {
 	totalRevenues: string;
 	totalExpenses: string;
 	netResult: string;
+	/** Story 46-2 — présents seulement si la demande portait `detailLevel`. */
+	grouping?: GroupingEcho;
+	groupedRows?: IncomeStatementGroupedRows;
 }
 
 export interface TrialBalanceRow {

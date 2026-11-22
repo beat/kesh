@@ -1,9 +1,14 @@
 <script lang="ts">
 	// Story 9-1 — Vue Bilan. Story 14-3c — section Capitaux propres par rôle.
+	// Story 46-2 — avec `groupedRows` (réponse demandée avec `detailLevel`), chaque
+	// section rend ses lignes groupées ; sans, la vue à plat d'avant, inchangée
+	// (sous-titres de rôle des fonds propres compris, D4). Totaux, lignes calculées
+	// et équation restent à leur place dans les deux cas.
 	import Big from 'big.js';
 	import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
 	import { accountRoleKey, type AccountRole } from '$lib/features/accounts/accounts.types';
 	import AccountCurrencyBalance from './AccountCurrencyBalance.svelte';
+	import GroupedReportRows, { type GroupedAmountColumn } from './GroupedReportRows.svelte';
 	import {
 		formatCurrencyFigure,
 		formatReportAmount,
@@ -12,12 +17,19 @@
 		ledgerHref,
 		showsRetainedEarningsLine,
 	} from './reports.api';
-	import type { AccountBalance, BalanceSheetDto } from './reports.types';
+	import type { AccountBalance, BalanceSheetDto, GroupedRow } from './reports.types';
 
 	interface Props {
 		dto: BalanceSheetDto;
+		/** Story 46-2 — clic sur l'accordéon d'un groupe (vue groupée seulement). */
+		onToggleGroup?: (row: GroupedRow) => void;
 	}
-	let { dto }: Props = $props();
+	let { dto, onToggleGroup = () => {} }: Props = $props();
+
+	// Story 46-2 — vue groupée si la réponse en porte les lignes.
+	let grouped = $derived(dto.groupedRows && dto.grouping ? dto.groupedRows : null);
+	let subtotalPosition = $derived(dto.grouping?.subtotalPosition ?? 'header');
+	const balanceColumns: GroupedAmountColumn[] = [{ id: 'balance', amount: (r) => r.balance }];
 
 	let empty = $derived(isReportEmpty('balance-sheet', dto));
 	// Ligne calculée « Résultat reporté » omise à zéro (correctif fix-bilan-resultat-reporte).
@@ -137,6 +149,15 @@
 						</tr>
 					</thead>
 					<tbody>
+						{#if grouped}
+							<GroupedReportRows
+								rows={grouped.assets}
+								{subtotalPosition}
+								columns={balanceColumns}
+								period={dto.period}
+								onToggle={onToggleGroup}
+							/>
+						{:else}
 						{#each dto.assets as a (a.accountId)}
 							<tr class:opacity-60={!a.active}>
 								<td class="px-2 py-1 font-mono">
@@ -151,6 +172,7 @@
 								<td class="px-2 py-1 text-right font-mono">{fmt(a.balance)}</td>
 							</tr>
 						{/each}
+						{/if}
 					</tbody>
 					<tfoot>
 						<tr class="border-t font-semibold">
@@ -176,6 +198,15 @@
 						</tr>
 					</thead>
 					<tbody>
+						{#if grouped}
+							<GroupedReportRows
+								rows={grouped.liabilities}
+								{subtotalPosition}
+								columns={balanceColumns}
+								period={dto.period}
+								onToggle={onToggleGroup}
+							/>
+						{:else}
 						{#each dto.liabilities as l (l.accountId)}
 							<tr class:opacity-60={!l.active}>
 								<td class="px-2 py-1 font-mono">
@@ -190,6 +221,7 @@
 								<td class="px-2 py-1 text-right font-mono">{fmt(l.balance)}</td>
 							</tr>
 						{/each}
+						{/if}
 					</tbody>
 					<tfoot>
 						<tr class="border-t font-semibold">
@@ -223,6 +255,15 @@
 					     unique ; `is_equity_role` garantit un rôle non-null dans `equity` → pas
 					     de collision de clé null. Ni l'index (réutilisation de nœud DOM si un
 					     groupe disparaît, ECH pass 2) ni un fallback `?? 'none'` ne conviennent. -->
+					{#if grouped}
+						<GroupedReportRows
+							rows={grouped.equity}
+							{subtotalPosition}
+							columns={balanceColumns}
+							period={dto.period}
+							onToggle={onToggleGroup}
+						/>
+					{:else}
 					{#each equityGroups as group (group.role)}
 							{#if group.role}
 								<tr class="bg-gray-100 text-sm font-semibold">
@@ -246,6 +287,7 @@
 								</tr>
 							{/each}
 						{/each}
+					{/if}
 						{#if showRetained}
 							<tr data-testid="balance-sheet-retained-earnings">
 								<td colspan="2" class="px-2 py-1 {retainedClass}">{retainedLabel}</td>
