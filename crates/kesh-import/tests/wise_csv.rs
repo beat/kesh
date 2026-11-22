@@ -855,3 +855,157 @@ fn a_second_debit_under_the_same_id_is_refused_with_the_debit_lines_only() {
         }
     );
 }
+
+// ---------------------------------------------------------------------------
+// Story 39-11e (D5) — les frais sont des lignes à part
+// ---------------------------------------------------------------------------
+
+/// Le même relevé exporté **sans** l'option « frais indiqués séparément » :
+/// les lignes `FEE-` retirées, le montant de chaque ligne d'origine frais
+/// compris (`Total fees` gardé). Le solde courant de chaque ligne restante ne
+/// change pas : celui d'une origine valait déjà « avant les deux lignes » plus
+/// les deux montants.
+fn sans_frais(src: &[u8]) -> Vec<u8> {
+    let (id, amount, fees) = (col("TransferWise ID"), col("Amount"), col("Total fees"));
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(src);
+    let mut writer = csv::WriterBuilder::new().from_writer(Vec::new());
+    for (i, record) in reader.records().enumerate() {
+        let mut cells: Vec<String> = record.unwrap().iter().map(str::to_string).collect();
+        if i > 0 && cells[id].starts_with("FEE-") {
+            continue;
+        }
+        if i > 0 && !cells[fees].is_empty() {
+            let a: rust_decimal::Decimal = cells[amount].parse().unwrap();
+            let f: rust_decimal::Decimal = cells[fees].parse().unwrap();
+            cells[amount] = (a - f).to_string();
+        }
+        writer.write_record(&cells).unwrap();
+    }
+    writer.into_inner().unwrap()
+}
+
+fn fees_not_separated(err: WiseCsvError) -> (Vec<usize>, usize) {
+    match err {
+        WiseCsvError::FeesNotSeparated { lines, count } => (lines, count),
+        other => panic!("attendu FeesNotSeparated, reçu {other:?}"),
+    }
+}
+
+#[test]
+fn a_statement_exported_without_separate_fees_is_refused() {
+    // CHF : le virement (ligne 6, 1.20 de frais) et la conversion (ligne 7,
+    // 0.35) n'ont plus leur ligne `FEE-`.
+    let sans = sans_frais(CHF);
+    let err = parse_wise_csv(&sans).unwrap_err();
+    assert_eq!(err.code(), "WISE_CSV_FEES_NOT_SEPARATED");
+    assert_eq!(fees_not_separated(err), (vec![6, 7], 2));
+    // EUR : les deux conversions (lignes 2 et 3).
+    assert_eq!(
+        fees_not_separated(parse_wise_csv(&sans_frais(EUR)).unwrap_err()),
+        (vec![2, 3], 2)
+    );
+}
+
+#[test]
+fn the_three_fixtures_and_a_fee_free_statement_are_accepted() {
+    for f in [CHF, EUR, USD] {
+        assert!(parse_wise_csv(f).is_ok());
+    }
+    // USD n'a aucun frais : « avec » et « sans » sont le même fichier.
+    assert_eq!(sans_frais(USD), {
+        let mut w = csv::WriterBuilder::new().from_writer(Vec::new());
+        for r in csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(USD)
+            .records()
+        {
+            w.write_record(&r.unwrap()).unwrap();
+        }
+        w.into_inner().unwrap()
+    });
+    assert!(parse_wise_csv(&sans_frais(USD)).is_ok());
+}
+
+#[test]
+fn zero_or_empty_total_fees_is_no_fee() {
+    // Relevé « sans » dont `Total fees` vaut 0, 0.00 ou rien : aucun frais.
+    let sans = sans_frais(CHF);
+    for (a, b) in [("0", "0.00"), ("", "0"), ("0.00", "")] {
+        let f = set(&set(&sans, 4, "Total fees", a), 5, "Total fees", b);
+        assert!(parse_wise_csv(&f).is_ok(), "{a:?} / {b:?}");
+    }
+}
+
+#[test]
+fn a_statement_without_the_total_fees_column_is_accepted() {
+    let c = col("Total fees");
+    let f = rewrite(&sans_frais(CHF), |_, mut cells| {
+        cells.remove(c);
+        cells
+    });
+    assert!(parse_wise_csv(&f).is_ok());
+}
+
+#[test]
+fn a_single_fee_line_without_its_fee_row_is_tolerated_when_the_file_has_fee_rows() {
+    // Le fichier « avec » porte ses `FEE-` ; une ligne de plus déclare un frais
+    // sans le sien (la borne de période l'aurait coupé) : reçu.
+    let f = set(CHF, 1, "Total fees", "0.10");
+    assert!(parse_wise_csv(&f).is_ok());
+    // Deux telles lignes : refusé (b), même avec d'autres lignes `FEE-`.
+    let f = set(&f, 2, "Total fees", "0.20");
+    assert_eq!(
+        fees_not_separated(parse_wise_csv(&f).unwrap_err()),
+        (vec![3, 4], 2)
+    );
+}
+
+#[test]
+fn a_statement_without_fee_rows_and_a_single_fee_is_refused() {
+    // Relevé « sans » à une seule ligne à frais (a) : refusé — limite écrite au
+    // manuel, un bon fichier ainsi coupé se réexporte sur une période élargie.
+    let f = set(&sans_frais(CHF), 5, "Total fees", "");
+    assert_eq!(
+        fees_not_separated(parse_wise_csv(&f).unwrap_err()),
+        (vec![6], 1)
+    );
+}
+
+#[test]
+fn a_broken_statement_keeps_its_own_refusal_before_the_fee_check() {
+    // Solde courant cassé et frais non séparés : la rupture de solde passe
+    // avant.
+    let f = set(&sans_frais(CHF), 0, "Running Balance", "1.00");
+    assert!(matches!(
+        parse_wise_csv(&f).unwrap_err(),
+        WiseCsvError::RunningBalanceBreak { .. }
+    ));
+}
+
+#[test]
+fn fee_line_numbers_are_capped_but_counted() {
+    // 150 lignes à frais sans aucune `FEE-` : 100 numéros cités, 150 comptées.
+    let header = std::str::from_utf8(CHF).unwrap().lines().next().unwrap();
+    let mut out = String::from(header);
+    let fees = col("Total fees");
+    for i in 0..150 {
+        let mut cells: Vec<String> = wise_line(
+            &format!("TRANSFER-{}", 92_000_000 + i),
+            "01-02-2020 09:00:00.000",
+            "0",
+            "0",
+        )
+        .split(',')
+        .map(str::to_string)
+        .collect();
+        cells[fees] = "0.50".into();
+        out.push('\n');
+        out.push_str(&cells.join(","));
+    }
+    let (lines, count) = fees_not_separated(parse_wise_csv(out.as_bytes()).unwrap_err());
+    assert_eq!(count, 150);
+    assert_eq!(lines.len(), kesh_import::MAX_CSV_LINE_ERRORS);
+    assert_eq!(lines[..3], [2, 3, 4]);
+}

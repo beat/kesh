@@ -300,8 +300,18 @@ async fn parse_form(mut multipart: Multipart) -> Result<WiseImportForm, AppError
 }
 
 /// Traduit le refus du lecteur (39-11a) en `422 WISE_CSV_INVALID`, le fichier
-/// nommé.
-fn csv_error(filename: &str, e: WiseCsvError) -> AppError {
+/// nommé — sauf le relevé exporté sans les frais séparés (Story 39-11e, D5),
+/// qui a son code propre, `422 WISE_CSV_FEES_NOT_SEPARATED`, avec l'archive
+/// d'où vient le fichier (`None` pour un fichier envoyé à part).
+fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError {
+    if let WiseCsvError::FeesNotSeparated { lines, count } = e {
+        return AppError::WiseCsvFeesNotSeparated {
+            filename: filename.to_string(),
+            archive: archive.map(str::to_string),
+            lines,
+            count,
+        };
+    }
     let reason = e.code();
     let details = match &e {
         WiseCsvError::MissingColumns(columns) => serde_json::json!({ "columns": columns }),
@@ -317,7 +327,8 @@ fn csv_error(filename: &str, e: WiseCsvError) -> AppError {
             expected,
             found,
         } => serde_json::json!({ "line": line, "expected": expected, "found": found }),
-        WiseCsvError::Empty => serde_json::json!({}),
+        // `FeesNotSeparated` est rendu plus haut, par son propre code.
+        WiseCsvError::Empty | WiseCsvError::FeesNotSeparated { .. } => serde_json::json!({}),
     };
     AppError::WiseCsvInvalid {
         filename: filename.to_string(),
@@ -380,7 +391,7 @@ pub async fn create(
 
     let mut read: Vec<(String, WiseCsv)> = Vec::with_capacity(form.files.len());
     for file in &form.files {
-        let csv = parse_wise_csv(&file.bytes).map_err(|e| csv_error(&file.filename, e))?;
+        let csv = parse_wise_csv(&file.bytes).map_err(|e| csv_error(&file.filename, None, e))?;
         read.push((file.filename.clone(), csv));
     }
     if let Some(refusal) = duplicate_currency(&read) {

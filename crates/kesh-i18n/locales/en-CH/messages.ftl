@@ -1798,6 +1798,7 @@ error-provider-account-hidden-char = The provider account name cannot contain a 
 error-paypal-csv-invalid = This file is not a readable PayPal « Balance affecting transactions » statement. Nothing was imported.
 error-provider-settings-both = A bank account can be the balance of only one provider: PayPal and Wise settings together are refused.
 error-wise-csv-invalid = The file « { $filename } » is not a readable Wise CSV statement. Nothing was imported.
+error-wise-csv-fees-not-separated = The statement « { $filename } » was exported without the option that shows fees as separate transactions: its amounts include the fees. Export it again from Wise with this option enabled. Nothing was imported.
 error-wise-duplicate-currency-file = Several files carry the { $currency } statement: one file per currency. Nothing was imported.
 # Story 38-12a — download through a provider's API (common base)
 error-provider-period-invalid = Period refused: the start must precede the end, not be in the future, and be less than three years old.

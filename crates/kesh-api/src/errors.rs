@@ -1010,6 +1010,21 @@ pub enum AppError {
         details: serde_json::Value,
     },
 
+    /// Import Wise : un relevé a été exporté sans l'option « frais indiqués
+    /// séparément » (Story 39-11e, D5) → `422 WISE_CSV_FEES_NOT_SEPARATED`,
+    /// `details: { filename, archive, lines, count }` — `archive` = le zip
+    /// d'où vient le fichier, `null` pour un fichier envoyé à part ; `lines` =
+    /// les lignes à frais sans leur ligne `FEE-` (au plus 100), `count` = leur
+    /// nombre. Code propre, et non `WISE_CSV_INVALID`, pour que le message
+    /// soit une consigne. Rien n'est importé.
+    #[error("Fichier Wise {filename} exporté sans les frais séparés")]
+    WiseCsvFeesNotSeparated {
+        filename: String,
+        archive: Option<String>,
+        lines: Vec<usize>,
+        count: usize,
+    },
+
     /// Import Wise : deux fichiers portent la même devise → `422
     /// WISE_DUPLICATE_CURRENCY_FILE`, `details: { currency, filenames }`.
     #[error("Deux fichiers Wise en {currency}")]
@@ -3801,6 +3816,31 @@ impl IntoResponse for AppError {
                         "code": "WISE_CSV_INVALID",
                         "message": t_args("error-wise-csv-invalid", &fallback, &args),
                         "details": details,
+                    }
+                });
+                (StatusCode::UNPROCESSABLE_ENTITY, Json(body)).into_response()
+            }
+            AppError::WiseCsvFeesNotSeparated {
+                filename,
+                archive,
+                lines,
+                count,
+            } => {
+                let mut args = FluentArgs::new();
+                args.set("filename", filename.clone());
+                let fallback = format!(
+                    "Le relevé « {filename} » a été exporté sans l'option « Afficher les transactions dont les frais sont indiqués séparément » : ses montants comprennent les frais. Exportez-le de nouveau depuis Wise en cochant cette option. Rien n'a été importé."
+                );
+                let body = serde_json::json!({
+                    "error": {
+                        "code": "WISE_CSV_FEES_NOT_SEPARATED",
+                        "message": t_args("error-wise-csv-fees-not-separated", &fallback, &args),
+                        "details": {
+                            "filename": filename,
+                            "archive": archive,
+                            "lines": lines,
+                            "count": count,
+                        },
                     }
                 });
                 (StatusCode::UNPROCESSABLE_ENTITY, Json(body)).into_response()

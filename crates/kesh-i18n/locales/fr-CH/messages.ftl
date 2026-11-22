@@ -1881,6 +1881,7 @@ error-provider-account-hidden-char = Le nom du compte du prestataire ne peut con
 error-paypal-csv-invalid = Ce fichier n'est pas un relevé PayPal « Balance affecting transactions » lisible. Rien n'a été importé.
 error-provider-settings-both = Un compte bancaire ne peut être le solde que d'un seul prestataire : réglages PayPal et Wise ensemble refusés.
 error-wise-csv-invalid = Le fichier « { $filename } » n'est pas un relevé CSV de Wise lisible. Rien n'a été importé.
+error-wise-csv-fees-not-separated = Le relevé « { $filename } » a été exporté sans l'option « Afficher les transactions dont les frais sont indiqués séparément » : ses montants comprennent les frais. Exportez-le de nouveau depuis Wise en cochant cette option. Rien n'a été importé.
 error-wise-duplicate-currency-file = Plusieurs fichiers portent le relevé en { $currency } : un seul fichier par devise. Rien n'a été importé.
 # Story 38-12a — téléchargement par l'API d'un prestataire (socle commun)
 error-provider-period-invalid = Période refusée : le début doit précéder la fin, ne pas être dans le futur, et dater de moins de trois ans.

@@ -1313,3 +1313,68 @@ async fn les_autres_chemins_refusent_un_compte_wise(pool: MySqlPool) {
     assert_eq!((s, code(&b)), (409, "BANK_ACCOUNT_IS_PROVIDER"), "{b}");
     assert_eq!(ctx.count("SELECT COUNT(*) FROM payment_batches").await, 0);
 }
+
+// ============================================================
+// Story 39-11e (D5) — le relevé exporté sans les frais séparés
+// ============================================================
+
+/// Le relevé CHF de 39-11a exporté **sans** l'option « frais indiqués
+/// séparément » : lignes `FEE-` retirées, virement et conversion frais compris
+/// (les soldes courants des lignes restantes ne changent pas).
+fn chf_sans_frais() -> Vec<u8> {
+    let texte = std::str::from_utf8(CHF).unwrap();
+    let mut s = String::new();
+    for l in texte.lines().filter(|l| !l.starts_with("FEE-")) {
+        s.push_str(l);
+        s.push('\n');
+    }
+    for (avant, apres) in [
+        (",-300.00,CHF,", ",-301.20,CHF,"),
+        (",-500.00,CHF,", ",-500.35,CHF,"),
+    ] {
+        assert_eq!(s.matches(avant).count(), 1, "{avant}");
+        s = s.replace(avant, apres);
+    }
+    s.into_bytes()
+}
+
+/// AC-4 — `422 WISE_CSV_FEES_NOT_SEPARATED`, code propre (non
+/// `WISE_CSV_INVALID`), le fichier nommé, `archive` nul pour un fichier à
+/// part, les lignes à frais et leur nombre ; rien d'écrit, d'aucun fichier ;
+/// le premier fichier refusé dans l'ordre de la liste.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn import_refuse_un_releve_exporte_sans_les_frais_separes(pool: MySqlPool) {
+    let ctx = monter(&pool).await;
+    ctx.trois_soldes().await;
+    let sans = chf_sans_frais();
+
+    let (s, b) = ctx.importer(&[("eur.csv", EUR), ("chf.csv", &sans)]).await;
+    assert_eq!((s, code(&b)), (422, "WISE_CSV_FEES_NOT_SEPARATED"), "{b}");
+    assert_eq!(
+        b["error"]["details"],
+        json!({ "filename": "chf.csv", "archive": null, "lines": [6, 7], "count": 2 })
+    );
+    let message = b["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("« chf.csv »") && message.contains("en cochant cette option"),
+        "{message}"
+    );
+    assert_eq!(ctx.ecrit().await, (0, 0, 0));
+
+    // Un fichier illisible placé après : le relevé sans frais, premier refusé
+    // dans l'ordre de la liste, l'emporte ; placé avant, l'illisible.
+    let illisible: &[u8] = b"Date,Amount\n01-01-2020,1.00\n";
+    let (s, b) = ctx
+        .importer(&[("chf.csv", &sans), ("mauvais.csv", illisible)])
+        .await;
+    assert_eq!((s, code(&b)), (422, "WISE_CSV_FEES_NOT_SEPARATED"), "{b}");
+    let (s, b) = ctx
+        .importer(&[("mauvais.csv", illisible), ("chf.csv", &sans)])
+        .await;
+    assert_eq!((s, code(&b)), (422, "WISE_CSV_INVALID"), "{b}");
+    assert_eq!(ctx.ecrit().await, (0, 0, 0));
+
+    // Le bon relevé passe.
+    let (s, b) = ctx.importer(&[("chf.csv", CHF)]).await;
+    assert_eq!(s, 201, "{b}");
+}
