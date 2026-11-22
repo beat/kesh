@@ -59,11 +59,17 @@
 	}
 	let { rows, subtotalPosition, columns, period, onToggle }: Props = $props();
 
+	/** Libellé de l'accordéon : ce que fait le clic, groupe nommé. */
 	function toggleLabel(row: GroupedRow): string {
-		const args = { number: row.accountNumber, name: row.accountName };
 		return row.open
-			? i18nMsg('reports-groups-toggle-close', 'Fermer le groupe { $number } { $name }', args)
-			: i18nMsg('reports-groups-toggle-open', 'Ouvrir le groupe { $number } { $name }', args);
+			? i18nMsg('reports-groups-toggle-close', 'Fermer le groupe { $number } { $name }', {
+					number: row.accountNumber,
+					name: row.accountName,
+				})
+			: i18nMsg('reports-groups-toggle-open', 'Ouvrir le groupe { $number } { $name }', {
+					number: row.accountNumber,
+					name: row.accountName,
+				});
 	}
 </script>
 
