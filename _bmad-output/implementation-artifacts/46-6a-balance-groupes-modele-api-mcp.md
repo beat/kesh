@@ -1,6 +1,6 @@
 # Story 46-6a : balance par groupes — modèle, API et MCP
 
-Status: in-progress
+Status: review
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D11 modifiée (Q6 : la balance dans le
 périmètre), D1 à D7, D10 ; FR-46-6, FR-46-11 ; NFR-46-1 à NFR-46-4, NFR-46-6. Release visée **0.21.0** (prévision).
@@ -196,19 +196,22 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
       ligne lue citée, les noms du § *L'API de la 46-1* tels qu'ils sont dans la branche, et si la 47-3 est fusionnée.
       **Avant toute modification**, écrire la fixture JSON de la balance sans paramètre (plan PME, un compte en
       devise, deux exercices, dates de période fixes), comme la 46-1 T0.
-- [ ] **T1** — dans `groupes.rs` : `impl LigneAgregeable for TrialBalanceRow` ; retouche d'`Agregat::ajouter_ligne`
+- [x] **T1** — dans `groupes.rs` : `impl LigneAgregeable for TrialBalanceRow` ; retouche d'`Agregat::ajouter_ligne`
       (AC-3 (c)) ; `LigneBalanceGroupee` (`Serialize`, camelCase) et `LigneBalanceGroupee::depuis` ;
       `AvecGroupes::<TrialBalance, Vec<LigneBalanceGroupee>>::balance(rapport, &arbre, &options)` — filtre des lignes
       propres nulles des groupes (AC-3 (d)), paires `(id, nature)` des seules lignes non nulles pour
       `Dissolution::calculer` (AC-2), `regrouper`, `Grouping::depuis`, conversion ; `TrialBalance` intact ; tests (AC 1
       à 4, 8, 9).
-- [ ] **T2** — service `balance_par_groupes` et `balance` délégant avec `None` (`services/rapports.rs`, `balance`) ;
+- [x] **T2** — service `balance_par_groupes` et `balance` délégant avec `None` (`services/rapports.rs`, `balance`) ;
       route `get_trial_balance` (second extracteur, `exiger`, `groupes_de`) ; `export_trial_balance` rend
       `&report.rapport` (AC 5, 7).
-- [ ] **T3** — MCP `kesh_balance` (AC 6), **après la 46-4** ; appelle `balance_par_groupes` ; la sortie lit l'enveloppe
+- [x] **T3** — MCP `kesh_balance` (AC 6), **après la 46-4** ; appelle `balance_par_groupes` ; la sortie lit l'enveloppe
       (`.rapport` pour les lignes plates, `grouping` et `grouped_rows` pour `groupes` et `groupes.lignes`) ; littéral de
       base du témoin sans argument (AC-6) **écrit au T0**, avant toute modification du MCP (T2 modifie déjà `rapports.rs` du MCP par la lecture de `.rapport`).
-- [ ] **T4** — tests d'intégration, documentation (AC 9) ; **T5** — gate complet, E2E complet au dernier commit de code.
+- [x] **T4** — tests d'intégration, documentation (AC 9) ; **T5** — gate complet, E2E complet au dernier commit de code.
+      *(T5 réalisé selon la règle des gates des epics du contributeur du 2026-11-22 : fmt, clippy, nextest complet,
+      frontend complet ; E2E : seulement les specs ajoutées — aucune ici ; `gate-ci.sh` et E2E complet à la fin de
+      l'epic. Dev Agent Record.)*
 
 ## Dev Notes
 
@@ -270,18 +273,100 @@ P2 L-6) ; fiche 47-3 (AC-1, § *Recâblage*) et fichier de l'Epic 47 (D7 ; § *D
 
 ## Note de version
 
-*(à écrire au développement)* — La balance des comptes se demande par groupes (API, MCP), avec les sous-totaux
-d'ouverture, de mouvements et de clôture de chaque groupe ; sans paramètre, l'API ne change pas ; au MCP, la sortie de `kesh_balance` gagne seulement `groupes: null`.
+**Added** — La balance des comptes se demande par groupes (API `GET /reports/trial-balance` avec `detailLevel`,
+`subtotalPosition`, `open`, `closed` ; outil MCP `kesh_balance`), avec les sous-totaux d'ouverture, de mouvements et de
+clôture de chaque groupe ; un groupe qui mêle comptes débiteurs et créditeurs à montant non nul est dissous. Sans
+paramètre, l'API ne change pas ; au MCP, la sortie de `kesh_balance` gagne seulement `groupes: null`.
+**Changed** — ⚠️ MCP : `kesh_balance` sert au plus **37** lignes par tranche (au lieu de 42), **20** par défaut (au
+lieu de 23), re-mesurés avec les lignes groupées en devise ; un `limit` de 38 à 42 est désormais refusé (« Arguments
+invalides. »).
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`bmad-dev-story`), 2026-11-22.
+
 ### Debug Log References
+
+Journaux hors dépôt, `kesh-gate-logs/s46-6a/` : `t0-capture*.log` (fixtures du T0), `t1-lib.log` (unitaires de
+`groupes`), `l1-*.log` (fmt, clippy), `c1.log` à `c4.log` (gates ciblés), `mutations.log` et `mut-*.log` (sondes),
+`front-*.log` (frontend), `gate-backend.log` (gate backend complet, `scripts/test-fast.sh --ci`).
 
 ### Completion Notes List
 
+- **Modèle** (`groupes.rs`) : `impl LigneAgregeable for TrialBalanceRow` (cinq montants `[ouverture, débit, crédit,
+  net, clôture]`, cinq en devise, un champ absent valant zéro, `None` sans devise) ; `entierement_nulle` (dix montants
+  nuls) ; retouche d'`Agregat::ajouter_ligne` — une ligne entièrement nulle n'agit ni sur `ligne_principale` ni sur
+  `par_devise` (AC-3 (c)), commentaire du champ mis à jour ; `LigneBalanceGroupee` et `depuis` (champs nommés,
+  `active` lu par `source` dans la liste **filtrée**) ; `AvecGroupes::<TrialBalance, Vec<LigneBalanceGroupee>>::balance` :
+  comptes de groupe = ancêtres (`ArbreComptes::ancetres`) d'une autre ligne, leur ligne entièrement nulle retirée
+  (AC-3 (d)), lignes clonées ; `Dissolution::calculer` sur les paires `(id, is_debit_natured)` des seules lignes non
+  nulles (AC-2, C-46-6a-3) ; `regrouper`, `Grouping::depuis`, conversion. `TrialBalance` et `trial_balance.rs`
+  intacts ; les quatorze tests de la 46-1 inchangés et verts après la retouche.
+- **Service et route** : `balance` délègue à `balance_par_groupes(…, None, …)` (écart E1) ; `get_trial_balance` lit
+  les paires (second extracteur), `exiger(EXIGENCES_BALANCE.affichage)` **avant** `groupes_de` ; `export_trial_balance`
+  rend `&report.rapport` et ignore toujours les paramètres (`ExportQuery`). Doc de `groupes_de` et de
+  `PARAMETRES_GROUPES` mise à jour.
+- **MCP** (`kesh_balance`) : quatre arguments déclarés dans `ArgumentsBalance`, recopiés dans `ArgumentsPeriode`,
+  convertis par `groupes_demandes` (46-4) ; sortie `Balance.groupes` (`null` sans `detailLevel`), `groupes.lignes`
+  (cinq montants, cinq en devise, `devise`, `ouvert`), liste plate vide, tranche et `total` sur les lignes groupées.
+  **Écho sans copie** : macro `sortie_groupes!` — les six champs d'écho écrits une fois, et leur conversion dans un
+  constructeur `depuis(Grouping, …)` ; elle remplace aussi les copies de `GroupesBilan` et `GroupesResultat` de la
+  46-4 (l'ancienne structure `Echo` disparaît ; `echo` ne convertit plus que le niveau). `regles_groupes!` partage la
+  phrase des règles entre les trois descriptions. Schéma de `kesh_balance` : les quatre arguments de la 46-4.
+- **Bornes re-mesurées** (AC-6) : la ligne groupée en devise pèse plus que la plate (élément **613 o**, socle
+  **756 o**, contre 542 et 595 ; `tailles_mesurees_en_devise` étendu : 56 comptes USD sous un groupe au nom de 34
+  caractères, `all`, `footer`). À 42 lignes, la réponse groupée était **refusée** (premier passage, `c1.log`) : les
+  deux bornes baissent ensemble, **42 / 23 → 37 / 20** (`LIMITE_MAX_MCP_BALANCE`, `LIMITE_DEFAUT_BALANCE`, schéma,
+  `bornes_des_schemas`, `TEMOINS`, `rapports_en_devise_par_le_mcp`), chiffres datés dans la doc du module.
+  **Conséquence sur le littéral du T0** : écrit à la limite par défaut d'alors (23), il reste inchangé ; le test le
+  compare à l'appel `limit: 23` (même sortie, à l'octet), déclaré au Change Log.
+- **Tests ajoutés** (recomptés de `92434d16` à `HEAD`, `#[test]`/`#[sqlx::test]`) : 10 — sept unitaires dans
+  `groupes.rs` (14 → 21 : `balance_cinq_montants_dans_l_ordre`, `balance_nature_et_lignes_nulles` (miroir de passif à
+  zéro puis mouvementé, état forgé), `balance_comptes_a_zero_ouverts_et_fermes`, `balance_ligne_propre_des_groupes`,
+  `balance_devise_unique_et_comptes_nuls`, `balance_plan_pme_dissolutions_et_totaux` (propriété de l'AC-4 sur le plan
+  PME, vingt et un niveaux × deux positions), `ligne_balance_au_contrat_json`), deux dans `reports_e2e.rs` (46 → 48 :
+  `balance_sans_parametre_identique_a_la_fixture_de_base`, `balance_groupee_niveau_2_et_tous`), un dans
+  `mcp_outils_e2e.rs` (40 → 41 : `balance_groupes_par_le_mcp`). **Adaptés** : `groupes_parametre_repete` (la balance,
+  qui l'ignorait, le refuse ; l'export de la balance l'ignore toujours, test écrit ici pour la 46-3 AC-8 aussi),
+  `groupes_refus_du_contrat` (+ `trial-balance`), `sans_groupes_sortie_du_commit_de_base` et
+  `groupes_arguments_refuses` (+ `kesh_balance`), `tailles_mesurees_en_devise`, `bornes_des_schemas`,
+  `rapports_en_devise_par_le_mcp`, `descriptions_des_groupes` (+ `kesh_balance`), `TEMOINS`.
+- **Sondes par mutation** (copie hors dépôt `s46-6a/mut-src`, `mutations.py`, `mut-run.sh`, `mutations.log`) : six,
+  toutes rouges — M1 nature constante (3 unitaires et `balance_groupee_niveau_2_et_tous` : la sonde négative de
+  l'AC-9), M2 lignes nulles dans la dissolution (2), M3 sans la retouche d'`ajouter_ligne` (1), M4 ligne propre nulle
+  gardée (2), M5 `total` du plat en mode groupé (`balance_groupes_par_le_mcp`), M6 route qui ne transmet pas les groupes
+  (`balance_groupee_niveau_2_et_tous`).
+- **Gates au dernier commit de code** (`29ec2b7b`) : `scripts/test-fast.sh --ci` vert — `cargo fmt --check`,
+  `cargo clippy --workspace --all-targets -D warnings`, nextest **6206 passés, 14 ignorés** (1 instable repassé au
+  second essai : `mcp_transport_e2e::abandon_au_delai_le_permis_reste_pris`, sans rapport avec la story), base
+  remise à zéro dans le même appel, `gate-backend.log`. Frontend (`npm run check` 0 erreur, `lint-i18n-ownership`,
+  Vitest **4627 tests, 278 fichiers**, `npm run build`) vert, `front-*.log` — joué avant le dernier commit de code,
+  sur un frontend que la story ne touche pas (`git diff 92434d16 -- frontend` vide). E2E : **aucune spec** — la story n'ajoute ni ne
+  modifie de spec et ne touche aucun écran (décision du responsable de l'epic pour cette nuit : seules les specs
+  ajoutées) ; **E2E complet et `gate-ci.sh` à la fin de l'epic**.
+- **Relevés** : la 47-3 n'est pas fusionnée dans la branche (C-46-6a-4 sans objet ici) ; aucune garde de la 48-11
+  dans la branche, aucun `{:.2}` ajouté (AC-8) ; la 46-6b (écran, PDF, CSV) reste à faire, et la phrase du guide d'API
+  sur l'export de la balance basculera avec elle.
+
 ### File List
+
+- `crates/kesh-report/src/groupes.rs`
+- `crates/kesh-report/src/lib.rs`
+- `crates/kesh-api/src/services/rapports.rs`
+- `crates/kesh-api/src/routes/reports.rs`
+- `crates/kesh-api/src/mcp/outils/rapports.rs`
+- `crates/kesh-api/tests/reports_e2e.rs`
+- `crates/kesh-api/tests/mcp_outils_e2e.rs`
+- `crates/kesh-api/tests/common/mcp_pieges.rs`
+- `crates/kesh-api/tests/fixtures/rapports-groupes/balance-2025.json` (neuf, T0)
+- `crates/kesh-api/tests/fixtures/rapports-groupes/balance-2026.json` (neuf, T0)
+- `crates/kesh-api/tests/fixtures/mcp-groupes/kesh_balance.txt` (neuf, T0)
+- `docs/api-external.md`
+- `docs/manual/fr/admin-manual.tex` (le PDF n'est pas régénéré : règle des branches d'epic)
+- `_bmad-output/implementation-artifacts/46-6a-balance-groupes-modele-api-mcp.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
@@ -339,3 +424,13 @@ d'ouverture, de mouvements et de clôture de chaque groupe ; sans paramètre, l'
   `balance_sans_parametre_identique_a_la_fixture_de_base`, `KESH_ECRIRE_FIXTURES_46_6A=1`) et le littéral MCP
   `tests/fixtures/mcp-groupes/kesh_balance.txt` (sortie sans argument, jetons de date et d'exercice, capturé par une
   retouche locale non commitée de `sans_groupes_sortie_du_commit_de_base`, comme la 46-4).
+- 2026-11-22 — **Développement, T1 à T5** (`29ec2b7b`) : modèle, service, route, MCP, tests, documentation (Dev
+  Agent Record). Écarts déclarés : (1) **bornes MCP de la balance abaissées, 42 / 23 → 37 / 20** — la ligne groupée
+  en devise mesurée à 613 o (socle 756 o) contre 542 o à plat ; à 42 lignes groupées la réponse était refusée ;
+  schéma unique, comme l'AC-6 le prévoit ; (2) le témoin sans argument du T0, écrit à la limite par défaut d'alors,
+  est comparé à l'appel `limit: 23` (sortie identique à l'octet), le littéral restant tel qu'écrit ; (3) la macro
+  `sortie_groupes!` écrit une fois les six champs d'écho et leur conversion, et sert aussi le bilan et le compte de
+  résultat de la 46-4 (la structure `Echo` disparaît) ; (4) `groupes_parametre_repete` adapté : la balance refuse
+  désormais un paramètre répété, la TVA et l'export de la balance l'ignorent toujours. Sondes : six mutations, toutes
+  rouges. Gates : fmt, clippy, nextest complet, frontend ; E2E : aucune spec (aucune ajoutée, aucun écran touché) ;
+  `gate-ci.sh` et E2E complet à la fin de l'epic. `review`.
