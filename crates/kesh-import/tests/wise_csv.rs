@@ -313,6 +313,25 @@ fn two_currencies_are_refused() {
     );
 }
 
+/// Story 39-13 — devises distinctes dans l'ordre de leur première apparition
+/// dans le fichier, sans doublon : une devise non initiale qui revient (USD),
+/// un retour de la première (CHF), et un ordre qui n'est pas l'alphabétique.
+/// Test de caractérisation (l'ancien contrôle rendait la même liste).
+#[test]
+fn mixed_currencies_are_listed_once_in_file_order() {
+    // Lignes 0 et 4 de la fixture : CHF ; lignes 1 à 3 : USD, EUR, USD.
+    let mixed = set(
+        &set(&set(CHF, 1, "Currency", "USD"), 2, "Currency", "EUR"),
+        3,
+        "Currency",
+        "USD",
+    );
+    assert_eq!(
+        parse_wise_csv(&mixed).unwrap_err(),
+        WiseCsvError::MixedCurrencies(vec!["CHF".into(), "USD".into(), "EUR".into()])
+    );
+}
+
 #[test]
 fn duplicate_id_is_refused_with_its_lines() {
     let dup = set(CHF, 0, "TransferWise ID", "balance-90000001");

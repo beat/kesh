@@ -528,17 +528,27 @@ pub fn parse_wise_csv(bytes: &[u8]) -> Result<WiseCsv, WiseCsvError> {
 }
 
 /// Toutes les lignes ont la même devise.
+///
+/// Chaque ligne se compare à la devise de la première : un fichier à une
+/// seule devise ne construit aucune liste. À la première différence, la liste
+/// du refus se construit en un passage, devises distinctes dans l'ordre de
+/// leur première apparition (un `Vec` poussé quand l'insertion dans
+/// l'ensemble des devises vues est neuve — l'itération de l'ensemble perdrait
+/// l'ordre ; Story 39-13).
 fn check_single_currency(rows: &[WiseRow]) -> Result<(), WiseCsvError> {
-    let mut currencies: Vec<String> = Vec::new();
-    for row in rows {
-        if !currencies.contains(&row.currency) {
-            currencies.push(row.currency.clone());
-        }
+    let Some(first) = rows.first() else {
+        return Ok(());
+    };
+    if rows.iter().all(|r| r.currency == first.currency) {
+        return Ok(());
     }
-    if currencies.len() > 1 {
-        return Err(WiseCsvError::MixedCurrencies(currencies));
-    }
-    Ok(())
+    let mut seen: HashSet<&str> = HashSet::new();
+    let currencies = rows
+        .iter()
+        .filter(|r| seen.insert(r.currency.as_str()))
+        .map(|r| r.currency.clone())
+        .collect();
+    Err(WiseCsvError::MixedCurrencies(currencies))
 }
 
 /// Aucun identifiant sur deux lignes **du même sens** ; le premier doublon
