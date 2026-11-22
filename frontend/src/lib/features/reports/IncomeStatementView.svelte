@@ -6,7 +6,7 @@
 	import Big from 'big.js';
 	import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
 	import AccountCurrencyBalance from './AccountCurrencyBalance.svelte';
-	import GroupedReportRows, { type GroupedAmountColumn } from './GroupedReportRows.svelte';
+	import GroupedReportRows, { BALANCE_COLUMNS } from './GroupedReportRows.svelte';
 	import { formatReportAmount, formatSwissDate, isReportEmpty } from './reports.api';
 	import type { GroupedRow, IncomeStatementDto } from './reports.types';
 
@@ -19,7 +19,6 @@
 
 	let grouped = $derived(dto.groupedRows && dto.grouping ? dto.groupedRows : null);
 	let subtotalPosition = $derived(dto.grouping?.subtotalPosition ?? 'header');
-	const balanceColumns: GroupedAmountColumn[] = [{ id: 'balance', amount: (r) => r.balance }];
 	let empty = $derived(isReportEmpty('income-statement', dto));
 
 	const fmt = formatReportAmount;
@@ -69,7 +68,7 @@
 							<GroupedReportRows
 								rows={grouped.revenues}
 								{subtotalPosition}
-								columns={balanceColumns}
+								columns={BALANCE_COLUMNS}
 								period={dto.period}
 								onToggle={onToggleGroup}
 							/>
@@ -109,7 +108,7 @@
 							<GroupedReportRows
 								rows={grouped.expenses}
 								{subtotalPosition}
-								columns={balanceColumns}
+								columns={BALANCE_COLUMNS}
 								period={dto.period}
 								onToggle={onToggleGroup}
 							/>

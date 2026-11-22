@@ -23,6 +23,7 @@
 	import {
 		groupingParamsOf,
 		readGroupingView,
+		sameGroupingParams,
 		toggleGroup,
 		withEcho,
 		writeGroupingView,
@@ -161,6 +162,27 @@
 
 	// P20 — race guard : sequence counter pattern (cf. ReconciliationProposals).
 	let genSeq = 0;
+	// L'onglet dont la génération est en vol (rapports classiques), `null` sinon.
+	let inFlightTab: TabId | null = null;
+
+	/**
+	 * Périme toute génération en vol et rabaisse ses deux drapeaux (`loading`,
+	 * `refreshing`) ; rend le numéro de la génération suivante.
+	 *
+	 * ⚠️ **Le seul endroit qui incrémente `genSeq`** (Story 46-2, revue P1 M1) :
+	 * une réponse périmée est jetée par `mySeq !== genSeq`, donc son `finally` ne
+	 * rabaisse plus rien — c'est à celui qui la périme de le faire. Avant cette
+	 * fonction, trois chemins (grand livre, balance âgée, projet) et l'effet de
+	 * changement de projet incrémentaient `genSeq` sans rabaisser `refreshing`,
+	 * qui restait levé (export grisé, `aria-busy`) jusqu'au « Générer » suivant.
+	 */
+	function invalidateInFlight(): number {
+		genSeq++;
+		inFlightTab = null;
+		loading = false;
+		refreshing = false;
+		return genSeq;
+	}
 
 	// Story 46-2 — vue groupée du bilan et du compte de résultat (AC-1 à AC-6, AC-10).
 	// Relue de la mémoire du navigateur AVANT la première requête : la première
@@ -209,7 +231,23 @@
 		const report = activeTab as GroupedReport;
 		setGroupingView(report, next);
 		const displayed = report === 'balance-sheet' ? balanceSheet : incomeStatement;
-		if (displayed) void generate({ keepDisplay: true });
+		// Revue P1 M2 (a) — pendant le premier chargement (`loading`, rien
+		// d'affiché), la demande en vol est partie avec l'ancienne vue : la
+		// redemander, sans quoi les contrôles diraient une vue que l'écran
+		// n'affiche pas. Un chargement complet reste un chargement complet.
+		const loadingThis = loading && inFlightTab === report;
+		if (displayed || loadingThis) {
+			void generate({ keepDisplay: displayed !== null && !loadingThis });
+		}
+	}
+
+	/**
+	 * Revue P1 M2 (b) — le rapport affiché l'a-t-il été avec la vue en cours ?
+	 * Sinon (redemande jetée par une génération sur un autre onglet), il faut le
+	 * redemander : les contrôles ne montrent jamais une vue que l'écran n'affiche pas.
+	 */
+	function displayedMatchesView(report: GroupedReport): boolean {
+		return sameGroupingParams(displayedGrouping[report], groupingParamsOf(groupingViews[report]));
 	}
 
 	function onToggleGroup(row: GroupedRow): void {
@@ -228,8 +266,21 @@
 		dto: BalanceSheetDto | IncomeStatementDto,
 	): void {
 		displayedGrouping[report] = params;
+		// Revue P1 M2 — l'écho n'est repris que s'il répond à la vue en cours ;
+		// une réponse partie avec une autre vue s'affiche (c'est la dernière),
+		// mais la vue reste celle de l'utilisateur, et le rapport est redemandé.
+		if (!displayedMatchesView(report)) {
+			// Sur un autre onglet, rien n'est redemandé ici : le retour sur
+			// celui-ci le fera (`selectTab`).
+			if (activeTab === report) void generate({ keepDisplay: true });
+			return;
+		}
 		if (params && dto.grouping) {
-			setGroupingView(report, withEcho(groupingViews[report], dto.grouping));
+			const view = withEcho(groupingViews[report], dto.grouping);
+			setGroupingView(report, view);
+			// Les groupes que l'API a ignorés ne changent rien à l'affichage :
+			// l'export part avec les listes de l'écho, égales à la vue retenue.
+			displayedGrouping[report] = groupingParamsOf(view);
 		}
 	}
 
@@ -251,9 +302,7 @@
 			// sur l'axe exercice (sinon un résultat FY-2026 en vol pourrait repeupler
 			// la vue après un switch vers FY-2027 → mismatch affichage/export). Durcit
 			// du même coup la même race préexistante sur les 5 rapports classiques.
-			genSeq++;
-			loading = false;
-			refreshing = false;
+			invalidateInFlight();
 			lastFyId = selectedFiscalYearId;
 		}
 	});
@@ -273,8 +322,7 @@
 				projectExpenses = null;
 				projectReturn = null;
 				errorMsg = null;
-				genSeq++;
-				loading = false;
+				invalidateInFlight();
 			}
 			lastProjectSel = key;
 		}
@@ -337,7 +385,7 @@
 		if (isLedgerTab) {
 			const q = ledgerQuery();
 			if (!q) return;
-			const mySeq = ++genSeq;
+			const mySeq = invalidateInFlight();
 			loading = true;
 			errorMsg = null;
 			try {
@@ -352,7 +400,7 @@
 		}
 		// Story 21-7 — balance âgée : pas de FY/période (arrêté à aujourd'hui).
 		if (isAgedTab) {
-			const mySeq = ++genSeq;
+			const mySeq = invalidateInFlight();
 			loading = true;
 			errorMsg = null;
 			try {
@@ -369,7 +417,7 @@
 		if (isProjectTab) {
 			const q = projectQuery();
 			if (!q) return;
-			const mySeq = ++genSeq;
+			const mySeq = invalidateInFlight();
 			loading = true;
 			errorMsg = null;
 			try {
@@ -388,14 +436,10 @@
 			return;
 		}
 		if (selectedFiscalYearId === null) return;
-		const mySeq = ++genSeq;
-		if (options.keepDisplay) {
-			refreshing = true;
-			loading = false;
-		} else {
-			loading = true;
-			refreshing = false;
-		}
+		const mySeq = invalidateInFlight();
+		inFlightTab = activeTab;
+		if (options.keepDisplay) refreshing = true;
+		else loading = true;
 		errorMsg = null;
 		const query = {
 			fiscalYearId: selectedFiscalYearId,
@@ -444,6 +488,7 @@
 			if (mySeq === genSeq) {
 				loading = false;
 				refreshing = false;
+				inFlightTab = null;
 			}
 		}
 	}
@@ -723,6 +768,14 @@
 			errorMsg = null;
 			// Story 21-7 (D-7c) — rend l'onglet adressable (replaceState, pas d'empilement).
 			void goto(`?tab=${next}`, { replaceState: true, keepFocus: true, noScroll: true });
+			// Story 46-2, revue P1 M2 (b) — retour sur un rapport groupé dont la
+			// redemande a été jetée : l'écran est remis d'accord avec ses contrôles.
+			if (next === 'balance-sheet' || next === 'income-statement') {
+				const displayed = next === 'balance-sheet' ? balanceSheet : incomeStatement;
+				if (displayed && !loading && !displayedMatchesView(next)) {
+					void generate({ keepDisplay: true });
+				}
+			}
 		}
 	}
 </script>

@@ -12,6 +12,8 @@ vi.mock('$lib/shared/utils/i18n.svelte', () => ({
 
 import BalanceSheetView from './BalanceSheetView.svelte';
 import IncomeStatementView from './IncomeStatementView.svelte';
+import GroupingControls from './GroupingControls.svelte';
+import { defaultGroupingView } from './reports-grouping';
 import type { AccountBalance, BalanceSheetDto, GroupedRow, IncomeStatementDto } from './reports.types';
 
 const period = { fiscalYearId: 1, startDate: '2026-01-01', endDate: '2026-12-31' };
@@ -142,5 +144,16 @@ describe('IncomeStatementView — vue groupée', () => {
 		const { queryByTestId, getByText } = render(IncomeStatementView, { dto: dto(false) });
 		expect(queryByTestId('grouped-group-3')).toBeNull();
 		expect(getByText('Ventes')).toBeTruthy();
+	});
+});
+
+describe('GroupingControls — accessibilité (revue P1 L2)', () => {
+	it('le sélecteur de niveau a un nom court ; l’info-bulle en est la description seule', () => {
+		const r = render(GroupingControls, { view: defaultGroupingView(), maxDepth: 3, onChange: () => {} });
+		const select = r.getByRole('combobox', { name: 'Niveau de détail' });
+		expect(select).toBe(r.getByTestId('grouping-level'));
+		const hint = document.getElementById(select.getAttribute('aria-describedby')!);
+		expect(hint?.textContent).toMatch(/Les sections légales du bilan restent/);
+		expect(hint?.closest('label')).toBeNull();
 	});
 });

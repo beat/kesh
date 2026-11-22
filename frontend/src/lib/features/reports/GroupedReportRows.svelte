@@ -13,6 +13,14 @@
 		amount: (row: GroupedRow) => string;
 	}
 
+	/**
+	 * La colonne unique du bilan et du compte de résultat : le solde de la ligne
+	 * (revue P1 L3 — une seule définition pour les deux vues).
+	 */
+	export const BALANCE_COLUMNS: GroupedAmountColumn[] = [
+		{ id: 'balance', amount: (row) => row.balance },
+	];
+
 	/** Retrait d'une profondeur, en rem ; borné pour que le nom garde sa place. */
 	const INDENT_REM = 1.25;
 	const INDENT_MAX_DEPTH = 10;

@@ -8,7 +8,7 @@
 	import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
 	import { accountRoleKey, type AccountRole } from '$lib/features/accounts/accounts.types';
 	import AccountCurrencyBalance from './AccountCurrencyBalance.svelte';
-	import GroupedReportRows, { type GroupedAmountColumn } from './GroupedReportRows.svelte';
+	import GroupedReportRows, { BALANCE_COLUMNS } from './GroupedReportRows.svelte';
 	import {
 		formatCurrencyFigure,
 		formatReportAmount,
@@ -29,7 +29,6 @@
 	// Story 46-2 — vue groupée si la réponse en porte les lignes.
 	let grouped = $derived(dto.groupedRows && dto.grouping ? dto.groupedRows : null);
 	let subtotalPosition = $derived(dto.grouping?.subtotalPosition ?? 'header');
-	const balanceColumns: GroupedAmountColumn[] = [{ id: 'balance', amount: (r) => r.balance }];
 
 	let empty = $derived(isReportEmpty('balance-sheet', dto));
 	// Ligne calculée « Résultat reporté » omise à zéro (correctif fix-bilan-resultat-reporte).
@@ -153,7 +152,7 @@
 							<GroupedReportRows
 								rows={grouped.assets}
 								{subtotalPosition}
-								columns={balanceColumns}
+								columns={BALANCE_COLUMNS}
 								period={dto.period}
 								onToggle={onToggleGroup}
 							/>
@@ -202,7 +201,7 @@
 							<GroupedReportRows
 								rows={grouped.liabilities}
 								{subtotalPosition}
-								columns={balanceColumns}
+								columns={BALANCE_COLUMNS}
 								period={dto.period}
 								onToggle={onToggleGroup}
 							/>
@@ -259,7 +258,7 @@
 						<GroupedReportRows
 							rows={grouped.equity}
 							{subtotalPosition}
-							columns={balanceColumns}
+							columns={BALANCE_COLUMNS}
 							period={dto.period}
 							onToggle={onToggleGroup}
 						/>

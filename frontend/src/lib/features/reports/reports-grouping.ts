@@ -148,6 +148,30 @@ export function groupingParamsOf(view: GroupingView): GroupingParams | undefined
 	};
 }
 
+/** Deux listes d'identifiants qui désignent les mêmes groupes, dans n'importe quel ordre. */
+function sameIds(a: number[], b: number[]): boolean {
+	if (a.length !== b.length) return false;
+	const set = new Set(a);
+	return b.every((id) => set.has(id));
+}
+
+/**
+ * Deux jeux de paramètres qui demandent le même rapport (revue P1 M2) : tous deux
+ * absents (hiérarchie masquée), ou mêmes niveau, place des sous-totaux et listes.
+ */
+export function sameGroupingParams(
+	a: GroupingParams | undefined,
+	b: GroupingParams | undefined,
+): boolean {
+	if (a === undefined || b === undefined) return a === b;
+	return (
+		a.detailLevel === b.detailLevel &&
+		a.subtotalPosition === b.subtotalPosition &&
+		sameIds(a.open, b.open) &&
+		sameIds(a.closed, b.closed)
+	);
+}
+
 /**
  * Un clic sur l'accordéon d'un groupe (AC-3) : il prime sur le niveau. Ouvrir un
  * groupe fermé l'ajoute à `open` et le retire de `closed` ; fermer un groupe

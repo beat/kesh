@@ -61,9 +61,13 @@
 		{i18nMsg('reports-groups-hierarchy', 'Hiérarchie des groupes')}
 	</label>
 
-	<label class="flex items-center gap-2" title={hint}>
-		{i18nMsg('reports-groups-level', 'Niveau de détail')}
+	<!-- Revue P1 L2 — le libellé du sélecteur reste court (« Niveau de détail ») ;
+	     l'info-bulle n'en est que la description (`aria-describedby`), hors du
+	     `<label>`. -->
+	<div class="flex items-center gap-2" title={hint}>
+		<label for="reports-groups-level">{i18nMsg('reports-groups-level', 'Niveau de détail')}</label>
 		<select
+			id="reports-groups-level"
 			class="rounded border border-border px-2 py-1 disabled:opacity-50"
 			value={levelValue}
 			disabled={levelDisabled}
@@ -80,7 +84,7 @@
 		</select>
 		<span class="cursor-help text-gray-500" aria-hidden="true">ⓘ</span>
 		<span id="reports-groups-level-hint" class="sr-only">{hint}</span>
-	</label>
+	</div>
 
 	<button
 		type="button"

@@ -9,6 +9,7 @@ import {
 	groupingStorageKey,
 	openAll,
 	readGroupingView,
+	sameGroupingParams,
 	sanitizeGroupingView,
 	toggleGroup,
 	withDetailLevel,
@@ -42,6 +43,25 @@ describe('paramètres de requête', () => {
 		expect(
 			groupingParamsOf(vue({ detailLevel: 2, subtotalPosition: 'footer', open: [4], closed: [9] })),
 		).toEqual({ detailLevel: 2, subtotalPosition: 'footer', open: [4], closed: [9] });
+	});
+});
+
+describe('paramètres égaux (revue P1 M2)', () => {
+	const p = (partiel = {}) => ({ ...groupingParamsOf(vue())!, ...partiel });
+	it('tous deux absents : égaux ; un seul absent : différents', () => {
+		expect(sameGroupingParams(undefined, undefined)).toBe(true);
+		expect(sameGroupingParams(undefined, p())).toBe(false);
+		expect(sameGroupingParams(p(), undefined)).toBe(false);
+	});
+	it("mêmes listes dans un autre ordre : égaux", () => {
+		expect(sameGroupingParams(p({ open: [4, 9], closed: [2] }), p({ open: [9, 4], closed: [2] }))).toBe(true);
+	});
+	it('niveau, position, ou une liste qui diffère : différents', () => {
+		expect(sameGroupingParams(p(), p({ detailLevel: 1 }))).toBe(false);
+		expect(sameGroupingParams(p(), p({ subtotalPosition: 'footer' }))).toBe(false);
+		expect(sameGroupingParams(p({ open: [4] }), p({ open: [5] }))).toBe(false);
+		expect(sameGroupingParams(p({ closed: [4] }), p({ closed: [4, 5] }))).toBe(false);
+		expect(sameGroupingParams(p({ closed: [4, 5] }), p({ closed: [4] }))).toBe(false);
 	});
 });
 

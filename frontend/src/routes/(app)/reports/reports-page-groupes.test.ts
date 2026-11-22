@@ -9,11 +9,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/svelte';
 import type { BalanceSheetDto, GroupingParams } from '$lib/features/reports/reports.types';
 
-const { getBalanceSheetMock, getIncomeStatementMock, downloadReportMock } = vi.hoisted(() => ({
-	getBalanceSheetMock: vi.fn(),
-	getIncomeStatementMock: vi.fn(),
-	downloadReportMock: vi.fn(async () => {}),
-}));
+const { getBalanceSheetMock, getIncomeStatementMock, downloadReportMock, getAgedReceivablesMock } =
+	vi.hoisted(() => ({
+		getBalanceSheetMock: vi.fn(),
+		getIncomeStatementMock: vi.fn(),
+		downloadReportMock: vi.fn(async () => {}),
+		getAgedReceivablesMock: vi.fn(async () => ({ asOf: '2026-12-31', rows: [], totals: {} })),
+	}));
 
 vi.mock('$app/state', () => ({ page: { url: new URL('http://localhost/reports') } }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
@@ -28,6 +30,7 @@ vi.mock('$lib/features/reports/reports.api', async (importOriginal) => {
 	return {
 		...vrai,
 		downloadReport: downloadReportMock,
+		getAgedReceivables: getAgedReceivablesMock,
 		getBalanceSheet: getBalanceSheetMock,
 		getIncomeStatement: getIncomeStatementMock,
 	};
@@ -249,5 +252,156 @@ describe('page des rapports — vue groupée du bilan (Story 46-2)', () => {
 		const select = r.getByTestId('grouping-level') as HTMLSelectElement;
 		expect(select.disabled).toBe(false);
 		expect([...select.options].map((o) => o.textContent)).toEqual(['Niveau 1', 'Tous les comptes']);
+	});
+});
+
+/** Compte de résultat vide, sans groupe : seule la génération compte ici. */
+const resultatVide = async () => ({
+	period: { fiscalYearId: 1, startDate: '2026-01-01', endDate: '2026-12-31' },
+	revenues: [],
+	expenses: [],
+	totalRevenues: '0',
+	totalExpenses: '0',
+	netResult: '0',
+});
+
+/** Prochain appel du bilan suspendu ; rend de quoi le résoudre avec ses paramètres. */
+function bilanSuspendu(): { resoudre: (open?: boolean) => void; params: () => GroupingParams | undefined } {
+	let res!: (v: BalanceSheetDto) => void;
+	let p: GroupingParams | undefined;
+	getBalanceSheetMock.mockImplementationOnce((_q, params?: GroupingParams) => {
+		p = params;
+		return new Promise((r) => (res = r));
+	});
+	return { resoudre: (open = true) => res(bilan(p, open)), params: () => p };
+}
+
+const pause = () => new Promise((res) => setTimeout(res, 10));
+
+describe('page des rapports — demandes périmées et vue affichée (Story 46-2, revue P1)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		localStorage.clear();
+		getBalanceSheetMock.mockImplementation(async (_q, p?: GroupingParams) => bilan(p, true));
+		getIncomeStatementMock.mockImplementation(resultatVide);
+	});
+	afterEach(() => vi.restoreAllMocks());
+
+	it('S1 — hiérarchie masquée pendant le premier chargement : redemandée, écran et case concordent (M2 a)', async () => {
+		const premier = bilanSuspendu();
+		const r = render(Page, { data });
+		await generer(r);
+		await fireEvent.click(r.getByTestId('grouping-shown'));
+		await waitFor(() => expect(getBalanceSheetMock).toHaveBeenCalledTimes(2));
+		expect(getBalanceSheetMock.mock.calls[1][1]).toBeUndefined();
+		premier.resoudre(); // la première réponse, partie groupée, est périmée
+		await r.findByText('Caisse');
+		await pause();
+		expect((r.getByTestId('grouping-shown') as HTMLInputElement).checked).toBe(false);
+		expect(r.queryByTestId('grouped-group-10')).toBeNull();
+		expect(JSON.parse(localStorage.getItem(KEY)!).shown).toBe(false);
+	});
+
+	it('S2 — redemande jetée par « Générer » sur un autre onglet : redemandée au retour (M2 b)', async () => {
+		// au niveau 1, le groupe 10 est fermé par l'API
+		getBalanceSheetMock.mockImplementation(async (_q, p?: GroupingParams) => bilan(p, p?.detailLevel !== 1));
+		const r = render(Page, { data });
+		await generer(r);
+		await r.findByTestId('grouped-group-10');
+		const jetee = bilanSuspendu();
+		await fireEvent.change(r.getByTestId('grouping-level'), { target: { value: '1' } });
+		await fireEvent.click(r.getByRole('tab', { name: 'Compte de résultat' }));
+		await generer(r);
+		await waitFor(() => expect(getIncomeStatementMock).toHaveBeenCalled());
+		jetee.resoudre(false);
+		await pause();
+		expect(getBalanceSheetMock).toHaveBeenCalledTimes(2);
+		await fireEvent.click(r.getByRole('tab', { name: 'Bilan' }));
+		await waitFor(() => expect(getBalanceSheetMock).toHaveBeenCalledTimes(3));
+		expect(getBalanceSheetMock.mock.calls[2][1]).toMatchObject({ detailLevel: 1 });
+		await waitFor(() => expect(r.queryByTestId('grouped-account-1000')).toBeNull());
+		expect((r.getByTestId('grouping-level') as HTMLSelectElement).value).toBe('1');
+	});
+
+	it('retour sur un onglet déjà d’accord avec ses contrôles : rien n’est redemandé', async () => {
+		const r = render(Page, { data });
+		await generer(r);
+		await r.findByTestId('grouped-group-10');
+		await fireEvent.click(r.getByRole('tab', { name: 'Compte de résultat' }));
+		await fireEvent.click(r.getByRole('tab', { name: 'Bilan' }));
+		await pause();
+		expect(getBalanceSheetMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('S3 — redemande en erreur : l’export reprend les paramètres affichés, non la vue demandée (AC-6)', async () => {
+		const r = render(Page, { data });
+		await generer(r);
+		await r.findByTestId('grouped-group-10');
+		getBalanceSheetMock.mockImplementationOnce(async () => {
+			throw new Error('réseau');
+		});
+		await fireEvent.change(r.getByTestId('grouping-level'), { target: { value: '1' } });
+		await waitFor(() => expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('false'));
+		await fireEvent.click(r.getByRole('button', { name: 'Export CSV' }));
+		await waitFor(() => expect(downloadReportMock).toHaveBeenCalledTimes(1));
+		expect((downloadReportMock.mock.calls[0] as unknown[])[4]).toEqual({
+			detailLevel: 'all',
+			subtotalPosition: 'header',
+			open: [],
+			closed: [],
+		});
+	});
+
+	it('export désactivé pendant une redemande, rendu à sa réponse (AC-3, AC-6)', async () => {
+		const r = render(Page, { data });
+		await generer(r);
+		await r.findByTestId('grouped-group-10');
+		const exporter = () => r.getByRole('button', { name: 'Export CSV' }) as HTMLButtonElement;
+		expect(exporter().disabled).toBe(false);
+		const enVol = bilanSuspendu();
+		await fireEvent.change(r.getByTestId('grouping-level'), { target: { value: '1' } });
+		expect(exporter().disabled).toBe(true);
+		enVol.resoudre(false);
+		await waitFor(() => expect(exporter().disabled).toBe(false));
+	});
+
+	it('S4 — redemande du bilan périmée par la balance âgée : drapeaux rabaissés (M1)', async () => {
+		const r = render(Page, { data });
+		await generer(r);
+		await r.findByTestId('grouped-group-10');
+		const jetee = bilanSuspendu();
+		await fireEvent.change(r.getByTestId('grouping-level'), { target: { value: '1' } });
+		await fireEvent.click(r.getByRole('tab', { name: 'Balance âgée' }));
+		await fireEvent.click(r.getByTestId('aged-report-generate'));
+		await waitFor(() => expect(getAgedReceivablesMock).toHaveBeenCalled());
+		jetee.resoudre(false);
+		await pause();
+		expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('false');
+		await fireEvent.click(r.getByRole('tab', { name: 'Bilan' }));
+		// le retour redemande la vue jetée (M2 b), puis l'export revient
+		await waitFor(() => expect(getBalanceSheetMock).toHaveBeenCalledTimes(3));
+		await waitFor(() =>
+			expect((r.getByRole('button', { name: 'Export CSV' }) as HTMLButtonElement).disabled).toBe(false),
+		);
+		expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('false');
+	});
+
+	it('changement d’exercice pendant une redemande : drapeaux rabaissés (M1)', async () => {
+		const deux = {
+			...(data as { fiscalYears: unknown[] }),
+			fiscalYears: [
+				...(data as { fiscalYears: unknown[] }).fiscalYears,
+				{ id: 2, companyId: 7, name: '2027', startDate: '2027-01-01', endDate: '2027-12-31', status: 'Open', multiCurrency: false },
+			],
+		} as never;
+		const r = render(Page, { data: deux });
+		await generer(r);
+		await r.findByTestId('grouped-group-10');
+		bilanSuspendu();
+		await fireEvent.change(r.getByTestId('grouping-level'), { target: { value: '1' } });
+		expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('true');
+		await fireEvent.change(r.getByRole('combobox', { name: 'Exercice' }), { target: { value: '2' } });
+		await waitFor(() => expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('false'));
+		expect((r.getByRole('button', { name: 'Générer' }) as HTMLButtonElement).disabled).toBe(false);
 	});
 });
