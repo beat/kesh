@@ -317,6 +317,38 @@ résultat.
   **partiel**, la seule spec de la story, `reports-groupes.spec.ts` **1 passé** (frontend reconstruit, binaire
   `kesh-api` du gate précédent : aucun `.rs` touché depuis), captures dans `captures-p1rem/`. Aucun gate Rust.
 
+**Remédiation de la revue P2 (2026-11-22)** — rapport `kesh-gate-logs/s46-2/revue-p2-rapport.md`, 0 C / 0 H / 1 M /
+4 L ; commit de code `623bb649`.
+- **M1** : `resyncActiveGroupedTab()` (`+page.svelte`) redemande le bilan ou le compte de résultat actif, affiché
+  avec une autre vue que celle des contrôles, quand aucune génération n'est en vol ; `selectTab` l'appelle au retour,
+  et `afterGeneration(myTab)`, dans les quatre `finally` de `generate`, à la fin d'une génération non périmée d'un
+  **autre** onglet. Le retour pendant le chargement d'un autre onglet ne périme donc pas ce chargement : la redemande
+  attend sa fin. La génération de l'onglet actif lui-même ne redemande jamais (garde `finishedTab !== activeTab`) :
+  une redemande en erreur ne boucle pas. Tests : X1 (bilan, niveau 1, *Générer* sur le compte de résultat, retour au
+  bilan pendant le chargement → aucune redemande avant sa fin, une après), et « redemande en erreur : pas de
+  redemande en boucle ». Manuel : l'écran *revient* à la présentation de la barre, à la fin de la génération d'un
+  autre rapport ; en erreur, message, présentation précédente, *Générer* la redemande (L2 de la revue, dit au manuel).
+- **L1** : trois tests, un par mutation survivante — « chargement périmé par un autre onglet : un changement de vue
+  sans rapport affiché ne demande rien » (P2B), « export après un écho qui retire un groupe disparu » (P2C),
+  « changement de vue pendant le premier chargement : chargement plein » (P2D). **L2** : noté (ci-dessus, manuel).
+  **L3** : `BALANCE_COLUMNS` figée (`Object.freeze`, `readonly GroupedAmountColumn[]`, prop `columns` en `readonly`).
+  **L4** : `title` porté par le seul ⓘ, retiré du conteneur.
+- Tests ajoutés (de `9b5d2a18` à `623bb649`, `grep -cE "^\s*it\("`) : **5**, `reports-page-groupes.test.ts` 18 → 23.
+- Mutations (copie `git archive` hors dépôt, `node_modules` réel, témoin vert **203 passés**, une à la fois,
+  `kesh-gate-logs/s46-2/mutations-p2rem/`, `mut.sh`, `mut.console`, `mut-*.log`) : P2B, P2C, P2D, P2F, N1 (pas
+  d'`afterGeneration` dans le `finally` des rapports classiques), N2 (garde `finishedTab !== activeTab` retirée),
+  N3 (pas de resynchronisation dans `selectTab`) **tuées** sur assertion nommée ; P2E (`<label for>` retiré) tuée par
+  « le sélecteur de niveau a un nom court… », dont le `getByRole` échoue (TestingLibraryElementError — le script la
+  classe « ERREUR » faute d'`AssertionError`, jugée tuée : un test nommé rougit sur ce qu'il vérifie) ; **P2A**
+  (garde de l'écho retirée) **survit**, chemin inatteignable déclaré depuis la P1.
+- Gates au commit `623bb649` (journaux `kesh-gate-logs/s46-2/*-p2rem*`) : frontend complet — `npm run check`
+  0 erreur, 29 avertissements (inchangé), `lint-i18n-ownership` vert, Vitest **4704 passés, 283 fichiers** (garde
+  `i18n-keys` comprise, `sitesTotal` inchangé à 3515 : aucun appel `i18nMsg` ajouté ni retiré), `npm run build` vert ;
+  E2E **partiel**, `reports-groupes.spec.ts` **1 passé** (frontend reconstruit, binaire `kesh-api` du gate précédent :
+  aucun `.rs` touché), captures dans `captures-p2rem/`. Aucun gate Rust. Manuel : copie compilée (`latexmk -g
+  -xelatex`, rc 0), PDF aplati : les deux phrases neuves présentes, aucun « ?? » (`user-manual-controle-p2rem.pdf`,
+  hors dépôt).
+
 ### File List
 
 - `frontend/src/lib/features/reports/reports-grouping.ts` (neuf)
@@ -380,3 +412,8 @@ résultat.
   dépendance à la 46-3 ; L6 : prénom dans la fiche. Tous remédiés (`7ec208c8`, `b7a53abb`, détail au Dev Agent
   Record). Boucle non close (deux M remédiés, production touchée) : passe P2 complète, autre modèle, prompt
   `kesh-gate-logs/s46-2/revue-p2-prompt.md`.
+- 2026-11-22 — Revue de code P2 (Claude Sonnet 5.5, complète, contexte frais) : 0 C / 0 H / 1 M / 4 L. M1 : retour sur
+  un rapport désaccordé pendant le chargement d'un autre onglet, sans redemande (sonde X1). L1 : mutations P2B, P2C,
+  P2D survivantes ; L2 : redemande en erreur ; L3 : `BALANCE_COLUMNS` mutable ; L4 : `title` sur le conteneur. Tous
+  remédiés (`623bb649`, détail au Dev Agent Record ; L2 dit au manuel). Boucle non close (un M remédié, production
+  touchée) : passe P3 ciblée sur `623bb649`, prompt `kesh-gate-logs/s46-2/revue-p3-prompt.md`.
