@@ -210,12 +210,12 @@ qu'elle n'est pas faite, cette story attend.**
 
 ## Tâches
 
-- [ ] T0 — Fusion d'`epic/39-wise`, conflits gardés des deux côtés, noms relus au code (*Avant le code*).
-- [ ] T1 — `lines`, `merchantAmount`, `details.lines`, `details.missingCurrencies` ; test HTTP (AC-1).
-- [ ] T2 — API, types, `wise-review.ts`, propriétés de la page commune, règles partagées (AC-2).
-- [ ] T3 — Libellés des genres, motifs, écarts et refus ; listes contre la source ; i18n (AC-3, AC-4).
-- [ ] T4 — Manuel, `docs/api-external.md` (AC-5).
-- [ ] T5 — E2E, captures (AC-6).
+- [x] T0 — Fusion d'`epic/39-wise`, conflits gardés des deux côtés, noms relus au code (*Avant le code*).
+- [x] T1 — `lines`, `merchantAmount`, `details.lines`, `details.missingCurrencies` ; test HTTP (AC-1).
+- [x] T2 — API, types, `wise-review.ts`, propriétés de la page commune, règles partagées (AC-2).
+- [x] T3 — Libellés des genres, motifs, écarts et refus ; listes contre la source ; i18n (AC-3, AC-4).
+- [x] T4 — Manuel, `docs/api-external.md` (AC-5).
+- [x] T5 — E2E, captures (AC-6).
 - [ ] T6 — Signaler à l'orchestrateur l'issue à ouvrir (écran d'annulation d'une ligne groupée, *Hors périmètre*).
 
 ## Gates
