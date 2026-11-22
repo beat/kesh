@@ -139,6 +139,8 @@ PDF) ; captures des écrans groupés reprises par les trois specs E2E au binaire
   et l'export) : `reports-balance-groupes`, `reports-groupes`, `reports-groupes-export` — **3 passés**, binaire et
   frontend de `cffecfc3c` (le commit suivant ne fait que remettre en forme un test Rust) ; `e2e.log`.
 - E2E complet et `gate-ci.sh` : à la fin de l'epic, sur la branche d'intégration.
+- Manuel : compilé dans une copie `git archive` hors dépôt (`make user`, rc 0, aucune ligne `!`), PDF supprimé ; texte
+  aplati : les trois phrases neuves présentes (« suffixe » avec sa ligature ﬀ) ; `kesh-gate-logs/s46-7/manuel.txt`.
 
 **Restent ouverts (AC-3, « on trace toujours »)** : D1, D2, D3 (versé par cette story), D5, D6, D7, D8, D9, à la liste
 des issues à ouvrir de l'epic ; aucun retiré sans correctif.
