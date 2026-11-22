@@ -4198,16 +4198,51 @@ Tous les rapports se \textbf{consultent à l'écran}. Pour les emporter :
 
 \begin{keshnote}
 Le PDF est paginé et destiné à être présenté ou archivé ; le CSV est destiné à être repris dans
-un tableur. Aucun des deux ne perd de ligne, même quand l'écran en limite le nombre~; le PDF abrège
-seulement, d'un «~…~», les textes qui dépassent un nombre fixe de caractères (intitulé de compte de la balance,
-pièce, journal, libellé et contreparties du grand livre, nom d'un compte en devise au bilan et au
-compte de résultat). Dans le PDF, les montants sont \textbf{alignés à droite} dans leur colonne,
+un tableur. Exporté \textbf{à plat} (sans groupes), aucun des deux ne perd de ligne, même quand
+l'écran en limite le nombre~; exporté \textbf{par groupes} (ci-dessous), un groupe fermé n'a qu'une
+ligne, qui porte la somme de ses comptes. Le PDF abrège seulement, d'un «~…~», les textes qui
+dépassent un nombre fixe de caractères (intitulé de compte de la balance, pièce, journal, libellé et
+contreparties du grand livre, nom d'un compte en devise au bilan et au compte de résultat, et, par
+groupes, un libellé que son retrait ne laisse plus tenir avant les montants). Dans le PDF, les montants sont \textbf{alignés à droite} dans leur colonne,
 les décimales l'une sous l'autre, totaux compris~; au bilan et au compte de résultat, le solde en
 devise («~USD 1'233.57~») l'est dans sa propre colonne. Les secondes lignes en petit du grand livre
 et de la balance, qui sont des phrases, restent alignées à gauche.
 Le titre du rapport, dans les propriétés du fichier PDF, garde ses accents («~Compte de
 résultat~», «~Décompte TVA~»).
 \end{keshnote}
+
+\paragraph{Le bilan et le compte de résultat par groupes.} L'export du bilan et du compte de
+résultat \textbf{suit l'écran}~: même niveau de détail, mêmes groupes ouverts ou fermés, mêmes
+sous-totaux, sur la ligne du titre ou en pied. Exporté sans niveau, il reste tel qu'avant.
+\begin{itemize}
+    \item \textbf{PDF} --- sous la période, une ligne dit le niveau imprimé («~Niveau~2~», ou
+          «~Tous les comptes~»), suivie de «~, détail ajusté à la main~» si vous avez ouvert ou
+          fermé des groupes vous-même~; les groupes ouverts ou fermés se voient dans le corps, où
+          un groupe fermé porte sa somme sans ses comptes. Chaque ligne est décalée selon sa
+          profondeur dans le plan~; un groupe et sa ligne de sous-total («~Total Liquidités~») sont
+          en gras~; un compte de groupe qui porte lui-même des écritures a sa ligne
+          «~(solde propre)~». Le titre d'un groupe ouvert ne reste pas seul en bas de page. Les
+          sous-titres de rôle des capitaux propres (\emph{Capital}, \emph{Autres fonds
+          propres}\ldots) ne s'impriment qu'à plat~: par groupes, les fonds propres suivent le plan.
+          Les totaux de section, les lignes calculées et l'équation du bilan ne changent pas.
+    \item \textbf{CSV} --- deux colonnes de plus après \texttt{Section}~: \texttt{Niveau} (la
+          profondeur dans le plan) et \texttt{TypeLigne} (\texttt{groupe}, \texttt{compte},
+          \texttt{propre}, \texttt{soustotal}), une ligne par ligne de l'écran~; le solde du titre
+          d'un groupe ouvert dont le sous-total est en pied est vide, sa ligne \texttt{soustotal}
+          le porte.
+\end{itemize}
+Les montants s'arrondissent au centime au moment de s'écrire. Un sous-total est l'arrondi de la
+somme exacte de ses comptes, \textbf{non la somme de leurs montants arrondis}~: deux comptes à
+10.005 et 5.006 s'impriment 10.01 et 5.01, et leur groupe 15.01. L'écart d'un centime avec
+l'addition des lignes est voulu~; les totaux de section suivent la même règle.
+
+\begin{keshwarning}
+Un bilan ou un compte de résultat imprimé à un niveau qui replie les comptes --- le niveau~1 en
+particulier --- est un \textbf{affichage de travail}, utile pour lire ou discuter les chiffres, et
+\textbf{non des comptes annuels}~: la conformité à l'art.~959a CO tient aux sections légales, que
+les groupes ne changent pas. Pour la remise de comptes annuels, préférez l'export à plat, ou au
+niveau «~Tous les comptes~».
+\end{keshwarning}
 
 \paragraph{Les cellules de texte du CSV.} Pour qu'un tableur lise toujours un libellé comme du
 texte, et jamais comme une formule, une cellule de texte d'un export CSV de rapport --- libellé
