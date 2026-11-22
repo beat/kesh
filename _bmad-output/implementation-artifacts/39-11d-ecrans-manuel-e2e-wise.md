@@ -1,11 +1,45 @@
 # Story 39-11d : écrans, manuel et E2E de l'import Wise
 
-Status: ready-for-dev
+Status: in-progress
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, revérifiée à la validation P1. Epic 39, **phase 1 KISS**.
 **Dépend de** : 39-11a à 39-11c, **38-11d** (écrans PayPal, validée P1 : case « Compte PayPal » du formulaire des
 comptes bancaires, `paypal.ts` et `withoutPaypal`, filtres de règle, page `reconciliation/paypal`, libellés des refus,
 E2E `paypal-import.spec.ts`), dont les composants sont **généralisés**, non recopiés (G10).*
+
+## Amendement du 2026-11-22 — contre le code réel (étape 0 du développement)
+
+Relu au code de la branche `story/39-11d`, partie d'`epic/39-wise` (`1f03f180`, 39-11e comprise) avec `epic/40-stripe`
+fusionné (`5064da7c`, 40-7d comprise ; décision de l'orchestrateur du 2026-11-22 : la 39-11d **s'ajoute à la page commune**
+`frontend/src/lib/features/provider/ProviderReviewPage.svelte` de la 40-7d, sans la regénéraliser ; ordre des PR : 38, 40, 39).
+Ce qui change, et pourquoi :
+
+- **A1 — formulaire (AC-1)** : la 40-7d a remplacé la case « Compte PayPal » par **une case par prestataire, chacune exclut
+  les autres** (`setFormProvider`, `providerCheckbox`), non par un choix « Aucun / PayPal / Wise ». La 39-11d y ajoute la case
+  « Compte Wise » (même forme que PayPal : libellé, compte de frais, sans compte de versement) ; `provider.ts` gagne `wise` dans
+  `ConfigurableProvider`, `isWise`, `wiseAccountLabels`, `providerPayload` (`{ wise }`) et la ligne « Wise · <compte> · <devise> ».
+  Côté serveur, la fusion réunit `wise` (39-11b) et `stripe` (40-7b) dans `routes/bank_accounts.rs` et l'entité
+  (`BankAccountProvider`, `ProviderSettings::wise`) : deux prestataires posés ensemble → `400 VALIDATION_ERROR`
+  (`error-provider-settings-both`, texte généralisé).
+- **A2 — page Wise (AC-2)** : le compte rendu de Wise est **par fichier** (`files[]`, `archive`, soldes, `warnings` `gap`,
+  `ignoredEntries`), non par devise : la page commune gagne `fileAccept`, `multiple`, `api.importFiles` et le fragment
+  `importReportMain` ; `currencies` devient facultatif dans `ProviderImportResponseBase`. Le bouton accepte
+  `.csv,text/csv,.zip,application/zip`, plusieurs fichiers ; la **consigne d'export** est à l'écran (option « Afficher les
+  transactions dont les frais sont indiqués séparément » à cocher) ; refus traduits : `WISE_CSV_FEES_NOT_SEPARATED` (fichier,
+  zip, consigne, lignes), `WISE_CSV_INVALID` par raison, `WISE_DUPLICATE_CURRENCY_FILE` ; `WISE_ZIP_INVALID` et les refus
+  communs par le message du serveur.
+- **A3 — revue et acceptation (AC-3) reportées** : la revue Wise (`GET /api/v1/wise/review`, `POST /api/v1/wise/accept`) est
+  la Story 39-11c, **en revue sur sa propre branche** et absente d'`epic/39-wise`. Sans elle, la page Wise n'a que l'import
+  (la page commune, sans `api.getReview`, n'affiche ni exercice ni propositions). AC-3 passe à une story **39-11d2** (écran de
+  la revue Wise sur la page commune, libellés des genres, écarts et motifs, E2E de l'acceptation), à faire après la fusion de
+  la 39-11c dans `epic/39-wise`. Le filtre de type générique (AC-1) et le lien de la page Stripe vers la page Wise (versement
+  sans réception) restent ici.
+- **A4 — manuel et API (AC-4)** : sous-section « Comptes Wise » (`sec:comptes-wise`) avant `sec:wise-export` de la 39-11e,
+  qui la cite ; le rapprochement y est dit « pas encore dans cette version ». `docs/api-external.md` : paragraphe « L'écran
+  Wise » ; table des erreurs réunie pour PayPal, Wise et Stripe à la fusion.
+- **A5 — E2E (AC-5)** : `wise-import.spec.ts` sans acceptation (A3) : compte Wise par l'écran, refus d'un relevé exporté sans
+  les frais séparés, import du zip (fait par la spec à partir des trois fixtures, plus une entrée PDF ignorée), réimport refusé.
+  Règle des gates de la nuit du 22.11 : E2E de la seule spec ajoutée, pas d'E2E complet ni de `gate-ci.sh`.
 
 ## Story
 
