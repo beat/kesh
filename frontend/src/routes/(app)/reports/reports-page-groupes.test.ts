@@ -162,7 +162,8 @@ describe('page des rapports — vue groupée du bilan (Story 46-2)', () => {
 		expect(getBalanceSheetMock.mock.calls[1][1]).toMatchObject({ open: [], closed: [90] });
 		expect(JSON.parse(localStorage.getItem(KEY)!).closed).toEqual([90]);
 		// pendant la redemande : l'affichage précédent reste, marqué occupé
-		expect(r.getByTestId('grouped-account-1000')).toBeTruthy();
+		expect(r.queryByTestId('grouped-account-1000')).not.toBeNull();
+		expect(r.queryByText('Génération du rapport en cours…')).toBeNull();
 		expect(r.getByRole('tabpanel').getAttribute('aria-busy')).toBe('true');
 		resoudre(bilan(getBalanceSheetMock.mock.calls[1][1], false, { closed: [90] }));
 		await waitFor(() => expect(r.queryByTestId('grouped-account-1000')).toBeNull());

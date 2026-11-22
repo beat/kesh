@@ -153,7 +153,9 @@ describe('mémoire du navigateur (AC-10)', () => {
 		vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
 			throw new DOMException('refusé', 'SecurityError');
 		});
-		expect(readGroupingView(1, 'balance-sheet')).toEqual(defaultGroupingView());
+		let lue: GroupingView | undefined;
+		expect(() => (lue = readGroupingView(1, 'balance-sheet'))).not.toThrow();
+		expect(lue).toEqual(defaultGroupingView());
 		expect(() => writeGroupingView(1, 'balance-sheet', vue())).not.toThrow();
 	});
 	it('société inconnue : ni lecture ni écriture', () => {

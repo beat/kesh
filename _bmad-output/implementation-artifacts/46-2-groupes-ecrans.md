@@ -1,6 +1,6 @@
 # Story 46-2 : écrans du bilan et du compte de résultat par groupes
 
-Status: ready-for-dev
+Status: review
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D3, D4, D9 (étendue), Q2, Q3, Q10 ; FR-46-2,
 FR-46-7 à FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1,
@@ -101,18 +101,18 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** — Reprise de `main` / de la branche d'epic ; vérifier le contrat de la 46-1 et l'export de la 46-3 tels
+- [x] **T0** — Reprise de `main` / de la branche d'epic ; vérifier le contrat de la 46-1 et l'export de la 46-3 tels
       que fusionnés (sinon arrêt, le dire au Change Log).
-- [ ] **T1 — maquette** (AC-8).
-- [ ] **T2 — types et appels** (AC 3, 6) : `reports.types.ts` (`Grouping`, `GroupedRow`, champs facultatifs des DTO),
+- [x] **T1 — maquette** (AC-8).
+- [x] **T2 — types et appels** (AC 3, 6) : `reports.types.ts` (`Grouping`, `GroupedRow`, champs facultatifs des DTO),
       `reports.api.ts` (`getBalanceSheet`, `getIncomeStatement`, `downloadReport`, `getReportExportUrl` avec options).
-- [ ] **T3 — composant** `GroupedReportRows.svelte` (neuf, partagé par les deux vues et réutilisé par la 46-6b) :
+- [x] **T3 — composant** `GroupedReportRows.svelte` (neuf, partagé par les deux vues et réutilisé par la 46-6b) :
       rendu des lignes, accordéons, règle de rendu (AC-4). Il se paramètre par un **descripteur de colonnes** (une
       colonne de montant ici, le solde en devise restant dans la cellule du libellé comme `AccountCurrencyBalance` aujourd'hui ; la 46-6b l'étend à quatre colonnes pour la balance), non par un composant par rapport.
-- [ ] **T4 — vues et page** (AC 1, 2, 5, 7, 10) : `BalanceSheetView.svelte`, `IncomeStatementView.svelte` (branche
+- [x] **T4 — vues et page** (AC 1, 2, 5, 7, 10) : `BalanceSheetView.svelte`, `IncomeStatementView.svelte` (branche
       groupée, branche à plat inchangée), barre de contrôles dans `routes/(app)/reports/+page.svelte`, mémoire (clé par société et rapport, AC-10).
-- [ ] **T5 — i18n, Vitest, E2E, captures, manuel** (AC 9).
-- [ ] **T6 — gates** : `npm run check`, `lint-i18n-ownership`, `test:unit`, `build` ; E2E complet au dernier commit de
+- [x] **T5 — i18n, Vitest, E2E, captures, manuel** (AC 9).
+- [x] **T6 — gates** : `npm run check`, `lint-i18n-ownership`, `test:unit`, `build` ; E2E complet au dernier commit de
       code.
 
 ## Dev Notes
@@ -153,9 +153,11 @@ garde « rapport vide » ; les autres onglets ; l'export sans paramètre.
 
 ## Note de version
 
-*(à écrire au développement)* — Le bilan et le compte de résultat s'affichent dans la **hiérarchie de votre plan** :
-groupes ouverts ou fermés, niveau de détail, sous-totaux sur le titre ou en pied ; « Hiérarchie masquée » rend
-l'affichage d'avant.
+**Added** — Le bilan et le compte de résultat s'affichent dans la **hiérarchie de votre plan comptable** : chaque
+groupe avec son sous-total, ouvert ou fermé d'un clic, un **niveau de détail** (niveau 1, 2… ou tous les comptes),
+les sous-totaux **sur le titre ou en pied** ; la case « Hiérarchie des groupes » décochée rend la liste à plat
+d'avant. Le navigateur retient la présentation de chaque rapport, société par société, et les exports PDF et CSV
+reçoivent les mêmes réglages que l'écran.
 
 ## Dev Agent Record
 
