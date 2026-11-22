@@ -3,7 +3,7 @@
 Status: review
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D3, D4, D9 (étendue), Q2, Q3, Q10 ; FR-46-2,
-FR-46-7 à FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1,
+FR-46-7 à FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Approuvée par le responsable de l'epic et par Guy (revue 1,
 2026-11-19) ; fiche écrite le 2026-11-20, à valider en boucle. **Suit la 46-1** (contrat de l'API) **et la 46-3** (export groupé). Aucune migration.
 
 ## Story
@@ -26,7 +26,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
 
 1. **AC-1 — Hiérarchie montrée par défaut (Q10).** À la première visite, le bilan et le compte de résultat s'affichent
    **groupés**, niveau « Tous les comptes » (`detailLevel=all` : tous les groupes ouverts), sous-totaux sur la ligne du
-   titre (`header`, décision 5). C'est un changement de l'écran d'aujourd'hui, voulu par Beat ; les E2E existants qui
+   titre (`header`, décision 5). C'est un changement de l'écran d'aujourd'hui, voulu par le responsable de l'epic ; les E2E existants qui
    lisent le bilan ou le compte de résultat (`frontend/tests/e2e/reports.spec.ts` — dont les deux tests axe, « empty
    state » et « populated state », qui contrôlent désormais l'écran groupé et ses accordéons —,
    `reports-currency.spec.ts`, `reports-export-pdf.spec.ts`, dont l'export d'un bilan vide part avec
@@ -35,7 +35,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
 2. **AC-2 — Contrôles.** Au-dessus du bilan et du compte de résultat (pas des autres rapports) :
    - **« Hiérarchie montrée / masquée »** : masquée = l'écran **à plat d'aujourd'hui**, requête **sans** `detailLevel`,
      sous-titres de rôle des fonds propres compris (D4) ; montrée = l'écran groupé. *(Ce contrôle tient lieu de l'entrée
-     « À plat » du sélecteur de D9 ; lecture décidée par Beat le 2026-11-20, C-46-2-2.)* Niveau, position et ouvertures sont gardés pendant que la hiérarchie est masquée ;
+     « À plat » du sélecteur de D9 ; lecture décidée par le responsable de l'epic le 2026-11-20, C-46-2-2.)* Niveau, position et ouvertures sont gardés pendant que la hiérarchie est masquée ;
    - **sélecteur de niveau** « Niveau 1 · … · Niveau n−1 · Tous les comptes », `n` = `grouping.maxDepth` de la dernière
      réponse (profondeur de l'arbre, indépendante de l'ouverture, 46-1), niveaux bornés à 20 ; désactivé quand la
      hiérarchie est masquée, et quand `maxDepth` ≤ 1 (plan sans groupe, rapport vide : seul « Tous les comptes ») ;
@@ -62,7 +62,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    **par rapport** (bilan, compte de résultat) sont retenus en `localStorage`, toute lecture et écriture sous
    `try`/`catch`, l'écran rendu par défaut (AC-1) si le stockage est vide, illisible ou refusé. Une valeur relue
    invalide (niveau hors bornes, liste non numérique) est ignorée, non transmise. Clé, restauration avant la
-   première requête et groupes disparus : AC-10 (décision de Beat du 2026-11-20).
+   première requête et groupes disparus : AC-10 (décision du responsable de l'epic du 2026-11-20).
 6. **AC-6 — Export fidèle à l'écran.** Les boutons PDF et CSV du bilan et du compte de résultat passent **les mêmes
    paramètres** que la dernière requête affichée (aucun si la hiérarchie est masquée) : `downloadReport` et
    `getReportExportUrl` (`reports.api.ts:334`, `:446`) gagnent un argument facultatif de groupement. Le rendu exporté
@@ -73,7 +73,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    niveau le rappelle.
 8. **AC-8 — Maquette avant les écrans.** Une maquette (HTML statique, hors dépôt, `kesh-gate-logs/epic-46/`) des deux
    positions de sous-total, d'un groupe fermé par le niveau puis ouvert à la main, et des contrôles, est jointe au Dev
-   Agent Record et montrée à Beat avant le développement des vues.
+   Agent Record et montrée au responsable de l'epic avant le développement des vues.
 9. **AC-9 — Textes, tests, manuel.** Libellés en quatre locales (bloc `reports-groups-*` propre à l'epic) ;
    `i18n-keys` (`sitesTotal` recompté par la garde) et `i18n-libelle-en-dur` verts ; Vitest des vues (rendu `header`
    et `footer`, groupe fermé, `own`, devise de groupe, mémoire illisible, AC-10) et du composant ; un E2E Playwright
@@ -81,7 +81,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    CSV dont l'URL porte les mêmes paramètres, hiérarchie masquée qui rend l'écran d'aujourd'hui, vue retrouvée au retour (AC-10) ; captures d'écran
    (thème clair) de chaque état au Dev Agent Record ; manuel utilisateur FR, § *Bilan* et *Compte de résultat*
    (`docs/manual/fr/user-manual.tex:3923`, `:3954`), `.tex` seul, PDF non commité.
-10. **AC-10 — Vue retrouvée au retour (décision de Beat du 2026-11-20).** Le rechargement à chaque clic (C-46-2-1)
+10. **AC-10 — Vue retrouvée au retour (décision du responsable de l'epic du 2026-11-20).** Le rechargement à chaque clic (C-46-2-1)
     est accepté **quel que soit l'état du stockage** ; l'écran retrouve sa vue **dans la mesure où le navigateur le permet** (stockage refusé ou vide : vue par défaut, sans erreur, rechargement et trace inchangés). En revenant sur la page (même rapport, même société, même
     navigateur), l'écran rétablit le niveau choisi et les groupes ouverts ou fermés à la main (ainsi que
     montrée/masquée et la position, AC-5). Choix KISS : mémorisation côté navigateur en `localStorage`, **clé par
@@ -141,8 +141,8 @@ garde « rapport vide » ; les autres onglets ; l'export sans paramètre.
   dans le navigateur une réponse `all` — il faudrait y recopier la règle d'ouverture, celle du montant (titre ou pied
   selon l'ouverture) et celle des groupes nuls masqués (46-1 AC-5), et l'export ne serait plus fidèle que si les deux
   copies s'accordent.
-- **C-46-2-2** : « hiérarchie masquée » = vue à plat d'aujourd'hui (**décidé par Beat le 2026-11-20** ; retenu
-  d'abord à la validation P1 : c'est la lecture qui ne double pas l'entrée « À plat » de D9, et le contrôle de Beat
+- **C-46-2-2** : « hiérarchie masquée » = vue à plat d'aujourd'hui (**décidé par le responsable de l'epic le 2026-11-20** ; retenu
+  d'abord à la validation P1 : c'est la lecture qui ne double pas l'entrée « À plat » de D9, et le contrôle du responsable de l'epic
   la remplace).
 - **C-46-2-3** : « tout ouvrir / tout fermer » passe par le niveau, non par la liste de tous les groupes (URL courte).
 
@@ -273,6 +273,50 @@ binaire `kesh-api` de ce worktree, base `kesh_e2e_s462` neuve : `reports-groupes
 sous-totaux en pied, niveau 1, groupe ouvert à la main, vue retrouvée au retour, hiérarchie masquée, compte de
 résultat.
 
+**Remédiation de la revue P1 (2026-11-22)** — rapport `kesh-gate-logs/s46-2/revue-p1-rapport.md`, 0 C / 0 H / 2 M /
+6 L, tous remédiés (commits `7ec208c8`, `b7a53abb`, puis ce compte rendu).
+- **M1** : `invalidateInFlight()` (`+page.svelte`) est désormais le seul endroit qui incrémente `genSeq` ; il
+  rabaisse `loading` et `refreshing` (et oublie l'onglet en vol). Appelée par les quatre branches de `generate()`,
+  l'effet de changement d'exercice et celui de changement de projet. Test du scénario S4 (redemande du bilan
+  périmée par la balance âgée) et du changement d'exercice pendant une redemande.
+- **M2** : (a) `changeGrouping` redemande aussi pendant le premier chargement du même rapport (`inFlightTab`), en
+  chargement complet ; (b) `selectTab`, au retour sur le bilan ou le compte de résultat, redemande si les
+  paramètres affichés (`displayedGrouping`) diffèrent de la vue (`sameGroupingParams`, neuf dans
+  `reports-grouping.ts`) ; l'écho n'est repris que s'il répond à la vue en cours (garde défensive, inatteignable
+  aujourd'hui : une première version y redemandait le rapport, mutation MG survivante — retirée, `b7a53abb`).
+  Après un écho, `displayedGrouping` prend les listes de l'écho (même affichage, pas de redemande inutile au retour).
+  Tests S1, S2, et « retour sur un onglet d'accord : rien n'est redemandé ».
+- **L1** : S3 versée (redemande en erreur, export aux paramètres affichés) et « export désactivé pendant une
+  redemande ». **L2** : `<label for>` court, info-bulle hors du `<label>` (`title` sur le conteneur, description par
+  `aria-describedby`) ; test du nom accessible. **L3** : `BALANCE_COLUMNS` exporté du module de
+  `GroupedReportRows.svelte`. **L4** : manuel — sélecteur inactif avant la première génération et hiérarchie
+  masquée, *Tout ouvrir*, *Tout fermer*, *Sous-totaux* inactifs hiérarchie masquée, et changement pendant une
+  génération en cours. **L6** : prénom du contributeur retiré de la fiche (« le responsable de l'epic »), grep des
+  noms vide sur la fiche, le `.tex`, le code et la spec E2E ; `sprint-status.yaml` en porte encore, sur des lignes
+  d'autres stories et la ligne `epic-46`, hors de la story, non touchées.
+- **L5 — dépendance à la 46-3, à tenir à la fusion** : sur cette branche, l'export reçoit les paramètres groupés et
+  rend le fichier à plat (`ExportQuery` les ignore), et le renvoi du manuel à §17.10 n'y trouve pas encore le
+  paragraphe des groupes. **Ne pas fusionner la 46-2 dans une branche publiable sans la 46-3** ; après la fusion de la
+  46-3, **rejouer `reports-export-pdf.spec.ts`** (un bilan vide exporté part désormais avec `detailLevel=all`).
+- Tests ajoutés par la remédiation (de `d4760e3e` à `b7a53abb`, recomptés par `grep -cE "^\s*it\("`) : **11** —
+  `reports-page-groupes.test.ts` 11 → 18, `reports-grouping.test.ts` 22 → 25, `views-groupes.test.ts` 7 → 8.
+- Mutations (copie hors dépôt, `node_modules` réel, témoin vert 198 passés, « tuée » sur assertion nommée,
+  `kesh-gate-logs/s46-2/mutations-p1rem/`, script `mut.sh`, journaux `mut-*.log`), jouées sur `7ec208c8` : 10 — MA (export pris sur la vue), MB (`refreshing` non rabaissé par
+  `invalidateInFlight`), MC (`!refreshing` retiré de `canExport`), ME (pas de redemande pendant le premier
+  chargement), MF (pas de redemande au retour), MH (`sameGroupingParams` sans `open`), MI (info-bulle dans un
+  `<label>`), MJ (balance âgée revenue à `++genSeq`) **tuées** ; MG (redemande dans la garde de l'écho) **survivante**,
+  chemin inatteignable, code retiré par `b7a53abb`, qui ne touche que cette garde : les neuf autres portent sur des
+  lignes inchangées.
+- Gates au dernier commit de code `b7a53abb` : voir ci-dessous (frontend complet, E2E de la spec de la story) ;
+  aucun `.rs` touché, pas de gate Rust. Manuel : copie compilée (`latexmk -xelatex`, rc 0), PDF aplati et grepé,
+  les trois phrases neuves présentes, aucun « ?? ».
+- Gates de la remédiation, au dernier commit de code `b7a53abb` (journaux `kesh-gate-logs/s46-2/*-p1rem*`) :
+  frontend complet — `npm run check` 0 erreur, 29 avertissements (le même nombre qu'au gate précédent),
+  `lint-i18n-ownership` vert, Vitest **4699 passés, 283 fichiers** (garde `i18n-keys` comprise : `sitesTotal`
+  recompté par la garde, inchangé à 3515, aucun appel `i18nMsg` ajouté ni retiré), `npm run build` vert ; E2E
+  **partiel**, la seule spec de la story, `reports-groupes.spec.ts` **1 passé** (frontend reconstruit, binaire
+  `kesh-api` du gate précédent : aucun `.rs` touché depuis), captures dans `captures-p1rem/`. Aucun gate Rust.
+
 ### File List
 
 - `frontend/src/lib/features/reports/reports-grouping.ts` (neuf)
@@ -315,17 +359,24 @@ résultat.
   (`reports.spec.ts` axe `:165`, `:176` ; `reports-export-pdf.spec.ts:40` ; `reports-currency.spec.ts:71`), lignes de
   `reports.api.ts` (`:26`, `:36`, `:45`, `:158`, `:280`, `:306`, `:334`, `:446`), vues (283, 113, 138 lignes),
   `+page.svelte` 893 lignes, `mode.svelte.ts`, manuel `:3923`, `:3954`. L : composant paramétré par un descripteur de
-  colonnes (T3) ; mention « à confirmer par Beat » remise sur « hiérarchie masquée » = vue à plat (AC-2, C-46-2-2).
+  colonnes (T3) ; mention « à confirmer par le responsable de l'epic » remise sur « hiérarchie masquée » = vue à plat (AC-2, C-46-2-2).
   Rapport : `kesh-gate-logs/epic-46/validation/46-2-P2.md`.
 - 2026-11-20 — Validation P3 ciblée (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `8a7f0f73`) : 0 C / 0 H / 0 M / 1 L, remédié. L : le descripteur « une colonne de montant » ne disait pas où loge le solde en devise ; il reste dans la cellule du libellé, comme `AccountCurrencyBalance` aujourd'hui (T3). Rapport : `kesh-gate-logs/epic-46/validation/46-123-P3-ciblee.md`.
-- 2026-11-20 — Décisions de Beat : (1) « hiérarchie masquée » = la liste à plat des comptes, comme l'écran d'aujourd'hui
+- 2026-11-20 — Décisions du responsable de l'epic : (1) « hiérarchie masquée » = la liste à plat des comptes, comme l'écran d'aujourd'hui
   (AC-2, C-46-2-2 : « à confirmer » remplacé par « décidé ») ; (2) rechargement à chaque clic accepté (aller-retour API,
   trace `report.generated`) **à condition que la vue soit mémorisée** : AC-10 neuf (`localStorage`, clé par société et
   par rapport, restaurée avant la première requête, groupes disparus ignorés), AC-5, AC-3, T4 et les tests de l'AC-9
   réalignés ; convention réutilisée : `mode.svelte.ts`.
-- 2026-11-20 — Validation P-ciblée des décisions de Beat (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `644b9e55` ; au code de `origin/main`) : 0 C / 0 H / 1 M / 3 L, remédiés. M : AC-10 se contredisait — « restaurée avant la première requête » et « groupes disparus ignorés, non transmis » ne tiennent pas ensemble, le client ne connaissant pas le plan avant la première réponse ; remédié : les identifiants sont transmis, l'API les ignore et les retire de l'écho (46-1 § *Le contrat*), la mémoire reprend l'écho. L : « même utilisateur » promis sans que la clé porte l'utilisateur (clé par navigateur, comme `kesh-mode`) ; identifiant de société non chargé par `+page.ts` (`company.id` de `fetchCompanyCurrent`) ; tests de l'AC-10 n'écrivant pas position ni montrée/masquée, pourtant retenues (AC-5). Non remédié, à trancher par Beat : AC-3 dit le rechargement accepté « à condition que la vue soit mémorisée », condition sans objet si le stockage est refusé (la vue n'est alors pas retenue, le rechargement reste). Boucle non close (un M remédié). Rapport : `kesh-gate-logs/epic-46/validation/46-2-decisions-ciblee.md`.
+- 2026-11-20 — Validation P-ciblée des décisions du responsable de l'epic (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `644b9e55` ; au code de `origin/main`) : 0 C / 0 H / 1 M / 3 L, remédiés. M : AC-10 se contredisait — « restaurée avant la première requête » et « groupes disparus ignorés, non transmis » ne tiennent pas ensemble, le client ne connaissant pas le plan avant la première réponse ; remédié : les identifiants sont transmis, l'API les ignore et les retire de l'écho (46-1 § *Le contrat*), la mémoire reprend l'écho. L : « même utilisateur » promis sans que la clé porte l'utilisateur (clé par navigateur, comme `kesh-mode`) ; identifiant de société non chargé par `+page.ts` (`company.id` de `fetchCompanyCurrent`) ; tests de l'AC-10 n'écrivant pas position ni montrée/masquée, pourtant retenues (AC-5). Non remédié, à trancher par le responsable de l'epic : AC-3 dit le rechargement accepté « à condition que la vue soit mémorisée », condition sans objet si le stockage est refusé (la vue n'est alors pas retenue, le rechargement reste). Boucle non close (un M remédié). Rapport : `kesh-gate-logs/epic-46/validation/46-2-decisions-ciblee.md`.
 - 2026-11-20 — Validation P-ciblée n°2 (Claude Sonnet 5.5, contexte frais, lentille sur le seul commit `935be28e`, au code de `origin/main`) : 0 C / 0 H / 0 M / 1 L, remédié. Décision de l'orchestrateur appliquée : AC-3 et AC-10 acceptent le rechargement et la trace **quel que soit l'état du stockage**, la vue étant mémorisée dans la mesure où le navigateur le permet (stockage refusé ou vide : vue par défaut, sans erreur) ; la condition « à condition que la vue soit mémorisée » est retirée des AC vivants (les entrées datées ci-dessus restent un relevé). L : une liste mémorisée de plus de 500 identifiants aurait fait répondre `400` (46-1) ; ignorée à la lecture (AC-10). Vérifié : contrat 46-1 (inconnus ignorés et retirés de l'écho, `400` au-delà de 500, `open`/`closed` sans `detailLevel` refusés), `+page.ts` ne renvoie que `companyName` et `company.id` vient de `fetchCompanyCurrent` (`settings.types.ts:10`, `:127`), cohérence AC-2, AC-5, AC-9, T4 et 46-3 (PDF de la requête affichée). Rapport : `kesh-gate-logs/epic-46/validation/46-2-decisions-ciblee-2.md`.
 - 2026-11-22 — Développement (Claude Opus 5.5) : T0 à T6 ; export groupé branché sur les paramètres de la fiche
   46-3 (non fusionnée), à exercer de bout en bout après sa fusion ; maquette non montrée avant les vues (écart à
   l'AC-8) ; gates de la nuit (fmt, clippy, nextest complet, frontend complet, E2E de la seule spec ajoutée).
   `review`.
+- 2026-11-22 — Revue de code P1 (Claude Opus 5.5, complète, contexte frais) : 0 C / 0 H / 2 M / 6 L. M1 : `refreshing`
+  resté levé quand une redemande est périmée par un autre chemin (sonde S4). M2 : contrôles montrant une vue que
+  l'écran n'affiche pas, pendant le premier chargement (S1) ou après une redemande jetée (S2). L1 : mutations MA, MB,
+  MC survivantes ; L2 : libellé accessible du sélecteur ; L3 : `balanceColumns` recopié ; L4 : manuel ; L5 :
+  dépendance à la 46-3 ; L6 : prénom dans la fiche. Tous remédiés (`7ec208c8`, `b7a53abb`, détail au Dev Agent
+  Record). Boucle non close (deux M remédiés, production touchée) : passe P2 complète, autre modèle, prompt
+  `kesh-gate-logs/s46-2/revue-p2-prompt.md`.

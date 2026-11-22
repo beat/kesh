@@ -3993,7 +3993,8 @@ Au-dessus du bilan et du compte de résultat, une barre règle leur présentatio
           \emph{Tous les comptes}~: au niveau~1, seuls les groupes de premier rang sont montrés,
           fermés sur leur sous-total~; au niveau~2, ils s'ouvrent sur leurs groupes de second rang,
           et ainsi de suite. Le sélecteur ne propose que les niveaux que votre plan contient, et il
-          est inactif pour un plan sans groupe ou un rapport vide. Son info-bulle le rappelle~: un
+          est inactif avant la première génération du rapport, pour un plan sans groupe ou un
+          rapport vide, et hiérarchie masquée. Son info-bulle le rappelle~: un
           affichage replié est un affichage de travail, non des comptes annuels.
     \item \textbf{Tout ouvrir}, \textbf{Tout fermer} --- reviennent à \emph{Tous les comptes} et au
           niveau~1.
@@ -4001,6 +4002,9 @@ Au-dessus du bilan et du compte de résultat, une barre règle leur présentatio
           défaut)~; \emph{en pied}~: une ligne «~Total \emph{nom du groupe}~» sous ses comptes. Un
           groupe fermé porte toujours son sous-total sur sa ligne.
 \end{itemize}
+
+Hiérarchie masquée, \emph{Tout ouvrir}, \emph{Tout fermer} et \emph{Sous-totaux} sont inactifs
+eux aussi~: seule la case reste active.
 
 Chaque groupe s'ouvre et se ferme d'un clic sur sa flèche (ou au clavier, touche Entrée)~; le
 clic l'emporte sur le niveau, jusqu'au prochain changement de niveau, qui l'efface. Un compte de
@@ -4014,7 +4018,9 @@ résultat, un groupe qui mêle produits et charges) n'est montré dans aucune~: 
 remontent d'un rang dans chaque section. Les totaux des sections, les lignes calculées du bilan
 et le résultat ne changent pas avec la présentation.
 
-Chaque changement redemande le rapport au serveur, et chaque demande est inscrite au journal
+Chaque changement redemande le rapport au serveur, même pendant une génération en cours~: seule
+la réponse à la dernière demande s'affiche, et l'écran montre toujours la présentation que la
+barre indique. Chaque demande est inscrite au journal
 d'audit, comme un changement de période. Le navigateur \textbf{retient votre présentation}, pour
 chaque société et chaque rapport~: en revenant sur la page, vous retrouvez la hiérarchie, le
 niveau, la place des sous-totaux et les groupes ouverts ou fermés à la main --- dans la mesure où
