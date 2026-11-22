@@ -26,6 +26,7 @@ pub mod opening;
 pub mod pdf;
 pub mod period;
 pub mod project_report;
+pub mod texte_pdf;
 pub mod trial_balance;
 pub mod vat_report;
 

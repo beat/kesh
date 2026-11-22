@@ -3166,29 +3166,12 @@ mod tests {
     }
 
     /// Les ordonnées (`y`, en points) des textes d'un PDF non compressé, dans
-    /// l'ordre d'écriture : chaque `x y Td … <hex> Tj`.
+    /// l'ordre d'écriture : l'extracteur partagé [`crate::texte_pdf::poses`].
     fn pdf_text_y(bytes: &[u8]) -> Vec<(f32, String)> {
-        let s = String::from_utf8_lossy(bytes);
-        let mut out = Vec::new();
-        for bloc in s.split("BT").skip(1) {
-            let Some(td) = bloc.find(" Td") else { continue };
-            let y = bloc[..td]
-                .split_whitespace()
-                .last()
-                .and_then(|v| v.parse::<f32>().ok());
-            let Some(y) = y else { continue };
-            let Some(a) = bloc.find('<') else { continue };
-            let Some(b) = bloc[a..].find("> Tj") else {
-                continue;
-            };
-            let hex = &bloc[a + 1..a + b];
-            let txt: String = (0..hex.len() / 2)
-                .filter_map(|i| u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).ok())
-                .map(char::from)
-                .collect();
-            out.push((y, txt));
-        }
-        out
+        crate::texte_pdf::poses(bytes)
+            .into_iter()
+            .map(|p| (p.y_pt, p.texte))
+            .collect()
     }
 
     /// Revue de code P2 — la seconde ligne en devise se lit collée à son

@@ -40,6 +40,10 @@ use rust_decimal_macros::dec;
 use serde_json::Value;
 use sqlx::MySqlPool;
 
+#[path = "support/jeu_pme.rs"]
+mod commun_pme;
+use commun_pme::JeuPme;
+
 const TEST_JWT_SECRET: &[u8] = b"test-secret-32-bytes-minimum-test-secret-padding";
 const TEST_ADMIN_PASSWORD: &str = "e2e-test-admin-password";
 
@@ -1017,4 +1021,101 @@ async fn export_content_disposition_handles_non_ascii_company_name(pool: MySqlPo
         cd.contains("filename*=UTF-8'") && cd.contains('\''),
         "Content-Disposition must include filename*=UTF-8'…' (RFC 5987), got: {cd}"
     );
+}
+
+// ============================================================
+// Story 46-3 — exports du bilan et du compte de résultat par groupes
+// ============================================================
+
+/// Le jeu PME de la Story 46-1 (`support/jeu_pme.rs`) : la société et son
+/// exercice 2026 par [`seed_company_with_name`], l'exercice 2025 ici, puis le
+/// plan, le compte en dollars et les écritures par le module partagé.
+async fn jeu_pme(pool: &MySqlPool) -> JeuPme {
+    let ctx = seed_company_with_name(pool, "pme_46_3", Role::Comptable, "Société PME 46-3").await;
+    let fy_2025 = fiscal_years::create(
+        pool,
+        ctx.user_id,
+        NewFiscalYear {
+            company_id: ctx.company_id,
+            name: "FY2025".into(),
+            start_date: NaiveDate::from_ymd_opt(2025, 1, 1).unwrap(),
+            end_date: NaiveDate::from_ymd_opt(2025, 12, 31).unwrap(),
+        },
+    )
+    .await
+    .unwrap()
+    .id;
+    commun_pme::peupler(pool, ctx.company_id, ctx.user_id, fy_2025, ctx.fy_id, ctx.jwt).await
+}
+
+/// GET d'un export du jeu PME (`route` : `balance-sheet` ou
+/// `income-statement`), avec la requête `suite` après `format`.
+async fn export_pme(
+    app: &TestApp,
+    jeu: &JeuPme,
+    route: &str,
+    fy: i64,
+    format: &str,
+    suite: &str,
+) -> reqwest::Response {
+    app.client
+        .get(app.url(&format!(
+            "/api/v1/reports/{route}/export?fiscalYearId={fy}&format={format}{suite}"
+        )))
+        .bearer_auth(&jeu.jwt)
+        .send()
+        .await
+        .unwrap()
+}
+
+/// Chemin d'une fixture d'export de la Story 46-3.
+fn fixture_46_3(nom: &str) -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/rapports-groupes")
+        .join(nom)
+}
+
+/// AC-2 (NFR-46-1) — sans paramètre de groupes, l'export CSV du bilan et du
+/// compte de résultat est **identique à l'octet**, et l'export PDF a les
+/// **mêmes lignes de texte** (extracteur partagé `kesh_report::texte_pdf`),
+/// qu'au commit de base de la Story 46-3, fixtures écrites dans
+/// `tests/fixtures/rapports-groupes/export-*` avant toute modification du
+/// rendu. `KESH_ECRIRE_FIXTURES_46_3=1` les réécrit — à ne faire qu'au commit
+/// de base.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn exports_sans_parametre_identiques_a_la_fixture_de_base(pool: MySqlPool) {
+    let jeu = jeu_pme(&pool).await;
+    let app = spawn_app(pool).await;
+    let ecrire = std::env::var("KESH_ECRIRE_FIXTURES_46_3").as_deref() == Ok("1");
+    for (route, nom) in [("balance-sheet", "bilan"), ("income-statement", "resultat")] {
+        for (fy, annee) in [(jeu.fy_2025, 2025), (jeu.fy_2026, 2026)] {
+            for format in ["csv", "pdf"] {
+                let resp = export_pme(&app, &jeu, route, fy, format, "").await;
+                assert_eq!(resp.status(), 200, "{route} {annee} {format}");
+                let corps = resp.bytes().await.unwrap().to_vec();
+                let (chemin, obtenu) = if format == "csv" {
+                    (fixture_46_3(&format!("export-{nom}-{annee}.csv")), corps)
+                } else {
+                    let lignes = kesh_report::texte_pdf::lignes(&corps);
+                    assert!(lignes.len() > 5, "{route} {annee} : PDF illisible ({lignes:?})");
+                    (
+                        fixture_46_3(&format!("export-{nom}-{annee}.pdf.txt")),
+                        (lignes.join("\n") + "\n").into_bytes(),
+                    )
+                };
+                if ecrire {
+                    std::fs::create_dir_all(chemin.parent().unwrap()).unwrap();
+                    std::fs::write(&chemin, &obtenu).unwrap();
+                }
+                let attendu = std::fs::read(&chemin)
+                    .unwrap_or_else(|e| panic!("fixture {} illisible : {e}", chemin.display()));
+                assert_eq!(
+                    String::from_utf8_lossy(&obtenu),
+                    String::from_utf8_lossy(&attendu),
+                    "{route} {annee} {format} sans paramètre : l'export a changé (AC-2)"
+                );
+                assert_eq!(obtenu, attendu, "{route} {annee} {format} : octets");
+            }
+        }
+    }
 }
