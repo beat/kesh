@@ -1,7 +1,7 @@
 //! Tests d'intégration pour `repositories::bank_transactions::find_in_dedup_window`
 //! (Story 8-3 T3.2).
 //!
-//! 4 tests : filtre fenêtre date, scoping multi-tenant `company_id`,
+//! Tests : filtre fenêtre date, scoping multi-tenant `company_id`,
 //! scoping `bank_account_id`, retour vide si aucune transaction dans
 //! la fenêtre. Les tests utilisent `bank_imports::create_with_transactions`
 //! pour seeder des transactions persistées (l'INSERT direct nécessiterait
@@ -467,14 +467,20 @@ async fn existing_transaction_ids_returns_each_id_once_within_company_and_accoun
     let ids: Vec<String> = ["CARD-1", "CARD-3", "CARD-4", "CARD-9"]
         .map(String::from)
         .to_vec();
-    // Montage : les arguments permutés ne désignent aucune ligne.
-    let swapped =
-        bank_transactions::existing_transactions_by_ids(&mut conn, account, company, &ids)
-            .await
-            .unwrap();
-    assert!(
-        swapped.is_empty(),
-        "montage : (compte, société) permutés ne rendent rien"
+    // Montage, lu par une requête directe (non par la fonction testée) :
+    // aucune ligne ne porte (société = id du compte visé, compte = id de la
+    // société visée), si bien qu'une permutation des deux arguments ne rendrait rien.
+    let swapped: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM bank_transactions WHERE company_id = ? AND bank_account_id = ?",
+    )
+    .bind(account)
+    .bind(company)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(
+        swapped, 0,
+        "montage : (compte, société) permutés ne désignent aucune ligne"
     );
 
     let got = bank_transactions::existing_transaction_ids(&mut conn, company, account, &ids)

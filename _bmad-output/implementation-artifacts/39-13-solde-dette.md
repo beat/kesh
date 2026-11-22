@@ -1,6 +1,6 @@
 # Story 39-13 : solde de la dette de l'Epic 39 (Wise)
 
-Status: review
+Status: done
 
 *Fiche rédigée le 2026-11-22 au gabarit de `bmad-create-story`, branche `story/39-13` partie d'`epic/39-wise`
 (`0a414376f`). Epic 39. Story de solde (`CLAUDE.md` § *Priorités des défauts*, « une story de solde à la fin de chaque
@@ -154,7 +154,7 @@ Claude Opus 5.5 (fiche, développement) ; validations : Sonnet (P1, P3 ciblée),
 
 ### Tests (recomptés, `#[test]` + `#[sqlx::test]`, de `0a414376f` à `06001b9f6`)
 
-`crates/kesh-import/tests/wise_csv.rs` 42 → 43 ; `crates/kesh-db/tests/bank_transactions_repository.rs` 6 → 7 : **deux
+`crates/kesh-import/tests/wise_csv.rs` 42 → 43 ; `crates/kesh-db/tests/bank_transactions_repository.rs` 5 → 6 : **deux
 tests neufs**, tous deux de caractérisation (l'ancien code les passe).
 
 ### Gates (au dernier commit de code `06001b9f6`)
@@ -213,3 +213,13 @@ encore « 4 tests » (périmé avant la story) : laissé, hors périmètre.
   (`provider_accept.rs:272` et `:672`, appelés par `routes/wise.rs:193` et `:609`).
 - 2026-11-22 — Développée (`b10ecf71e`, `06001b9f6`), gates et sondes ci-dessus ; statut `review`, revue P1 à lancer
   (`kesh-gate-logs/s39-13/revue-p1-prompt.md`).
+- 2026-11-22 — Revue de code P1 (Opus, `kesh-gate-logs/s39-13/revue-p1-rapport.md`) : 0 C, 0 H, 0 M, 4 L, tous appliqués
+  sans code de production. LOW-1 : décompte du Dev Agent Record corrigé (`bank_transactions_repository.rs` 5 → 6, l'ancien
+  grep comptait l'attribut cité dans un commentaire `//!`) ; LOW-2 : la table des erreurs de `docs/api-external.md` nomme
+  `POST /paypal-downloads` (`PROVIDER_ACCOUNT_NOT_FOUND`) et `POST /wise/accept` (`PROVIDER_PROPOSAL_STALE`,
+  `COUNTERPARTY_CURRENCY_MISMATCH`), relus au code (`routes/paypal_downloads.rs:93`, `routes/wise.rs:839`,
+  `provider_accept.rs:1575`) ; LOW-3 : l'assertion de montage du test `kesh-db` lit la base par une requête directe, non
+  par la fonction testée ; LOW-4 : en-tête du module de test sans nombre de tests. **Boucle close** : validation P1→P3
+  (0/0/2/4 → 0/0/1/3 → 0/0/0/2, Sonnet, Opus, Sonnet), revue de code P1 0/0/0/4 (Opus), aucune ligne de production
+  touchée par la remédiation ; gate ciblé `binary(bank_transactions_repository) | binary(wise_csv) | binary(textes_coherents)`
+  au commit de clôture. Statut `done`.
