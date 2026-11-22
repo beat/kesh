@@ -1191,7 +1191,9 @@ const ATTENDU = {
 	// vers Wise) : **3692** (« expected 3692 to be 3689 »), relevé par la garde.
 	// Revue P2 de la 40-7d (délégation complète de PayPal au module commun, texte du versement Wise
 	// raccourci) : **3691** (« expected 3691 to be 3692 »), relevé par la garde.
-	sitesTotal: 3691,
+	// Story 39-11d (fusion d'epic/40-stripe, écrans de l'import Wise, case « Compte Wise ») :
+	// **3739** (« expected 3739 to be 3691 »), relevé par la garde, non additionné.
+	sitesTotal: 3739,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/

@@ -436,7 +436,9 @@ const SUFFIXES = ['Label', 'Text', 'Display'];
 // **138 → 145** (Story 40-7d) : les libellés de l'écran Stripe (`stripe/stripe-labels.ts`) et les
 // libellés communs aux prestataires (`provider/provider-labels.ts`), tous par `i18nMsg` ;
 // `conforme` **117 → 124**, relevé par la garde (« expected 145 to be 138 »).
-const CANDIDATES_ATTENDUES = 145;
+// **145 → 147** (Story 39-11d) : les libellés de l'écran Wise (`wise/wise-labels.ts`), par
+// `i18nMsg` ; `conforme` **124 → 126**, relevé par la garde (« expected 147 to be 145 »).
+const CANDIDATES_ATTENDUES = 147;
 
 /** Les trois délimiteurs de littéral en JS/TS. */
 const QUOTES = ["'", '"', '`'];
@@ -953,7 +955,7 @@ describe('libellés en dur — l’angle mort #255', () => {
 			else if (c.retours.length > 0) classes.ecartee += 1;
 			else classes.conforme += 1;
 		}
-		expect(classes).toEqual({ nonAnalysee: 0, enViolation: 0, ecartee: 21, conforme: 124 });
+		expect(classes).toEqual({ nonAnalysee: 0, enViolation: 0, ecartee: 21, conforme: 126 });
 		// La somme est recalculée depuis les classes, jamais depuis le total qu'elle contrôle.
 		const somme = Object.values(classes).reduce((a, b) => a + b, 0);
 		expect(somme).toBe(CANDIDATES_ATTENDUES);
