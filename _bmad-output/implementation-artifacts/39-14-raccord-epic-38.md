@@ -53,7 +53,8 @@ disparaisse.
 
 - **D1 — Une variante de source, non un champ de plus** : `ImportSource::Statements(&[CurrencyStatement])`, un relevé
   par devise, dans l'ordre de l'appelant. `CurrencyStatement { currency, filename, bytes, period_from, period_to,
-  opening_balance, closing_balance, trace }`. Pour cette source, le cœur : parcourt les devises dans l'ordre des
+  opening_balance, closing_balance, trace }` — `bytes: &'a [u8]`, période en `NaiveDate`, soldes en `Decimal` (non
+  facultatifs : `continuity_gap` les exige, la réponse les rend), `trace: serde_json::Map` (validation P2, L5). Pour cette source, le cœur : parcourt les devises dans l'ordre des
   relevés (refus et écritures) ; prend nom, empreinte (des octets du relevé, même formule que `File`), période et
   soldes du relevé (même pour un relevé à doublons partiels) ; refuse l'empreinte déjà importée comme `File` ; juge la
   continuité et rend `warnings` ; écrit à la trace de la source `files` (pour chaque devise, `trace` du relevé complété
@@ -69,13 +70,16 @@ disparaisse.
   ≥ 0 (zéro : les deux), règle de la 39-11a2 déplacée telle quelle ; dans la source, l'unité du doublon est
   (`group_id`, sens). Coût assumé : les littéraux `ProviderLine { … }` d'epic/40 (Stripe) ne compileront plus à sa
   fusion — correction mécanique, `counterparty_iban: None, direction: None` (à noter au registre des choix).
-- **D3 — Doublons** : `dedupe_groups(groups, &ExistingKeys)` ; `ExistingKeys::of(&[ExistingTransaction])`, lue par
+- **D3 — Doublons** : le cœur appelle `dedupe_by_keys(groups, &ExistingKeys)` ; `dedupe_groups(groups,
+  &HashSet<String>)` garde sa signature (tests de PayPal et de Stripe, epic/40) et délègue par
+  `ExistingKeys::from_ids` (validation P2, M2.3) ; `ExistingKeys::of(&[ExistingTransaction])`, lue par
   `bank_transactions::existing_transactions_by_ids` (même filtre SQL que `existing_transaction_ids`, montant en plus)
   pour tous les prestataires. Une ligne **sans** sens est présente si une transaction de même identifiant existe, quel
   que soit son montant (ensemble des identifiants, distinct des deux ensembles par sens) : doublons inchangés pour
-  PayPal. Les deux tests de `paypal_imports.rs` et celui de `provider_imports.rs` qui appellent `dedupe_groups` passent
-  à `ExistingKeys::from_ids` (tests seuls). `existing_transaction_ids` (`kesh-db`) perd son dernier appelant de
-  `kesh-api` ; il reste (fonction publique du dépôt, lue par d'autres branches d'epic), noté pour la story de solde.
+  PayPal. `existing_transaction_ids` (`kesh-db`) perd son dernier appelant de `kesh-api` ; il reste (fonction publique,
+  lue par d'autres branches d'epic), et ses commentaires et ceux d'`existing_transactions_by_ids`, qui nomment leurs
+  appelants, deviennent inexacts : **à tracer en issue** par l'orchestrateur (validation P2, L2). Les lignes d'un
+  relevé s'insèrent dans l'ordre de `csv.rows`, comme avant (L6).
 - **D4 — `CurrencyReport.warnings: Option<Vec<ImportWarning>>`**, omis quand `None` : la réponse PayPal reste octet
   pour octet ; `Some` (éventuellement vide) pour `Statements`. `ImportWarning` = l'ancien `FileWarning` de Wise
   (`code`, `expected`, `found`, `previousImportId`), déplacé au cœur avec `WARNING_GAP` ; `wise_imports` les
@@ -96,14 +100,17 @@ disparaisse.
 
 - **AC-1 — Un seul cœur** : `paypal_imports.rs` ne porte plus aucune des onze fonctions et types du cœur 39-11b ;
   `wise_imports.rs` appelle `provider_imports::load_balances` et `import_lines` ; `grep -rn
-  "run_provider_import\|insert_currency_import\|ProviderWrite\|LockedTarget\|resolve_currency_balances\|file_currency_hash"
+  "run_provider_import\|insert_currency_import\|ProviderWrite\|LockedTarget\|resolve_currency_balances\|file_currency_hash\|WriteFuture\|CurrencyImport\b\|WiseWriter\|fn existing_keys"
   crates/` ne rend que des mentions historiques datées (fiches, commentaires « avant la 39-14 »).
 - **AC-2 — Réponses inchangées** : pour Wise, mêmes statuts, codes, corps (`files` dans l'ordre du formulaire,
   `rows`, `inserted`, `duplicates`, `importId`, `openingBalance`, `closingBalance`, `warnings` toujours présent,
   `archive`, `ignoredEntries`) et même ordre des refus (en-tête du module `wise_imports`) ; pour PayPal, fichier et
   téléchargement, corps octet pour octet (pas de clé `warnings`). Tenu par les suites existantes
   (`wise_import_e2e`, `paypal_import_e2e`, `paypal_download*`) vertes **sans modification de leurs assertions**, et
-  par un test neuf (AC-5).
+  par un test neuf (AC-5) ; pour PayPal, l'ensemble exact des clés d'une entrée de `currencies` (`bankAccountId`,
+  `currency`, `duplicates`, `importId`, `inserted`) est vérifié dans la réponse et la trace, fichier
+  (`paypal_import_e2e::import_ventile_par_devise_puis_doublons`) et téléchargement (`paypal_download_e2e`), sonde
+  « `warnings` sérialisé pour PayPal » (validation P2, M1).
 - **AC-3 — Écritures inchangées** : par fichier Wise, une entrée `bank_imports` (nom du fichier, empreinte octets ‖
   devise, période et soldes du **fichier entier**, `CSV`) s'il reste une ligne ; transactions avec IBAN de la
   contrepartie ; doublons par (identifiant, sens) ; traces `bank_import.created` (mêmes `details`) et
@@ -119,8 +126,9 @@ disparaisse.
   `files` de la trace égal à `files` de la réponse, lignes `bank_imports` (nom, période, ouverture, clôture) du fichier
   entier, identifiant de l'entrée USD inférieur à celui de CHF ; et deux comptes clos, envoyés USD puis EUR : le refus
   nomme le compte USD ; un relevé CHF **tout en doublons** à écart de continuité : `importId` nul, avertissement rendu
-  et tracé, aucune entrée. **Vert avant le raccord** (joué sur `1f03f180`) **et après** ; sondes par mutation hors dépôt
-  (ordre alphabétique rétabli, période des lignes gardées, `direction` ignorée, `warnings` omis) tuées par une
+  et tracé, aucune entrée ; empreinte stockée = SHA-256(octets ‖ `:CHF`). **Vert avant le raccord** (joué sur `1f03f180`) **et après** ; sondes par mutation hors dépôt
+  (ordre alphabétique rétabli, période des lignes gardées, `direction` ignorée, `warnings` omis, continuité sautée pour
+  un relevé tout en doublons, `warnings` sérialisé pour PayPal) tuées par une
   assertion nommée.
 - **AC-6 — Doc** : en-têtes de `wise_imports.rs` et `provider_imports.rs` à jour ; `audit_route_registry.rs` point
   (vi) : l'enveloppe de rejeu de Wise vit dans `provider_imports::import_lines` (comptes de routes inchangés — aucune
@@ -169,7 +177,16 @@ unitaires du cœur. Gates : fmt, clippy workspace, nextest complet ; aucun écra
 ## Fichiers communs (39-11c en remédiation sur `story/39-11c`)
 
 `tests/audit_route_registry.rs` (commentaire du point (vi) ; la 39-11c y ajoute des routes) et `sprint-status.yaml`
-(chacun sa ligne). La 39-11c ne touche ni `wise_imports.rs`, ni `provider_imports.rs`, ni `paypal_imports.rs`.
+(chacun sa ligne). La 39-11c ne touche ni `wise_imports.rs`, ni `provider_imports.rs`, ni `paypal_imports.rs` ; son
+`date_coverage` relit période et ouverture stockées, que D1 garde au fichier entier (compatible, L7).
+
+**`epic/40-stripe`** (`73fa1573`, validation P2, M2) change aussi `provider_imports.rs` ; qui fusionne en second :
+(1) `AUDIT_ACTIONS` et l'entrée `SITES_INDIRECTS` : garder `stripe_import.created` **et** `wise_import.created` ;
+(2) `ProviderLine` : l'union des champs (`value_date` de Stripe, `counterparty_iban` et `direction` d'ici) — littéraux
+de Wise à compléter de `value_date: None` (sa valeur d'avant), ceux de Stripe de `counterparty_iban: None, direction:
+None`, et `into_new_bank_transaction` recopie les trois ; (3) `dedupe_groups` garde sa signature (D3) : les tests de
+`stripe_imports.rs` compilent ; (4) Stripe déplace les bornes et `truncate_*` en `pub` dans `provider_imports.rs` :
+une seule définition après la fusion (celles de `paypal_imports.rs` retirées, les `use` de Wise repointés).
 
 ## Note de version
 
@@ -181,6 +198,12 @@ Aucune ligne au CHANGELOG : réorganisation interne, sans effet visible (journal
 
 ## Change Log
 
+- 2026-11-22 — Validation P2 (Claude Opus 5.5, contexte frais, lecture seule, `validation-p2-rapport.md`) : 0 C, 0 H,
+  2 M, 7 L. Remédiations de P1 tenues. M1 : clés exactes du compte rendu PayPal (réponse, trace, fichier et
+  téléchargement) en AC-2 ; M2 : `epic/40-stripe` aux fichiers communs, `dedupe_groups` gardé (D3). LOW : L1
+  (empreinte stockée en AC-5), L2 (issue à tracer), L5, L6, L7 écrits ; L3 (grep : `WriteFuture`, `CurrencyImport`,
+  `WiseWriter`, `existing_keys` ajoutés à l'AC-1) ; L4 (test `les_cles_existantes_lisent_le_sens_au_signe` couvre la
+  ligne sans sens au débit, au crédit et à zéro).
 - 2026-11-22 — Validation P1 (Claude Sonnet 5.5, contexte séparé, lecture seule, `kesh-gate-logs/s39-14/validation-p1-rapport.md`) :
   0 C, 1 H, 3 M, 7 L. H1 (`SITES_INDIRECTS`) : prémisse corrigée, AC-4 ; M1 : tableau des points 1 à 10 ; M2 : D3
   précisé ; M3 : ordre de la continuité en D1, cas « tout en doublons » ajouté à AC-5. LOW : `flatten` écarté (D5
