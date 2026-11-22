@@ -20,7 +20,7 @@ comptes Wise sans passer par l'API.
 | Exigence | Texte | AC |
 |---|---|---|
 | `FR-39-11d2-1` | La revue Wise montre les lignes d'un paiement par carte groupé (proposition ou « à examiner »). | AC-1, AC-2 |
-| `FR-39-11d2-2` | Page Wise : exercice, propositions à cocher par genre, « ce qui sera fait » en clair. | AC-2 |
+| `FR-39-11d2-2` | Page Wise : exercice, propositions à cocher, leur genre et « ce qui sera fait » en clair. | AC-2 |
 | `FR-39-11d2-3` | Chaque motif « à examiner » et chaque écart de la revue Wise s'explique à l'écran en une phrase, quatre locales. | AC-3 |
 | `FR-39-11d2-4` | Acceptation par lot (*Pattern batch*, `{ accepted, failed }`), refus lisibles, revue relue. | AC-4 |
 | `NFR-39-11d2-1` | Manuel utilisateur (`.tex` seul) et `docs/api-external.md` ; limites du rapprochement au manuel. | AC-5 |
@@ -28,15 +28,22 @@ comptes Wise sans passer par l'API.
 
 ## Avant le code — base de la branche
 
-`git merge epic/39-wise` dans `story/39-11d2` (apporte la 39-11c :
-`routes/wise.rs`, `kesh-reconciliation/src/wise.rs`, `wise_reconciliation_e2e.rs`). Conflit attendu sur la fiche
-`39-11d-ecrans-manuel-e2e-wise.md` (la version d'`epic/39-wise` porte la section « Limites du rapprochement à reprendre
-au manuel » et l'entrée de Change Log de la P3 de la 39-11c ; celle de `story/39-11d` l'amendement A1–A5 et le Dev Agent
-Record) : **garder les deux côtés** ; `sprint-status.yaml` : garder les deux côtés, chaque story à son statut le plus
-avancé ; compteurs (`sitesTotal`, gardes i18n, registres) recomptés depuis la source. Relire au code, et citer au Change
-Log, la ligne de chaque nom repris ci-dessous (`build_wise_review`, `card_group_blocker`, `ReviewProposal`,
-`PayoutProposal` de `stripe.rs`). Si la 39-11d a changé entre-temps par sa revue P1, la reprendre aussi (`git merge
-story/39-11d`).
+**Condition préalable, hors de cette story** : `story/39-11d` (après sa revue) **fusionnée dans `epic/39-wise`**. Ce n'est
+pas un conflit de fiche : c'est l'intégration de deux lignes de code — `story/39-11d` porte `epic/40-stripe` (page
+commune, 40-7d), `epic/39-wise` porte la 39-14 et la 39-11c — qui ont modifié les mêmes fichiers depuis `1f03f180`
+(dont `wise_imports.rs`, `provider_imports.rs`, `paypal_imports.rs`, `provider_accept.rs`,
+`kesh-db/src/repositories/provider_review.rs`, `audit_route_registry.rs`, `lib.rs`, `wise_import_e2e.rs`,
+`docs/api-external.md`, `user-manual.tex`). Elle se fait par l'orchestrateur, avec son gate complet (`kesh-db` touché),
+sa revue du code d'intégration (diff combiné, interactions sans conflit de texte : la 39-14 a récrit `wise_imports.rs`,
+la 39-11d l'a modifié) et ses compteurs recomptés (§ *Travailler à plusieurs développeurs*, `CLAUDE.md`). **Tant
+qu'elle n'est pas faite, cette story attend.**
+
+**Étape 0 de la story** (inconditionnelle) : `git merge epic/39-wise` dans `story/39-11d2` — `story/39-11d2` n'ajoute à
+`story/39-11d` que des commits de fiche, la fusion n'apporte donc que l'intégration déjà jugée ; conflits éventuels
+(fiche 39-11d, `sprint-status.yaml`) résolus en gardant les deux côtés. Puis `nextest` complet et frontend complet
+**avant T1**, déclarés au Change Log. Relire au code, et citer au Change Log, la ligne de chaque nom repris ci-dessous
+(`build_wise_review`, `card_group_blocker`, `reconciled_card_lines`, `remove_transactions`, `ReviewProposal`,
+`PayoutProposal`/`StripeReviewProposal`, `findingDate`, `CODES_MOTEUR` de `provider-labels.test.ts`).
 
 ## Critères d'acceptation
 
@@ -44,10 +51,13 @@ story/39-11d`).
    La revue ne montre aujourd'hui d'un `card_group` que sa ligne principale (`transaction`) et des identifiants
    (`bankTransactionIds`, `details.bankTransactionIds`) : l'écran ne peut pas en montrer les lignes. Dans
    `routes/wise.rs`, sur le patron de la proposition `payout` de Stripe (type de **revue** sérialisé seul,
-   `PayoutProposal`/`StripeReviewProposal`, `kesh-reconciliation/src/stripe.rs`) : la proposition `card_group` de la
+   `PayoutProposal`/`StripeReviewProposal`, `kesh-reconciliation/src/stripe.rs`), le type de revue vivant dans
+   `routes/wise.rs` (la revue y est construite en `Review<WiseProposal>`, puis convertie par `map_proposals` à la fin ;
+   `remove_transactions` garde son type) : la proposition `card_group` de la
    revue porte en plus `lines` (le `TransactionSummary` de chaque ligne, dans l'ordre de `bankTransactionIds`, principale
    en tête) et `merchantAmount` (montant du marchand en CHF, deux décimales, chaîne) ; les quatre motifs `card_group_*`
-   portent `details.lines` (mêmes résumés). Le **corps de l'acceptation ne change pas** (`WiseProposal`, champs
+   portent `details.lines` (mêmes résumés) ; `card_group_statements_missing` porte en plus `details.missingCurrencies`
+   (devises des soldes de `missingBankAccountIds`, que le serveur connaît : `BankAccountSummary` n'a pas de devise). Le **corps de l'acceptation ne change pas** (`WiseProposal`, champs
    d'affichage ignorés, déjà admis par `POST /wise/accept`) ; aucune migration ; `ReviewProposal` commune non touchée.
    Test HTTP ajouté à `wise_reconciliation_e2e.rs` (paiement groupé de `monter_partielle` : `lines` de trois résumés, la
    ligne CHF en tête, `merchantAmount` ; un `card_group_statements_missing` porte `details.lines`) ; un corps
@@ -63,21 +73,29 @@ story/39-11d`).
    (`wise-labels.ts`) :
    - `fee` : « Frais » — « Écriture au compte de frais <n° — nom> » ;
    - `conversion` : « Conversion » — « Au cours de Wise : 100.00 EUR → 109.00 USD » (montants de `transaction` et
-     `otherTransaction`), suivi de « une écriture » si un côté est en CHF, sinon « deux écritures par le compte de
+     `otherTransaction`, en valeurs absolues), suivi de « une écriture » si un côté est en CHF, sinon « deux écritures par le compte de
      conversion » ;
    - `link_entry` : « Rattachement » — « Rattachée à l'écriture n° <n> déjà passée, sans nouvelle écriture » (`entry`) ;
    - `rule` : « Règle » — « Règle <libellé> → <n° — nom> » ;
    - `card_group` : « Paiement par carte » — « Une écriture : <merchantAmount> CHF au compte <n° — nom> (règle
      <libellé>), chaque solde crédité de sa part, la différence de change sur son compte » ; ses **lignes** affichées
-     sous la proposition, une par ligne (date, montant et devise, identifiant Wise, « frais » pour une `FEE-CARD-…`).
+     sous la proposition (date, montant et devise, identifiant Wise, « frais » pour une `FEE-CARD-…`) : la ligne de la
+     proposition est la principale (`lines[0]`), les sous-lignes sont les suivantes (`lines[1..]`).
    Libellés des règles et des comptes lus au chargement (`onLoad`, best-effort) ; la lecture paginée des règles de la page
    PayPal (`allRules`) **sort dans un module partagé** (`rules.api.ts` ou `lib/features/provider/`) et sert aux deux pages
    (DRY). Page commune : deux propriétés facultatives neuves, `proposalLines(p)` et `findingLines(f)` (rendent des
-   `ProviderReviewTransaction[]`), qui affichent les lignes en sous-lignes sous la proposition ou la ligne « à examiner »
-   — chaque sous-ligne d'un « à examiner » avec son propre bouton « Rattacher à une écriture » (même modale, sur cette
-   transaction) ; sans elles, PayPal et Stripe rendent ce qu'ils rendent (tests existants verts sans changement
-   d'assertion). Rien n'est coché d'office ; « Tout cocher » ne coche que des propositions. Le commentaire d'en-tête de la
-   page Wise et celui de `ProviderReviewPage` (« jusqu'à la revue Wise ») sont récrits.
+   `ProviderReviewTransaction[]`, la principale exclue), qui affichent les lignes en sous-lignes sous la proposition ou
+   la ligne « à examiner » — chaque sous-ligne d'un « à examiner » avec son propre bouton « Rattacher à une écriture »
+   (même modale, sur cette transaction ; la ligne du motif garde le sien, sur la principale). Identifiants de test des
+   sous-lignes propres, jamais ceux d'une ligne (`<testId>-proposal-line-<id>`, `<testId>-to-review-line-<id>`,
+   `<testId>-link-line-<id>`) ; `findingDate` lit aussi `details.date` (écart sans transaction ni écriture, `balance_gap`).
+   Sans elles, PayPal et Stripe rendent ce qu'ils rendent (tests existants verts sans changement
+   d'assertion). Rien n'est coché d'office ; « Tout cocher » ne coche que des propositions ; les propositions restent
+   dans une seule table, triées par date, le genre en colonne. Le mode sans revue de la page commune (`hasReview`) reste,
+   générique et sans appelant. Le commentaire d'en-tête de la page Wise et celui de `ProviderReviewPage` (« jusqu'à la
+   revue Wise ») sont récrits ; les tests qui affirment l'absence de revue sont **retournés**, non supprimés :
+   `wise-page.test.ts` (ceux qui attendent ni exercice ni propositions) et `wise-import.spec.ts` (`wise-fiscal-year` à 0
+   élément, en-tête « la page n'a que l'import »).
 
 3. **AC-3 — Chaque motif en une phrase** (`wise-labels.ts`, clés `wise-` ; communs par `providerToReviewLabel`). Listes
    **fermées**, exportées (`WISE_GAP_CODES`, `WISE_TO_REVIEW_CODES`, `WISE_CARD_GROUP_UNSUPPORTED_REASONS`) et **comparées à
@@ -89,8 +107,9 @@ story/39-11d`).
      `TRANSFER`…), ou passez l'écriture à la main puis rattachez la ligne. » ;
    - `ambiguous_link` : « Plusieurs écritures déjà passées peuvent être l'autre côté de ce virement (n° …) : rattachez la
      ligne à la bonne. » (numéros tirés de `entries`) ;
-   - `stripe_payout_unmatched` : « Versement Stripe dont l'écriture de versement n'est pas encore passée : importez le
-     rapport Stripe et acceptez le versement ; aucune règle ne s'y applique. » (lien vers la page Stripe) ;
+   - `stripe_payout_unmatched` : « Versement Stripe sans l'écriture de son versement : importez le rapport Stripe et
+     acceptez le versement, ou passez l'écriture à la main puis rattachez la ligne ; aucune règle ne s'y applique. »
+     (lien vers la page Stripe seulement si la société a un compte Stripe) ;
    - `card_group_no_rule` : « Paiement par carte de { merchantAmount } CHF : aucune règle ne lui donne un compte en CHF ;
      créez-en une. » ;
    - `card_group_unsupported` : « Les lignes de ce paiement par carte n'ont pas la forme attendue (<raison>) : traitez
@@ -98,10 +117,10 @@ story/39-11d`).
      `exchange_missing`, `merchant_not_chf`, `exchange_currency_mismatch`, `exchange_amount_missing`,
      `card_line_missing`) ;
    - `card_group_statements_missing` : « Une ligne de ce paiement peut manquer : le relevé du solde <devises> ne couvre
-     pas cette date ; importez-le, ou traitez les lignes à la main. » (devises tirées de `details.missingBankAccountIds`
-     par les comptes bancaires chargés, l'identifiant à défaut) ;
-   - `card_group_partly_reconciled` : « Une part de ce paiement est déjà rapprochée (écriture n° …) : annulez ce
-     rapprochement puis acceptez le paiement entier, ou finissez à la main. » (liens vers `details.journalEntryIds`) ;
+     pas cette date ; importez-le, ou traitez les lignes à la main. » (devises de `details.missingCurrencies`, AC-1) ;
+   - `card_group_partly_reconciled` : « Une part de ce paiement est déjà rapprochée : annulez ce rapprochement puis
+     acceptez le paiement entier, ou finissez à la main. », suivi d'un lien « Voir l'écriture » par identifiant de
+     `details.journalEntryIds` (des identifiants, non des numéros : aucun « n° » affiché) ;
    - écart `conversion_half_missing` : « L'autre moitié de cette conversion manque : importez le relevé de l'autre devise,
      ou elle est déjà rapprochée. » ;
    - écart `fee_without_origin` : « Frais sans la ligne dont il vient sur ce solde : importez le relevé complet de la
@@ -116,9 +135,12 @@ story/39-11d`).
    acceptée(s), m refusée(s) », chaque refus par sa transaction et sa phrase (`wiseFailedLabel` : délégation à
    `providerFailedLabel`, puis `failedProposalLabel`) ; `PROVIDER_PROPOSAL_STALE` dont `details.reason` est
    `card_group_statements_missing` ou `card_group_partly_reconciled` dit la phrase du motif (AC-3) ; les autres raisons
-   (`card_group_changed`, `rule_no_longer_matches`, `conversion_pair_changed`, …) la phrase commune « Rechargez la
-   revue » ; `RATE_UNAVAILABLE`, `FX_ACCOUNT_INVALID`, `COUNTERPARTY_CURRENCY_MISMATCH`, `PERIOD_LOCKED` par les libellés
-   existants. Liste des codes de `POST /wise/accept` testée contre leur source, comme `PROVIDER_COMMON_FAILED_CODES`. Un
+   — liste fermée : `transaction_not_found`, `provider_settings_changed`, `transaction_not_pending`, `kind_changed`,
+   `entry_changed`, `entry_linked`, `rule_no_longer_matches`, `conversion_pair_changed`, `card_group_changed` — la
+   phrase commune « Rechargez la revue » ; `RATE_UNAVAILABLE`, `FX_ACCOUNT_INVALID`, `COUNTERPARTY_CURRENCY_MISMATCH`, `PERIOD_LOCKED` par les libellés
+   existants (`RATE_UNAVAILABLE` : le cours mensuel retenu manque, renvoi aux cours de change). `routes/wise.rs`
+   n'ajoute aucun code de refus : ses littéraux (`stale(…)`, `FX_ACCOUNT_INVALID`…) entrent dans le relevé de
+   `CODES_MOTEUR` (`provider-labels.test.ts`), dont le test lit alors aussi `routes/wise.rs`. Un
    `400` global (corps refusé) s'affiche par `errorMessageOf`. La revue se relit après l'acceptation. Vitest : corps d'un
    groupe (identifiants, règle, contrepartie ; sans `lines`), ordre, paquets, refus d'un groupe périmé.
 
@@ -127,7 +149,10 @@ story/39-11d`).
    cette version ») et la phrase du contrôle de clôture (« la page Wise ne fait qu'importer ») **récrits** ; ce que Kesh
    propose (frais, conversions au cours de Wise — une écriture si un côté est en francs, deux par le compte de conversion
    sinon —, rattachement à l'autre côté déjà passé, règles, paiement par carte converti en une écriture avec ses lignes) ;
-   chaque motif « à examiner » et chaque écart en termes d'utilisateur ; l'acceptation par lot, rien d'office ; une ligne
+   chaque motif « à examiner » et chaque écart en termes d'utilisateur ; le **cours mensuel retenu** de la société,
+   condition de l'acceptation d'un frais ou d'une règle sur un solde en devise, d'une conversion entre deux devises
+   étrangères et de la part en devise d'un paiement groupé (sinon refus « cours indisponible », renvoi aux cours de
+   change) ; l'acceptation par lot, rien d'office ; une ligne
    non proposée se traite à la main (écriture, puis *Rattacher à une écriture*) ; **les trois limites de la section
    « Limites du rapprochement à reprendre au manuel » de la fiche 39-11d** (continuité des relevés, solde en devise peu
    utilisé, part arrivée après coup), et l'annulation d'une ligne d'un paiement groupé qui remet **toutes** ses lignes en
@@ -143,11 +168,13 @@ story/39-11d`).
    l'écran — une proposition de frais, une conversion, une règle ; « à examiner » `no_rule` et `stripe_payout_unmatched`
    avec leur phrase. Un **paiement par carte groupé** sur un **second compte Wise** (libellé distinct, soldes CHF et USD,
    relevés CSV faits par la spec sur le patron de `releves_partielle` de `wise_reconciliation_e2e.rs`, identifiants et
-   noms fictifs) : proposition `card_group` avec ses trois lignes affichées. Acceptation par l'écran d'un frais, d'une
-   conversion et du groupe : compte rendu « 3 acceptée(s), 0 refusée(s) », propositions disparues à la relecture ; le
-   groupe en **une** écriture (vérifiée par l'API : trois transactions rapprochées sur le même `journalEntryId`). Captures
-   (thème clair, `KESH_CAPTURES_DIR`, hors dépôt) : revue, groupe et ses lignes, « à examiner », écarts s'il y en a,
-   compte rendu de l'acceptation ; jointes au Dev Agent Record et au prompt de revue.
+   noms fictifs) : proposition `card_group`, sa ligne principale et ses deux sous-lignes affichées. Acceptation par
+   l'écran, **une par compte Wise** (le corps n'en porte qu'un, et le compte rendu s'efface au changement de compte) :
+   un frais et une conversion du premier → « 2 proposition(s) acceptée(s), 0 refusée(s). » ; le groupe du second →
+   « 1 proposition(s) acceptée(s), 0 refusée(s). » ; propositions disparues à la relecture ; le groupe en **une**
+   écriture (vérifiée par l'API : trois transactions rapprochées sur le même `journalEntryId`). Captures (thème clair,
+   `KESH_CAPTURES_DIR`, hors dépôt) : revue, groupe et ses lignes, « à examiner », écarts (vides avec les fixtures :
+   capture de l'état « Aucun écart. »), compte rendu de chaque acceptation ; jointes au Dev Agent Record et au prompt de revue.
 
 ## Tâches
 
@@ -157,6 +184,7 @@ story/39-11d`).
 - [ ] T3 — Libellés des genres, motifs, écarts et refus ; listes contre la source ; i18n (AC-3, AC-4).
 - [ ] T4 — Manuel, `docs/api-external.md` (AC-5).
 - [ ] T5 — E2E, captures (AC-6).
+- [ ] T6 — Signaler à l'orchestrateur l'issue à ouvrir (écran d'annulation d'une ligne groupée, *Hors périmètre*).
 
 ## Gates
 
@@ -187,3 +215,12 @@ s'acceptent d'un geste.
 ## Change Log
 
 - 2026-11-22 — fiche rédigée (AC-3 de la 39-11d, amendement A3), non validée.
+- 2026-11-22 — validation P1 (Opus, contexte frais, lecture seule) : 0 CRITICAL, 1 HIGH, 7 MEDIUM, 9 LOW, tous remédiés
+  dans la fiche (rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11d2-P1.md`). HIGH : la base n'était pas un
+  conflit de fiche mais l'intégration de `story/39-11d` (Epic 40 compris) et d'`epic/39-wise` (39-14, 39-11c) — posée en
+  condition préalable, hors story, avec gate et revue d'intégration ; étape 0 inconditionnelle, gates avant T1. MEDIUM :
+  acceptation E2E une par compte Wise (M1) ; phrase du manuel absente sans la fusion (M2) ; tests « sans revue » nommés,
+  retournés (M3) ; `details.missingCurrencies` servi (M4) ; écritures d'une part rapprochée par identifiant, sans numéro
+  (M5) ; sous-lignes sans la principale, identifiants de test propres (M6) ; cours mensuel au manuel et au refus (M7).
+  LOW : `findingDate` et `details.date`, raisons de `PROVIDER_PROPOSAL_STALE` fermées, montants absolus, place du type
+  de revue, `CODES_MOTEUR`, versement Stripe sans compte Stripe, T6, une table triée par date, état « Aucun écart ».
