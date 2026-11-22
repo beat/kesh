@@ -27,6 +27,7 @@ export const PROVIDER_NAMES: Record<ConfigurableProvider, string> = {
 	wise: 'Wise',
 	stripe: 'Stripe',
 };
+import type { ProviderApiStatus } from '$lib/features/provider-download/provider-download.api';
 
 /** Ce qu'il faut d'un compte bancaire pour savoir s'il est celui d'un prestataire. */
 export interface ProviderSource {
@@ -252,4 +253,22 @@ export function providerPayload(
 		case 'stripe':
 			return { stripe: { ...base, payoutBankAccountId } };
 	}
+}
+
+/**
+ * Story 38-12b (AC-1) — l'état du téléchargement par l'API du compte PayPal
+ * `label` (sans casse ni accents, comme le serveur), lu sur ses comptes
+ * bancaires (`providerApi` de la liste) : configuré si l'un d'eux l'est, le mode
+ * du premier configuré ; `null` si aucun compte ne porte ce libellé. Tous les
+ * soldes d'un même libellé partagent la même série : ils disent la même chose.
+ */
+export function paypalApiStatus(
+	accounts: readonly { provider?: string | null; paypal?: PaypalSettings | null; providerApi?: ProviderApiStatus | null }[],
+	label: string,
+): ProviderApiStatus | null {
+	const key = accountLabelKey(label);
+	const mine = accounts.filter((a) => isPaypal(a) && a.paypal && accountLabelKey(a.paypal.account) === key);
+	if (mine.length === 0) return null;
+	const configured = mine.find((a) => a.providerApi?.configured);
+	return configured?.providerApi ?? { configured: false };
 }

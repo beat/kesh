@@ -10,6 +10,13 @@
   lignes « à examiner » — lui est passé par ses propriétés et ses fragments ;
   les identifiants de test se préfixent par `testId` (« paypal », « stripe »).
 
+  Fusion de l'Epic 38 (38-12b) : à côté de l'import du fichier, des actions
+  propres au prestataire (`importActions` : « Télécharger depuis PayPal ») et
+  leurs notes (`importNotes`) ; un compte rendu propre au prestataire
+  (`importReport`) peut remplacer le compte rendu commun ; l'exercice choisi et
+  les exercices chargés se lisent (période proposée au téléchargement), et
+  `reload()` relit la revue à la fin d'un téléchargement.
+
   Kesh PROPOSE, l'utilisateur ACCEPTE : rien n'est écrit à la lecture de la
   revue ; aucune proposition n'est cochée d'office. La revue se recharge après
   l'import et après l'acceptation ; une réponse périmée (autre compte, autre
@@ -29,6 +36,7 @@
 	import { listFiscalYears } from '$lib/features/fiscal-years/fiscal-years.api';
 	import type { FiscalYearResponse } from '$lib/features/fiscal-years/fiscal-years.types';
 	import LinkSettlementModal from '$lib/features/reconciliation/LinkSettlementModal.svelte';
+	import ProviderImportReport from './ProviderImportReport.svelte';
 	import type { LinkTarget } from '$lib/features/reconciliation/reconciliation.types';
 	import { chunkProposals } from './provider-review.api';
 	import { defaultFiscalYearId, findingDate } from './provider-review';
@@ -77,6 +85,15 @@
 		toReviewLabel?: (f: ProviderFinding) => string;
 		/** Le compte rendu propre au prestataire, sous les lignes par devise. */
 		importReportExtra?: Snippet<[R]>;
+		/**
+		 * Le compte rendu entier, propre au prestataire, à la place du compte rendu commun
+		 * (PayPal : `PaypalImportReport`, partagé avec le dialogue de téléchargement, 38-12b).
+		 */
+		importReport?: Snippet<[R]>;
+		/** Des actions à côté de l'import du fichier ; `busy` : import ou acceptation en cours (38-12b). */
+		importActions?: Snippet<[{ busy: boolean }]>;
+		/** Des notes sous la ligne de l'import (aide de l'Administrateur, 38-12b). */
+		importNotes?: Snippet;
 		/** La colonne « Ce qui sera fait » d'une proposition (sans objet sans revue). */
 		proposalAction?: Snippet<[P, string]>;
 		/** Ce qui suit le libellé d'un écart (un lien, par exemple), facultatif. */
@@ -96,6 +113,9 @@
 		selectedAccount?: string | null;
 		/** Les comptes bancaires chargés (lisibles par la page du prestataire). */
 		bankAccounts?: BankAccountSummary[];
+		/** L'exercice choisi et les exercices chargés (lisibles par la page du prestataire, 38-12b). */
+		selectedYearId?: number | null;
+		fiscalYears?: FiscalYearResponse[];
 	}
 
 	let {
@@ -117,6 +137,9 @@
 		gapDetails = () => null,
 		toReviewLabel = (f) => f.code,
 		importReportExtra,
+		importReport: importReportView,
+		importActions,
+		importNotes,
 		proposalAction,
 		gapExtra,
 		toReviewHead,
@@ -127,13 +150,12 @@
 		accepting = $bindable(false),
 		selectedAccount = $bindable(null),
 		bankAccounts = $bindable([]),
+		selectedYearId = $bindable(null),
+		fiscalYears = $bindable([]),
 	}: Props = $props();
 
-	let fiscalYears = $state<FiscalYearResponse[]>([]);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
-
-	let selectedYearId = $state<number | null>(null);
 
 	// Import
 	let fileInput = $state<HTMLInputElement | null>(null);
@@ -293,6 +315,11 @@
 	}
 </script>
 
+<!-- Le compte rendu propre au prestataire à la place des lignes par devise (Wise, 39-11d), dans le compte rendu commun. -->
+{#snippet importReportMainView()}
+	{#if importReport}{@render importReportMain?.(importReport)}{/if}
+{/snippet}
+
 <svelte:head>
 	<title>{texts.title} - Kesh</title>
 </svelte:head>
@@ -361,10 +388,12 @@
 				{importing ? i18nMsg('provider-import-running', 'Import en cours…') : texts.importButton}
 			</Button>
 		</div>
+		{@render importActions?.({ busy: importing || accepting })}
 	</div>
 	{#if texts.importHelp}
 		<p class="mt-2 text-sm text-text" data-testid="{testId}-import-help">{texts.importHelp}</p>
 	{/if}
+	{@render importNotes?.()}
 	{#if texts.hint}
 		<p class="mt-2 text-sm text-text-muted" data-testid="{testId}-hint">{texts.hint}</p>
 	{/if}
@@ -381,25 +410,17 @@
 	{/if}
 
 	{#if importReport}
-		<section class="mt-4 rounded border border-border bg-surface-alt p-3 text-sm" data-testid="{testId}-import-report">
-			<h2 class="font-semibold">{i18nMsg('provider-import-report-title', 'Compte rendu de l’import')}</h2>
-			{#if importReportMain}
-				{@render importReportMain(importReport)}
-			{:else}
-			<ul class="mt-2 list-disc pl-5">
-				{#each importReport.currencies ?? [] as c (c.currency)}
-					<li data-testid="{testId}-import-report-{c.currency}">
-						{i18nMsg('provider-import-report-currency', '{ $currency } : { $inserted } transaction(s) insérée(s), { $duplicates } doublon(s)', {
-							currency: c.currency,
-							inserted: String(c.inserted),
-							duplicates: String(c.duplicates),
-						})}
-					</li>
-				{/each}
-			</ul>
-			{/if}
-			{@render importReportExtra?.(importReport)}
-		</section>
+		{#if importReportView}
+			{@render importReportView(importReport)}
+		{:else}
+			<ProviderImportReport
+				report={importReport}
+				testid="{testId}-import-report"
+				main={importReportMain ? importReportMainView : undefined}
+			>
+				{@render importReportExtra?.(importReport)}
+			</ProviderImportReport>
+		{/if}
 	{/if}
 
 	{#if reviewError}

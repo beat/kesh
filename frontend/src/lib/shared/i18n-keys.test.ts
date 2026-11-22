@@ -1195,7 +1195,17 @@ const ATTENDU = {
 	// **3739** (« expected 3739 to be 3691 »), relevé par la garde, non additionné.
 	// Revue P1 de la 39-11d (M1 : phrase du refus de doublon `wise-import-error-duplicate-file`) :
 	// **3740** (« expected 3740 to be 3739 »), relevé par la garde.
-	sitesTotal: 3740,
+	// Story 38-12b (dialogue générique de téléchargement, bouton et aide de la page PayPal, code
+	// de ligne `STATUS`) : **3671** (« expected 3671 to be 3632 »), relevé par la garde ; recompté
+	// au diff hors tests : 42 sites `i18nMsg(` ajoutés, 3 retirés (compte rendu extrait), net +39.
+	// Revue P1 de la 38-12b (avis `provider-download-resumed`) : **3672** (« expected 3672 to be
+	// 3671 »), relevé par la garde ; au diff : 1 site ajouté, 0 retiré.
+	// Revue P2 de la 38-12b (avis au passé, suivi perdu après une reprise) : **3674**, relevé par
+	// la garde ; au diff : 2 sites ajoutés, 0 retiré.
+	// Fusion d'epic/38-paypal (38-12b) dans epic/40-stripe : **3733** (« expected 3733 to be 0 »),
+	// relevé par la garde = 3691 + 42 (les sites de la 38-12b, 3674 − 3632).
+	// Fusion d'epic/40-stripe (38-12b) dans epic/39-wise, après la 39-11d : **3782** (« expected 3782 to be 0 »), relevé par la garde = 3740 + 42 (les sites de la 38-12b).
+	sitesTotal: 3782,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/
