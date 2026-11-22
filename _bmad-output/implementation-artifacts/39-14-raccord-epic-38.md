@@ -1,6 +1,6 @@
 # Story 39-14 : l'import Wise branché sur le cœur commun des prestataires
 
-Status: review
+Status: done
 
 *Fiche rédigée le 2026-11-22 au gabarit de `bmad-create-story`, branche `story/39-14` partie d'`epic/39-wise`
 (`1f03f180`, qui porte la 39-11e et `epic/38-paypal` à `8b8cd338`, fusionnée par `aaaf7875`). Epic 39. **Dépend
@@ -298,6 +298,10 @@ station) ; les quatre autres une à une, chacune dans son appel de `heavy.sh`, `
 
 ## Change Log
 
+- 2026-11-22 — **Clôture** : revue P3 ciblée (Claude Sonnet 5.5, `revue-p3-rapport.md`, sur le commit de fiche `e7ce9519`) :
+  0 C, 0 H, 0 M, 2 L. Boucle close : validation P1 → P3, revue de code P1 (Sonnet 0/0/1/4) → P2 (Haiku ciblée 0/0/2/2)
+  → P3 (Sonnet ciblée 0/0/0/2), la dernière remédiation ne touchant aucune ligne de production. Story `done`, fusionnée
+  sans squash dans `epic/39-wise`.
 - 2026-11-22 — Revue de code P1 (Claude Sonnet 5.5, `revue-p1-rapport.md`) : 0 C, 0 H, 1 M, 4 L ; aucune différence de
   comportement trouvée. M1 (fiche : quatre sites, copie des bornes par Stripe), L3, L4 remédiés ; L1, L2 notés au
   Dev Agent Record. Remédiation : fiche, commentaires, une assertion de test ; aucune ligne de production. Passe P2
