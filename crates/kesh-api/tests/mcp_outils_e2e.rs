@@ -186,7 +186,9 @@ fn bornes_des_schemas() {
         ("kesh_grand_livre", (26, 14)),
         // Story 37-4 (AC-6) : champs en devise re-mesurés (`tailles_mesurees_en_devise`),
         // grand livre 30 / 15 → 26 / 14 (27 donnait 23 614 o dans la fixture des tailles),
-        // balance 55 / 30 → 42 / 23.
+        // balance 55 / 30 → 42 / 23. Story 46-6a (AC-6) : le schéma garde ceux du
+        // mode plat ; le mode groupé (613 o la ligne, socle de 756 o) a 37 / 20,
+        // dits par la description et appliqués selon `detailLevel`.
         ("kesh_balance", (42, 23)),
         ("kesh_postes_ouverts", (24, 12)),
         ("kesh_factures", (40, 20)),
@@ -204,6 +206,12 @@ fn bornes_des_schemas() {
         assert_eq!(l["minimum"], json!(1), "{nom} minimum");
         assert_eq!(mesurees[nom], (max, defaut), "{nom} : valeurs de la fiche");
     }
+    // `kesh_balance` : le maximum avec `detailLevel` (mode groupé) est porté
+    // par `dependentSchemas`, et vaut la constante du code.
+    assert_eq!(
+        schema("kesh_balance")["dependentSchemas"]["detailLevel"]["properties"]["limit"]["maximum"],
+        json!(outils::rapports::LIMITE_MAX_MCP_BALANCE_GROUPEE)
+    );
 }
 
 /// Story 32-9b — le statut d'une pièce dit une seule valeur partout : la
@@ -2396,7 +2404,8 @@ async fn rapports_en_devise_par_le_mcp(pool: MySqlPool) {
         &b.appeler(
             &jeton,
             "kesh_balance",
-            json!({"fiscalYearId": p.exercice_id, "limit": 42}),
+            json!({"fiscalYearId": p.exercice_id,
+                   "limit": outils::rapports::LIMITE_MAX_MCP_BALANCE}),
         )
         .await,
         "kesh_balance",
@@ -2700,6 +2709,116 @@ async fn tailles_mesurees_en_devise(pool: MySqlPool) {
         assert!(tailles[2] <= 13_312, "{outil} : défaut {} o", tailles[2]);
         assert!(tailles[3] <= 23_552, "{outil} : maximum {} o", tailles[3]);
     }
+    // Story 46-6a (AC-6) — la balance **groupée**, mêmes bornes : les 56
+    // comptes USD rangés sous un groupe `00` au nom de 34 caractères, tous les
+    // niveaux, sous-totaux en pied ; la tranche commence par le groupe (en
+    // USD : toute sa descendance l'est) et ses comptes, colonnes en devise
+    // remplies. Une ligne groupée pèse plus que la plate (613 o contre 542 o) :
+    // le mode groupé a ses propres bornes, la sortie à plat garde les siennes.
+    let groupe: i64 = sqlx::query_scalar(
+        "INSERT INTO accounts (company_id, number, name, account_type, postable) \
+         VALUES (?, '00', ?, 'Asset', FALSE) RETURNING id",
+    )
+    .bind(a.c)
+    .bind(texte_de(34, "Groupe en devise"))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE accounts SET parent_id = ? WHERE company_id = ? AND number LIKE '00___'")
+        .bind(groupe)
+        .bind(a.c)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let groupee = |limit: i64| {
+        json!({"fiscalYearId": p.exercice_id, "limit": limit, "detailLevel": "all",
+               "subtotalPosition": "footer"})
+    };
+    let mesure: Vec<usize> = {
+        let mut m = Vec::new();
+        for n in [1, 2] {
+            m.push(texte(&b.appeler(&jeton, "kesh_balance", groupee(n)).await).len());
+        }
+        m
+    };
+    let (element, socle) = (mesure[1] - mesure[0], mesure[0] - (mesure[1] - mesure[0]));
+    eprintln!(
+        "MESURE EN DEVISE kesh_balance groupée : élément {element} o, socle {socle} o ; bornes \
+         possibles : défaut {} / maximum {}",
+        (13_312 - socle) / element,
+        (23_552 - socle) / element
+    );
+    let mut tailles = Vec::new();
+    for n in [
+        1,
+        2,
+        outils::rapports::LIMITE_DEFAUT_BALANCE_GROUPEE,
+        outils::rapports::LIMITE_MAX_MCP_BALANCE_GROUPEE,
+    ] {
+        let r = b.appeler(&jeton, "kesh_balance", groupee(n)).await;
+        let s = structure(&r, "kesh_balance groupée");
+        let lignes = s["groupes"]["lignes"].as_array().unwrap();
+        assert_eq!(lignes.len(), usize::try_from(n).unwrap());
+        assert_eq!(lignes[0]["compteId"], json!(groupe), "{}", lignes[0]);
+        assert_eq!(lignes[0]["devise"], json!("USD"), "{}", lignes[0]);
+        for l in lignes {
+            assert!(!l["clotureDevise"].is_null(), "colonnes en devise : {l}");
+        }
+        tailles.push(texte(&r).len());
+    }
+    eprintln!(
+        "TAILLE EN DEVISE kesh_balance groupée : élément {} o ; défaut {} o ; maximum {} o",
+        tailles[1] - tailles[0],
+        tailles[2],
+        tailles[3]
+    );
+    assert!(
+        tailles[2] <= 13_312,
+        "balance groupée : défaut {} o",
+        tailles[2]
+    );
+    assert!(
+        tailles[3] <= 23_552,
+        "balance groupée : maximum {} o",
+        tailles[3]
+    );
+    // Un écho chargé et un sous-total : le groupe ouvert à la main (écho
+    // `ouverts` non vide) et la dernière tranche pleine, qui porte le
+    // sous-total en pied du groupe (genre `subtotal`).
+    let max_g = outils::rapports::LIMITE_MAX_MCP_BALANCE_GROUPEE;
+    let total_groupe = structure(
+        &b.appeler(&jeton, "kesh_balance", groupee(1)).await,
+        "kesh_balance groupée",
+    )["total"]
+        .as_i64()
+        .unwrap();
+    let r = b
+        .appeler(
+            &jeton,
+            "kesh_balance",
+            json!({"fiscalYearId": p.exercice_id, "limit": max_g, "offset": total_groupe - max_g,
+                   "detailLevel": "all", "subtotalPosition": "footer", "open": [groupe]}),
+        )
+        .await;
+    let s = structure(&r, "kesh_balance groupée avec écho");
+    assert_eq!(s["groupes"]["ouverts"], json!([groupe]), "écho chargé");
+    assert!(
+        s["groupes"]["lignes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|l| l["genre"] == json!("subtotal")),
+        "un sous-total dans la tranche : {s}"
+    );
+    eprintln!(
+        "TAILLE EN DEVISE kesh_balance groupée, écho et sous-total : {} o",
+        texte(&r).len()
+    );
+    assert!(
+        texte(&r).len() <= 23_552,
+        "balance groupée avec écho : {} o",
+        texte(&r).len()
+    );
     let r = b
         .appeler(&jeton, "kesh_bilan", json!({"fiscalYearId": p.exercice_id}))
         .await;
@@ -2741,16 +2860,18 @@ fn litteral_de_base(outil: &str, p: &kesh_seed::pieges::Pieges) -> String {
 /// groupement ; le test en analyse la partie JSON, y ajoute `groupes` à `null`
 /// au niveau supérieur, la re-sérialise par le chemin de la sortie
 /// (`to_value` puis `to_string_pretty`) et compare le texte entier, en-tête
-/// compris.
+/// compris. `kesh_balance` (Story 46-6a, AC-6, C-46-6a-5) : même règle, sur
+/// le littéral écrit au commit de base de la 46-6a.
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
 async fn sans_groupes_sortie_du_commit_de_base(pool: MySqlPool) {
     let a = societe_piegee(&pool, "Société A 464", 'A').await;
     let jeton = cle_de(&pool, &a, &LECTURE, SendValidation::Exempt).await;
     let b = banc(&pool);
-    for outil in ["kesh_bilan", "kesh_compte_de_resultat"] {
-        let r = b
-            .appeler(&jeton, outil, json!({"fiscalYearId": a.p.exercice_id}))
-            .await;
+    for outil in ["kesh_balance", "kesh_bilan", "kesh_compte_de_resultat"] {
+        // `kesh_balance` comprise : sans `limit` ni argument de groupement,
+        // la limite par défaut à plat est celle de T0 (23), inchangée.
+        let args = json!({"fiscalYearId": a.p.exercice_id});
+        let r = b.appeler(&jeton, outil, args).await;
         let rendu = texte(&r);
         let base = litteral_de_base(outil, &a.p);
         let (entete, json_de_base) = base
@@ -2973,7 +3094,7 @@ async fn groupes_lignes_fideles_au_plat(pool: MySqlPool) {
 }
 
 /// AC-1 — un refus par contrainte : chacun rend le même texte fixe, qui ne
-/// nomme pas l'argument. Les formes valides voisines sont servies (sonde
+/// nomme pas l'argument ; `kesh_balance` de même (Story 46-6a, AC-6). Les formes valides voisines sont servies (sonde
 /// positive : le refus n'est pas celui de tout appel).
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
 async fn groupes_arguments_refuses(pool: MySqlPool) {
@@ -3015,7 +3136,7 @@ async fn groupes_arguments_refuses(pool: MySqlPool) {
         json!({"detailLevel": 2, "closed": assez}),
         json!({"detailLevel": null}),
     ];
-    for outil in ["kesh_bilan", "kesh_compte_de_resultat"] {
+    for outil in ["kesh_balance", "kesh_bilan", "kesh_compte_de_resultat"] {
         for args in &refuses {
             let mut args = args.clone();
             args["fiscalYearId"] = json!(fy);
@@ -3033,6 +3154,226 @@ async fn groupes_arguments_refuses(pool: MySqlPool) {
             assert_eq!(r["result"]["isError"], json!(false), "{outil} {args} : {r}");
         }
     }
+}
+
+/// Les clés d'une ligne groupée de la balance (Story 46-6a, AC-6) : ni
+/// `typeDeCompte` ni `actif`.
+const CLES_LIGNE_BALANCE_GROUPEE: [&str; 17] = [
+    "cloture",
+    "clotureDevise",
+    "compteId",
+    "credit",
+    "creditDevise",
+    "debit",
+    "debitDevise",
+    "devise",
+    "genre",
+    "nom",
+    "numero",
+    "ouvert",
+    "ouverture",
+    "ouvertureDevise",
+    "profondeur",
+    "solde",
+    "soldeDevise",
+];
+
+/// Story 46-6a, AC-6 — les bornes de `limit` de `kesh_balance` suivent le
+/// mode : à plat 23 par défaut et 42 au plus (inchangés), avec `detailLevel`
+/// 20 et 37 ; 38 refusé en mode groupé, accepté à plat.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn balance_bornes_selon_le_mode(pool: MySqlPool) {
+    let a = societe_piegee(&pool, "Société A 467", 'A').await;
+    let jeton = cle_de(&pool, &a, &LECTURE, SendValidation::Exempt).await;
+    let b = banc(&pool);
+    let fy = a.p.exercice_id;
+    let appel = |args: Value| {
+        let b = &b;
+        let jeton = &jeton;
+        async move {
+            structure(
+                &b.appeler(jeton, "kesh_balance", args).await,
+                "kesh_balance",
+            )
+        }
+    };
+    let plat = appel(json!({"fiscalYearId": fy})).await;
+    let total = plat["total"].as_i64().unwrap();
+    assert!(total > 42, "assez de comptes pour borner : {total}");
+    assert_eq!(
+        plat["lignes"].as_array().unwrap().len(),
+        23,
+        "défaut à plat"
+    );
+    assert_eq!(plat["limit"], json!(23));
+    let plat42 = appel(json!({"fiscalYearId": fy, "limit": 42})).await;
+    assert_eq!(plat42["lignes"].as_array().unwrap().len(), 42, "42 à plat");
+    let groupe = appel(json!({"fiscalYearId": fy, "detailLevel": "all"})).await;
+    assert!(groupe["total"].as_i64().unwrap() > 37);
+    assert_eq!(
+        groupe["groupes"]["lignes"].as_array().unwrap().len(),
+        20,
+        "défaut groupé"
+    );
+    assert_eq!(groupe["limit"], json!(20));
+    let groupe37 = appel(json!({"fiscalYearId": fy, "detailLevel": "all", "limit": 37})).await;
+    assert_eq!(groupe37["groupes"]["lignes"].as_array().unwrap().len(), 37);
+    let r = b
+        .appeler(
+            &jeton,
+            "kesh_balance",
+            json!({"fiscalYearId": fy, "detailLevel": "all", "limit": 38}),
+        )
+        .await;
+    assert_eq!(r, attendu_outil_en_erreur(1, TEXTE_ARGUMENTS_INVALIDES));
+}
+
+/// Story 46-6a, AC-6 — `kesh_balance` par groupes : l'écho, `groupes.lignes`
+/// et la liste plate vide ; la tranche porte sur les lignes groupées, que
+/// `total` compte, et les tranches mises bout à bout redonnent la liste
+/// entière ; les totaux du rapport sont inchangés ; chaque ligne de compte
+/// porte les valeurs de sa ligne plate (dont un compte en USD).
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn balance_groupes_par_le_mcp(pool: MySqlPool) {
+    let a = societe_piegee(&pool, "Société A 466", 'A').await;
+    let usd = compte_usd_mouvemente(&pool, &a).await;
+    let actifs = compte_numero(&pool, &a, "1").await;
+    let jeton = cle_de(&pool, &a, &LECTURE, SendValidation::Exempt).await;
+    let b = banc(&pool);
+    let fy = a.p.exercice_id;
+    let max = outils::rapports::LIMITE_MAX_MCP_BALANCE_GROUPEE;
+    let appel = |args: Value| {
+        let b = &b;
+        let jeton = &jeton;
+        async move {
+            structure(
+                &b.appeler(jeton, "kesh_balance", args).await,
+                "kesh_balance",
+            )
+        }
+    };
+
+    // Le plat, en entier (par tranches).
+    let mut plat: Vec<Value> = Vec::new();
+    let temoin = appel(json!({"fiscalYearId": fy, "limit": max})).await;
+    assert_eq!(temoin["groupes"], Value::Null, "témoin hors groupe");
+    let total_plat = temoin["total"].as_i64().unwrap();
+    let mut offset = 0;
+    while offset < total_plat {
+        let s = appel(json!({"fiscalYearId": fy, "limit": max, "offset": offset})).await;
+        plat.extend(s["lignes"].as_array().unwrap().iter().cloned());
+        offset += max;
+    }
+    assert_eq!(plat.len() as i64, total_plat);
+
+    // Niveau 1 : les racines, fermées ; liste plate vide, totaux inchangés.
+    let g = appel(json!({"fiscalYearId": fy, "detailLevel": 1, "limit": max})).await;
+    let groupes = &g["groupes"];
+    assert_eq!(groupes["niveau"], json!(1), "{groupes}");
+    assert_eq!(groupes["tousLesNiveaux"], json!(false));
+    assert_eq!(groupes["positionSousTotaux"], json!("header"));
+    assert!(groupes["profondeurMax"].as_u64().unwrap() >= 2, "{groupes}");
+    assert_eq!(
+        (&groupes["ouverts"], &groupes["fermes"]),
+        (&json!([]), &json!([]))
+    );
+    assert_eq!(g["lignes"], json!([]), "liste plate vide");
+    let lignes = groupes["lignes"].as_array().unwrap();
+    assert!(!lignes.is_empty());
+    assert_eq!(g["total"], json!(lignes.len()), "total des lignes groupées");
+    for l in lignes {
+        let cles: Vec<&str> = l.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(cles, CLES_LIGNE_BALANCE_GROUPEE, "{l}");
+        assert_eq!(l["profondeur"], json!(1), "{l}");
+    }
+    for k in [
+        "periode",
+        "totalDebit",
+        "totalCredit",
+        "equilibree",
+        "reportBenefice",
+        "ouvertureEquilibree",
+        "limit",
+        "offset",
+    ] {
+        assert_eq!(g[k], temoin[k], "{k} inchangé");
+    }
+
+    // Tous les niveaux, en pied, un groupe ouvert à la main et des
+    // identifiants ignorés : tranches bout à bout = la liste entière.
+    let args = |limit: i64, offset: i64| {
+        json!({"fiscalYearId": fy, "detailLevel": "all", "subtotalPosition": "footer",
+               "open": [actifs], "closed": [INEXISTANT, 0, -5],
+               "limit": limit, "offset": offset})
+    };
+    let tete = appel(args(max, 0)).await;
+    let total = tete["total"].as_i64().unwrap();
+    assert!(total > max, "plus d'une tranche : {total}");
+    assert_eq!(tete["groupes"]["tousLesNiveaux"], json!(true));
+    assert_eq!(tete["groupes"]["ouverts"], json!([actifs]));
+    assert_eq!(
+        tete["groupes"]["fermes"],
+        json!([]),
+        "inconnus retirés de l'écho"
+    );
+    let mut toutes: Vec<Value> = Vec::new();
+    let mut offset = 0;
+    while offset < total {
+        let s = appel(args(max, offset)).await;
+        assert_eq!(s["total"], json!(total));
+        assert_eq!(s["lignes"], json!([]));
+        toutes.extend(s["groupes"]["lignes"].as_array().unwrap().iter().cloned());
+        offset += max;
+    }
+    assert_eq!(toutes.len() as i64, total, "chaque ligne groupée une fois");
+    let deux = appel(args(2, 1)).await;
+    assert_eq!(
+        deux["groupes"]["lignes"].as_array().unwrap()[..],
+        toutes[1..3],
+        "tranche (2, 1)"
+    );
+    let genres: BTreeSet<&str> = toutes
+        .iter()
+        .map(|l| l["genre"].as_str().unwrap())
+        .collect();
+    assert!(
+        genres.contains("subtotal") && genres.contains("account"),
+        "{genres:?}"
+    );
+
+    // Fidélité au plat : chaque ligne de compte porte les valeurs de sa ligne
+    // plate ; le compte en USD compris.
+    let mut usd_compare = false;
+    let mut comptes = 0;
+    for l in toutes.iter().filter(|l| l["genre"] == json!("account")) {
+        let f = plat
+            .iter()
+            .find(|f| f["compteId"] == l["compteId"])
+            .unwrap_or_else(|| panic!("pas de ligne plate pour {l}"));
+        for k in [
+            "numero",
+            "nom",
+            "ouverture",
+            "debit",
+            "credit",
+            "solde",
+            "cloture",
+            "devise",
+            "ouvertureDevise",
+            "debitDevise",
+            "creditDevise",
+            "soldeDevise",
+            "clotureDevise",
+        ] {
+            assert_eq!(l[k], f[k], "{k} de {l}");
+        }
+        comptes += 1;
+        usd_compare |= l["compteId"] == json!(usd);
+    }
+    assert!(
+        comptes > 0 && usd_compare,
+        "comptes comparés : {comptes}, USD : {usd_compare}"
+    );
 }
 
 /// Une écriture d'un montant en USD au débit de `compte` (aux décimaux larges

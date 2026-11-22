@@ -2,9 +2,15 @@
 //! période d'un exercice (Story 32-9a, AC-a10) ; chaque consultation s'inscrit
 //! au journal d'audit (`ContexteMcp::afficher`). Portée `books:read`.
 //!
-//! La balance rend tout compte actif : l'outil la **tranche** (défaut 23,
-//! maximum 42 lignes, re-mesurés avec les colonnes en devise à la Story 37-4)
-//! et rend les totaux du rapport entier. Le bilan et le
+//! La balance rend tout compte actif : l'outil la **tranche** (à plat : défaut 23,
+//! maximum 42 lignes, re-mesurés avec les colonnes en devise à la Story 37-4 ;
+//! avec `detailLevel` : défaut 20, maximum 37, re-mesurés avec les lignes
+//! groupées à la Story 46-6a)
+//! et rend les totaux du rapport entier. **Par groupes** (Story 46-6a), elle
+//! accepte les mêmes arguments que le bilan ; la tranche porte alors sur les
+//! lignes groupées (`groupes.lignes`, `total` les compte) et la liste plate est
+//! vide — une ligne groupée pèse plus qu'une ligne plate, et le plan PME en
+//! rend une centaine à `all` : au-delà du plafond sans tranche (C-46-6a-2). Le bilan et le
 //! compte de résultat ne sont pas paginés : au-delà d'environ 60 comptes à
 //! solde non nul, la réponse est refusée pour sa taille (C-32-9-8). Re-mesuré
 //! avec les champs en devise (Story 37-4, `tailles_mesurees_en_devise`) : un
@@ -47,31 +53,48 @@ use crate::mcp::textes::depuis_app_error;
 use crate::services::acces::Portee;
 use crate::services::rapports::{self, Affichage, DemandeGroupes, DemandePeriode, NiveauDemande};
 
-/// Lignes de balance par défaut. Story 37-4 : re-mesurée avec les colonnes en
-/// devise remplies (élément de 542 o, `tailles_mesurees_en_devise`), 30 → 23.
+/// Lignes de balance par défaut, **à plat**. Story 37-4 : re-mesurée avec les
+/// colonnes en devise remplies (élément de 542 o, `tailles_mesurees_en_devise`),
+/// 30 → 23. Story 46-6a : inchangée pour la sortie à plat.
 pub const LIMITE_DEFAUT_BALANCE: i64 = 23;
-/// Lignes de balance au plus (aucun plafond de service). Story 37-4 : 55 → 42.
+/// Lignes de balance au plus, à plat (aucun plafond de service). Story 37-4 :
+/// 55 → 42. Story 46-6a : inchangée pour la sortie à plat.
 pub const LIMITE_MAX_MCP_BALANCE: i64 = 42;
+/// Lignes de balance par défaut avec `detailLevel`. Story 46-6a : la ligne
+/// **groupée** en devise pèse plus (élément de 613 o, socle de 756 o, mesurés
+/// le 2026-11-22) : 23 → 20.
+pub const LIMITE_DEFAUT_BALANCE_GROUPEE: i64 = 20;
+/// Lignes de balance au plus avec `detailLevel`. Story 46-6a : 42 → 37.
+pub const LIMITE_MAX_MCP_BALANCE_GROUPEE: i64 = 37;
 
 /// Lignes groupées (toutes sections) au-delà desquelles le bilan ou le compte
 /// de résultat par groupes est refusé pour sa taille — borne basse mesurée
 /// (`tailles_groupees_seuil`), écrite dans les descriptions des deux outils.
 pub const SEUIL_LIGNES_GROUPEES: usize = 60;
 
-/// La phrase des arguments de groupement, commune aux descriptions du bilan et
-/// du compte de résultat (Story 46-4, AC-1, AC-3, AC-5). Le nombre est
-/// [`SEUIL_LIGNES_GROUPEES`] (test `descriptions_des_groupes`).
+/// Les règles des arguments de groupement, communes aux descriptions du bilan,
+/// du compte de résultat (Story 46-4) et de la balance (Story 46-6a).
+macro_rules! regles_groupes {
+    () => {
+        "Par groupes de comptes, comme à l'écran : detailLevel (entier de 1 à 20, ou \"all\") \
+         ouvre les groupes de profondeur inférieure au niveau ; open et closed (tableaux \
+         d'identifiants de comptes de groupe, 500 au plus, jamais le même dans les deux) \
+         ouvrent ou ferment des groupes à la main ; subtotalPosition (\"header\", par défaut, \
+         ou \"footer\") place le sous-total d'un groupe ouvert sur son titre ou sur une ligne \
+         subtotal sous sa descendance — un groupe fermé porte son montant sur son titre. \
+         subtotalPosition, open et closed exigent detailLevel ; un argument hors de ces \
+         règles est refusé (Arguments invalides). "
+    };
+}
+
+/// La phrase des arguments de groupement du bilan et du compte de résultat
+/// (Story 46-4, AC-1, AC-3, AC-5). Le nombre est [`SEUIL_LIGNES_GROUPEES`]
+/// (test `descriptions_des_groupes`).
 macro_rules! description_groupes {
     ($plates:literal) => {
         concat!(
-            "Par groupes de comptes, comme à l'écran : detailLevel (entier de 1 à 20, ou \"all\") \
-             ouvre les groupes de profondeur inférieure au niveau ; open et closed (tableaux \
-             d'identifiants de comptes de groupe, 500 au plus, jamais le même dans les deux) \
-             ouvrent ou ferment des groupes à la main ; subtotalPosition (\"header\", par défaut, \
-             ou \"footer\") place le sous-total d'un groupe ouvert sur son titre ou sur une ligne \
-             subtotal sous sa descendance — un groupe fermé porte son montant sur son titre. \
-             subtotalPosition, open et closed exigent detailLevel ; un argument hors de ces \
-             règles est refusé (Arguments invalides). Avec detailLevel, groupes porte l'écho des \
+            regles_groupes!(),
+            "Avec detailLevel, groupes porte l'écho des \
              choix retenus et les lignes groupées de chaque section (genre group, account, own \
              ou subtotal ; un identifiant inconnu est ignoré) et les listes plates (",
             $plates,
@@ -89,9 +112,8 @@ pub struct KeshBilan;
 pub struct KeshCompteDeResultat;
 
 /// Les arguments d'un rapport à période : la période, et les arguments de
-/// groupement (Story 46-4), aux noms de l'API. Les quatre derniers ne servent
-/// que le bilan et le compte de résultat ; `kesh_balance` les pose à `None`
-/// jusqu'à la Story 46-6a.
+/// groupement (Story 46-4), aux noms de l'API ; `kesh_balance` y recopie les
+/// siens (Story 46-6a).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct ArgumentsPeriode {
@@ -211,6 +233,10 @@ struct ArgumentsBalance {
     period_end: Option<NaiveDate>,
     limit: Option<i64>,
     offset: Option<i64>,
+    detail_level: Option<NiveauArgument>,
+    subtotal_position: Option<PositionSousTotaux>,
+    open: Option<Vec<i64>>,
+    closed: Option<Vec<i64>>,
 }
 
 /// Le schéma du bilan et du compte de résultat : la période et les arguments
@@ -257,33 +283,94 @@ sortie! {
     }
 }
 
-sortie! {
+/// Une sortie « par groupes » : les six champs de l'écho `grouping` de la
+/// Story 46-1, puis les champs propres au rapport — écrits **une fois**
+/// (`sortie!` interdit `flatten`), avec leur conversion ([`echo`]) dans le
+/// constructeur `depuis` (Story 46-6a, AC-6) : `niveau` à `null` et
+/// `tousLesNiveaux` à `true` pour `"all"`.
+macro_rules! sortie_groupes {
+    (
+        $(#[doc = $doc:literal])*
+        struct $nom:ident { $($champ:ident : $t:ty),* $(,)? }
+    ) => {
+        sortie! {
+            $(#[doc = $doc])*
+            struct $nom {
+                niveau: Option<i64>,
+                tous_les_niveaux: bool,
+                position_sous_totaux: PositionSousTotaux,
+                profondeur_max: u32,
+                ouverts: Vec<i64>,
+                fermes: Vec<i64>,
+                $($champ: $t),*
+            }
+        }
+        impl $nom {
+            /// L'écho converti, et les champs propres au rapport.
+            fn depuis(g: kesh_report::Grouping, $($champ: $t),*) -> Self {
+                let (niveau, tous_les_niveaux) = echo(g.detail_level);
+                Self {
+                    niveau,
+                    tous_les_niveaux,
+                    position_sous_totaux: PositionSousTotaux::depuis_rapport(g.subtotal_position),
+                    profondeur_max: g.max_depth,
+                    ouverts: g.open,
+                    fermes: g.closed,
+                    $($champ),*
+                }
+            }
+        }
+    };
+}
+
+sortie_groupes! {
     /// Le bilan par groupes : l'écho des choix retenus et les sections.
     struct GroupesBilan {
-        niveau: Option<i64>,
-        tous_les_niveaux: bool,
-        position_sous_totaux: PositionSousTotaux,
-        profondeur_max: u32,
-        ouverts: Vec<i64>,
-        fermes: Vec<i64>,
         actifs: Vec<LigneGroupee>,
         passifs: Vec<LigneGroupee>,
         fonds_propres: Vec<LigneGroupee>,
     }
 }
 
-sortie! {
+sortie_groupes! {
     /// Le compte de résultat par groupes : l'écho des choix retenus et les
     /// sections.
     struct GroupesResultat {
-        niveau: Option<i64>,
-        tous_les_niveaux: bool,
-        position_sous_totaux: PositionSousTotaux,
-        profondeur_max: u32,
-        ouverts: Vec<i64>,
-        fermes: Vec<i64>,
         produits: Vec<LigneGroupee>,
         charges: Vec<LigneGroupee>,
+    }
+}
+
+sortie! {
+    /// Une ligne groupée de la balance (Story 46-6a) : un groupe et ses
+    /// sous-totaux, un compte, le solde propre d'un groupe, ou le sous-total en
+    /// pied d'un groupe ouvert ; les cinq colonnes, et leurs cinq en devise.
+    struct LigneBalanceGroupee {
+        genre: GenreLigne,
+        profondeur: u32,
+        compte_id: i64,
+        numero: TexteNonFiable,
+        nom: TexteNonFiable,
+        ouverture: Montant,
+        debit: Montant,
+        credit: Montant,
+        solde: Montant,
+        cloture: Montant,
+        devise: Option<Code<Devise>>,
+        ouverture_devise: Option<Montant>,
+        debit_devise: Option<Montant>,
+        credit_devise: Option<Montant>,
+        solde_devise: Option<Montant>,
+        cloture_devise: Option<Montant>,
+        ouvert: Option<bool>,
+    }
+}
+
+sortie_groupes! {
+    /// La balance par groupes : l'écho des choix retenus et la tranche des
+    /// lignes groupées.
+    struct GroupesBalance {
+        lignes: Vec<LigneBalanceGroupee>,
     }
 }
 
@@ -356,6 +443,8 @@ sortie! {
         equilibree: bool,
         report_benefice: Montant,
         ouverture_equilibree: bool,
+        // Story 46-6a : `null` sans `detailLevel` (C-37-9, C-46-6a-5).
+        groupes: Option<GroupesBalance>,
     }
 }
 
@@ -401,29 +490,35 @@ fn lignes_groupees(v: Vec<kesh_report::LigneRapport>) -> Vec<LigneGroupee> {
         .collect()
 }
 
-/// L'écho `grouping` de la Story 46-1, champ par champ : `niveau` à `null` et
-/// `tousLesNiveaux` à `true` pour `"all"`.
-struct Echo {
-    niveau: Option<i64>,
-    tous_les_niveaux: bool,
-    position_sous_totaux: PositionSousTotaux,
-    profondeur_max: u32,
-    ouverts: Vec<i64>,
-    fermes: Vec<i64>,
-}
-
-fn echo(g: kesh_report::Grouping) -> Echo {
-    let (niveau, tous_les_niveaux) = match g.detail_level {
+/// Le niveau de l'écho `grouping` de la Story 46-1 : `(niveau, tousLesNiveaux)`,
+/// `(null, true)` pour `"all"`.
+fn echo(n: kesh_report::NiveauDetail) -> (Option<i64>, bool) {
+    match n {
         kesh_report::NiveauDetail::Niveau(n) => (Some(i64::from(n)), false),
         kesh_report::NiveauDetail::Tous => (None, true),
-    };
-    Echo {
-        niveau,
-        tous_les_niveaux,
-        position_sous_totaux: PositionSousTotaux::depuis_rapport(g.subtotal_position),
-        profondeur_max: g.max_depth,
-        ouverts: g.open,
-        fermes: g.closed,
+    }
+}
+
+/// Une ligne groupée de la balance, aux noms du MCP.
+fn ligne_balance_groupee(l: kesh_report::LigneBalanceGroupee) -> LigneBalanceGroupee {
+    LigneBalanceGroupee {
+        genre: genre(l.kind),
+        profondeur: l.depth,
+        compte_id: l.account_id,
+        numero: TexteNonFiable::de(l.account_number),
+        nom: TexteNonFiable::de(l.account_name),
+        ouverture: Montant(l.opening_balance),
+        debit: Montant(l.total_debit),
+        credit: Montant(l.total_credit),
+        solde: Montant(l.balance),
+        cloture: Montant(l.closing_balance),
+        devise: l.currency.map(Code::depuis_str),
+        ouverture_devise: l.opening_currency.map(Montant),
+        debit_devise: l.total_debit_currency.map(Montant),
+        credit_devise: l.total_credit_currency.map(Montant),
+        solde_devise: l.balance_currency.map(Montant),
+        cloture_devise: l.closing_currency.map(Montant),
+        ouvert: l.open,
     }
 }
 
@@ -460,16 +555,27 @@ impl McpTool for KeshBalance {
     }
 
     fn description(&self) -> &'static str {
-        "Lit la balance des comptes d'un exercice (fiscalYearId, requis ; kesh_exercices), \
+        concat!(
+            "Lit la balance des comptes d'un exercice (fiscalYearId, requis ; kesh_exercices), \
          sur une période facultative (periodStart, periodEnd) : soldes d'ouverture, \
          mouvements et soldes par compte, par tranches (limit, offset), avec les totaux du \
          rapport entier. Si la réponse est trop grosse, réduisez limit. Un compte en devise \
          (devise, code ISO 4217) porte aussi ses colonnes dans sa devise (champs suffixés \
-         « devise », null sur un compte en CHF) ; les totaux restent en CHF."
+         « devise », null sur un compte en CHF) ; les totaux restent en CHF. ",
+            regles_groupes!(),
+            "Avec detailLevel, limit vaut 20 par défaut et 37 au plus (le schéma annonce 42 et 23, bornes à plat, et \
+             porte 37 en dependentSchemas) ; groupes porte l'écho des choix retenus et, dans groupes.lignes, \
+             les lignes groupées (genre group, account, own ou subtotal ; un identifiant inconnu \
+             est ignoré) ; la liste plate lignes est vide, et la tranche (limit, offset) porte \
+             sur les lignes groupées, que total compte : un groupe et son sous-total en pied \
+             peuvent tomber dans deux tranches (profondeur et compteId permettent de reprendre \
+             le fil). Un groupe qui mêle comptes débiteurs et créditeurs à montant non nul est \
+             dissous : ses comptes remontent. Sans detailLevel, groupes vaut null."
+        )
     }
 
     fn schema_entree(&self) -> &'static str {
-        r#"{"type":"object","properties":{"fiscalYearId":{"type":"integer","minimum":1},"periodStart":{"type":"string","format":"date"},"periodEnd":{"type":"string","format":"date"},"limit":{"type":"integer","minimum":1,"maximum":42,"default":23},"offset":{"type":"integer","minimum":0}},"required":["fiscalYearId"],"additionalProperties":false}"#
+        r#"{"type":"object","properties":{"fiscalYearId":{"type":"integer","minimum":1},"periodStart":{"type":"string","format":"date"},"periodEnd":{"type":"string","format":"date"},"limit":{"type":"integer","minimum":1,"maximum":42,"default":23},"offset":{"type":"integer","minimum":0},"detailLevel":{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]},"subtotalPosition":{"type":"string","enum":["header","footer"]},"open":{"type":"array","items":{"type":"integer"},"maxItems":500},"closed":{"type":"array","items":{"type":"integer"},"maxItems":500}},"required":["fiscalYearId"],"dependentSchemas":{"detailLevel":{"properties":{"limit":{"maximum":37}}}},"additionalProperties":false}"#
     }
 
     fn portee(&self) -> Portee {
@@ -483,29 +589,63 @@ impl McpTool for KeshBalance {
     ) -> FuturOutil<'a> {
         Box::pin(async move {
             let b: ArgumentsBalance = arguments(valeur)?;
-            let limit = limite(b.limit, LIMITE_DEFAUT_BALANCE, LIMITE_MAX_MCP_BALANCE)?;
+            let (defaut, maximum) = if b.detail_level.is_some() {
+                (
+                    LIMITE_DEFAUT_BALANCE_GROUPEE,
+                    LIMITE_MAX_MCP_BALANCE_GROUPEE,
+                )
+            } else {
+                (LIMITE_DEFAUT_BALANCE, LIMITE_MAX_MCP_BALANCE)
+            };
+            let limit = limite(b.limit, defaut, maximum)?;
             let offset = decalage(b.offset)?;
             let a = ArgumentsPeriode {
                 fiscal_year_id: b.fiscal_year_id,
                 period_start: b.period_start,
                 period_end: b.period_end,
-                // Story 46-6a : la balance par groupes.
-                detail_level: None,
-                subtotal_position: None,
-                open: None,
-                closed: None,
+                detail_level: b.detail_level,
+                subtotal_position: b.subtotal_position,
+                open: b.open,
+                closed: b.closed,
             };
             let resume = resume_periode("kesh_balance", &a)
                 .entier("limit", Some(limit))
                 .entier("offset", Some(offset));
-            let rapport = rapports::balance(ctx.acces(), ctx.lecture(), demande(&a), Affichage)
-                .await
-                .map_err(depuis_app_error)?;
-            let r = ctx.afficher(rapport).await;
-            let total = nombre(r.rows.len());
+            let g = groupes_demandes(&a)?;
+            let rapport = rapports::balance_par_groupes(
+                ctx.acces(),
+                ctx.lecture(),
+                demande(&a),
+                g,
+                Affichage,
+            )
+            .await
+            .map_err(depuis_app_error)?;
+            let enveloppe = ctx.afficher(rapport).await;
+            let r = enveloppe.rapport;
+            // Par groupes : la tranche porte sur les lignes groupées, que
+            // `total` compte, et la liste plate est vide (C-46-6a-2).
+            let (total, groupes) = match enveloppe.grouping.zip(enveloppe.grouped_rows) {
+                None => (nombre(r.rows.len()), None),
+                Some((g, lignes)) => (
+                    nombre(lignes.len()),
+                    Some(GroupesBalance::depuis(
+                        g,
+                        tranche(lignes, offset, limit)
+                            .into_iter()
+                            .map(ligne_balance_groupee)
+                            .collect(),
+                    )),
+                ),
+            };
+            let plates = if groupes.is_some() {
+                Vec::new()
+            } else {
+                r.rows
+            };
             let sortie = Balance {
                 periode: periode(r.period),
-                lignes: tranche(r.rows, offset, limit)
+                lignes: tranche(plates, offset, limit)
                     .into_iter()
                     .map(|row| LigneBalance {
                         compte_id: row.account_id,
@@ -534,6 +674,7 @@ impl McpTool for KeshBalance {
                 equilibree: r.balanced,
                 report_benefice: Montant(r.retained_earnings),
                 ouverture_equilibree: r.opening_balanced,
+                groupes,
             };
             donnees(resume, &sortie)
         })
@@ -585,18 +726,12 @@ impl McpTool for KeshBilan {
                 .grouping
                 .zip(enveloppe.grouped_rows)
                 .map(|(g, s)| {
-                    let e = echo(g);
-                    GroupesBilan {
-                        niveau: e.niveau,
-                        tous_les_niveaux: e.tous_les_niveaux,
-                        position_sous_totaux: e.position_sous_totaux,
-                        profondeur_max: e.profondeur_max,
-                        ouverts: e.ouverts,
-                        fermes: e.fermes,
-                        actifs: lignes_groupees(s.assets),
-                        passifs: lignes_groupees(s.liabilities),
-                        fonds_propres: lignes_groupees(s.equity),
-                    }
+                    GroupesBilan::depuis(
+                        g,
+                        lignes_groupees(s.assets),
+                        lignes_groupees(s.liabilities),
+                        lignes_groupees(s.equity),
+                    )
                 });
             let plates = |v| {
                 if groupes.is_some() {
@@ -673,17 +808,11 @@ impl McpTool for KeshCompteDeResultat {
                 .grouping
                 .zip(enveloppe.grouped_rows)
                 .map(|(g, s)| {
-                    let e = echo(g);
-                    GroupesResultat {
-                        niveau: e.niveau,
-                        tous_les_niveaux: e.tous_les_niveaux,
-                        position_sous_totaux: e.position_sous_totaux,
-                        profondeur_max: e.profondeur_max,
-                        ouverts: e.ouverts,
-                        fermes: e.fermes,
-                        produits: lignes_groupees(s.revenues),
-                        charges: lignes_groupees(s.expenses),
-                    }
+                    GroupesResultat::depuis(
+                        g,
+                        lignes_groupees(s.revenues),
+                        lignes_groupees(s.expenses),
+                    )
                 });
             let plates = |v| {
                 if groupes.is_some() {
@@ -709,6 +838,29 @@ impl McpTool for KeshCompteDeResultat {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Les nombres écrits en toutes lettres dans la description de
+    /// `kesh_balance` (20, 37, 42, 23) sont ceux des constantes.
+    #[test]
+    fn description_balance_cite_les_constantes() {
+        let d = KeshBalance.description();
+        let attendu = format!(
+            "limit vaut {} par défaut et {} au plus (le schéma annonce {} et {},",
+            LIMITE_DEFAUT_BALANCE_GROUPEE,
+            LIMITE_MAX_MCP_BALANCE_GROUPEE,
+            LIMITE_MAX_MCP_BALANCE,
+            LIMITE_DEFAUT_BALANCE
+        );
+        let a_plat = d.replace(['\n', ' '], "");
+        assert!(
+            a_plat.contains(&attendu.replace(' ', "")),
+            "description et constantes divergent : {d}"
+        );
+        assert!(d.contains(&format!(
+            "porte {} en dependentSchemas",
+            LIMITE_MAX_MCP_BALANCE_GROUPEE
+        )));
+    }
 
     fn lire(json: &str) -> Result<ArgumentsPeriode, serde_json::Error> {
         serde_json::from_str(json)
@@ -835,6 +987,8 @@ mod tests {
             ] {
                 assert!(d.contains(mot), "{mot} : {d}");
             }
+            // Ni le bilan ni le compte de résultat n'ont de `limit`.
+            assert!(!d.contains("limit"), "{d}");
         }
         assert!(
             KeshBilan
@@ -846,5 +1000,21 @@ mod tests {
                 .description()
                 .contains("(produits, charges)")
         );
+        // Story 46-6a : la balance énonce les mêmes règles, la tranche sur les
+        // lignes groupées et la dissolution par nature.
+        let d = KeshBalance.description();
+        for mot in [
+            "detailLevel",
+            "subtotalPosition",
+            "open",
+            "closed",
+            "500",
+            "groupes.lignes",
+            "tranche",
+            "dissous",
+            "null",
+        ] {
+            assert!(d.contains(mot), "{mot} : {d}");
+        }
     }
 }

@@ -2262,6 +2262,35 @@ async fn rapports_sans_parametre_identiques_a_la_fixture_de_base(pool: MySqlPool
     }
 }
 
+/// Story 46-6a, AC-5 (NFR-46-1) — sans `detailLevel`, le corps JSON de la
+/// balance est **identique à l'octet** à celui du commit de base de la Story
+/// 46-6a, écrit dans `tests/fixtures/rapports-groupes/balance-{année}.json`
+/// avant toute modification du code (jeu PME : un compte en dollars, deux
+/// exercices). `KESH_ECRIRE_FIXTURES_46_6A=1` les réécrit — à ne faire qu'au
+/// commit de base.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn balance_sans_parametre_identique_a_la_fixture_de_base(pool: MySqlPool) {
+    let jeu = jeu_pme(&pool).await;
+    let app = spawn_app(pool).await;
+    let ecrire = std::env::var("KESH_ECRIRE_FIXTURES_46_6A").as_deref() == Ok("1");
+    for (fy, annee) in [(jeu.fy_2025, 2025), (jeu.fy_2026, 2026)] {
+        let resp = get_pme(&app, &jeu, "trial-balance", fy, "").await;
+        assert_eq!(resp.status(), 200, "balance {annee}");
+        let corps = resp.text().await.unwrap();
+        let chemin = fixture_46_1(&format!("balance-{annee}.json"));
+        if ecrire {
+            std::fs::write(&chemin, &corps).unwrap();
+        }
+        let attendu = std::fs::read_to_string(&chemin)
+            .unwrap_or_else(|e| panic!("fixture {} illisible : {e}", chemin.display()));
+        assert_eq!(
+            corps, attendu,
+            "balance {annee} sans paramètre : le JSON a changé (NFR-46-1)"
+        );
+        assert!(!corps.contains("grouping") && !corps.contains("groupedRows"));
+    }
+}
+
 /// GET d'un rapport du jeu PME, avec la requête `suite` après `fiscalYearId`.
 async fn get_pme(
     app: &TestApp,
@@ -2278,8 +2307,9 @@ async fn get_pme(
         .unwrap()
 }
 
-/// AC-8 — chaque refus du contrat, sur les deux routes : `400
-/// VALIDATION_ERROR`, message qui nomme le paramètre.
+/// AC-8 — chaque refus du contrat, sur les deux routes, et sur la balance
+/// (Story 46-6a, AC-5) : `400 VALIDATION_ERROR`, message qui nomme le
+/// paramètre.
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
 async fn groupes_refus_du_contrat(pool: MySqlPool) {
     let jeu = jeu_pme(&pool).await;
@@ -2308,7 +2338,7 @@ async fn groupes_refus_du_contrat(pool: MySqlPool) {
         (format!("&detailLevel=2&open={trop}"), "open"),
         (format!("&detailLevel=all&closed={trop}"), "closed"),
     ];
-    for route in ["balance-sheet", "income-statement"] {
+    for route in ["balance-sheet", "income-statement", "trial-balance"] {
         for (suite, parametre) in &refus {
             let resp = get_pme(&app, &jeu, route, jeu.fy_2025, suite).await;
             assert_eq!(resp.status(), 400, "{route}{suite}");
@@ -2588,14 +2618,131 @@ async fn exemple_du_guide_d_api_est_la_reponse_reelle(pool: MySqlPool) {
     assert_eq!(corps["groupedRows"], attendu["groupedRows"]);
 }
 
+/// Les `groupedRows` de la balance (un tableau, Story 46-6a).
+fn lignes_balance(corps: &Value) -> &Vec<Value> {
+    corps["groupedRows"]
+        .as_array()
+        .unwrap_or_else(|| panic!("groupedRows de la balance absent ou non tableau : {corps}"))
+}
+
+/// Les numéros des lignes `group` d'une balance groupée.
+fn groupes_de_la_balance(corps: &Value) -> std::collections::BTreeSet<String> {
+    lignes_balance(corps)
+        .iter()
+        .filter(|l| l["kind"] == "group")
+        .map(|l| l["accountNumber"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// Story 46-6a, AC-2 à AC-5 — la balance du jeu PME par groupes, au niveau 2
+/// et à `all`, sur les deux exercices : les champs d'aujourd'hui inchangés
+/// (fixture), `groupedRows` en tableau, la somme des débits (crédits) de
+/// profondeur 1 (sous-totaux exclus) égale aux totaux ; **la nature pour
+/// partition** — en 2025, `6` (6000 en charge, 6950 en produit), `7` et `70`
+/// (7010, 7000) sont dissous et 6950 remonte en profondeur 1, `8` et `80`,
+/// sans montant, restent des groupes ; en 2026, l'inverse (8000, 8010
+/// mouvementés ; les comptes de résultat de `6` et `7` à zéro ne dissolvent
+/// rien, C-46-6a-3) ; `2 Passifs` reste un groupe ; aucune ligne `own` (les
+/// lignes propres nulles des groupes, AC-3 (d)). Sonde négative de la
+/// dissolution par nature : sans elle, `6` resterait un groupe en 2025.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn balance_groupee_niveau_2_et_tous(pool: MySqlPool) {
+    let jeu = jeu_pme(&pool).await;
+    let app = spawn_app(pool).await;
+    let somme = |lignes: &[Value], champ: &str| -> Decimal {
+        lignes
+            .iter()
+            .filter(|l| l["depth"] == 1 && l["kind"] != "subtotal")
+            .map(|l| l[champ].as_str().unwrap().parse::<Decimal>().unwrap())
+            .sum()
+    };
+    for (fy, annee) in [(jeu.fy_2025, 2025), (jeu.fy_2026, 2026)] {
+        for suite in ["&detailLevel=2", "&detailLevel=all&subtotalPosition=footer"] {
+            let resp = get_pme(&app, &jeu, "trial-balance", fy, suite).await;
+            assert_eq!(resp.status(), 200, "{annee}{suite}");
+            let corps: Value = resp.json().await.unwrap();
+            let mut plat = corps.clone();
+            let objet = plat.as_object_mut().unwrap();
+            objet.remove("grouping");
+            objet.remove("groupedRows");
+            let attendu: Value = serde_json::from_str(
+                &std::fs::read_to_string(fixture_46_1(&format!("balance-{annee}.json"))).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                plat, attendu,
+                "{annee}{suite} : champs d'aujourd'hui inchangés"
+            );
+            let lignes = lignes_balance(&corps);
+            for (champ, total) in [("totalDebit", "totalDebit"), ("totalCredit", "totalCredit")] {
+                let t: Decimal = corps[total].as_str().unwrap().parse().unwrap();
+                assert_eq!(somme(lignes, champ), t, "{annee}{suite} : {champ}");
+            }
+            assert!(!lignes.iter().any(|l| l["kind"] == "own"), "{annee}{suite}");
+            assert!(lignes.iter().all(|l| l.get("role").is_none()));
+            assert_eq!(corps["grouping"]["open"], serde_json::json!([]));
+        }
+        let corps: Value = get_pme(&app, &jeu, "trial-balance", fy, "&detailLevel=all")
+            .await
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(corps["grouping"]["detailLevel"], "all");
+        let groupes = groupes_de_la_balance(&corps);
+        for garde in ["1", "10", "2", "20", "28", "60"] {
+            assert!(
+                groupes.contains(garde),
+                "{annee} : {garde} affiché ({groupes:?})"
+            );
+        }
+        let (dissous, gardes) = if annee == 2025 {
+            (["6", "7", "70"], ["8", "80", "8"])
+        } else {
+            (["8", "80", "8"], ["6", "7", "70"])
+        };
+        for d in dissous {
+            assert!(!groupes.contains(d), "{annee} : {d} dissous ({groupes:?})");
+        }
+        for g in gardes {
+            assert!(groupes.contains(g), "{annee} : {g} gardé ({groupes:?})");
+        }
+        if annee == 2025 {
+            let produit = lignes_balance(&corps)
+                .iter()
+                .find(|l| l["accountNumber"] == "6950")
+                .unwrap();
+            assert_eq!(produit["kind"], "account", "{produit}");
+            assert_eq!(produit["depth"], 1, "{produit}");
+        }
+        let usd = lignes_balance(&corps)
+            .iter()
+            .find(|l| l["accountNumber"] == "1025")
+            .unwrap();
+        assert_eq!(usd["currency"], "USD", "{usd}");
+        assert!(
+            usd["closingCurrency"].is_string() && usd["active"] == true,
+            "{usd}"
+        );
+        // Le compte en dollars ne donne pas sa devise à `10` (comptes CHF non
+        // nuls).
+        let dix = lignes_balance(&corps)
+            .iter()
+            .find(|l| l["accountNumber"] == "10")
+            .unwrap();
+        assert!(dix.get("currency").is_none(), "{dix}");
+    }
+}
+
 /// Revue P1, L-4 — un paramètre de groupes répété : refus clair sur les
 /// rapports groupés (400 `VALIDATION_ERROR` qui le nomme) ; ignoré, comme
-/// avant, par la balance et la TVA, qui partagent `ReportQuery`.
+/// avant, par la TVA, qui partage `ReportQuery`, et par l'export de la balance
+/// (`ExportQuery`, jusqu'à la Story 46-6b). Story 46-6a : la balance, qui
+/// l'ignorait, le refuse désormais comme le bilan (adapté, Change Log).
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
 async fn groupes_parametre_repete(pool: MySqlPool) {
     let jeu = jeu_pme(&pool).await;
     let app = spawn_app(pool).await;
-    for route in ["balance-sheet", "income-statement"] {
+    for route in ["balance-sheet", "income-statement", "trial-balance"] {
         for (suite, parametre) in [
             ("&detailLevel=2&open=1&open=2", "open"),
             ("&detailLevel=2&detailLevel=3", "detailLevel"),
@@ -2611,13 +2758,13 @@ async fn groupes_parametre_repete(pool: MySqlPool) {
             );
         }
     }
-    for route in ["trial-balance", "vat"] {
+    for route in ["vat", "trial-balance/export"] {
         let resp = get_pme(
             &app,
             &jeu,
             route,
             jeu.fy_2025,
-            "&open=1&open=2&detailLevel=x&detailLevel=y",
+            "&format=csv&open=1&open=2&detailLevel=x&detailLevel=y",
         )
         .await;
         assert_eq!(

@@ -26,8 +26,8 @@ use kesh_db::entities::audit_log::NewAuditLogEntry;
 use kesh_db::entities::journal_entry::Journal;
 use kesh_db::repositories::accounts;
 use kesh_report::groupes::{
-    ArbreComptes, AvecGroupes, NIVEAU_MAX, NiveauDetail, OptionsGroupes, PositionSousTotal,
-    SectionsBilan, SectionsResultat,
+    ArbreComptes, AvecGroupes, LigneBalanceGroupee, NIVEAU_MAX, NiveauDetail, OptionsGroupes,
+    PositionSousTotal, SectionsBilan, SectionsResultat,
 };
 use kesh_report::project_report::{ProjectPeriodMode, resolve_scope};
 use kesh_report::{
@@ -844,17 +844,40 @@ pub async fn compte_de_resultat_par_groupes<U: Usage>(
     Ok(Rapport::nouveau(contenu, details, acces, usage))
 }
 
-/// La balance des comptes.
+/// La balance des comptes, sans groupes : [`balance_par_groupes`] sans
+/// demande de groupes.
 pub async fn balance<U: Usage>(
     acces: &ContexteAcces,
     lecture: &Lecture,
     demande: DemandePeriode,
     usage: U,
-) -> Result<Rapport<TrialBalance, U>, AppError> {
+) -> Result<Rapport<AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>, U>, AppError> {
+    balance_par_groupes(acces, lecture, demande, None, usage).await
+}
+
+/// La balance des comptes, et, si `groupes` est donné, ses lignes par groupes
+/// de comptes (Story 46-6a ; la nature débitrice ou créditrice pour partition) ;
+/// même régime que [`bilan_par_groupes`] : sans `groupes`, la balance seule,
+/// à l'octet, et aucune requête de plus.
+pub async fn balance_par_groupes<U: Usage>(
+    acces: &ContexteAcces,
+    lecture: &Lecture,
+    demande: DemandePeriode,
+    groupes: Option<DemandeGroupes>,
+    usage: U,
+) -> Result<Rapport<AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>, U>, AppError> {
     acces.exiger(EXIGENCES_BALANCE.pour(&usage))?;
     validate_fiscal_year_id(demande.fiscal_year_id)?;
     let period = resoudre_periode(acces, lecture, &demande).await?;
-    let contenu = generate_trial_balance(lecture.pool(), acces.company_id(), &period).await?;
+    let balance = generate_trial_balance(lecture.pool(), acces.company_id(), &period).await?;
+    let contenu = match groupes {
+        None => AvecGroupes::sans_groupes(balance),
+        Some(g) => AvecGroupes::balance(
+            balance,
+            &arbre_des_comptes(acces, lecture).await?,
+            &g.options,
+        ),
+    };
     let details = details_periode("trial-balance", &demande, &period, None);
     Ok(Rapport::nouveau(contenu, details, acces, usage))
 }

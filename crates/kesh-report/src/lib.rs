@@ -40,8 +40,8 @@ pub use general_ledger::{
     generate as generate_general_ledger,
 };
 pub use groupes::{
-    ArbreComptes, AvecGroupes, Grouping, LigneRapport, NiveauDetail, OptionsGroupes,
-    PositionSousTotal, SectionsBilan, SectionsResultat,
+    ArbreComptes, AvecGroupes, Grouping, LigneBalanceGroupee, LigneRapport, NiveauDetail,
+    OptionsGroupes, PositionSousTotal, SectionsBilan, SectionsResultat,
 };
 pub use homepage_summary::{HomepageSummary, generate as generate_homepage_summary};
 pub use income_statement::{IncomeStatement, generate as generate_income_statement};

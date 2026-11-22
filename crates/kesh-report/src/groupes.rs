@@ -3,6 +3,9 @@
 //! Le bilan et le compte de résultat se présentent, sur demande, **par groupes**
 //! de l'arbre du plan comptable (`accounts.parent_id`, D1 — jamais le numéro) :
 //! un sous-total par groupe, un niveau de détail, des groupes ouverts ou fermés.
+//! La balance des comptes aussi (Story 46-6a), sur une seule liste dont la
+//! nature débitrice ou créditrice de chaque compte est la clé de partition,
+//! avec cinq montants par ligne ([`LigneBalanceGroupee`]).
 //!
 //! Ce module est **pur** (aucune I/O) :
 //!
@@ -29,6 +32,8 @@ use serde::{Serialize, Serializer};
 
 use crate::balance_sheet::{AccountBalance, BalanceSheet};
 use crate::income_statement::IncomeStatement;
+use crate::opening::is_debit_natured;
+use crate::trial_balance::{TrialBalance, TrialBalanceRow};
 
 // ===========================================================================
 // Options
@@ -388,7 +393,9 @@ impl Dissolution {
 struct Agregat {
     montants: Vec<Decimal>,
     par_devise: BTreeMap<String, Vec<Decimal>>,
-    /// Au moins une ligne d'entrée en devise principale.
+    /// Au moins une ligne d'entrée **non entièrement nulle** en devise
+    /// principale (une ligne nulle ne compte pas pour la devise unique, 46-6a
+    /// AC-3 (c)).
     ligne_principale: bool,
 }
 
@@ -401,7 +408,16 @@ impl Agregat {
         }
     }
 
+    /// Ajoute une ligne d'entrée. Une ligne **entièrement nulle** (balance : un
+    /// compte actif sans ouverture ni mouvement) n'agit ni sur
+    /// `ligne_principale` ni sur `par_devise` (46-6a AC-3 (c)) : un compte CHF
+    /// à zéro ne retire pas sa devise à un groupe de comptes USD. Ses montants,
+    /// nuls, ne changeraient ni la somme ni [`Self::est_nul`]. Le bilan et le
+    /// compte de résultat n'ont jamais de telle ligne.
     fn ajouter_ligne<L: LigneAgregeable>(&mut self, l: &L) {
+        if entierement_nulle(l) {
+            return;
+        }
         additionner(&mut self.montants, &l.montants());
         match (l.devise(), l.montants_devise()) {
             (Some(d), Some(m)) => {
@@ -932,6 +948,194 @@ impl AvecGroupes<IncomeStatement, SectionsResultat> {
             rapport,
             grouping: Some(grouping),
             grouped_rows: Some(SectionsResultat { revenues, expenses }),
+        }
+    }
+}
+
+// ===========================================================================
+// La balance des comptes par groupes (Story 46-6a)
+// ===========================================================================
+
+/// `true` si tous les montants d'une ligne, en devise principale et en devise,
+/// sont nuls : une telle ligne ne compte ni pour la devise unique d'un groupe
+/// (46-6a AC-3 (c)) ni pour la dissolution par nature (AC-2, C-46-6a-3).
+fn entierement_nulle<L: LigneAgregeable>(l: &L) -> bool {
+    l.montants().iter().all(Decimal::is_zero)
+        && l.montants_devise()
+            .is_none_or(|m| m.iter().all(Decimal::is_zero))
+}
+
+impl LigneAgregeable for TrialBalanceRow {
+    fn compte_id(&self) -> i64 {
+        self.account_id
+    }
+    fn numero(&self) -> &str {
+        &self.account_number
+    }
+    fn nom(&self) -> &str {
+        &self.account_name
+    }
+    fn devise(&self) -> Option<&str> {
+        self.currency.as_deref()
+    }
+    /// Les cinq colonnes, dans cet ordre : ouverture, débit, crédit, net des
+    /// mouvements, clôture.
+    fn montants(&self) -> Vec<Decimal> {
+        vec![
+            self.opening_balance,
+            self.total_debit,
+            self.total_credit,
+            self.balance,
+            self.closing_balance,
+        ]
+    }
+    /// Les cinq colonnes en devise, dans le même ordre (un champ absent vaut
+    /// zéro), pour un compte en devise seulement.
+    fn montants_devise(&self) -> Option<Vec<Decimal>> {
+        self.currency.as_ref()?;
+        Some(
+            [
+                self.opening_currency,
+                self.total_debit_currency,
+                self.total_credit_currency,
+                self.balance_currency,
+                self.closing_currency,
+            ]
+            .map(|m| m.unwrap_or(Decimal::ZERO))
+            .to_vec(),
+        )
+    }
+}
+
+/// Une ligne groupée de la balance, telle que sérialisée dans `groupedRows`
+/// (un tableau : la balance n'a pas de sections). Les noms sont ceux de
+/// [`TrialBalanceRow`] ; ni rôle ni miroir (la balance n'est pas présentée).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LigneBalanceGroupee {
+    /// `group`, `account`, `own` ou `subtotal`.
+    pub kind: GenreLigne,
+    /// Profondeur dans l'arbre affiché (racines : 1).
+    pub depth: u32,
+    /// Identifiant du compte.
+    pub account_id: i64,
+    /// Numéro du compte.
+    pub account_number: String,
+    /// Nom du compte.
+    pub account_name: String,
+    /// Solde d'ouverture (sous-total d'un groupe), exact.
+    pub opening_balance: Decimal,
+    /// Mouvements débit de la période.
+    pub total_debit: Decimal,
+    /// Mouvements crédit de la période.
+    pub total_credit: Decimal,
+    /// Net des mouvements de la période.
+    pub balance: Decimal,
+    /// Solde de clôture.
+    pub closing_balance: Decimal,
+    /// Devise étrangère, si toute la descendance non nulle la partage.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
+    /// Ouverture en devise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opening_currency: Option<Decimal>,
+    /// Débit en devise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_debit_currency: Option<Decimal>,
+    /// Crédit en devise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_credit_currency: Option<Decimal>,
+    /// Net des mouvements en devise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub balance_currency: Option<Decimal>,
+    /// Clôture en devise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub closing_currency: Option<Decimal>,
+    /// État d'un groupe (`group` seulement).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open: Option<bool>,
+    /// Compte actif (`account` et `own`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active: Option<bool>,
+}
+
+impl LigneBalanceGroupee {
+    /// La ligne neutre convertie en ses champs nommés ; `entree` est la liste
+    /// **passée à [`regrouper`]** (lignes propres nulles des groupes retirées),
+    /// où se lit `source`.
+    fn depuis(l: LigneGroupee, entree: &[TrialBalanceRow]) -> Self {
+        let col = |m: &[Decimal], i: usize| m.get(i).copied().unwrap_or(Decimal::ZERO);
+        let dev = |i: usize| l.montants_devise.as_deref().map(|m| col(m, i));
+        Self {
+            kind: l.genre,
+            depth: l.profondeur,
+            account_id: l.compte_id,
+            opening_balance: col(&l.montants, 0),
+            total_debit: col(&l.montants, 1),
+            total_credit: col(&l.montants, 2),
+            balance: col(&l.montants, 3),
+            closing_balance: col(&l.montants, 4),
+            opening_currency: dev(0),
+            total_debit_currency: dev(1),
+            total_credit_currency: dev(2),
+            balance_currency: dev(3),
+            closing_currency: dev(4),
+            currency: l.devise,
+            open: l.ouvert,
+            active: l.source.map(|i| entree[i].active),
+            account_number: l.numero,
+            account_name: l.nom,
+        }
+    }
+}
+
+impl AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>> {
+    /// La balance groupée (Story 46-6a). Une seule liste ; la clé de partition
+    /// est la **nature** du compte (débitrice : actif et charge ; créditrice :
+    /// passif et produit, AC-2), si bien qu'un sous-total n'additionne que des
+    /// soldes de même signe.
+    ///
+    /// Deux filtres propres à la balance, qui rend aussi les comptes actifs à
+    /// zéro :
+    ///
+    /// - la ligne d'un **compte de groupe** (ancêtre d'une autre ligne de la
+    ///   balance) dont les dix montants sont nuls n'est pas passée à
+    ///   [`regrouper`] : le groupe est montré par sa ligne `group`, sans ligne
+    ///   `own` nulle (AC-3 (d)) ;
+    /// - seules les lignes **non entièrement nulles** comptent pour la
+    ///   dissolution (C-46-6a-3) : un zéro n'additionne aucun signe contraire.
+    ///
+    /// La ligne calculée du résultat reporté reste hors des groupes.
+    pub fn balance(rapport: TrialBalance, arbre: &ArbreComptes, options: &OptionsGroupes) -> Self {
+        let groupes: HashSet<i64> = rapport
+            .rows
+            .iter()
+            .flat_map(|r| arbre.ancetres(r.account_id))
+            .collect();
+        let lignes: Vec<TrialBalanceRow> = rapport
+            .rows
+            .iter()
+            .filter(|r| !(groupes.contains(&r.account_id) && entierement_nulle(*r)))
+            .cloned()
+            .collect();
+        let dissous = Dissolution::calculer(
+            arbre,
+            lignes
+                .iter()
+                .filter(|r| !entierement_nulle(*r))
+                .map(|r| (r.account_id, is_debit_natured(r.account_type))),
+        );
+        let section = regrouper(&lignes, arbre, &dissous, options);
+        let grouping = Grouping::depuis(options, std::slice::from_ref(&section));
+        let grouped_rows = section
+            .lignes
+            .into_iter()
+            .map(|l| LigneBalanceGroupee::depuis(l, &lignes))
+            .collect();
+        Self {
+            rapport,
+            grouping: Some(grouping),
+            grouped_rows: Some(grouped_rows),
         }
     }
 }
@@ -1822,5 +2026,459 @@ mod tests {
             (Some("account"), Some(true))
         );
         assert!(v["role"].is_null() && v.as_object().unwrap().contains_key("role"));
+    }
+
+    // ---- Balance par groupes (Story 46-6a) ------------------------------
+
+    use kesh_db::entities::AccountType as Type;
+
+    /// Une ligne de balance de test : ouverture et débit donnés, crédit nul,
+    /// net = débit, clôture = ouverture + débit (soldes du côté naturel).
+    fn tb(numero: &str, t: Type, ouverture: Decimal, debit: Decimal) -> TrialBalanceRow {
+        TrialBalanceRow {
+            account_id: ident(numero),
+            account_number: numero.to_string(),
+            account_name: format!("Compte {numero}"),
+            account_type: t,
+            active: true,
+            opening_balance: ouverture,
+            total_debit: debit,
+            total_credit: Decimal::ZERO,
+            balance: debit,
+            closing_balance: ouverture + debit,
+            currency: None,
+            opening_currency: None,
+            total_debit_currency: None,
+            total_credit_currency: None,
+            balance_currency: None,
+            closing_currency: None,
+        }
+    }
+
+    /// La même, en devise : les cinq colonnes en devise valent celles en CHF
+    /// multipliées par deux (un champ absent pour le crédit, lu comme zéro).
+    fn tb_devise(
+        numero: &str,
+        t: Type,
+        ouverture: Decimal,
+        debit: Decimal,
+        devise: &str,
+    ) -> TrialBalanceRow {
+        TrialBalanceRow {
+            currency: Some(devise.to_string()),
+            opening_currency: Some(ouverture * dec!(2)),
+            total_debit_currency: Some(debit * dec!(2)),
+            total_credit_currency: None,
+            balance_currency: Some(debit * dec!(2)),
+            closing_currency: Some((ouverture + debit) * dec!(2)),
+            ..tb(numero, t, ouverture, debit)
+        }
+    }
+
+    fn balance_de(rows: Vec<TrialBalanceRow>) -> TrialBalance {
+        let total_debit = rows.iter().map(|r| r.total_debit).sum();
+        TrialBalance {
+            period: crate::period::ReportPeriod {
+                fiscal_year_id: 1,
+                start_date: chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+                end_date: chrono::NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+            },
+            rows,
+            total_debit,
+            total_credit: total_debit,
+            balanced: true,
+            retained_earnings: dec!(7),
+            opening_balanced: true,
+        }
+    }
+
+    fn grouper(
+        rows: Vec<TrialBalanceRow>,
+        p: &Plan,
+        o: &OptionsGroupes,
+    ) -> Vec<LigneBalanceGroupee> {
+        AvecGroupes::balance(balance_de(rows), &p.arbre, o)
+            .grouped_rows
+            .unwrap()
+    }
+
+    /// Rendu compact : `genre:numéro@profondeur=ouverture/débit`.
+    fn rendu_b(v: &[LigneBalanceGroupee]) -> Vec<String> {
+        v.iter()
+            .map(|g| {
+                let genre = match g.kind {
+                    GenreLigne::Groupe if g.open == Some(true) => "G+",
+                    GenreLigne::Groupe => "G-",
+                    GenreLigne::Compte => "C",
+                    GenreLigne::Propre => "P",
+                    GenreLigne::SousTotal => "S",
+                };
+                format!(
+                    "{genre}:{}@{}={}/{}",
+                    g.account_number, g.depth, g.opening_balance, g.total_debit
+                )
+            })
+            .collect()
+    }
+
+    /// AC-1 — l'ordre des cinq montants, et les cinq en devise (un champ
+    /// absent vaut zéro) ; aucun montant en devise pour un compte en CHF.
+    #[test]
+    fn balance_cinq_montants_dans_l_ordre() {
+        let mut r = tb("1000", Type::Asset, dec!(1), dec!(2));
+        r.total_credit = dec!(3);
+        r.balance = dec!(4);
+        r.closing_balance = dec!(5);
+        assert_eq!(r.montants(), [dec!(1), dec!(2), dec!(3), dec!(4), dec!(5)]);
+        assert_eq!(r.montants_devise(), None);
+        let d = tb_devise("1025", Type::Asset, dec!(1), dec!(2), "USD");
+        assert_eq!(
+            d.montants_devise().unwrap(),
+            [dec!(2), dec!(4), dec!(0), dec!(4), dec!(6)]
+        );
+        assert_eq!(d.devise(), Some("USD"));
+    }
+
+    /// AC-2 — nature, au lieu de section : un compte de nature contraire à
+    /// zéro ne dissout pas son groupe (C-46-6a-3) ; avec un montant, il dissout
+    /// le groupe et ses ancêtres. Cas du compte miroir de passif rangé sous un
+    /// groupe d'actif (état forgé, 47-1 AC-8).
+    #[test]
+    fn balance_nature_et_lignes_nulles() {
+        let p = plan(&[
+            ("1", None),
+            ("10", Some("1")),
+            ("1000", Some("10")),
+            ("1090", Some("10")),
+        ]);
+        let o = opts(NiveauDetail::Tous);
+        let miroir_nul = vec![
+            tb("1000", Type::Asset, dec!(10), dec!(5)),
+            tb("1090", Type::Liability, dec!(0), dec!(0)),
+        ];
+        assert_eq!(
+            rendu_b(&grouper(miroir_nul, &p, &o)),
+            [
+                "G+:1@1=10/5",
+                "G+:10@2=10/5",
+                "C:1000@3=10/5",
+                "C:1090@3=0/0"
+            ]
+        );
+        let miroir_mouvemente = vec![
+            tb("1000", Type::Asset, dec!(10), dec!(5)),
+            tb("1090", Type::Liability, dec!(0), dec!(1)),
+        ];
+        assert_eq!(
+            rendu_b(&grouper(miroir_mouvemente, &p, &o)),
+            ["C:1000@1=10/5", "C:1090@1=0/1"],
+            "le groupe et ses ancêtres sont dissous"
+        );
+        // Actif et charge partagent un groupe : même nature, aucun dissous.
+        let meme_nature = vec![
+            tb("1000", Type::Asset, dec!(10), dec!(5)),
+            tb("1090", Type::Expense, dec!(1), dec!(1)),
+        ];
+        assert_eq!(
+            rendu_b(&grouper(meme_nature, &p, &o)),
+            [
+                "G+:1@1=11/6",
+                "G+:10@2=11/6",
+                "C:1000@3=10/5",
+                "C:1090@3=1/1"
+            ]
+        );
+    }
+
+    /// AC-3 (a), (b) — un compte à zéro dans un groupe ouvert est rendu ; un
+    /// groupe fermé par le niveau entièrement nul n'est pas affiché ; fermé à
+    /// la main, il l'est.
+    #[test]
+    fn balance_comptes_a_zero_ouverts_et_fermes() {
+        let p = plan(&[
+            ("1", None),
+            ("10", Some("1")),
+            ("1000", Some("10")),
+            ("14", Some("1")),
+            ("1500", Some("14")),
+        ]);
+        let rows = || {
+            vec![
+                tb("1000", Type::Asset, dec!(3), dec!(0)),
+                tb("1500", Type::Asset, dec!(0), dec!(0)),
+            ]
+        };
+        assert_eq!(
+            rendu_b(&grouper(rows(), &p, &opts(NiveauDetail::Tous))),
+            [
+                "G+:1@1=3/0",
+                "G+:10@2=3/0",
+                "C:1000@3=3/0",
+                "G+:14@2=0/0",
+                "C:1500@3=0/0"
+            ]
+        );
+        assert_eq!(
+            rendu_b(&grouper(rows(), &p, &opts(NiveauDetail::Niveau(2)))),
+            ["G+:1@1=3/0", "G-:10@2=3/0"],
+            "14, fermé par le niveau et nul, est masqué"
+        );
+        let mut o = opts(NiveauDetail::Niveau(2));
+        o.fermes.insert(ident("14"));
+        assert_eq!(
+            rendu_b(&grouper(rows(), &p, &o)),
+            ["G+:1@1=3/0", "G-:10@2=3/0", "G-:14@2=0/0"]
+        );
+    }
+
+    /// AC-3 (d) — la ligne propre nulle d'un compte de groupe n'est pas une
+    /// ligne `own` et ne dissout rien (le groupe `1` est d'un autre type que
+    /// ses enfants) ; non nulle, elle est `own`. Un compte de groupe dont
+    /// aucun sous-compte n'est rendu reste une ligne `account`. `source` se
+    /// lit dans la liste filtrée : le groupe retiré **avant** un compte ne
+    /// décale pas l'`active` de ce compte.
+    #[test]
+    fn balance_ligne_propre_des_groupes() {
+        let p = plan(&[
+            ("1", None),
+            ("1000", Some("1")),
+            ("1020", Some("1")),
+            ("9", None),
+            ("90", Some("9")),
+        ]);
+        let mut inactif = tb("1020", Type::Asset, dec!(2), dec!(0));
+        inactif.active = false;
+        let rows = vec![
+            tb("1", Type::Liability, dec!(0), dec!(0)),
+            tb("1000", Type::Asset, dec!(1), dec!(0)),
+            inactif,
+            tb("9", Type::Asset, dec!(0), dec!(0)),
+        ];
+        let g = grouper(rows, &p, &opts(NiveauDetail::Tous));
+        assert_eq!(
+            rendu_b(&g),
+            ["G+:1@1=3/0", "C:1000@2=1/0", "C:1020@2=2/0", "C:9@1=0/0"]
+        );
+        assert_eq!(g[1].active, Some(true));
+        assert_eq!(g[2].active, Some(false), "source lu dans la liste filtrée");
+        assert_eq!(g[0].active, None);
+        // Ligne propre non nulle : `own`, premier enfant, et elle dissout.
+        let rows = vec![
+            tb("1", Type::Asset, dec!(4), dec!(0)),
+            tb("1000", Type::Asset, dec!(1), dec!(0)),
+        ];
+        assert_eq!(
+            rendu_b(&grouper(rows, &p, &opts(NiveauDetail::Tous))),
+            ["G+:1@1=5/0", "P:1@2=4/0", "C:1000@2=1/0"]
+        );
+        let rows = vec![
+            tb("1", Type::Liability, dec!(4), dec!(0)),
+            tb("1000", Type::Asset, dec!(1), dec!(0)),
+        ];
+        assert_eq!(
+            rendu_b(&grouper(rows, &p, &opts(NiveauDetail::Tous))),
+            ["C:1@1=4/0", "C:1000@1=1/0"],
+            "groupe dissous par sa ligne propre non nulle"
+        );
+    }
+
+    /// AC-3 (c) — un compte CHF nul et un compte EUR nul parmi des comptes
+    /// USD ne retirent pas sa devise au groupe ; un compte CHF non nul, si.
+    #[test]
+    fn balance_devise_unique_et_comptes_nuls() {
+        let p = plan(&[
+            ("10", None),
+            ("1020", Some("10")),
+            ("1021", Some("10")),
+            ("1022", Some("10")),
+            ("1023", Some("10")),
+        ]);
+        let mut rows = vec![
+            tb_devise("1020", Type::Asset, dec!(1), dec!(2), "USD"),
+            tb_devise("1021", Type::Asset, dec!(3), dec!(0), "USD"),
+            tb("1022", Type::Asset, dec!(0), dec!(0)),
+            tb_devise("1023", Type::Asset, dec!(0), dec!(0), "EUR"),
+        ];
+        let g = grouper(rows.clone(), &p, &opts(NiveauDetail::Niveau(1)));
+        assert_eq!(g.len(), 1);
+        assert_eq!(g[0].currency.as_deref(), Some("USD"));
+        assert_eq!(g[0].opening_currency, Some(dec!(8)));
+        assert_eq!(g[0].total_debit_currency, Some(dec!(4)));
+        assert_eq!(g[0].total_credit_currency, Some(dec!(0)));
+        assert_eq!(g[0].closing_currency, Some(dec!(12)));
+        rows[2].total_debit = dec!(1);
+        let g = grouper(rows, &p, &opts(NiveauDetail::Niveau(1)));
+        assert_eq!(
+            (g[0].currency.as_deref(), g[0].opening_currency),
+            (None, None)
+        );
+    }
+
+    /// Un groupe dont tous les comptes sont à zéro, fût-ce en USD, n'a ni
+    /// devise ni colonnes en devise : le compte nul ne compte pas dans la
+    /// devise du groupe (lignes `account` à zéro, groupe sans `currency`).
+    #[test]
+    fn balance_groupe_a_lignes_toutes_nulles_sans_devise() {
+        let p = plan(&[
+            ("1", None),
+            ("10", Some("1")),
+            ("1020", Some("10")),
+            ("1021", Some("10")),
+            ("14", Some("1")),
+            ("1500", Some("14")),
+        ]);
+        let rows = vec![
+            tb_devise("1020", Type::Asset, dec!(0), dec!(0), "USD"),
+            tb_devise("1021", Type::Asset, dec!(0), dec!(0), "USD"),
+            tb("1500", Type::Asset, dec!(5), dec!(0)),
+        ];
+        let g = grouper(rows, &p, &opts(NiveauDetail::Tous));
+        let dix = g
+            .iter()
+            .find(|l| l.account_id == ident("10"))
+            .expect("groupe 10");
+        assert_eq!(dix.currency, None, "groupe 10 sans devise");
+        assert_eq!(dix.opening_currency, None);
+        assert_eq!(dix.closing_currency, None);
+        let compte = g
+            .iter()
+            .find(|l| l.account_id == ident("1020"))
+            .expect("compte 1020");
+        assert_eq!(
+            compte.currency.as_deref(),
+            Some("USD"),
+            "le compte garde la sienne"
+        );
+    }
+
+    /// Les lignes de balance du plan PME : chaque compte, groupes compris
+    /// (la balance rend tout compte actif), à zéro, sauf les feuilles de
+    /// `montant` (indice + 1 en ouverture et en débit).
+    fn balance_pme(montant: impl Fn(usize, &str) -> bool) -> (Plan, Vec<TrialBalanceRow>) {
+        use kesh_core::chart_of_accounts::{AccountType as T, load_chart};
+        let plan_pme = load_chart("pme").unwrap();
+        let p = plan(
+            &plan_pme
+                .iter()
+                .map(|e| (e.number.as_str(), e.parent_number.as_deref()))
+                .collect::<Vec<_>>(),
+        );
+        let rows = plan_pme
+            .iter()
+            .enumerate()
+            .map(|(i, e)| {
+                let t = match e.account_type {
+                    T::Asset => Type::Asset,
+                    T::Liability => Type::Liability,
+                    T::Revenue => Type::Revenue,
+                    T::Expense => Type::Expense,
+                };
+                let feuille = !plan_pme
+                    .iter()
+                    .any(|f| f.parent_number.as_deref() == Some(&e.number));
+                let v = if feuille && montant(i, &e.number) {
+                    Decimal::from(i as i64 + 1)
+                } else {
+                    Decimal::ZERO
+                };
+                tb(&e.number, t, v, v)
+            })
+            .collect();
+        (p, rows)
+    }
+
+    fn groupes_affiches(v: &[LigneBalanceGroupee]) -> BTreeSet<String> {
+        v.iter()
+            .filter(|g| g.kind == GenreLigne::Groupe)
+            .map(|g| g.account_number.clone())
+            .collect()
+    }
+
+    /// AC-2, AC-4 — le plan PME : toutes les feuilles mouvementées, `6`, `7`,
+    /// `70`, `8`, `80` sont dissous et `2` reste un groupe ; entièrement nul,
+    /// aucun groupe n'est dissous. À tout niveau et pour les deux positions,
+    /// la somme des débits (crédits) des lignes de profondeur 1, sous-totaux
+    /// exclus, égale le total ; les totaux du rapport sont inchangés.
+    #[test]
+    fn balance_plan_pme_dissolutions_et_totaux() {
+        let (p, rows) = balance_pme(|_, _| true);
+        let tous = grouper(rows.clone(), &p, &opts(NiveauDetail::Tous));
+        let affiches = groupes_affiches(&tous);
+        for dissous in ["6", "7", "70", "8", "80"] {
+            assert!(
+                !affiches.contains(dissous),
+                "{dissous} devrait être dissous"
+            );
+        }
+        for garde in ["1", "2", "20", "28", "3", "4", "5", "60", "9"] {
+            assert!(affiches.contains(garde), "{garde} devrait être affiché");
+        }
+        // Aucune ligne propre nulle des groupes : pas de ligne `own`.
+        assert!(!tous.iter().any(|g| g.kind == GenreLigne::Propre));
+        let niveaux: Vec<NiveauDetail> = (1..=NIVEAU_MAX)
+            .map(NiveauDetail::Niveau)
+            .chain([NiveauDetail::Tous])
+            .collect();
+        let total: Decimal = rows.iter().map(|r| r.total_debit).sum();
+        for niveau in niveaux {
+            for position in [PositionSousTotal::Titre, PositionSousTotal::Pied] {
+                let mut o = opts(niveau);
+                o.position = position;
+                let env = AvecGroupes::balance(balance_de(rows.clone()), &p.arbre, &o);
+                let racines = |f: fn(&LigneBalanceGroupee) -> Decimal| -> Decimal {
+                    env.grouped_rows
+                        .as_ref()
+                        .unwrap()
+                        .iter()
+                        .filter(|g| g.depth == 1 && g.kind != GenreLigne::SousTotal)
+                        .map(f)
+                        .sum()
+                };
+                assert_eq!(racines(|g| g.total_debit), total, "{niveau:?} {position:?}");
+                assert_eq!(racines(|g| g.total_credit), Decimal::ZERO);
+                assert_eq!(env.rapport.total_debit, total);
+                assert_eq!(env.rapport.retained_earnings, dec!(7));
+                assert_eq!(env.rapport.rows.len(), rows.len(), "rows inchangé");
+            }
+        }
+        // Entièrement nul : aucun groupe dissous (`6` à `8` affichés).
+        let (p, rows) = balance_pme(|_, _| false);
+        let affiches = groupes_affiches(&grouper(rows, &p, &opts(NiveauDetail::Tous)));
+        for garde in ["6", "7", "70", "8", "80", "2"] {
+            assert!(
+                affiches.contains(garde),
+                "{garde} : balance nulle, non dissous"
+            );
+        }
+        // 6950 (produit) à zéro parmi des charges mouvementées : `6` gardé.
+        let (p, rows) = balance_pme(|_, n| n.starts_with('6') && n != "6950");
+        let affiches = groupes_affiches(&grouper(rows, &p, &opts(NiveauDetail::Tous)));
+        assert!(affiches.contains("6"), "6950 nul ne dissout pas 6");
+    }
+
+    /// AC-5 — le contrat JSON d'une ligne groupée de la balance.
+    #[test]
+    fn ligne_balance_au_contrat_json() {
+        let p = plan(&[("10", None), ("1025", Some("10"))]);
+        let g = grouper(
+            vec![tb_devise("1025", Type::Asset, dec!(1), dec!(2), "USD")],
+            &p,
+            &opts(NiveauDetail::Tous),
+        );
+        assert_eq!(
+            serde_json::to_value(&g[1]).unwrap(),
+            serde_json::json!({"kind": "account", "depth": 2, "accountId": ident("1025"),
+                "accountNumber": "1025", "accountName": "Compte 1025",
+                "openingBalance": "1", "totalDebit": "2", "totalCredit": "0", "balance": "2",
+                "closingBalance": "3", "currency": "USD", "openingCurrency": "2",
+                "totalDebitCurrency": "4", "totalCreditCurrency": "0", "balanceCurrency": "4",
+                "closingCurrency": "6", "active": true})
+        );
+        let v = serde_json::to_value(&g[0]).unwrap();
+        assert_eq!(
+            (v["kind"].as_str(), v["open"].as_bool()),
+            (Some("group"), Some(true))
+        );
+        assert!(v.get("active").is_none() && v.get("role").is_none());
     }
 }
