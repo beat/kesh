@@ -148,7 +148,10 @@ describe('GroupedReportRows — règle de rendu (46-1)', () => {
 		expect(indentOf(2)).toBe('1.75rem');
 		expect(indentOf(11)).toBe(indentOf(30));
 		const { container } = rendre(lignes('header'), 'header');
-		const td = container.querySelector('[data-testid="grouped-account-1000"] td') as HTMLElement;
-		expect(td.style.paddingLeft).toBe('1.75rem');
+		const [numero, libelle] = container.querySelectorAll<HTMLElement>('[data-testid="grouped-account-1000"] td');
+		expect(numero.style.paddingLeft).toBe('1.75rem');
+		expect(libelle.style.paddingLeft).toBe('1.75rem');
+		const groupe = container.querySelectorAll<HTMLElement>('[data-testid="grouped-group-10"] td');
+		expect(groupe[1].style.paddingLeft).toBe('0.5rem');
 	});
 });

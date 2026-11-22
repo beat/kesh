@@ -105,7 +105,8 @@
 				>
 			{/if}
 		</td>
-		<td class="px-2 py-1">
+		<!-- Le libellé suit le même retrait que le numéro : un pied de groupe se lit au rang de son groupe. -->
+		<td class="py-1 pr-2" style:padding-left={indentOf(row.depth)}>
 			{#if row.kind === 'subtotal'}
 				{i18nMsg('reports-groups-subtotal', 'Total { $name }', { name: row.accountName })}
 			{:else if row.kind === 'own'}
