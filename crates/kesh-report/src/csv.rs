@@ -14,12 +14,17 @@
 use std::io::Write;
 
 use kesh_core::csv::csv_sanitize;
+use kesh_core::types::format_two_decimals;
 use rust_decimal::Decimal;
 
 use crate::aged_receivables::AgedReceivables;
 use crate::balance_sheet::{AccountBalance, BalanceSheet};
 use crate::errors::ReportError;
 use crate::general_ledger::{FiscalYearBreak, GeneralLedger};
+use crate::groupes::{
+    AvecGroupes, GenreLigne, Grouping, LigneRapport, PositionSousTotal, SectionsBilan,
+    SectionsResultat,
+};
 use crate::income_statement::IncomeStatement;
 use crate::journal_report::JournalReport;
 use crate::pdf::{format_exchange_rate, round_for_display};
@@ -140,26 +145,200 @@ fn write_bom<W: Write>(writer: &mut W) -> Result<(), ReportError> {
 /// `Total capitaux propres`. Les comptes de rôle equity **ne figurent plus** dans
 /// `Passifs` (partition D2) — `Total passifs` = dettes réelles seules. Libellés
 /// **hardcodés FR-CH** (i18n sérialiseurs déférée, limitation L1/L4/L11 — D3).
-pub fn render_balance_sheet_csv<W: Write>(
+pub fn render_balance_sheet_csv<W: Write>(bs: &BalanceSheet, writer: W) -> Result<(), ReportError> {
+    rendre_bilan_csv(bs, None, writer)
+}
+
+/// Génère le CSV du bilan **tel que l'écran le groupe** (Story 46-3, AC-5) :
+/// avec `groupedRows` (46-1), deux colonnes après `Section` — `Niveau` (la
+/// profondeur) et `TypeLigne` (`groupe`, `compte`, `propre`, `soustotal`) —
+/// et une ligne par ligne groupée ; montants arrondis au centime
+/// ([`kesh_core::types::format_two_decimals`], AC-6). Sans `groupedRows`, c'est
+/// [`render_balance_sheet_csv`], à l'octet (AC-2).
+pub fn render_grouped_balance_sheet_csv<W: Write>(
+    report: &AvecGroupes<BalanceSheet, SectionsBilan>,
+    writer: W,
+) -> Result<(), ReportError> {
+    rendre_bilan_csv(
+        &report.rapport,
+        report.grouping.as_ref().zip(report.grouped_rows.as_ref()),
+        writer,
+    )
+}
+
+/// La disposition des colonnes d'un CSV du bilan ou du compte de résultat :
+/// groupé ou non (colonnes `Niveau;TypeLigne`), en devise ou non (colonnes
+/// `Devise;SoldeDevise`), et le formateur de ses montants.
+struct Disposition {
+    /// Colonnes `Niveau;TypeLigne` (Story 46-3).
+    groupe: bool,
+    /// Colonnes `Devise;SoldeDevise` (Story 37-4).
+    fx: bool,
+    /// Formateur des montants : [`format_amount_iso`] à plat (inchangé),
+    /// [`kesh_core::types::format_two_decimals`] groupé.
+    fmt: fn(Decimal) -> String,
+}
+
+impl Disposition {
+    /// La ligne d'en-tête.
+    fn entete<W: Write>(&self, wtr: &mut csv::Writer<W>) -> Result<(), ReportError> {
+        self.ecrire(
+            wtr,
+            "Section",
+            Some(["Niveau", "TypeLigne"]),
+            ["NumeroCompte", "NomCompte", "Solde"],
+            balance_header_extra(self.fx),
+        )
+    }
+
+    /// Un enregistrement : `section`, puis, en mode groupé, les deux cellules
+    /// `groupe` (vides si `None`), puis `reste`, puis les colonnes en devise.
+    fn ecrire<W: Write>(
+        &self,
+        wtr: &mut csv::Writer<W>,
+        section: &str,
+        groupe: Option<[&str; 2]>,
+        reste: [&str; 3],
+        extra: Option<Vec<String>>,
+    ) -> Result<(), ReportError> {
+        let mut base: Vec<&str> = vec![section];
+        if self.groupe {
+            base.extend(groupe.unwrap_or(["", ""]));
+        }
+        base.extend(reste);
+        write_fx_record(wtr, &base, extra)
+    }
+
+    /// Une ligne de total, ou une ligne calculée : `nom` dans `NomCompte`.
+    fn total<W: Write>(
+        &self,
+        wtr: &mut csv::Writer<W>,
+        section: &str,
+        nom: &str,
+        montant: Decimal,
+    ) -> Result<(), ReportError> {
+        self.ecrire(
+            wtr,
+            section,
+            None,
+            ["", nom, &(self.fmt)(montant)],
+            balance_row_extra(None, self.fx),
+        )
+    }
+}
+
+/// `TypeLigne` d'une ligne groupée (Story 46-3, AC-5).
+fn type_ligne(kind: GenreLigne) -> &'static str {
+    match kind {
+        GenreLigne::Groupe => "groupe",
+        GenreLigne::Compte => "compte",
+        GenreLigne::Propre => "propre",
+        GenreLigne::SousTotal => "soustotal",
+    }
+}
+
+/// Les lignes groupées d'une section : niveau, type, numéro, nom tel quel, et
+/// le solde arrondi — vide sur le titre d'un groupe ouvert dont le sous-total
+/// est en pied (sa ligne `soustotal` le porte) ; devise et solde en devise sur
+/// la ligne qui porte une devise et son montant.
+fn write_grouped_rows<W: Write>(
+    wtr: &mut csv::Writer<W>,
+    d: &Disposition,
+    section: &str,
+    lignes: &[LigneRapport],
+    position: PositionSousTotal,
+) -> Result<(), ReportError> {
+    for l in lignes {
+        let montant = !(l.kind == GenreLigne::Groupe
+            && l.open == Some(true)
+            && position == PositionSousTotal::Pied);
+        let fmt = |v: Decimal| if montant { (d.fmt)(v) } else { String::new() };
+        let extra = d.fx.then(|| match (&l.currency, l.balance_currency) {
+            (Some(cur), Some(fx)) if montant => vec![cur.clone(), (d.fmt)(fx)],
+            _ => vec![String::new(); 2],
+        });
+        d.ecrire(
+            wtr,
+            section,
+            Some([&l.depth.to_string(), type_ligne(l.kind)]),
+            [
+                &txt(&l.account_number),
+                &txt(&l.account_name),
+                &fmt(l.balance),
+            ],
+            extra,
+        )?;
+    }
+    Ok(())
+}
+
+/// La disposition d'un CSV du bilan ou du compte de résultat, à plat ou
+/// groupé ; `fx` : une ligne (un compte à plat, une ligne groupée) porte une
+/// devise.
+fn disposition(groupe: bool, fx: bool) -> Disposition {
+    Disposition {
+        groupe,
+        fx,
+        fmt: if groupe {
+            format_two_decimals
+        } else {
+            format_amount_iso
+        },
+    }
+}
+
+/// Le corps d'une section : à plat, une ligne par compte ; groupé, les lignes
+/// groupées.
+fn write_section_body<W: Write>(
+    wtr: &mut csv::Writer<W>,
+    d: &Disposition,
+    section: &str,
+    comptes: &[AccountBalance],
+    groupes: Option<(&[LigneRapport], PositionSousTotal)>,
+) -> Result<(), ReportError> {
+    match groupes {
+        None => {
+            for ab in comptes {
+                write_account_balance(wtr, section, ab, d.fx)?;
+            }
+            Ok(())
+        }
+        Some((lignes, position)) => write_grouped_rows(wtr, d, section, lignes, position),
+    }
+}
+
+/// Le bilan, à plat (`groupes = None`) ou par groupes : un seul rendu, dont
+/// seul le corps des sections diffère (Story 46-3, T4).
+fn rendre_bilan_csv<W: Write>(
     bs: &BalanceSheet,
+    groupes: Option<(&Grouping, &SectionsBilan)>,
     mut writer: W,
 ) -> Result<(), ReportError> {
     write_bom(&mut writer)?;
     let mut wtr = make_writer(writer);
 
     // Story 37-4, AC-5 : `Devise;SoldeDevise` seulement si un compte en devise
-    // figure dans le rapport ; les totaux restent en devise principale.
-    let fx = bs
-        .assets
-        .iter()
-        .chain(&bs.liabilities)
-        .chain(&bs.equity)
-        .any(|a| a.currency.is_some());
-    write_fx_record(
-        &mut wtr,
-        &["Section", "NumeroCompte", "NomCompte", "Solde"],
-        balance_header_extra(fx),
-    )?;
+    // figure dans le rapport (groupé : si une ligne groupée en porte une) ; les
+    // totaux restent en devise principale.
+    let fx = match groupes {
+        None => bs
+            .assets
+            .iter()
+            .chain(&bs.liabilities)
+            .chain(&bs.equity)
+            .any(|a| a.currency.is_some()),
+        Some((_, s)) => s
+            .assets
+            .iter()
+            .chain(&s.liabilities)
+            .chain(&s.equity)
+            .any(|l| l.currency.is_some()),
+    };
+    let d = disposition(groupes.is_some(), fx);
+    let section = |f: fn(&SectionsBilan) -> &[LigneRapport]| {
+        groupes.map(|(g, s)| (f(s), g.subtotal_position))
+    };
+    d.entete(&mut wtr)?;
 
     // Cas rapport vide : header seul, pas de data rows (Pass 1 ECH-M1). Garde
     // centralisée `BalanceSheet::is_empty()` (Story 14-3c P1-F1) — inclut `equity` :
@@ -174,96 +353,70 @@ pub fn render_balance_sheet_csv<W: Write>(
     // Pass 1 code-review M6 (ECH1-M1) : guard chaque section indépendamment
     // — sinon un BS partiel (actifs vides mais passifs présents, ou inverse)
     // affiche un « Total actifs;;;0.00 » phantom alors qu'aucune ligne actif
-    // n'a été émise. Idem section Passifs.
+    // n'a été émise. Idem section Passifs. Une section groupée est vide si et
+    // seulement si sa section à plat l'est.
     if !bs.assets.is_empty() {
-        for ab in &bs.assets {
-            write_account_balance(&mut wtr, "Actifs", ab, fx)?;
-        }
-        write_fx_record(
-            &mut wtr,
-            &["Total actifs", "", "", &format_amount_iso(bs.total_assets)],
-            balance_row_extra(None, fx),
-        )?;
+        write_section_body(&mut wtr, &d, "Actifs", &bs.assets, section(|s| &s.assets))?;
+        d.total(&mut wtr, "Total actifs", "", bs.total_assets)?;
     }
 
     if !bs.liabilities.is_empty() {
-        for ab in &bs.liabilities {
-            write_account_balance(&mut wtr, "Passifs", ab, fx)?;
-        }
-        write_fx_record(
+        write_section_body(
             &mut wtr,
-            &[
-                "Total passifs",
-                "",
-                "",
-                &format_amount_iso(bs.total_liabilities),
-            ],
-            balance_row_extra(None, fx),
+            &d,
+            "Passifs",
+            &bs.liabilities,
+            section(|s| &s.liabilities),
         )?;
+        d.total(&mut wtr, "Total passifs", "", bs.total_liabilities)?;
     }
 
     // Section Capitaux propres — présentation par rôle (Story 14-3c). D'abord les
     // comptes physiques de fonds propres, dans l'ordre par rôle fixé en backend
     // (une ligne par compte, l'ordre porte le regroupement — pas d'en-tête de groupe
-    // dans le format linéaire CSV, AC-C). Puis les deux lignes **calculées** distinctes
+    // dans le format linéaire CSV, AC-C) ; groupé, l'ordre de l'arbre (Story 46-3).
+    // Puis les deux lignes **calculées** distinctes
     // (« Résultat reporté (calculé) » marquée calculée pour la distinguer d'un compte
     // physique de rôle RetainedEarnings — collision D1). Le report à-nouveau DOIT figurer
     // dès qu'il est non nul, sinon le bilan exporté est déséquilibré ; nul, il est omis
     // comme au PDF et à l'écran (`shows_retained_earnings_line`, correctif
     // fix-bilan-resultat-reporte) — sans effet sur le total ni l'équation.
-    for ab in &bs.equity {
-        write_account_balance(&mut wtr, "CapitauxPropres", ab, fx)?;
-    }
+    write_section_body(
+        &mut wtr,
+        &d,
+        "CapitauxPropres",
+        &bs.equity,
+        section(|s| &s.equity),
+    )?;
     if bs.shows_retained_earnings_line() {
-        write_fx_record(
+        // Arrondie comme la règle qui la montre (revue P1, LOW-1).
+        d.total(
             &mut wtr,
-            &[
-                "CapitauxPropres",
-                "",
-                "Résultat reporté (calculé)",
-                // Arrondie comme la règle qui la montre (revue P1, LOW-1).
-                &format_amount_iso(round_for_display(bs.retained_earnings)),
-            ],
-            balance_row_extra(None, fx),
+            "CapitauxPropres",
+            "Résultat reporté (calculé)",
+            round_for_display(bs.retained_earnings),
         )?;
     }
-    write_fx_record(
+    d.total(
         &mut wtr,
-        &[
-            "CapitauxPropres",
-            "",
-            "Résultat de l'exercice",
-            &format_amount_iso(bs.equity_result),
-        ],
-        balance_row_extra(None, fx),
+        "CapitauxPropres",
+        "Résultat de l'exercice",
+        bs.equity_result,
     )?;
 
     // Total capitaux propres = comptes physiques + 2 lignes calculées.
     let total_equity_all = bs.total_equity + bs.retained_earnings + bs.equity_result;
-    write_fx_record(
-        &mut wtr,
-        &[
-            "Total capitaux propres",
-            "",
-            "",
-            &format_amount_iso(total_equity_all),
-        ],
-        balance_row_extra(None, fx),
-    )?;
+    d.total(&mut wtr, "Total capitaux propres", "", total_equity_all)?;
 
     // Ligne finale : somme passifs (dettes) + capitaux propres — invariant restructuré
     // (14-3c) : `total_liabilities + total_equity + retained_earnings + equity_result`
     // = ancien total passifs + fonds propres.
     let total_liab_eq = bs.total_liabilities + total_equity_all;
-    write_fx_record(
+    d.total(
         &mut wtr,
-        &[
-            "Total passifs + capitaux propres",
-            "",
-            "",
-            &format_amount_iso(total_liab_eq),
-        ],
-        balance_row_extra(None, fx),
+        "Total passifs + capitaux propres",
+        "",
+        total_liab_eq,
     )?;
 
     wtr.flush().map_err(map_io_err)?;
@@ -276,22 +429,51 @@ pub fn render_balance_sheet_csv<W: Write>(
 /// `Section ∈ {Produits, Charges}`. Ligne finale `ResultatNet;;;<somme>`.
 pub fn render_income_statement_csv<W: Write>(
     is_: &IncomeStatement,
+    writer: W,
+) -> Result<(), ReportError> {
+    rendre_resultat_csv(is_, None, writer)
+}
+
+/// Génère le CSV du compte de résultat tel que l'écran le groupe (Story 46-3,
+/// AC-5) : même régime que [`render_grouped_balance_sheet_csv`].
+pub fn render_grouped_income_statement_csv<W: Write>(
+    report: &AvecGroupes<IncomeStatement, SectionsResultat>,
+    writer: W,
+) -> Result<(), ReportError> {
+    rendre_resultat_csv(
+        &report.rapport,
+        report.grouping.as_ref().zip(report.grouped_rows.as_ref()),
+        writer,
+    )
+}
+
+/// Le compte de résultat, à plat ou par groupes (Story 46-3, T4).
+fn rendre_resultat_csv<W: Write>(
+    is_: &IncomeStatement,
+    groupes: Option<(&Grouping, &SectionsResultat)>,
     mut writer: W,
 ) -> Result<(), ReportError> {
     write_bom(&mut writer)?;
     let mut wtr = make_writer(writer);
 
     // Story 37-4, AC-5 : même règle de colonnes que le bilan.
-    let fx = is_
-        .revenues
-        .iter()
-        .chain(&is_.expenses)
-        .any(|a| a.currency.is_some());
-    write_fx_record(
-        &mut wtr,
-        &["Section", "NumeroCompte", "NomCompte", "Solde"],
-        balance_header_extra(fx),
-    )?;
+    let fx = match groupes {
+        None => is_
+            .revenues
+            .iter()
+            .chain(&is_.expenses)
+            .any(|a| a.currency.is_some()),
+        Some((_, s)) => s
+            .revenues
+            .iter()
+            .chain(&s.expenses)
+            .any(|l| l.currency.is_some()),
+    };
+    let d = disposition(groupes.is_some(), fx);
+    let section = |f: fn(&SectionsResultat) -> &[LigneRapport]| {
+        groupes.map(|(g, s)| (f(s), g.subtotal_position))
+    };
+    d.entete(&mut wtr)?;
 
     if is_.revenues.is_empty() && is_.expenses.is_empty() {
         wtr.flush().map_err(map_io_err)?;
@@ -302,44 +484,30 @@ pub fn render_income_statement_csv<W: Write>(
     // pour éviter un « Total produits;;;0.00 » / « Total charges;;;0.00 »
     // phantom quand une seule des deux sections est non-vide.
     if !is_.revenues.is_empty() {
-        for ab in &is_.revenues {
-            write_account_balance(&mut wtr, "Produits", ab, fx)?;
-        }
-        write_fx_record(
+        write_section_body(
             &mut wtr,
-            &[
-                "Total produits",
-                "",
-                "",
-                &format_amount_iso(is_.total_revenues),
-            ],
-            balance_row_extra(None, fx),
+            &d,
+            "Produits",
+            &is_.revenues,
+            section(|s| &s.revenues),
         )?;
+        d.total(&mut wtr, "Total produits", "", is_.total_revenues)?;
     }
 
     if !is_.expenses.is_empty() {
-        for ab in &is_.expenses {
-            write_account_balance(&mut wtr, "Charges", ab, fx)?;
-        }
-        write_fx_record(
+        write_section_body(
             &mut wtr,
-            &[
-                "Total charges",
-                "",
-                "",
-                &format_amount_iso(is_.total_expenses),
-            ],
-            balance_row_extra(None, fx),
+            &d,
+            "Charges",
+            &is_.expenses,
+            section(|s| &s.expenses),
         )?;
+        d.total(&mut wtr, "Total charges", "", is_.total_expenses)?;
     }
 
     // Résultat net : utile même si une section est vide (= total_revenues -
     // total_expenses, donc reflète le rapport réel).
-    write_fx_record(
-        &mut wtr,
-        &["ResultatNet", "", "", &format_amount_iso(is_.net_result)],
-        balance_row_extra(None, fx),
-    )?;
+    d.total(&mut wtr, "ResultatNet", "", is_.net_result)?;
 
     wtr.flush().map_err(map_io_err)?;
     Ok(())
@@ -2184,6 +2352,135 @@ mod tests {
                 "-120.00",
                 "-60.00%"
             ]
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // Story 46-3 — CSV par groupes
+    // ------------------------------------------------------------------
+
+    use crate::essai_groupes::{
+        bilan, bilan_essai, bilan_essai_groupe, noeud, options, resultat, resultat_essai, usd,
+    };
+    use crate::groupes::{ArbreComptes, AvecGroupes, NiveauDetail, PositionSousTotal};
+
+    /// Le CSV groupé du bilan d'essai, sans BOM, en lignes.
+    fn csv_bilan_groupe(o: &crate::groupes::OptionsGroupes) -> Vec<String> {
+        let mut buf = Vec::new();
+        render_grouped_balance_sheet_csv(&bilan_essai_groupe(o), &mut buf).unwrap();
+        String::from_utf8(buf[3..].to_vec())
+            .unwrap()
+            .split("\r\n")
+            .map(String::from)
+            .collect()
+    }
+
+    /// AC-5, AC-6 — en `header` : `Niveau;TypeLigne` après `Section`, une ligne
+    /// par ligne groupée, montants arrondis au centime (sous-total 16.011 →
+    /// 16.01) ; totaux et lignes calculées avec deux cellules vides de plus.
+    #[test]
+    fn bilan_csv_groupe_header() {
+        let l = csv_bilan_groupe(&options(
+            NiveauDetail::Tous,
+            PositionSousTotal::Titre,
+            &[],
+            &[],
+        ));
+        assert_eq!(
+            l[..9],
+            [
+                "Section;Niveau;TypeLigne;NumeroCompte;NomCompte;Solde",
+                "Actifs;1;groupe;10;Actifs circulants;16.01",
+                "Actifs;2;groupe;100;Liquidités;16.01",
+                "Actifs;3;propre;100;Liquidités;1.00",
+                "Actifs;3;compte;1000;Caisse;10.01",
+                "Actifs;3;compte;1020;Banque;5.01",
+                "Actifs;1;groupe;14;Immobilisations;300.00",
+                "Actifs;2;compte;1500;Machines;300.00",
+                "Total actifs;;;;;316.01",
+            ]
+        );
+        assert!(l.contains(&"CapitauxPropres;;;;Résultat de l'exercice;0.00".to_string()));
+        assert!(l.contains(&"Total passifs + capitaux propres;;;;;316.01".to_string()));
+    }
+
+    /// AC-5 — en `footer` : titre d'un groupe ouvert sans montant, sa ligne
+    /// `soustotal` après sa descendance ; un groupe fermé à la main porte son
+    /// montant et n'a pas de comptes.
+    #[test]
+    fn bilan_csv_groupe_footer_et_ferme() {
+        let l = csv_bilan_groupe(&options(
+            NiveauDetail::Niveau(2),
+            PositionSousTotal::Pied,
+            &[],
+            &[14],
+        ));
+        assert_eq!(
+            l[1..5],
+            [
+                "Actifs;1;groupe;10;Actifs circulants;",
+                "Actifs;2;groupe;100;Liquidités;16.01",
+                "Actifs;1;soustotal;10;Actifs circulants;16.01",
+                "Actifs;1;groupe;14;Immobilisations;300.00",
+            ]
+        );
+    }
+
+    /// AC-5 — colonnes en devise si une ligne groupée en porte : la devise et le
+    /// solde en devise arrondi, sur le groupe comme sur ses comptes.
+    #[test]
+    fn bilan_csv_groupe_devise() {
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(102, "Banques USD", None),
+            noeud(1025, "Banque USD", Some(102)),
+        ]);
+        let bs = bilan(vec![usd(1025, "Banque USD", dec!(9.005), dec!(10.005))]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let mut buf = Vec::new();
+        render_grouped_balance_sheet_csv(&AvecGroupes::bilan(bs, &arbre, &o), &mut buf).unwrap();
+        let s = String::from_utf8(buf[3..].to_vec()).unwrap();
+        let l: Vec<&str> = s.split("\r\n").collect();
+        assert_eq!(
+            l[..4],
+            [
+                "Section;Niveau;TypeLigne;NumeroCompte;NomCompte;Solde;Devise;SoldeDevise",
+                "Actifs;1;groupe;102;Banques USD;9.01;USD;10.01",
+                "Actifs;2;compte;1025;Banque USD;9.01;USD;10.01",
+                "Total actifs;;;;;9.01;;",
+            ]
+        );
+    }
+
+    /// AC-2 — sans groupes, le CSV « groupé » est le CSV à plat, à l'octet.
+    #[test]
+    fn csv_groupe_sans_groupes_est_le_csv_a_plat() {
+        let bs = bilan_essai();
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        render_grouped_balance_sheet_csv(&AvecGroupes::sans_groupes(bs.clone()), &mut a).unwrap();
+        render_balance_sheet_csv(&bs, &mut b).unwrap();
+        assert_eq!(a, b);
+        let is_ = resultat_essai();
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        render_grouped_income_statement_csv(&AvecGroupes::sans_groupes(is_.clone()), &mut a)
+            .unwrap();
+        render_income_statement_csv(&is_, &mut b).unwrap();
+        assert_eq!(a, b);
+    }
+
+    /// AC-3 — rapport vide groupé : la ligne d'en-tête seule.
+    #[test]
+    fn csv_groupe_vide_n_a_que_l_en_tete() {
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let vide = ArbreComptes::depuis_noeuds(vec![]);
+        let mut buf = Vec::new();
+        render_grouped_income_statement_csv(
+            &AvecGroupes::compte_de_resultat(resultat(vec![], vec![]), &vide, &o),
+            &mut buf,
+        )
+        .unwrap();
+        assert_eq!(
+            String::from_utf8(buf[3..].to_vec()).unwrap(),
+            "Section;Niveau;TypeLigne;NumeroCompte;NomCompte;Solde\r\n"
         );
     }
 }

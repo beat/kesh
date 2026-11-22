@@ -12,11 +12,16 @@
 //! Story 9-2a — Sérialiseurs export PDF & CSV :
 //! - [`pdf`] — 4 fonctions `render_*_pdf` (printpdf 0.7, Helvetica builtin).
 //! - [`csv`] — 4 fonctions `render_*_csv` (csv 1.3, BOM UTF-8, `;` delimiter, CRLF).
+//!
+//! Story 46-3 — le bilan et le compte de résultat **par groupes**
+//! (`render_grouped_*`), et [`texte_pdf`], l'extracteur de texte PDF des tests.
 
 pub mod aged_receivables;
 pub mod balance_sheet;
 pub mod csv;
 pub mod errors;
+#[cfg(test)]
+mod essai_groupes;
 pub mod general_ledger;
 pub mod groupes;
 pub mod homepage_summary;
@@ -64,6 +69,10 @@ pub use pdf::{
     PdfContext, SectionLabels, render_balance_sheet_pdf, render_income_statement_pdf,
     render_journal_report_pdf, render_trial_balance_pdf,
 };
+
+// Story 46-3 — exports du bilan et du compte de résultat par groupes
+pub use csv::{render_grouped_balance_sheet_csv, render_grouped_income_statement_csv};
+pub use pdf::{render_grouped_balance_sheet_pdf, render_grouped_income_statement_pdf};
 
 // Story 11-2 — re-exports rapport TVA
 pub use csv::render_vat_report_csv;

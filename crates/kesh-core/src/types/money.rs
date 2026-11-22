@@ -87,6 +87,40 @@ impl Money {
     }
 }
 
+/// **Arrondit au centime, puis formate** un montant exact : deux décimales,
+/// point décimal, sans séparateur de milliers (`1234.57`, `-5.01`, `0.00`).
+///
+/// L'arrondi est **explicite** — `round_dp_with_strategy(2,
+/// MidpointAwayFromZero)`, l'équidistant loin de zéro, comme
+/// [`Money::round_to_centimes`] : `10.0050` → `10.01`, `-10.0050` → `-10.01`.
+/// Un `format!("{:.2}", d)` sur un `Decimal`, lui, **tronque** (#1245) :
+/// `10.0050` y sort `10.00`. Un résidu négatif de moins d'un demi-centime
+/// (`-0.004`) sort `0.00`, sans signe.
+///
+/// ⚠️ **Provisoire, à remplacer par la 48-11 à l'intégration** (Story 46-3,
+/// décision du responsable de l'Epic 46 du 2026-11-22) : remplaçant minimal de
+/// la fonction commune « arrondir au centime puis formater » que la Story
+/// 48-11 (#1245) doit poser. Seuls les rendus **groupés** du bilan et du compte
+/// de résultat (`kesh-report`, PDF et CSV) l'emploient ; les autres formateurs
+/// de montants n'y sont pas encore rebranchés.
+///
+/// ```
+/// use rust_decimal_macros::dec;
+/// use kesh_core::types::format_two_decimals;
+///
+/// assert_eq!(format_two_decimals(dec!(10.0050)), "10.01");
+/// assert_eq!(format_two_decimals(dec!(1234.5)), "1234.50");
+/// assert_eq!(format_two_decimals(dec!(-0.004)), "0.00");
+/// ```
+pub fn format_two_decimals(amount: Decimal) -> String {
+    let mut arrondi = amount.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
+    if arrondi.is_zero() {
+        arrondi = Decimal::ZERO;
+    }
+    arrondi.rescale(2);
+    arrondi.to_string()
+}
+
 impl fmt::Display for Money {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -251,6 +285,27 @@ mod tests {
         ];
         let total: Money = amounts.iter().sum();
         assert_eq!(total.amount(), dec!(60));
+    }
+
+    /// Story 46-3 (remplaçant provisoire de la 48-11, #1245) : arrondi au
+    /// centime, l'équidistant loin de zéro, **puis** formatage — là où un
+    /// `{:.2}` tronque (10.0050 → 10.00).
+    #[test]
+    fn format_two_decimals_arrondit_puis_formate() {
+        for (montant, attendu) in [
+            (dec!(10.0050), "10.01"),
+            (dec!(5.0060), "5.01"),
+            (dec!(10.0049), "10.00"),
+            (dec!(-10.0050), "-10.01"),
+            (dec!(15.011), "15.01"),
+            (dec!(1234.5), "1234.50"),
+            (dec!(12), "12.00"),
+            (dec!(0), "0.00"),
+            (dec!(-0.004), "0.00"),
+            (dec!(12345678.905), "12345678.91"),
+        ] {
+            assert_eq!(format_two_decimals(montant), attendu, "{montant}");
+        }
     }
 
     #[test]
