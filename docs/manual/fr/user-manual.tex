@@ -4278,7 +4278,11 @@ résultat~», «~Décompte TVA~»).
 
 \paragraph{Le bilan et le compte de résultat par groupes.} L'export du bilan et du compte de
 résultat \textbf{suit l'écran}~: même niveau de détail, mêmes groupes ouverts ou fermés, mêmes
-sous-totaux, sur la ligne du titre ou en pied. Exporté sans niveau, il reste tel qu'avant.
+sous-totaux, sur la ligne du titre ou en pied. Exporté sans niveau --- à l'écran, case \textbf{Hiérarchie des groupes} décochée --- il reste à
+plat, tel qu'avant. Depuis l'écran, l'export suit la hiérarchie affichée, avec les colonnes
+\texttt{Niveau} et \texttt{TypeLigne} et les sous-totaux~: pour additionner la colonne \texttt{Solde}
+dans un tableur, filtrez \texttt{TypeLigne} sur les lignes de compte, ou décochez «~Hiérarchie des
+groupes~» pour l'export à plat d'avant. Les montants groupés sont arrondis au centime.
 \begin{itemize}
     \item \textbf{PDF} --- sous la période, une ligne dit le niveau imprimé («~Niveau~2~», ou
           «~Tous les comptes~»), suivie de «~, détail ajusté à la main~» si vous avez ouvert ou
@@ -4305,7 +4309,7 @@ l'addition des lignes est voulu~; les totaux de section suivent la même règle.
 Un bilan ou un compte de résultat imprimé à un niveau qui replie les comptes --- le niveau~1 en
 particulier --- est un \textbf{affichage de travail}, utile pour lire ou discuter les chiffres, et
 \textbf{non des comptes annuels}~: la conformité à l'art.~959a CO tient aux sections légales, que
-les groupes ne changent pas. Pour la remise de comptes annuels, préférez l'export à plat, ou au
+les groupes ne changent pas. Pour la remise de comptes annuels, préférez l'export à plat (case «~Hiérarchie des groupes~» décochée), ou au
 niveau «~Tous les comptes~».
 \end{keshwarning}
 

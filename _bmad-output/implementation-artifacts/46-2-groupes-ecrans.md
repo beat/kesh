@@ -159,6 +159,11 @@ les sous-totaux **sur le titre ou en pied** ; la case « Hiérarchie des groupes
 d'avant. Le navigateur retient la présentation de chaque rapport, société par société, et les exports PDF et CSV
 reçoivent les mêmes réglages que l'écran.
 
+**Changed** — L'export CSV ou PDF du bilan et du compte de résultat lancé depuis l'écran suit la hiérarchie affichée
+(par défaut, tous les comptes) : le CSV porte les colonnes `Niveau;TypeLigne` et des lignes de sous-total. Pour
+additionner la colonne `Solde` dans un tableur, filtrer `TypeLigne` sur les lignes de compte, ou décocher « Hiérarchie
+des groupes » pour l'export à plat d'avant ; les montants groupés sont arrondis au centime.
+
 ## Dev Agent Record
 
 ### Agent Model Used
