@@ -268,3 +268,27 @@ Journaux et captures : `kesh-gate-logs/s46-6b/` (hors dépôt).
   vert ; 5 mutations tuées. Bascule déclarée : l'export de la balance refuse un paramètre de groupes répété, qu'il
   ignorait (tests `reports_e2e::groupes_parametre_repete` et `reports_export_e2e`). Story en `review` ; prompt de la
   revue P1 : `kesh-gate-logs/s46-6b/revue-p1-prompt.md`.
+- 2026-11-22 — **Revue de code P1 (passe complète, une lentille) : 0 C, 0 H, 1 M, 2 L, remédiés** (rapport
+  `kesh-gate-logs/s46-6b/revue-p1-rapport.md`). **M-1** : au PDF groupé, la colonne de l'intitulé (22 caractères)
+  abrégeait deux sous-totaux à l'identique (« Total Capitaux étrangers à court terme » et « … à long terme » en
+  « Total Capitaux étra… ») ; une ligne **sans numéro** (sous-total, ou titre au numéro vide) part désormais de la
+  colonne du numéro et dispose de 30 caractères au retrait nul (`Gabarit::x_sans_numero_mm`,
+  `nom_max_sans_numero`, `TB_NAME_MAX_CHARS_SANS_NUMERO` ; `limite_nom_groupe_balance(depth, avec_numero)`) ; le
+  bilan, le compte de résultat et la balance à plat ne bougent pas (fixtures `export-balance-*` inchangées). 30
+  suffit : recalculé sur les trois plans livrés, quatre langues, aucun sous-total n'y est plus abrégé à l'identique
+  d'un autre (à 22 : `20`/`24` en français et en italien) ; `nom_max` des lignes numérotées n'est donc pas élargi.
+  **L-1** : note de version, tous les refus neufs de l'export. **L-2** : `balanceCurrency` remonté dans
+  `GroupedRowBase`, le transtypage `as unknown as GroupedRow` retiré. Manuel (limites des sous-totaux : 30, 29, 27,
+  26, 24, 22) et `docs/api-external.md` suivent. Tests (de `3fa6cded9` à `c44edcf7b`, `#[test]`) : `pdf.rs` 78 → 79
+  (`balance_groupee_sous_totaux_longs_distincts`, neuf : textes extraits et abscisses), `balance_groupee_footer_et_groupe_ferme`
+  (« Total Actifs circulants » entier), `balance_groupee_libelle_tronque_a_sa_colonne` et
+  `les_colonnes_de_montant_ne_se_chevauchent_pas` complétés ; `export_balance_groupee_fidele_au_json` suit la limite
+  par genre de ligne. Mutations (`mut-r1.console.log`, témoin vert) : **3/3 tuées** par
+  `pdf::tests::balance_groupee_sous_totaux_longs_distincts` — départ sans numéro remis à l'intitulé, longueur remise
+  à 22, numéro vide non filtré. Gates au dernier commit de code `c44edcf7b` : fmt, clippy verts, **nextest 6257
+  exécutés, 6257 passés** (1 instable au premier essai, `mcp_transport_e2e::abandon_au_delai_le_permis_reste_pris`,
+  sans rapport), 14 ignorés (`gate-backend-r1.log`) ; frontend : check 0 erreur, lint, **Vitest 4719/4719 (283
+  fichiers)**, build verts ; **E2E partiel (1 spec)** `reports-balance-groupes.spec.ts` 1/1 (`e2e.log`) ; manuel
+  compilé dans une copie (`manuel-r1.txt`, phrase neuve présente). Captures reprises par la spec au binaire de `c44edcf7b` (1 à 7 ; rendu `-6-export-pdf-1.png`
+  refait) ; ajoutées : `46-6b-6b-sous-totaux-longs.pdf` (le jeu du test neuf, sous-totaux en pied) et son rendu
+  `-6b-sous-totaux-longs-1.png` — « Total Capitaux étrangers à c… » et « … à l… », sans chevauchement des montants. Prompt de la P2 (complète, Opus) : `kesh-gate-logs/s46-6b/revue-p2-prompt.md`.
