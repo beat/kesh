@@ -4885,10 +4885,10 @@ mod tests {
             vec![
                 "10 Devises 90.00 9.45 0.00 99.45",
                 "USD ouverture 100.00 · débit 10.51 · crédit 0.00 · clôture 110.51",
-                "1025 Banque USD 90.00 9.00 0.00 99.00",
-                "USD ouverture 100.00 · débit 10.00 · crédit 0.00 · clôture 110.00",
-                "1026 Caisse USD 0.00 0.45 0.00 0.45",
+                "1000 Caisse USD 0.00 0.45 0.00 0.45",
                 "USD ouverture 0.00 · débit 0.51 · crédit 0.00 · clôture 0.51",
+                "1020 Banque USD 90.00 9.00 0.00 99.00",
+                "USD ouverture 100.00 · débit 10.00 · crédit 0.00 · clôture 110.00",
                 "2000 Fournisseurs 90.00 0.00 9.45 99.45",
             ]
         );
@@ -4903,7 +4903,7 @@ mod tests {
             ),
             "{l:?}"
         );
-        assert!(!l.iter().any(|x| x.starts_with("1025")), "{l:?}");
+        assert!(!l.iter().any(|x| x.starts_with("1020")), "{l:?}");
     }
 
     /// AC-2 — une balance vide groupée garde le message « rapport vide » du

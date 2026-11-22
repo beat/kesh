@@ -270,26 +270,26 @@ pub fn balance_essai_groupee(
     AvecGroupes::balance(balance_essai(), &arbre(), o)
 }
 
-/// Une balance en dollars : `10` ⊃ `1025`, `1026`, tous deux en USD (le
+/// Une balance en dollars : `10` ⊃ `1020`, `1000`, tous deux en USD (le
 /// groupe est en devise unique), et `2000` qui équilibre.
 pub fn balance_usd_groupee(
     o: &OptionsGroupes,
 ) -> AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>> {
     let arbre = ArbreComptes::depuis_noeuds(vec![
         noeud(10, "Devises", None),
-        noeud(1025, "Banque USD", Some(10)),
-        noeud(1026, "Caisse USD", Some(10)),
+        noeud(1020, "Banque USD", Some(10)),
+        noeud(1000, "Caisse USD", Some(10)),
         noeud(2000, "Fournisseurs", None),
     ]);
     let tb = balance(vec![
         tb_usd(
-            1025,
+            1020,
             "Banque USD",
             [dec!(90), dec!(9), dec!(0), dec!(99)],
             [dec!(100), dec!(10), dec!(0), dec!(110)],
         ),
         tb_usd(
-            1026,
+            1000,
             "Caisse USD",
             [dec!(0), dec!(0.45), dec!(0), dec!(0.45)],
             [dec!(0), dec!(0.505), dec!(0), dec!(0.505)],
