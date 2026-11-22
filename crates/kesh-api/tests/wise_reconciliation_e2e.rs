@@ -1368,6 +1368,279 @@ async fn partielle_deux_devises_dont_une_absente(pool: MySqlPool) {
     );
 }
 
+/// Le relevé CHF « sans la ligne du paiement » : deux virements qui
+/// encadrent le 10-03-2020 (export pris avant le règlement de la carte).
+fn releve_chf_sans_la_carte() -> Vec<u8> {
+    releve_virements(
+        "CHF",
+        &[
+            ("TRANSFER-70000011", "05-03-2020", "40.00", "40.00"),
+            ("TRANSFER-70000012", "15-03-2020", "10.00", "50.00"),
+        ],
+    )
+}
+
+/// Revue P3, M1 (prémisse vérifiée : aucun montant compté deux fois) : le
+/// relevé CHF couvre la date **sans** la ligne du paiement ; la part USD forme
+/// un groupe, accepté (une écriture, marchand 11.35). Un second export CHF,
+/// qui porte la ligne `CARD-` en CHF, est importé ensuite : hors groupe, elle
+/// se propose par la règle, au montant de sa seule part (86.60), comme la
+/// reprise à la main de l'amendement A-3. Les deux écritures font la charge,
+/// les crédits des soldes et la perte de change de l'écriture unique
+/// (`partielle_en_une_ecriture_puis_annulation`).
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn partielle_usd_d_abord_puis_ligne_chf(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let usd = releve_usd_carte("10-03-2020");
+    let (s, b) = ctx
+        .importer(&[("chf.csv", &releve_chf_sans_la_carte()), ("usd.csv", &usd)])
+        .await;
+    assert_eq!(s, 201, "import : {b}");
+    let regle = regle_boutique(&ctx).await;
+    let revue = ctx.revue().await;
+    let groupes = de_groupe(&revue["proposals"]);
+    assert_eq!(groupes.len(), 1, "{revue}");
+    let ids: Vec<i64> = serde_json::from_value(groupes[0]["bankTransactionIds"].clone()).unwrap();
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+
+    let (chf, _) = releves_partielle();
+    let (s, b) = ctx.importer(&[("chf2.csv", &chf)]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let ligne_chf = ctx.tx("CARD-90000020", ctx.chf).await;
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["toReview"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    let p = proposition(&revue, ligne_chf);
+    assert_eq!(p["type"], "rule", "{revue}");
+    let (s, b) = ctx.accepter(vec![p]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    assert_eq!(ctx.mouvement(ctx.charge).await.0, dec!(97.95));
+    assert_eq!(ctx.mouvement(ctx.chf).await.0, dec!(-86.60));
+    assert_eq!(ctx.mouvement(ctx.usd).await, (dec!(-12.50), dec!(-13.89)));
+    assert_eq!(ctx.mouvement(ctx.perte).await.0, dec!(1.15));
+}
+
+/// Revue P3, L1 : le frais `FEE-CARD` importé seul d'abord et passé au compte
+/// de frais ne bloque pas le paiement dont les lignes de carte arrivent
+/// ensuite : le groupe (sans le frais) se propose et s'écrit, la part USD
+/// créditée de la seule ligne de carte (13.85), le frais n'étant pas compté
+/// deux fois.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn frais_d_abord_puis_la_carte(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let (chf, usd) = releves_partielle();
+    let usd = String::from_utf8(usd).unwrap();
+    let (entete, lignes) = usd.split_once('\n').unwrap();
+    let (carte, frais) = lignes.trim_end().split_once('\n').unwrap();
+    let seul = |ligne: &str| format!("{entete}\n{ligne}\n").into_bytes();
+    let (s, b) = ctx
+        .importer(&[("chf.csv", &chf), ("f.csv", &seul(frais))])
+        .await;
+    assert_eq!(s, 201, "import : {b}");
+    let regle = regle_boutique(&ctx).await;
+    let id_frais = ctx.tx("FEE-CARD-90000020", ctx.usd).await;
+    let revue = ctx.revue().await;
+    let p = proposition(&revue, id_frais);
+    assert_eq!(p["type"], "fee", "{revue}");
+    let (s, b) = ctx.accepter(vec![p]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    let avant = ctx.count("SELECT COUNT(*) FROM journal_entries").await;
+
+    let (s, b) = ctx.importer(&[("c.csv", &seul(carte))]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["toReview"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    let groupes = de_groupe(&revue["proposals"]);
+    assert_eq!(groupes.len(), 1, "{revue}");
+    let ids: Vec<i64> = serde_json::from_value(groupes[0]["bankTransactionIds"].clone()).unwrap();
+    assert_eq!(
+        ids,
+        vec![
+            ctx.tx("CARD-90000020", ctx.chf).await,
+            ctx.tx("CARD-90000020", ctx.usd).await
+        ]
+    );
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    let ecriture = b["accepted"][0]["journalEntryIds"][0].as_i64().unwrap();
+    assert_eq!(
+        ctx.count("SELECT COUNT(*) FROM journal_entries").await,
+        avant + 1
+    );
+    let lignes = ctx.lignes(ecriture).await;
+    assert_eq!(lignes[0], (ctx.charge, dec!(97.95), dec!(0), None, None));
+    let usd_credite: Vec<Option<Decimal>> = lignes
+        .iter()
+        .filter(|l| l.0 == ctx.usd)
+        .map(|l| l.3)
+        .collect();
+    assert_eq!(usd_credite, vec![Some(dec!(13.85))], "{lignes:?}");
+}
+
+/// Revue P3, L1 (le frais arrivé après coup) : le groupe de la part
+/// USD passé sans son frais, le frais importé ensuite par un second fichier
+/// du même solde se propose seul (`fee`) et s'accepte : une écriture de frais
+/// à part, que le groupe n'a pas comptée.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn frais_apres_le_groupe_passe_seul(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let usd = String::from_utf8(releve_usd_carte("10-03-2020")).unwrap();
+    let (entete, lignes) = usd.split_once('\n').unwrap();
+    let (carte, frais) = lignes.trim_end().split_once('\n').unwrap();
+    let seul = |ligne: &str| format!("{entete}\n{ligne}\n").into_bytes();
+    let (s, b) = ctx
+        .importer(&[
+            ("chf.csv", &releve_chf_sans_la_carte()),
+            ("c.csv", &seul(carte)),
+        ])
+        .await;
+    assert_eq!(s, 201, "import : {b}");
+    let regle = regle_boutique(&ctx).await;
+    let revue = ctx.revue().await;
+    let groupes = de_groupe(&revue["proposals"]);
+    assert_eq!(groupes.len(), 1, "{revue}");
+    let ids: Vec<i64> = serde_json::from_value(groupes[0]["bankTransactionIds"].clone()).unwrap();
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+
+    let (s, b) = ctx.importer(&[("f.csv", &seul(frais))]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let id_frais = ctx.tx("FEE-CARD-90000020", ctx.usd).await;
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["toReview"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    let p = proposition(&revue, id_frais);
+    assert_eq!(p["type"], "fee", "{revue}");
+    let (s, b) = ctx.accepter(vec![p]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    assert_eq!(ctx.etat(id_frais).await.0, "reconciled");
+}
+
+/// Revue P3, L2 (`DateCoverage::Gap`, relevé suivant sans solde d'ouverture) :
+/// les deux relevés CHF se suivraient, mais le suivant n'a pas de solde
+/// d'ouverture — rien n'atteste la continuité : la conversion totale datée
+/// entre eux reste « à examiner », le solde CHF manquant.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn totale_releve_chf_suivant_sans_solde_d_ouverture(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let premier = releve_virements(
+        "CHF",
+        &[("TRANSFER-70000001", "10-03-2020", "50.00", "50.00")],
+    );
+    let suivant = releve_virements(
+        "CHF",
+        &[("TRANSFER-70000002", "05-04-2020", "10.00", "60.00")],
+    );
+    let usd = releve_usd_carte("20-03-2020");
+    for f in [&premier, &suivant, &usd] {
+        let (s, b) = ctx.importer(&[("releve.csv", f)]).await;
+        assert_eq!(s, 201, "import : {b}");
+    }
+    let suivant_id = ctx.tx("TRANSFER-70000002", ctx.chf).await;
+    let (import_id, ba_chf): (i64, i64) =
+        sqlx::query_as("SELECT import_id, bank_account_id FROM bank_transactions WHERE id = ?")
+            .bind(suivant_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+    sqlx::query("UPDATE bank_imports SET opening_balance = NULL WHERE id = ?")
+        .bind(import_id)
+        .execute(&ctx.pool)
+        .await
+        .unwrap();
+    regle_boutique(&ctx).await;
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["proposals"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    let examen = de_groupe(&revue["toReview"]);
+    assert_eq!(examen.len(), 1, "{revue}");
+    assert_eq!(
+        examen[0]["code"], "card_group_statements_missing",
+        "{revue}"
+    );
+    assert_eq!(
+        examen[0]["details"]["missingBankAccountIds"],
+        json!([ba_chf])
+    );
+}
+
+/// Revue P3, L2 (`DateCoverage::NoPrevious`, solde CHF) : le seul relevé CHF
+/// commence après la date du paiement — rien n'atteste ce qui précède : la
+/// conversion totale reste « à examiner », le solde CHF manquant.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn totale_sans_releve_chf_anterieur(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let chf = releve_virements(
+        "CHF",
+        &[("TRANSFER-70000002", "05-04-2020", "10.00", "60.00")],
+    );
+    let usd = releve_usd_carte("20-03-2020");
+    let (s, b) = ctx.importer(&[("chf.csv", &chf), ("usd.csv", &usd)]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let ba_chf: i64 = sqlx::query_scalar(
+        "SELECT bank_account_id FROM bank_transactions WHERE transaction_id = 'TRANSFER-70000002'",
+    )
+    .fetch_one(&ctx.pool)
+    .await
+    .unwrap();
+    regle_boutique(&ctx).await;
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["proposals"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    let examen = de_groupe(&revue["toReview"]);
+    assert_eq!(examen.len(), 1, "{revue}");
+    assert_eq!(
+        examen[0]["code"], "card_group_statements_missing",
+        "{revue}"
+    );
+    assert_eq!(
+        examen[0]["details"]["missingBankAccountIds"],
+        json!([ba_chf])
+    );
+}
+
+/// Revue P3, L2 (`DateCoverage::NoPrevious`, solde en devise) : le seul
+/// relevé EUR commence après la date du paiement ; un solde en devise ouvert
+/// après la date n'est pas exigé : la partielle se propose.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn partielle_solde_en_devise_ouvert_apres(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let eur = releve_virements(
+        "EUR",
+        &[("TRANSFER-70000022", "01-04-2020", "5.00", "30.00")],
+    );
+    let (chf, usd) = releves_partielle();
+    let (s, b) = ctx
+        .importer(&[("chf.csv", &chf), ("eur.csv", &eur), ("usd.csv", &usd)])
+        .await;
+    assert_eq!(s, 201, "import : {b}");
+    regle_boutique(&ctx).await;
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["toReview"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    assert_eq!(de_groupe(&revue["proposals"]).len(), 1, "{revue}");
+}
+
 /// Revue P2, L-d : le prédicat du rang 3 (`settlement_entry_cancel_blocker`)
 /// n'exempte une autre ligne du paiement groupé que **rapprochée** : forgée en
 /// attente sans perdre son écriture (état qu'aucun chemin ne produit), elle

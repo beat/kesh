@@ -318,16 +318,56 @@ async fn build_wise_review(
     Ok(review)
 }
 
+/// Les détails du motif
+/// [`wise::REVIEW_CARD_GROUP_PARTLY_RECONCILED`]
+/// (`reconciledBankTransactionIds`, `journalEntryIds`) quand une ligne **de
+/// carte** (`CARD-<id>`, frais exclus) du paiement `card_id` est déjà
+/// rapprochée sur un solde de `own`, ou `None`.
+///
+/// Un frais `FEE-CARD-<id>` déjà rapproché n'y compte pas (revue de code P3
+/// de la 39-11c, L1) : passé seul au compte de frais, il n'est pas dans le
+/// groupe des lignes en attente, que l'écriture du groupe crédite sans lui —
+/// aucun montant compté deux fois.
+async fn reconciled_card_lines(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    own: &[i64],
+    card_id: &str,
+) -> Result<Option<serde_json::Value>, DbError> {
+    let done =
+        reads::reconciled_by_transaction_ids(&mut *conn, company_id, own, &[card_id.to_string()])
+            .await?;
+    if done.is_empty() {
+        return Ok(None);
+    }
+    let mut entries: Vec<i64> = done.iter().filter_map(|t| t.matched_entry_id).collect();
+    entries.sort_unstable();
+    entries.dedup();
+    Ok(Some(serde_json::json!({
+        "reconciledBankTransactionIds": done.iter().map(|t| t.id).collect::<Vec<_>>(),
+        "journalEntryIds": entries,
+    })))
+}
+
 /// Ce qui empêche d'écrire un paiement par carte groupé, ou `None` : le
 /// motif (`code` de la revue, `details.reason` de l'acceptation) et ses
 /// détails, **les mêmes** des deux côtés — la revue et l'acceptation
 /// l'appellent toutes deux (revues de code P1 et P2 de la 39-11c).
 ///
-/// 1. [`wise::REVIEW_CARD_GROUP_PARTLY_RECONCILED`] : une ligne du même
-///    paiement (`CARD-<id>`, `FEE-CARD-<id>`) est déjà rapprochée, sur un solde
-///    du compte Wise — une partielle dont une part, importée d'abord, a été
-///    passée seule ; écrire le groupe en ferait une seconde écriture
-///    (`details.reconciledBankTransactionIds`, `details.journalEntryIds`).
+/// 1. [`wise::REVIEW_CARD_GROUP_PARTLY_RECONCILED`] : une ligne **de carte**
+///    du même paiement (`CARD-<id>`) est déjà rapprochée, sur un solde du
+///    compte Wise — une partielle dont une part, importée d'abord, a été
+///    passée seule ; écrire le groupe en ferait une seconde écriture du
+///    paiement (`details.reconciledBankTransactionIds`,
+///    `details.journalEntryIds` : [`reconciled_card_lines`], qui ne compte pas
+///    un frais passé seul). Aucun montant n'y serait compté deux fois — le
+///    groupe ne réunit que les lignes en attente, son marchand celui de ces
+///    seules lignes —, mais le motif garde la proposition à une écriture par
+///    paiement. Il ne vaut que pour un groupe : la ligne de carte seule d'un
+///    paiement converti, hors groupe (la part en CHF, sans segment, arrivée
+///    après le groupe de sa part en devise), suit le classement ligne à ligne
+///    et se propose par règle, au montant de sa seule part — comme la reprise
+///    à la main de l'amendement A-3 (revue de code P3 de la 39-11c, M1).
 /// 2. [`wise::REVIEW_CARD_GROUP_STATEMENTS_MISSING`] : un solde sans ligne dans
 ///    le groupe peut en avoir une qui n'est pas encore importée
 ///    (`details.missingBankAccountIds`) — une conversion partielle, sans sa
@@ -344,8 +384,12 @@ async fn build_wise_review(
 /// importée se propose alors sans elle, et sa part arrivée ensuite formerait
 /// un second groupe, refusé par le motif 1 (une part rapprochée) ;
 /// un frais `FEE-CARD` importé plus tard par un second fichier du **même**
-/// solde que la carte n'est pas décelable (le relevé de ce solde couvre déjà
-/// la date).
+/// solde que la carte se passe seul, au compte de frais (le groupe ne l'a pas
+/// compté). La continuité (`closing == opening`) tient pour preuve qu'aucune
+/// ligne ne manque, même quand des lignes absentes s'annulent (solde net
+/// nul) ; et un solde en devise dont les relevés encadrent la date sans se
+/// suivre met « à examiner » tout paiement daté entre eux, même sans rapport
+/// avec lui.
 async fn card_group_blocker<'b>(
     conn: &mut sqlx::MySqlConnection,
     company_id: i64,
@@ -354,22 +398,10 @@ async fn card_group_blocker<'b>(
 ) -> Result<Option<(&'static str, serde_json::Value)>, DbError> {
     let balances: Vec<(i64, &str)> = balances.collect();
     let own: Vec<i64> = balances.iter().map(|(id, _)| *id).collect();
-    let wanted = vec![
-        group.card_id.clone(),
-        format!("{}{}", wise::FEE_PREFIX, group.card_id),
-    ];
-    let done = reads::reconciled_by_transaction_ids(&mut *conn, company_id, &own, &wanted).await?;
-    if !done.is_empty() {
-        let mut entries: Vec<i64> = done.iter().filter_map(|t| t.matched_entry_id).collect();
-        entries.sort_unstable();
-        entries.dedup();
-        return Ok(Some((
-            wise::REVIEW_CARD_GROUP_PARTLY_RECONCILED,
-            serde_json::json!({
-                "reconciledBankTransactionIds": done.iter().map(|t| t.id).collect::<Vec<_>>(),
-                "journalEntryIds": entries,
-            }),
-        )));
+    if let Some(details) =
+        reconciled_card_lines(&mut *conn, company_id, &own, &group.card_id).await?
+    {
+        return Ok(Some((wise::REVIEW_CARD_GROUP_PARTLY_RECONCILED, details)));
     }
     let date = payment_date(group.principal());
     let present: HashSet<i64> = group.lines.iter().map(|t| t.bank_account_id).collect();

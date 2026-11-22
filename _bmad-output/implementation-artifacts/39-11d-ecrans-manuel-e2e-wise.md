@@ -95,6 +95,23 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
 *Ajouté* — Écrans de l'import Wise : réglage des comptes, import des relevés, propositions et écarts ; section Wise au
 manuel utilisateur.
 
+## Limites du rapprochement à reprendre au manuel (revue de code P3 de la 39-11c)
+
+À écrire dans la sous-section « Comptes Wise » (AC-4), en termes d'utilisateur, à côté des motifs « à examiner » du
+paiement par carte converti (`docs/api-external.md`, section du rapprochement Wise, fait foi) :
+
+- **Continuité des relevés** : Kesh tient pour complet un intervalle entre deux relevés d'un solde quand l'ouverture du
+  second égale la clôture du premier. Des lignes non importées qui s'annulent (une recharge et une dépense du même
+  montant, ou un solde resté à zéro des deux côtés) n'y paraissent pas : le paiement se propose sans elles. Conseil :
+  exporter chaque solde sur des périodes jointives, sans trou.
+- **Solde en devise peu utilisé** : si ses relevés encadrent la date d'un paiement sans se suivre (exports épars), **tout**
+  paiement par carte daté entre eux passe « à examiner », même sans rapport avec ce solde. Remède : importer le relevé qui
+  comble l'intervalle, ou traiter la ligne à la main.
+- **Part arrivée après coup** : un paiement par carte groupé dont une ligne de carte est déjà rapprochée passe « à
+  examiner » (« une part du paiement est déjà rapprochée ») ; la ligne en francs d'une partielle importée après le groupe
+  de sa part en devise se propose seule par la règle (deux écritures, aucun montant compté deux fois) ; un frais de carte
+  passé seul ne bloque rien.
+
 ## Change Log
 
 - 2026-11-20 — fiche rédigée (phase 1 KISS), non validée.
@@ -108,3 +125,5 @@ manuel utilisateur.
   de la phase 1 de 38-11b (facture fournisseur, angle mort de la réconciliation générale, plus lourd pour un solde Wise en francs
   qui reçoit conversions et frais). LOW : « écart Stripe » est un motif « à examiner », non un écart.
 - 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : `provider.ts` / `withoutProviders` déjà livrés par 38-11d sur cinq sites (paiement de facture fournisseur compris) : réutilisés, plus de `paypal.ts` à généraliser ni de « quatre sites » ; `providerOf` retiré. Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.
+- 2026-11-22 — limites du rapprochement Wise à reprendre au manuel, notées par la remédiation de la revue de code P3 de la
+  39-11c (continuité tenue pour preuve, solde en devise épars, part arrivée après coup).
