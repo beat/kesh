@@ -195,5 +195,27 @@ transactions Wise viennent avec la 39-11d2 : d'ici là, les transactions import�
     visible, `listFiscalYears` non appelé).
   - **L5** noté, non traité : aucune garde des codes Wise contre leur source (patron des 38-11d/40-7d) ; à reprendre avec
     la 39-11d2.
-  - `sitesTotal` 3739 → **3740**, relevé par la garde. Gates et mutations : ci-dessous (§ remédiation P1).
+  - `sitesTotal` 3739 → **3740**, relevé par la garde.
+  - Gates de la remédiation (journaux `kesh-gate-logs/s39-11d/`) :
+    - `cargo fmt --check` et clippy workspace `-D warnings` : rc 0 au commit `a60904e7` (`lint-p1r.log`), et de nouveau au
+      commit `bcb66301` (`cible-p1r.log`).
+    - nextest complet au commit `a60904e7` : 6614 exécutés, 6614 passés, 17 ignorés, rc 0 (`nextest-p1r.log`) ; après lui,
+      `bcb66301` ne change qu'une assertion de `wise_import_e2e.rs` : binaire `wise_import_e2e` rejoué, 13 passés, 1 ignoré
+      (`cible-p1r.log`).
+    - frontend au commit `a60904e7` : `npm run check` rc 0, `lint-i18n-ownership` rc 0, Vitest 297 fichiers, 5067 tests
+      passés (+4 : `FiscalYearChecks` compte Wise, `wise-labels` doublon, `wise-page` doublon et exercices non lus),
+      `npm run build` rc 0 (`front-p1r.rc`). `2f2e259a` ne touche que la spec E2E (non rejoué au front).
+    - E2E partiel, `wise-import.spec.ts` seule (règle de la nuit) : au commit `a60904e7`, 2 passés, 1 échec (l'étape 3
+      affirmait le texte sur le bloc entier, qui porte aussi le lien « Comptes bancaires » : `e2e-p1r.log`) ; corrigé
+      (`2f2e259a`, la ligne du refus) : 3 passés (`e2e-p1r2.log`). Ni E2E complet ni `gate-ci.sh`.
+    - Mutations hors dépôt, une à la fois, depuis un témoin vert (Vitest 51 passés ; nextest 2 passés) : M1 (cas
+      `BANK_IMPORT_DUPLICATE_FILE` neutralisé) tuée par `wise-labels` « relevé déjà importé … » et `wise-page` « refus :
+      relevé déjà importé … » (AssertionError) ; L7 (garde `hasReview` retirée) tuée par `wise-page` « les exercices ne
+      sont pas lus … » ; L2 (lien Wise neutralisé) tuée par `FiscalYearChecks` « K2 : un compte Wise lie la page Wise » ;
+      M2 (`archive` retiré de `csv_error`) tuée par `import_zip_refus_et_cles` (`panicked at wise_import_e2e.rs:1612`,
+      `left: Null, right: "b.zip"`). L'assertion « à part » de `import_refus_dans_l_ordre_roles_et_cles` survivait (clé
+      absente lue `Null`) : exigée présente en `bcb66301`. Journaux `kesh-gate-logs/s39-11d/mut-p1r/`.
+    - Manuel : PDF régénéré dans une copie (`make user`, rc 0), aplati et grepé : « Ouvrir la page Wise pour un compte Wise
+      (§14.4) — dans cette version, la page Wise ne fait qu'importer … », la phrase des refus ventilée ; aucun `??`.
+  - Passe suivante : P2 complète, Sonnet (`kesh-gate-logs/s39-11d/revue-p2-prompt.md`).
 
