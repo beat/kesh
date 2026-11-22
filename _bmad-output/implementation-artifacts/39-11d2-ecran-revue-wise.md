@@ -1,6 +1,6 @@
 # Story 39-11d2 : la revue et l'acceptation Wise à l'écran
 
-Status: review
+Status: done
 
 *Fiche rédigée le 2026-11-22, branche `story/39-11d2`, partie de `story/39-11d` (`440ae42c` à la rédaction ; la branche avance par sa revue P1, reprise par la condition préalable). Epic 39, phase 1
 KISS. **Reprend l'AC-3 de la 39-11d**, reporté par son amendement A3 (la revue Wise, Story 39-11c, n'était pas dans la
@@ -319,6 +319,9 @@ s'acceptent d'un geste.
 - Vitest, `it(` : `wise-review.test.ts` 0 → 6, `wise-labels.test.ts` 9 → 23, `provider-labels.test.ts` 3 → 6,
   `ProviderReviewPage.test.ts` 0 → 2, `provider-review.test.ts` 0 → 1, `wise-page.test.ts` 8 → 12 (deux retournés).
 - E2E : `wise-import.spec.ts` 3 → 5 tests.
+- Revues P1 et P2 (de `6ce8fd5cc` à `HEAD`) : tests unitaires `routes::wise::tests` 0 → 3
+  (`groupe_sans_lignes_d_affichage_est_une_erreur_interne`, `groupe_connu_rend_ses_lignes`,
+  `groupe_absent_de_shown_rend_l_erreur_interne`) ; Vitest `wise-page.test.ts` 12 → 13.
 - Compteurs recomptés par leur garde : `sitesTotal` 3782 → **3816** (34 sites `i18nMsg(` au diff hors tests, 0
   retiré) ; garde des libellés en dur 149 → **159** (`conforme` 128 → 137, `ecartee` 21 → 22, chaque candidate nommée).
 
@@ -413,3 +416,17 @@ paypal/+page.svelte}`, `frontend/src/lib/shared/{i18n-keys.test.ts, i18n-libelle
   (`unwrap_or_default`) : `card_group_display` rend une erreur interne tracée (`tracing::error!`, `AppError::Internal`),
   propagée par `build_wise_review` (tests `groupe_sans_lignes_d_affichage_est_une_erreur_interne`, `groupe_connu_rend_ses_lignes`).
   LOW-3 : ligne vide finale de `provider-review.ts` retirée. Passe P2 ciblée sur ce commit : prompt `revue-p2-prompt.md`.
+- 2026-11-22 — revue de code P2 ciblée sur la remédiation P1 (`5c172533b`, Opus, contexte frais, lecture seule ; prompt
+  `revue-p2-prompt.md`, rapport `kesh-gate-logs/s39-11d2/revue-p2-rapport.md`) : 0 CRITICAL, 0 HIGH, 0 MEDIUM, 3 LOW. MEDIUM-1
+  et LOW-1 à LOW-3 de la P1 confirmés corrigés (mutations `openLink` et repli vide rejouées, tuées). LOW-A appliqué (test
+  seul, `6c5c40f68`) : `groupe_absent_de_shown_rend_l_erreur_interne` exige `(_, Some(AppError::Internal(_)))` de
+  `to_review_proposal` sur `shown` vide, et aucune erreur pour une proposition commune ; mutation « erreur ignorée »
+  (`Err(e) => (…, Some(e))` → `Err(_e) => (…, None)`) sur une copie `git archive` hors dépôt, cible cargo propre supprimée
+  ensuite : témoin 3/3 vert, mutant tué sur l'assertion nommée « erreur interne attendue, obtenu None » (`wise.rs:1010`),
+  rc 101 (journal `kesh-gate-logs/s39-11d2/lowa-mut.log` ; ciblé `routes::wise::tests` 3 passés et `cargo fmt --check` 0,
+  `lowa-cible.log`). LOW-B noté, non appliqué : le tuple `(proposition, Option<AppError>)` vient de `map_proposals`, qui ne
+  sait pas échouer ; un pré-contrôle de `shown` ou un `try_map_proposals` serait plus simple, et le `tracing::error!` de
+  `card_group_display` double celui d'`AppError::Internal` (il ajoute les identifiants) — forme, sans comportement faux.
+  LOW-C hors périmètre (phrase sœur de Stripe, `docs/api-external.md`) : reprise par la story de solde de l'Epic 40.
+  **Boucle close** sur une passe sans rien au-dessus de LOW. Tendance : P1 (Sonnet) 0/0/1/3 → P2 ciblée (Opus) 0/0/0/3.
+  Clippy et nextest complet de ce dernier commit (test seul) au gate de l'intégration dans `epic/39-wise`.
