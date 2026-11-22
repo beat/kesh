@@ -1205,7 +1205,12 @@ const ATTENDU = {
 	// Fusion d'epic/38-paypal (38-12b) dans epic/40-stripe : **3733** (« expected 3733 to be 0 »),
 	// relevé par la garde = 3691 + 42 (les sites de la 38-12b, 3674 − 3632).
 	// Fusion d'epic/40-stripe (38-12b) dans epic/39-wise, après la 39-11d : **3782** (« expected 3782 to be 0 »), relevé par la garde = 3740 + 42 (les sites de la 38-12b).
-	sitesTotal: 3782,
+	// Story 39-11d2 (revue Wise à l'écran : genres, actions, motifs, écarts, refus, sous-lignes) :
+	// **3814** (« expected 3814 to be 3782 »), relevé par la garde ; recompté au diff hors tests :
+	// 32 sites `i18nMsg(` ajoutés (28 `wise-labels.ts`, 1 `provider-labels.ts`, 2 page Wise,
+	// 1 `ProviderReviewPage.svelte`), 0 retiré. Puis les colonnes « Nom » et « Identifiant Wise » des
+	// lignes « à examiner » de la page Wise : **3816**, 2 sites ajoutés (`wise-col-name`, `wise-col-id`).
+	sitesTotal: 3816,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/

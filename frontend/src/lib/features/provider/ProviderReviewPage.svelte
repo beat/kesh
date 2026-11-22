@@ -1,14 +1,26 @@
 <!--
   Story 40-7d (AC-2, AC-3) — la page **commune** des prestataires (PayPal,
-  Stripe ; Wise depuis la 39-11d, plusieurs fichiers ou un zip d'un geste, et,
-  jusqu'à la revue Wise de la 39-11c, l'import seul), tirée de la page PayPal de la 38-11d : choix du compte et de
+  Stripe ; Wise depuis la 39-11d, plusieurs fichiers ou un zip d'un geste, et
+  sa revue depuis la 39-11d2), tirée de la page PayPal de la 38-11d : choix du compte et de
   l'exercice, import du fichier et son compte rendu, propositions à cocher et
   à accepter par paquets de 500, écarts et lignes « à examiner » (rattachement
   par la modale du rapprochement, écriture manuelle). Ce qui est
   propre à un prestataire — ses textes, son client d'API, ses libellés, la
   forme de son compte rendu, l'action d'une proposition, les colonnes de ses
   lignes « à examiner » — lui est passé par ses propriétés et ses fragments ;
-  les identifiants de test se préfixent par `testId` (« paypal », « stripe »).
+  les identifiants de test se préfixent par `testId` (« paypal », « stripe », « wise »).
+
+  Story 39-11d2 (AC-2) — les lignes d'une proposition ou d'une ligne « à
+  examiner » qui en réunit plusieurs (le paiement par carte groupé de Wise) :
+  `proposalLines` et `findingLines` rendent ses lignes hors la principale,
+  affichées en sous-lignes (identifiants de test propres, jamais ceux d'une
+  ligne) ; chaque sous-ligne d'un « à examiner » a son propre bouton
+  « Rattacher à une écriture », sur sa transaction ; `lineLabel` dit ce qui
+  suit une sous-ligne (« frais ») ; `toReviewExtra` ajoute un fragment sous le
+  libellé d'un « à examiner », comme `gapExtra` pour un écart. Sans ces
+  propriétés, une page n'affiche aucune sous-ligne. Une page **sans revue**
+  (`api.getReview` absent) n'a ni exercice ni propositions : le mode reste,
+  générique (aucun prestataire ne s'en sert aujourd'hui).
 
   Fusion de l'Epic 38 (38-12b) : à côté de l'import du fichier, des actions
   propres au prestataire (`importActions` : « Télécharger depuis PayPal ») et
@@ -48,6 +60,7 @@
 		ProviderPageTexts,
 		ProviderProposalBase,
 		ProviderReview,
+		ProviderReviewTransaction,
 	} from './provider-review.types';
 
 	interface Props {
@@ -83,6 +96,27 @@
 		gapDetails?: (f: ProviderFinding) => string | null;
 		/** Libellé d'un motif « à examiner ». */
 		toReviewLabel?: (f: ProviderFinding) => string;
+		/**
+		 * Story 39-11d2 — les lignes d'une proposition hors sa transaction (sous-lignes ; défaut :
+		 * aucune). La page Wise y rend les lignes d'un paiement par carte groupé.
+		 */
+		proposalLines?: (p: P) => ProviderReviewTransaction[];
+		/**
+		 * Story 39-11d2 — les lignes d'une ligne « à examiner » hors sa transaction (sous-lignes,
+		 * chacune avec son bouton « Rattacher à une écriture » ; défaut : aucune). Un prestataire
+		 * qui a des colonnes propres (`toReviewHead`) passe aussi `toReviewLineCells`.
+		 */
+		findingLines?: (f: ProviderFinding) => ProviderReviewTransaction[];
+		/** Story 39-11d2 — le texte après une sous-ligne (« frais »), ou `null`. */
+		lineLabel?: (t: ProviderReviewTransaction) => string | null;
+		/** Story 39-11d2 — ce qui suit le libellé d'un « à examiner » (liens), facultatif. */
+		toReviewExtra?: Snippet<[ProviderFinding]>;
+		/**
+		 * Story 39-11d2 — les cellules propres au prestataire d'une sous-ligne « à examiner »
+		 * (mêmes colonnes que `toReviewCells`) ; données, la cellule du motif ne répète pas
+		 * l'identifiant de la sous-ligne.
+		 */
+		toReviewLineCells?: Snippet<[ProviderReviewTransaction]>;
 		/** Le compte rendu propre au prestataire, sous les lignes par devise. */
 		importReportExtra?: Snippet<[R]>;
 		/**
@@ -136,6 +170,11 @@
 		gapLabel = (f) => f.code,
 		gapDetails = () => null,
 		toReviewLabel = (f) => f.code,
+		proposalLines = () => [],
+		findingLines = () => [],
+		lineLabel = () => null,
+		toReviewExtra,
+		toReviewLineCells,
 		importReportExtra,
 		importReport: importReportView,
 		importActions,
@@ -179,7 +218,7 @@
 	let linkTarget = $state<LinkTarget | null>(null);
 
 	let providerAccounts = $derived(accountLabels(bankAccounts));
-	// Story 39-11d — une page sans revue (Wise, avant la 39-11c) n'a ni exercice ni propositions.
+	// Story 39-11d — une page sans revue (`api.getReview` absent) n'a ni exercice ni propositions.
 	let hasReview = $derived(api.getReview !== undefined);
 
 	onMount(async () => {
@@ -267,9 +306,11 @@
 			: new Set();
 	}
 
-	/** Ouvre la modale de rattachement sur la transaction d'une ligne « à examiner ». */
-	function openLink(item: ProviderFinding) {
-		const t = item.transaction;
+	/**
+	 * Ouvre la modale de rattachement sur une transaction : celle d'une ligne « à examiner »,
+	 * ou celle d'une de ses sous-lignes (39-11d2).
+	 */
+	function openLink(t: ProviderReviewTransaction | undefined) {
 		if (!t) return;
 		linkTarget = {
 			bankTransactionId: t.id,
@@ -318,6 +359,26 @@
 <!-- Le compte rendu propre au prestataire à la place des lignes par devise (Wise, 39-11d), dans le compte rendu commun. -->
 {#snippet importReportMainView()}
 	{#if importReport}{@render importReportMain?.(importReport)}{/if}
+{/snippet}
+
+<!-- Story 39-11d2 — l'identifiant d'une sous-ligne, et le texte qui le suit (« frais »). -->
+{#snippet subLineId(line: ProviderReviewTransaction)}
+	{@const label = lineLabel(line)}
+	<span class="font-mono text-xs whitespace-nowrap">↳ {line.transactionId ?? ''}</span>
+	{#if label !== null}<span class="ml-1 text-xs" data-testid="{testId}-line-label-{line.id}">{label}</span>{/if}
+{/snippet}
+
+<!-- Story 39-11d2 — une sous-ligne d'une proposition : sans case à cocher ni action (la proposition les porte). -->
+{#snippet subLine(line: ProviderReviewTransaction, rowTestId: string)}
+	<tr class="border-b border-border text-text-muted" data-testid={rowTestId}>
+		<td class="py-1 pr-2"></td>
+		<td class="py-1 pr-4 whitespace-nowrap">{formatSwissDate(line.date)}</td>
+		<td class="py-1 pr-4"></td>
+		<td class="py-1 pr-4 text-right font-mono whitespace-nowrap">{line.amount} {line.currency}</td>
+		<td class="py-1 pr-4">{line.name ?? ''}</td>
+		<td class="py-1 pr-4">{@render subLineId(line)}</td>
+		<td class="py-1"></td>
+	</tr>
 {/snippet}
 
 <svelte:head>
@@ -521,6 +582,9 @@
 								<td class="py-2 pr-4 font-mono text-xs">{p.transaction.transactionId ?? ''}</td>
 								<td class="py-2">{@render proposalAction?.(p, key)}</td>
 							</tr>
+							{#each proposalLines(p) as line (line.id)}
+								{@render subLine(line, `${testId}-proposal-line-${line.id}`)}
+							{/each}
 						{/each}
 					</tbody>
 				</table>
@@ -607,14 +671,17 @@
 							{@const tx = t.transaction}
 							<tr class="border-b border-border" data-testid="{testId}-to-review-{tx?.id ?? `e${i}`}">
 								<td class="py-2 pr-4 whitespace-nowrap">{findingDate(t)}</td>
-								<td class="py-2 pr-4">{toReviewLabel(t)}</td>
+								<td class="py-2 pr-4">
+									{toReviewLabel(t)}
+									{@render toReviewExtra?.(t)}
+								</td>
 								<td class="py-2 pr-4 text-right font-mono whitespace-nowrap">{#if tx}{tx.amount} {tx.currency}{/if}</td>
 								{@render toReviewCells?.(t, i)}
 								<td class="py-2 whitespace-nowrap">
 									<button
 										type="button"
 										class="rounded border border-border px-2 py-1 text-xs"
-										onclick={() => openLink(t)}
+										onclick={() => openLink(tx)}
 										disabled={!tx}
 										data-testid="{testId}-link-{tx?.id ?? `e${i}`}"
 									>
@@ -625,6 +692,31 @@
 									</a>
 								</td>
 							</tr>
+							{#each findingLines(t) as line (line.id)}
+								<tr class="border-b border-border text-text-muted" data-testid="{testId}-to-review-line-{line.id}">
+									<td class="py-1 pr-4 pl-4 whitespace-nowrap">{formatSwissDate(line.date)}</td>
+									<td class="py-1 pr-4">
+										{#if toReviewLineCells}
+											{@const label = lineLabel(line)}
+											<span class="text-xs">↳ {label ?? ''}</span>
+										{:else}
+											{@render subLineId(line)}
+										{/if}
+									</td>
+									<td class="py-1 pr-4 text-right font-mono whitespace-nowrap">{line.amount} {line.currency}</td>
+									{@render toReviewLineCells?.(line)}
+									<td class="py-1 whitespace-nowrap">
+										<button
+											type="button"
+											class="rounded border border-border px-2 py-1 text-xs"
+											onclick={() => openLink(line)}
+											data-testid="{testId}-link-line-{line.id}"
+										>
+											{i18nMsg('provider-link-entry', 'Rattacher à une écriture')}
+										</button>
+									</td>
+								</tr>
+							{/each}
 						{/each}
 					</tbody>
 				</table>
