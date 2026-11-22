@@ -81,7 +81,7 @@ pub(crate) fn read_records(text: &str) -> RawRecords {
 }
 
 /// Forme comparable d'un nom de colonne : `trim`, puis minuscules.
-fn normalize(name: &str) -> String {
+pub(crate) fn normalize(name: &str) -> String {
     name.trim().to_lowercase()
 }
 
