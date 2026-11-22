@@ -1,6 +1,6 @@
 # Story 46-7 : solde de la dette de l'epic
 
-Status: review
+Status: done
 
 *Esquisse du 2026-11-18 (renumérotée 46-7 le 2026-11-19 : la balance prend le 46-6). Revue de Beat : approuvée. Story de solde (`CLAUDE.md` § *Priorités des défauts*, « Tarir la source, puis solder »).
 Plafond : **2 issues**, fixé au fichier d'epic (§ *Stories*). **Dernière story de l'epic**, après 46-1 à 46-6b (et
@@ -86,7 +86,7 @@ ne laisse pas de LOW sans suite.
 - **Fixed** — Rapports par groupes : fermer puis rouvrir un groupe (ou l'inverse) le rend à l'état que lui donne le
   niveau, et le PDF exporté ne dit plus « détail ajusté à la main » quand l'écran montre exactement le niveau choisi.
 - **Fixed** — PDF des rapports par groupes : la ligne « (solde propre) » d'un compte de groupe à nom long garde son
-  suffixe ; seul le nom est abrégé (sauf au plus profond niveau de la balance, dont la colonne est plus étroite que le
+  suffixe ; seul le nom est abrégé (sauf à partir de la profondeur 6 de la balance, dont la colonne est alors plus étroite que le
   suffixe).
 
 ## Dev Agent Record
@@ -102,8 +102,9 @@ ne laisse pas de LOW sans suite.
   `all` ou `depth < niveau` ; `depth` de la ligne = la `profondeur` passée à `est_ouvert`, `groupes.rs:837`) ;
   `toggleGroup` prend la profondeur de la ligne et n'inscrit le groupe dans une liste que si l'état voulu diffère de
   celui du niveau. Une entrée redondante d'une mémoire ancienne se ferme encore d'un clic (test). Aucun affichage n'en
-  dépend : l'état montré reste celui que l'API rend. AC-3 de la 46-2 tenu à la lettre (« ouvrir un groupe fermé **par
-  le niveau** l'ajoute à `open` »).
+  dépend : l'état montré reste celui que l'API rend. AC-3 et C-46-2-1 de la 46-2 amendés par une note datée du 2026-11-22 (revue P1, LOW-1) : un clic n'inscrit plus
+  le groupe que si l'état voulu diffère de celui du niveau (citation d'origine rectifiée : l'AC-3 dit « ouvrir un groupe
+  fermé par le niveau l'ajoute à `open` » sans restriction).
 - D4 : `truncate_keeping_suffix(texte, suffixe, max)` abrège le nom seul ; le nom peut se réduire à « … » (numéro
   imprimé à part) ; plus étroit que le suffixe et son espace (balance au retrait maximal, 14 caractères), le tout est
   tronqué comme avant. Le test de fidélité de la balance suit, par `tronque_propre`, écrit indépendamment du rendu.
@@ -157,6 +158,11 @@ des issues à ouvrir de l'epic ; aucun retiré sans correctif.
   des Change Logs et Dev Agent Records des fiches 46-1 à 46-6b, la mention restant une aide. L : « `P1` puis `P4` » →
   « de `P1` à `P4` ». Plafond (2) et borne de cinq modules confrontés au fichier d'epic : conformes. Rapport :
   `kesh-gate-logs/epic-46/validation/46-7-P2.md`.
+- 2026-11-22 — revue P1 (Sonnet 5.5) : 0 C, 0 H, 0 M, 5 L ; boucle close (aucun finding au-dessus de LOW, remédiation sans
+  code de production). LOW-1 : AC-3 et C-46-2-1 de la 46-2 amendés par note datée, citation de la 46-7 corrigée. LOW-2 :
+  table partagée `crates/kesh-report/tests/fixtures/ouverture_par_niveau.json`, lue par un test Rust (`est_ouvert`) et un
+  test Vitest (`openByLevel` via `toggleGroup`). LOW-4 : manuel et fiche disent « à partir de la profondeur 6 ». LOW-3 et
+  LOW-5 : versés à la liste des issues à ouvrir de l'epic (LOW-5 : lisibilité assumée, sans correctif). Gates de clôture : fmt, clippy workspace, nextest `package(kesh-report) | binary(reports_export_e2e)` 321 passés (1 ignoré), Vitest des rapports 211 passés, `npm run check` vert ; PDF du manuel compilé dans une copie, phrase « à partir de la profondeur 6 » présente.
 - 2026-11-22 — Développement (`bmad-dev-story`) : amendement daté (dix points de dette, plafond 2 : D10 et D4
   retenus), deux correctifs, LOW de la revue de fusion de la 46-6b corrigés, D3 versé à la liste ; gates ci-dessus ;
   statut `review`. Prompt de la revue P1 : `kesh-gate-logs/s46-7/revue-p1-prompt.md`.

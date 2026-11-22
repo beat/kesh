@@ -51,6 +51,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    réponse de la dernière demande s'affiche ; pendant le chargement, l'écran garde l'affichage précédent (sans
    clignotement, `aria-busy`). Chaque redemande écrit une trace `report.generated` au journal d'audit, comme un
    changement de période aujourd'hui (46-1 AC-11) : assumé (C-46-2-1), **quel que soit l'état du stockage** du navigateur ; la vue est mémorisée dans la mesure où le navigateur le permet (AC-10).
+   *Note du 2026-11-22 (Story 46-7, LOW-1) : depuis la 46-7, un clic qui rend au groupe l'état que lui donne le niveau le retire des deux listes au lieu de l'y inscrire ; `openByLevel` (`reports-grouping.ts`) reprend pour cela la règle `est_ouvert` de la 46-1, gardée par une table de cas partagée avec le Rust. Ce n'est qu'une mémoire de clic minimale : l'état affiché reste celui que l'API rend, et C-46-2-1 (« aucun repli calculé dans le navigateur ») vaut pour l'affichage.*
 4. **AC-4 — Rendu (D5, Q2, Q3).** Lignes rendues dans l'ordre de `groupedRows` : retrait par `depth` ; `group` en gras,
    son montant **selon la règle de rendu de la 46-1** (sur le titre en `header` ou si fermé ; sinon sur la ligne
    `subtotal`, en gras, libellé « Total <nom du groupe> ») ; `own` libellée « <numéro> <nom> (solde propre) » ; solde en

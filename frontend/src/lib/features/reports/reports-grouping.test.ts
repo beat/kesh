@@ -1,5 +1,7 @@
 // Story 46-2 — état, transitions et mémoire de la vue groupée (AC-2, AC-3, AC-5, AC-10).
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	closeAll,
@@ -212,4 +214,31 @@ describe('mémoire du navigateur (AC-10)', () => {
 		expect(set).not.toHaveBeenCalled();
 		expect(readGroupingView(null, 'balance-sheet')).toEqual(defaultGroupingView());
 	});
+});
+
+describe("règle d'ouverture par le niveau, table partagée avec le Rust (46-7, LOW-2)", () => {
+	// Le même fichier est lu par `groupes::tests::est_ouvert_suit_la_table_partagee_avec_le_frontend` :
+	// `openByLevel` n'est pas exporté, on l'éprouve par `toggleGroup` (listes vides au départ).
+	const table = JSON.parse(
+		readFileSync(
+			resolve(process.cwd(), '../crates/kesh-report/tests/fixtures/ouverture_par_niveau.json'),
+			'utf8',
+		),
+	) as { cas: { niveau: number | 'all'; profondeur: number; ouvert: boolean }[] };
+
+	it('la table est lue en entier', () => {
+		expect(table.cas.length).toBeGreaterThan(10);
+	});
+
+	for (const c of table.cas) {
+		it(`niveau ${c.niveau}, profondeur ${c.profondeur} : ${c.ouvert ? 'ouvert' : 'fermé'}`, () => {
+			const v = vue({ detailLevel: c.niveau });
+			// Cliquer vers l'état que le niveau donne déjà ne s'inscrit dans aucune liste ;
+			// cliquer vers l'autre l'inscrit dans l'une des deux.
+			const verslEtatDuNiveau = toggleGroup(v, 5, !c.ouvert, c.profondeur);
+			expect(verslEtatDuNiveau).toMatchObject({ open: [], closed: [] });
+			const contre = toggleGroup(v, 5, c.ouvert, c.profondeur);
+			expect(c.ouvert ? contre.closed : contre.open).toEqual([5]);
+		});
+	}
 });
