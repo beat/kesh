@@ -294,6 +294,12 @@ depuis votre banque, versement Stripe), le reste par vos règles ; ce qui ne se 
 - 2026-11-22 — remédiation de la revue de code P1 (1 MEDIUM, 9 LOW) : garde `card_group_statements_missing` (M1), tests
   du gain de change et de la règle forgée (L1), échelle du montant CHF (L2), prédicats d'annulation alignés (L5), segment lu
   à sa place (L7), fixture sans raison sociale réelle (L4). Voir le Dev Agent Record ; passe P2 à lancer.
+- 2026-11-22 — revue de code P2 (passe complète, une lentille ; 0 C, 0 H, 2 MEDIUM, 5 LOW, rapport
+  `kesh-gate-logs/s39-11c/revue-p2-rapport.md`), remédiée (`5c62870f`) : part déjà rapprochée d'un paiement groupé
+  (M1-P2, `card_group_partly_reconciled`), couverture d'une date par la continuité des relevés (M2-P2,
+  `bank_imports::date_coverage`), solde en devise exigé quand ses relevés encadrent la date sans se suivre (écart au remède
+  « chaque solde », limite écrite), L-a à L-d. Trend : P1 1 MEDIUM → P2 2 MEDIUM (défauts de la garde ajoutée en P1) ;
+  passe P3 ciblée à lancer (`kesh-gate-logs/s39-11c/revue-p3-prompt.md`).
 
 ## Dev Agent Record
 
@@ -436,6 +442,55 @@ Champ `known_chf` de `ProviderEntry` : non employé (le paiement groupé écrit 
 - **L8, L9** : laissés (moteur partagé avec la 40-7c ; perf) — entrées d'issue. **L6** : échec fermé, conforme à A-5, laissé.
 - Hors changement : la conversion **totale** (crédit du solde en devise au cours du mois, différence de change) reste
   celle de l'amendement A-1 ; question au responsable de l'epic.
+
+### Remédiation de la revue de code P2 (2026-11-22, rapport `kesh-gate-logs/s39-11c/revue-p2-rapport.md`)
+
+0 CRITICAL, 0 HIGH, 2 MEDIUM, 5 LOW à la revue. Commit de code `5c62870f` ; périmètre des décomptes : `be75a3a8..5c62870f`.
+
+- **M1-P2 (corrigé)** : la garde du paiement groupé devient `card_group_blocker` (`routes/wise.rs`), **une** fonction pour
+  la revue et l'acceptation, qui rend le motif et ses détails (mêmes des deux côtés : `toReview[].code`, ou
+  `PROVIDER_PROPOSAL_STALE` avec `details.reason`). Motif 1, jugé d'abord : une ligne `CARD-<id>` ou `FEE-CARD-<id>` du
+  même paiement **déjà rapprochée**, sur un solde du compte Wise → `card_group_partly_reconciled`
+  (`details.reconciledBankTransactionIds`, `details.journalEntryIds`) ; lecture `provider_review::reconciled_by_transaction_ids`,
+  factorisée avec `pending_by_transaction_ids` (`select_by_transaction_ids`, SQL de ce dernier inchangé). Élargi au **même**
+  solde que le groupe (le remède disait « un autre solde ») : une ligne du paiement rapprochée seule l'est toujours à tort,
+  quel que soit son solde. Sonde `p2_sonde_chf_d_abord` devenue le test `partielle_chf_d_abord_deja_rapprochee`.
+- **M2-P2 (corrigé)** : motif 2, `card_group_statements_missing`, jugé par `bank_imports::date_coverage` (kesh-db, neuf,
+  enum `DateCoverage`) : `Covered` si un relevé contient la date, ou si le premier relevé qui la suit prolonge sans écart le
+  relevé à solde qui la précède (même règle de clôture et d'ouverture que `continuity_gap`) ; `Gap` (relevés de part et
+  d'autre qui ne se suivent pas, ou relevé suivant sans solde d'ouverture), `NoPrevious`, `NothingAfter`. Tests
+  `totale_apres_la_derniere_ligne_chf` (« à examiner », puis proposée et acceptée en une écriture une fois le relevé CHF
+  suivant importé, continu) et `totale_releve_chf_suivant_discontinu` (reste « à examiner », acceptation forgée refusée).
+- **Soldes en devise (recommandation de la revue, faite en partie)** : exigé du solde CHF sauf `Covered` (inchangé dans
+  son principe) ; d'un solde en devise **seulement** sur `Gap`. Exiger tout solde qui a un relevé (la recommandation) aurait
+  mis « à examiner » tout paiement postérieur au dernier relevé d'un solde **dormant** — un solde qui n'a plus bougé n'a
+  aucun fichier à importer (rapport P2, M2) — ou antérieur au premier relevé d'un solde ouvert plus tard : jugé trop risqué
+  pour des livres tenus ; **limite écrite** (L-a) : une partielle sur deux soldes en devise dont l'un n'a rien d'importé
+  autour de la date se propose sans lui (écriture de la seule part présente) ; sa part arrivée ensuite tombe sous le motif 1,
+  jamais une seconde écriture. Test `partielle_deux_devises_dont_une_absente` (la limite, puis le cas fermé par `Gap`).
+- **L-a** : `docs/api-external.md` dit la règle de couverture, le motif neuf, les limites, et « jamais une seconde écriture »
+  hors la limite du frais `FEE-CARD` (qui se propose seul, en écriture de frais) ; la phrase « jamais deux écritures »
+  retirée. **L-b** : test pur `montant_du_marchand_au_centime` (zéros de queue admis, centime fractionnaire refusé, sur la
+  ligne CHF et dans le segment). **L-c** : test pur `segment_le_dernier_element_conforme`. **L-d** : test HTTP
+  `annulation_bloquee_par_une_ligne_liee_non_rapprochee` (ligne sœur forgée en attente avec son écriture :
+  `MATCHED_BANK_TRANSACTION` à la vue, `cancelBlockedDocumentId` nommé, geste refusé). **L-e** : rien à faire.
+- **Tests** (recomptés aux deux bornes) : `#[sqlx::test]` de `wise_reconciliation_e2e.rs` 12 → 17 ; `#[test]` de
+  `kesh-reconciliation/src/wise.rs` 13 → 15. Aucune clé i18n (aucun écran n'affiche ces motifs, 39-11d) ; le manuel
+  utilisateur ne décrit pas encore le rapprochement Wise (grep `card_group`, `paiement group` : aucun site) ; aucune migration.
+- **Sondes par mutation** (copie `git archive` hors dépôt, cible propre `kesh-targets/s39-11c-mut`, base
+  `kesh_s3911c_mut`, supprimées ; journal `kesh-gate-logs/s39-11c/mutation-p2fix.log`) : témoin non muté 9/9 vert avant et
+  après ; chaque mutation tuée sur assertion nommée — A (motif 1 inerte) → `partielle_chf_d_abord_deja_rapprochee`
+  `:1144` ; B (continuité jamais retenue) → `totale_apres_la_derniere_ligne_chf` `:1229` ; C (`Gap` pris pour couvert) →
+  `totale_releve_chf_suivant_discontinu` `:1278` et `partielle_deux_devises_dont_une_absente` `:1354` ; D (`Gap` d'un solde
+  en devise non exigé) → `partielle_deux_devises_dont_une_absente` `:1354` ; E (prédicat d'annulation sans
+  `status = 'reconciled'`) → `annulation_bloquee_…` `:1396` ; F (échelle > 3) → `montant_du_marchand_au_centime`
+  `wise.rs:783` ; G (`split` au lieu de `rsplit`) → `segment_le_dernier_element_conforme` `wise.rs:796`.
+- **Gates** : ciblé (`cible-1.sh` : fmt, clippy workspace `-D warnings`, nextest des binaires touchés) **1910 / 1910**,
+  8 ignorés (`cible-p2fix.log`) ; **backend complet** au commit de code `5c62870f` : `scripts/test-fast.sh --ci` (fmt, clippy
+  workspace `-D warnings`, nextest) **6498 exécutés, 6498 passés, 16 ignorés** (`gate-backend.log` ; 6491 + 7 tests neufs),
+  lancé avec `KESH_NO_MEMGUARD=1` sous `heavy.sh` : le bus systemd utilisateur de la station refusait la connexion
+  (`mem-guard` ne pouvait pas créer de portée ; premier passage arrêté là, rc 1, aucun test joué). Frontend non touché, non rejoué. Aucun E2E (aucune spec
+  neuve) ; E2E complet et `gate-ci.sh` à la fin de l'epic.
 
 ### Notes de version
 
