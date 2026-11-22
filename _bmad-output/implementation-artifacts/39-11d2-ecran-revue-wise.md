@@ -1,6 +1,6 @@
 # Story 39-11d2 : la revue et l'acceptation Wise à l'écran
 
-Status: in-progress
+Status: review
 
 *Fiche rédigée le 2026-11-22, branche `story/39-11d2`, partie de `story/39-11d` (`440ae42c` à la rédaction ; la branche avance par sa revue P1, reprise par la condition préalable). Epic 39, phase 1
 KISS. **Reprend l'AC-3 de la 39-11d**, reporté par son amendement A3 (la revue Wise, Story 39-11c, n'était pas dans la
@@ -216,7 +216,7 @@ qu'elle n'est pas faite, cette story attend.**
 - [x] T3 — Libellés des genres, motifs, écarts et refus ; listes contre la source ; i18n (AC-3, AC-4).
 - [x] T4 — Manuel, `docs/api-external.md` (AC-5).
 - [x] T5 — E2E, captures (AC-6).
-- [ ] T6 — Signaler à l'orchestrateur l'issue à ouvrir (écran d'annulation d'une ligne groupée, *Hors périmètre*).
+- [x] T6 — Signaler à l'orchestrateur l'issue à ouvrir (écran d'annulation d'une ligne groupée, *Hors périmètre*).
 
 ## Gates
 
@@ -245,6 +245,130 @@ partagée ;
 conversions au cours de Wise, le rattachement à l'autre côté déjà passé, les règles et le paiement par carte converti
 en une écriture, avec ses lignes ; chaque ligne « à examiner » ou en écart dit pourquoi ; les propositions choisies
 s'acceptent d'un geste.
+
+## Dev Agent Record
+
+*Développée le 2026-11-22 (modèle Opus), worktree `kesh-wt39d2`, branche `story/39-11d2`. Journaux hors dépôt :
+`kesh-gate-logs/s39-11d2/`.*
+
+### Étape 0 — base et noms relus
+
+- Fusion non squash d'`epic/39-wise` (`206d2a8b4`, 39-11d, 39-11c, 39-14, Epic 40 à jour) : `8d82118d6`. Un seul
+  conflit, `sprint-status.yaml` (39-11c et 39-11d `done` d'`epic/39-wise`, 39-11d2 passée `in-progress`) ; aucun
+  compteur touché par la fusion.
+- Gates avant tout code, au commit de fusion (`cible-0.log`) : `cargo fmt --check` 0, clippy workspace
+  `-D warnings` 0, nextest ciblé Wise (`binary(wise_import_e2e) | binary(wise_reconciliation_e2e) | test(/wise/)`)
+  **64 passés**. Le frontend complet n'a pas été joué au commit de fusion (consigne de l'orchestrateur : fmt, clippy,
+  nextest ciblé) ; il l'a été à la fin (ci-dessous).
+- Noms relus au code, au commit de fusion : `build_wise_review` (`routes/wise.rs:136`), `reconciled_card_lines`
+  (`:331`), `card_group_blocker` (`:393`, son itérateur porte `(id, devise)`), `remove_transactions` (`:445`, garde
+  `Review<WiseProposal>`), `ReviewProposal` (`kesh-reconciliation/src/provider_review.rs:439`, non touchée),
+  `PayoutProposal`/`StripeReviewProposal` (`kesh-reconciliation/src/stripe.rs:312`, `:328`), `findingDate`
+  (`frontend/src/lib/features/provider/provider-review.ts:38`), `CODES_MOTEUR` (`provider-labels.test.ts:23`).
+- Les trois LOW de la validation P4, recontrôlés : `fxMonthLabel` (exporté sous ce nom de `fx-refusals.ts`,
+  l'homonyme de `exchange-rates-grid.ts` intact) ; `details` absents tolérés (test « détails absents ou vides » de
+  `provider-labels.test.ts`) ; motif des raisons ancré sur `stale(<identifiant>, "<raison>")`, définition exclue
+  (dix raisons relevées) ; paires `(id, devise)` triées ensemble dans `card_group_blocker`.
+- Limites de la fiche 39-11d (« à reprendre par la 39-11d2 ») : les trois, au manuel (§ *Limites* de
+  `sec:comptes-wise`), avec l'annulation d'une ligne groupée.
+
+### Revue d'intégration de l'Epic 39 (consigne de l'orchestrateur)
+
+- **M1** : manuel, paragraphe « Le rapprochement » récrit ; § Stripe « Versement sans réception » (compte Wise : la
+  page Wise propose le rattachement) ; `api-external.md` au même mot (§ *L'écran Wise*, réception d'un versement
+  Stripe sur Wise au § Stripe).
+- **L1** : `routes/wise.rs`, `DESCRIPTION_MAX_CHARS = ENTRY_DESCRIPTION_MAX_CHARS` (une seule définition).
+- **L2** : en-têtes récrits — page Wise, `wise-import.spec.ts`, `stripe_reconciliation_e2e.rs`.
+- M2 non touché (traité sur `epic/40-stripe`).
+
+### Ce qui a été fait
+
+- **AC-1** (`crates/kesh-api/src/routes/wise.rs`) : type de revue `WiseReviewProposal` (`CardGroup(CardGroupReview)` |
+  `Common(Proposal)`, sérialisé à plat), `CardGroupReview { proposal (aplati), lines, merchant_amount }` ; table
+  `shown` (principale → lignes, montant) tenue dans la boucle des groupes, conversion finale `to_review_proposal`
+  (le `map_proposals(WiseProposal::Common)` initial reste) ; `details.lines` sur les quatre motifs `card_group_*` ;
+  `missingCurrencies` posé dans `card_group_blocker`, donc aussi à l'acceptation. Corps de l'acceptation inchangé.
+- **AC-2** : `wise.api.ts` (`getWiseReview`, `acceptWiseProposals`), `wise.types.ts` (`WiseProposal`,
+  `WiseAcceptProposal`), `wise-review.ts` (clé, transaction, corps, ordre, sous-lignes) ; page commune : propriétés
+  `proposalLines`, `findingLines`, `lineLabel`, `toReviewExtra` et, ajoutée au développement, `toReviewLineCells`
+  (les colonnes propres d'une sous-ligne « à examiner ») ; `findingDate` lit `details.date` ; `openLink` prend une
+  transaction. La page Wise montre aussi, dans « À examiner », le **nom** et l'**identifiant Wise** de chaque ligne
+  et sous-ligne (sans eux, les captures montraient des lignes qu'on ne pouvait pas retrouver). Lecture paginée des
+  règles sortie dans `provider/provider-rules.ts` (`listAllRules`, `ruleLabelsById`), reprise par la page PayPal ;
+  `accountNumberName` (provider-labels) remplace les deux copies privées de PayPal et Stripe (DRY). Sous-titre de la
+  page Wise : « Puis acceptez les propositions de rapprochement : rien n'est écrit dans les livres sans votre
+  acceptation » (quatre locales).
+- **AC-3, AC-4** (`wise-labels.ts`) : listes fermées `WISE_GAP_CODES`, `WISE_TO_REVIEW_CODES`,
+  `WISE_CARD_GROUP_UNSUPPORTED_REASONS`, `WISE_STALE_RELOAD_REASONS` (+ `WISE_STALE_EXCLUDED_REASONS`), comparées à la
+  source Rust ; une phrase par motif et par écart ; `wiseFailedLabel` ; `RATE_UNAVAILABLE` propre aux prestataires
+  (`provider-failed-rate-unavailable`, mois par `fxMonthLabel`), `PROVIDER_COMMON_FAILED_CODES` augmentée (seul test
+  existant dont l'assertion change, comme le prévoit l'AC-2).
+- **AC-5** : manuel utilisateur (`.tex` seul) et `docs/api-external.md`. PDF construit dans une copie hors dépôt
+  (`pdf.log` : 3 passes, stable), aplati et grepé : les phrases neuves s'y trouvent, « pas encore dans cette version »
+  n'y est plus. DE, IT, EN : manuels non traduits (règle du dépôt).
+- **AC-6** : `wise-import.spec.ts`, tests « 5 » et « 6 » (numérotés à la suite des points 1 à 4 de l'en-tête ; il n'y
+  a pas de test « 4 »), relecture des trois transactions du groupe par `GET /api/v1/reconciliation/transactions/{id}`
+  (`status` `reconciled`, même `matchedEntryId` non nul) ; tests « sans revue » retournés (`wise-page.test.ts` : deux ;
+  `wise-import.spec.ts` : `wise-fiscal-year` à un élément) ; le test L7 de la page commune sans revue déplacé dans
+  `ProviderReviewPage.test.ts`.
+
+### Tests ajoutés (recomptés, de `8d82118d6` à `HEAD`)
+
+- Rust : `wise_reconciliation_e2e.rs` **23 → 25** (`revue_du_groupe_avec_ses_lignes`,
+  `lignes_et_devises_d_un_groupe_a_examiner`).
+- Vitest, `it(` : `wise-review.test.ts` 0 → 6, `wise-labels.test.ts` 9 → 23, `provider-labels.test.ts` 3 → 6,
+  `ProviderReviewPage.test.ts` 0 → 2, `provider-review.test.ts` 0 → 1, `wise-page.test.ts` 8 → 12 (deux retournés).
+- E2E : `wise-import.spec.ts` 3 → 5 tests.
+- Compteurs recomptés par leur garde : `sitesTotal` 3782 → **3816** (34 sites `i18nMsg(` au diff hors tests, 0
+  retiré) ; garde des libellés en dur 149 → **159** (`conforme` 128 → 137, `ecartee` 21 → 22, chaque candidate nommée).
+
+### Sondes négatives (mutations hors dépôt, une à la fois, tuées seulement sur assertion nommée)
+
+- Frontend (copie avec son vrai `node_modules`, témoin vert 114/114, `mut-temoin.log`) : F1 corps d'un groupe avec
+  `lines` → `wise-review.test.ts` « le corps d'un groupe… » ; F2 `RATE_UNAVAILABLE` hors de `providerFailedLabel` →
+  trois tests de `provider-labels.test.ts` ; F3 blocage d'un groupe dit « Rechargez » → `wise-labels.test.ts` « un
+  groupe périmé par son blocage… » ; F4 sous-lignes non rendues → `wise-page.test.ts` « genres et ce qui sera fait… »
+  (élément `wise-proposal-line-11` introuvable) ; F5 `findingDate` sans `details.date` → `provider-review.test.ts`.
+  Journaux `mut-F*.log`.
+- Rust (copie `git archive` de `40cc2b538`, cible cargo propre, supprimée ensuite ; témoin 25/25) : R1
+  `missingCurrencies` retiré → `lignes_et_devises_d_un_groupe_a_examiner` panique (`:1202`) ; R2 groupe sans entrée
+  dans `shown` → `revue_du_groupe_avec_ses_lignes` panique (`:1154`). Journaux `mutrs-*.log`.
+
+### Gates (dernier commit de code `6ce8fd5cc`)
+
+- `cargo fmt --check` 0 et clippy workspace `-D warnings` 0 (`cible-2.log`, à `40cc2b538` ; le seul changement Rust
+  postérieur est une clé ajoutée aux catalogues `.ftl`, couverte par le nextest ci-dessous) ; nextest ciblé Wise 66
+  passés (`cible-2.log`).
+- **nextest complet** à `6ce8fd5cc` (`nextest-final2.log`) : **6660 exécutés, 6660 passés, 17 ignorés**.
+- **Frontend complet** (`front-final3.*`, arbre de `6ce8fd5cc` avant son commit, même contenu) : `npm run check` 0
+  (0 erreur), `lint-i18n-ownership` 0, Vitest **5152 passés (303 fichiers)**, `npm run build` 0.
+- **E2E partiel** à `6ce8fd5cc` (`e2e-final2.log`, `e2e.head`) : `wise-import.spec.ts` (spec étendue),
+  `paypal-import.spec.ts` et `stripe-import.spec.ts` (page commune partagée) — **16 passés** (5 + 7 + 4), 0 échec.
+  Captures dans `kesh-gate-logs/s39-11d2/captures/` : `10-revue-premier-compte`, `11-a-examiner`,
+  `12-ecarts-aucun`, `13-compte-rendu-premier-compte`, `14-paiement-groupe-et-ses-lignes`,
+  `15-compte-rendu-paiement-groupe`, `16-page-wise-apres-acceptation` (00 à 07 : la partie import, rejouée ; les
+  autres, PayPal et Stripe). `11-a-examiner` est prise sur l'élément : l'en-tête fixe de l'application recouvre sa
+  première ligne ; la capture pleine page `10` la montre entière.
+- Non joués (règle de la nuit) : `gate-ci.sh` et E2E complet, à la fin de l'epic.
+
+### Hors périmètre, à ouvrir en issue (T6, signalé à l'orchestrateur)
+
+- L'écran d'annulation d'une transaction (`GET /reconciliation/transactions/{id}`) ne dit pas que les autres lignes
+  d'un paiement groupé reviennent en attente (le manuel le dit).
+- Revue d'intégration L3 : aucun test de bout en bout ne joue la chaîne `POST /stripe/accept` (versement vers un
+  compte Wise) → `GET /wise/review` propose `link_entry` → `POST /wise/accept` ; non ajouté ici.
+
+### Fichiers
+
+`crates/kesh-api/src/routes/wise.rs`, `crates/kesh-api/tests/wise_reconciliation_e2e.rs`,
+`crates/kesh-api/tests/stripe_reconciliation_e2e.rs` (en-tête), `crates/kesh-i18n/locales/{fr,de,it,en}-CH/messages.ftl`,
+`docs/manual/fr/user-manual.tex`, `docs/api-external.md`, `frontend/src/lib/features/provider/{ProviderReviewPage.svelte,
+ProviderReviewPage.test.ts, provider-labels.ts, provider-labels.test.ts, provider-review.ts, provider-review.test.ts,
+provider-rules.ts}`, `frontend/src/lib/features/wise/{wise.api.ts, wise.types.ts, wise-labels.ts, wise-labels.test.ts,
+wise-review.ts, wise-review.test.ts}`, `frontend/src/lib/features/{paypal/paypal-review.ts, stripe/stripe-labels.ts,
+journal-entries/fx-refusals.ts}`, `frontend/src/routes/(app)/reconciliation/{wise/+page.svelte, wise/wise-page.test.ts,
+paypal/+page.svelte}`, `frontend/src/lib/shared/{i18n-keys.test.ts, i18n-libelle-en-dur.test.ts}`,
+`frontend/tests/e2e/wise-import.spec.ts`, `sprint-status.yaml`, cette fiche.
 
 ## Change Log
 
@@ -278,3 +402,4 @@ s'acceptent d'un geste.
   ensemble. **Boucle close** sur une passe sans rien au-dessus de LOW. Tendance : P1 1 HIGH, 7 MEDIUM, 9 LOW → P2 5 MEDIUM,
   11 LOW → P3 1 MEDIUM, 8 LOW → P4 0 au-dessus de LOW (3 LOW). Modèles : Opus (P1, P3), Sonnet (P2, P4 ciblée). Les LOW
   de la P4 ne sont relus par aucune passe : à recontrôler à l'étape 0 du développement.
+- 2026-11-22 — développée (étape 0, T0 à T5) ; gates au Dev Agent Record ; passée en `review`.
