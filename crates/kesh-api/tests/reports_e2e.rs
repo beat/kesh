@@ -2262,6 +2262,35 @@ async fn rapports_sans_parametre_identiques_a_la_fixture_de_base(pool: MySqlPool
     }
 }
 
+/// Story 46-6a, AC-5 (NFR-46-1) — sans `detailLevel`, le corps JSON de la
+/// balance est **identique à l'octet** à celui du commit de base de la Story
+/// 46-6a, écrit dans `tests/fixtures/rapports-groupes/balance-{année}.json`
+/// avant toute modification du code (jeu PME : un compte en dollars, deux
+/// exercices). `KESH_ECRIRE_FIXTURES_46_6A=1` les réécrit — à ne faire qu'au
+/// commit de base.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn balance_sans_parametre_identique_a_la_fixture_de_base(pool: MySqlPool) {
+    let jeu = jeu_pme(&pool).await;
+    let app = spawn_app(pool).await;
+    let ecrire = std::env::var("KESH_ECRIRE_FIXTURES_46_6A").as_deref() == Ok("1");
+    for (fy, annee) in [(jeu.fy_2025, 2025), (jeu.fy_2026, 2026)] {
+        let resp = get_pme(&app, &jeu, "trial-balance", fy, "").await;
+        assert_eq!(resp.status(), 200, "balance {annee}");
+        let corps = resp.text().await.unwrap();
+        let chemin = fixture_46_1(&format!("balance-{annee}.json"));
+        if ecrire {
+            std::fs::write(&chemin, &corps).unwrap();
+        }
+        let attendu = std::fs::read_to_string(&chemin)
+            .unwrap_or_else(|e| panic!("fixture {} illisible : {e}", chemin.display()));
+        assert_eq!(
+            corps, attendu,
+            "balance {annee} sans paramètre : le JSON a changé (NFR-46-1)"
+        );
+        assert!(!corps.contains("grouping") && !corps.contains("groupedRows"));
+    }
+}
+
 /// GET d'un rapport du jeu PME, avec la requête `suite` après `fiscalYearId`.
 async fn get_pme(
     app: &TestApp,

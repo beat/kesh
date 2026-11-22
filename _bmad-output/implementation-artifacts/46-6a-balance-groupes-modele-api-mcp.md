@@ -1,6 +1,6 @@
 # Story 46-6a : balance par groupes — modèle, API et MCP
 
-Status: ready-for-dev
+Status: in-progress
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D11 modifiée (Q6 : la balance dans le
 périmètre), D1 à D7, D10 ; FR-46-6, FR-46-11 ; NFR-46-1 à NFR-46-4, NFR-46-6. Release visée **0.21.0** (prévision).
@@ -192,7 +192,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** — Reprise de la branche d'epic avec la 46-1 (et la 46-4 pour T3) fusionnées ; relever au Change Log,
+- [x] **T0** — Reprise de la branche d'epic avec la 46-1 (et la 46-4 pour T3) fusionnées ; relever au Change Log,
       ligne lue citée, les noms du § *L'API de la 46-1* tels qu'ils sont dans la branche, et si la 47-3 est fusionnée.
       **Avant toute modification**, écrire la fixture JSON de la balance sans paramètre (plan PME, un compte en
       devise, deux exercices, dates de période fixes), comme la 46-1 T0.
@@ -327,3 +327,15 @@ d'ouverture, de mouvements et de clôture de chaque groupe ; sans paramètre, l'
   (F10) ; bascule du test d'ignorance de l'export de la balance à la 46-6b (F11). Aussi : commentaire de
   `ligne_principale` à mettre à jour (AC-3 (c)). Rapport : `kesh-gate-logs/s46-specs/validation-p1-rapport.md`.
 - 2026-11-21 — **Validation** (boucle close) : P1 (Claude Sonnet 5.5, 0 C / 0 H / 0 M au-dessus de LOW ; tendance 0/0/2/10 → 0/0/0/10) puis P2 (Claude Opus 5.5, contexte frais, à `e61c9029`) 0 C / 0 H / 0 M / 10 L sur les trois fiches (46-3 : 4, 46-6a : 5, 46-4 : 1) ; aucun finding au-dessus de LOW. LOW de la P2 appliqués dans la fiche : G5 (note de version), G6 (littéral du témoin au T0), G7 (phrase du guide d'API complète), G8 (motif de C-46-6a-5 : convention C-37-9), G9 (écho de la 46-4 repris par une fonction partagée). Rapport : `kesh-gate-logs/s46-specs/validation-p2-rapport.md`. `ready-for-dev`.
+- 2026-11-22 — **Développement, T0** (`bmad-dev-story`, branche `story/46-6a` partie de `epic/46-rapports-groupes` à
+  `92434d16`, la 46-4 fusionnée). Relevé au code de la branche : `Dissolution::calculer` (`groupes.rs:353`),
+  `regrouper` (`:687`), `Grouping::depuis` privé (`:765`), `ArbreComptes::ancetres` privé (`:218`),
+  `DemandeGroupes::depuis_valeurs` (`services/rapports.rs:247`), `arbre_des_comptes` privé (`:765`), `groupes_de`
+  (`routes/reports.rs:93`), `groupes_demandes` et `echo` au MCP (`mcp/outils/rapports.rs`) : les noms du § *L'API
+  de la 46-1* tiennent. La 47-3 **n'est pas** fusionnée dans la branche (aucun `present_balance_sheet`). La garde
+  de la 48-11 n'existe pas encore dans la branche (`grep` sans résultat ; trois `{:.2}` antérieurs dans
+  `kesh-report/src`, aucun dans `groupes.rs`). Fixtures écrites **avant toute modification du code** :
+  `tests/fixtures/rapports-groupes/balance-2025.json`, `balance-2026.json` (jeu PME de la 46-1, test
+  `balance_sans_parametre_identique_a_la_fixture_de_base`, `KESH_ECRIRE_FIXTURES_46_6A=1`) et le littéral MCP
+  `tests/fixtures/mcp-groupes/kesh_balance.txt` (sortie sans argument, jetons de date et d'exercice, capturé par une
+  retouche locale non commitée de `sans_groupes_sortie_du_commit_de_base`, comme la 46-4).
