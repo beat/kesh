@@ -839,6 +839,29 @@ impl McpTool for KeshCompteDeResultat {
 mod tests {
     use super::*;
 
+    /// Les nombres écrits en toutes lettres dans la description de
+    /// `kesh_balance` (20, 37, 42, 23) sont ceux des constantes.
+    #[test]
+    fn description_balance_cite_les_constantes() {
+        let d = KeshBalance.description();
+        let attendu = format!(
+            "limit vaut {} par défaut et {} au plus (le schéma annonce {} et {},",
+            LIMITE_DEFAUT_BALANCE_GROUPEE,
+            LIMITE_MAX_MCP_BALANCE_GROUPEE,
+            LIMITE_MAX_MCP_BALANCE,
+            LIMITE_DEFAUT_BALANCE
+        );
+        let a_plat = d.replace(['\n', ' '], "");
+        assert!(
+            a_plat.contains(&attendu.replace(' ', "")),
+            "description et constantes divergent : {d}"
+        );
+        assert!(d.contains(&format!(
+            "porte {} en dependentSchemas",
+            LIMITE_MAX_MCP_BALANCE_GROUPEE
+        )));
+    }
+
     fn lire(json: &str) -> Result<ArgumentsPeriode, serde_json::Error> {
         serde_json::from_str(json)
     }

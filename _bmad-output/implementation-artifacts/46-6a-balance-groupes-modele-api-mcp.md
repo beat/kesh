@@ -1,6 +1,6 @@
 # Story 46-6a : balance par groupes — modèle, API et MCP
 
-Status: review
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D11 modifiée (Q6 : la balance dans le
 périmètre), D1 à D7, D10 ; FR-46-6, FR-46-11 ; NFR-46-1 à NFR-46-4, NFR-46-6. Release visée **0.21.0** (prévision).
@@ -138,7 +138,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    comme 46-4 AC-3). En mode groupé, `groupes` = l'écho de la 46-4 (`niveau`, `tousLesNiveaux`, `positionSousTotaux`,
    `profondeurMax`, `ouverts`, `fermes`), **repris par une fonction de construction partagée extraite par la 46-4** (`sortie!` interdit `flatten` : la 46-6a n'en recopie ni les six champs ni leur conversion ; si la 46-4 ne l'a pas extraite, la 46-6a le fait, sans copie) et **`groupes.lignes`**, les lignes groupées (genre, profondeur, `compteId`,
    `numero`, `nom`, les cinq montants `ouverture`, `debit`, `credit`, `solde`, `cloture` et les cinq `…Devise`,
-   `devise`, `ouvert`) ; le champ plat existant `lignes` (au niveau supérieur, lu par `mcp_outils_e2e.rs:753`) est
+   `devise`, `ouvert`) ; le champ plat existant `lignes` (au niveau supérieur, lu par `mcp_outils_e2e.rs:761`) est
    alors vide ; la **tranche** (`limit`, `offset`,
    défaut 20, maximum 37 avec `detailLevel` ; 23 et 42 à plat, inchangés) porte sur les **lignes groupées**, `total` en compte le nombre ; totaux du rapport entier
    inchangés. *Pourquoi la tranche et non le niveau seul (contraire du bilan, 46-4 C-46-4-3)* : une ligne de balance
@@ -466,4 +466,11 @@ Journaux hors dépôt, `kesh-gate-logs/s46-6a/` : `t0-capture*.log` (fixtures du
   *Gates au dernier commit de code* : fmt, clippy workspace et nextest complet par `test-fast.sh` (**6208 passés, 14
   ignorés**, `kesh-gate-logs/s46-6a/gate-backend.log`, dont `mcp_outils_e2e` et les `mcp_*`) ; pas d'E2E ni de
   `gate-ci.sh`. Prompt de la passe ciblée P3 : `kesh-gate-logs/s46-6a/revue-p3-prompt.md`.
-
+- 2026-11-22 — **Clôture.** Tendance des passes (C/H/M/L) : P1 Sonnet 0/0/1/6 -> P2 Haiku ciblée 0/0/3/1 -> P3 Sonnet
+  ciblée 0/0/0/2 ; la P3 ne rend rien au-dessus de LOW. LOW-1 clos par un test unitaire
+  (`description_balance_cite_les_constantes`, `rapports.rs`) qui compare les nombres 20, 37, 42 et 23 de la description
+  de `kesh_balance` aux constantes, sans changement de production ; LOW-2 : la référence de la fiche (AC, ligne 141)
+  pointe désormais `mcp_outils_e2e.rs:761`. *Gates au dernier commit* : `cargo fmt --check` et clippy workspace
+  `-D warnings` verts ; nextest `binary(mcp_outils_e2e)` et le test neuf : 43 exécutés, 43 passés
+  (`kesh-gate-logs/s46-6a/p4.log`) ; le gate complet (6208 passés, 14 ignorés) date du dernier commit de code
+  précédent, la seule différence étant ce test.
