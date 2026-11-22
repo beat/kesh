@@ -43,7 +43,9 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
    modale « Rattacher à une écriture » en devise) paramétré par le prestataire (routes, libellés, forme du compte rendu),
    entrée « Wise » du menu à côté de « PayPal », dans `comptableOnly`. Bouton **« Importer des relevés Wise »** :
    sélection multiple (`accept=".csv,text/csv"`, `multiple`), envoi à `POST /api/v1/wise-imports` ; compte rendu par
-   fichier ; refus traduits par les codes fermés de 39-11a (colonnes manquantes nommées, ligne et champ, rupture du
+   fichier ; *(amendé le 2026-11-22, story 39-11e : `accept=".csv,text/csv,.zip,application/zip"`, le zip de Wise
+   envoyé tel quel ; compte rendu avec `archive` et `ignoredEntries` ; refus `WISE_ZIP_INVALID` et
+   `WISE_CSV_FEES_NOT_SEPARATED` traduits par leur code)* ; refus traduits par les codes fermés de 39-11a (colonnes manquantes nommées, ligne et champ, rupture du
    solde courant avec la ligne) et de 39-11b (devise sans compte, fichier de même devise) ; avertissement `gap`
    expliqué (« le relevé ne commence pas où finissait le précédent »).
 3. **AC-3 — Propositions, écarts, à examiner.** Genres : « Frais », « Conversion au cours de Wise : 100.00 EUR → 95.00
@@ -58,7 +60,9 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
 4. **AC-4 — Manuel et API** (`docs/manual/fr/user-manual.tex`, `.tex` seul ; DE, IT, EN « à traduire » selon la règle
    du dépôt) : sous-section « Comptes Wise » à côté de « Comptes PayPal » (38-11d AC-6) — un compte bancaire par devise,
    compte de frais, compte de conversion requis entre deux devises étrangères ; exporter de Wise le relevé CSV de chaque
-   solde (période, une devise par fichier ; le zip n'est pas lu) ; l'importer ; ce que Kesh propose ligne par ligne ;
+   solde (période, une devise par fichier ; le zip n'est pas lu) *(amendé le 2026-11-22 : l'export est décrit par la
+   sous-section `sec:wise-export` de la story 39-11e — CSV, option des frais séparés cochée, zip tel quel —, à
+   laquelle cette sous-section renvoie)* ; l'importer ; ce que Kesh propose ligne par ligne ;
    les conversions au cours de Wise ; le rattachement à l'autre côté (virement depuis votre banque, versement Stripe de
    l'Epic 40 : jamais compté deux fois, jamais affecté par une règle) ; un virement vers sa banque par une règle quand
    l'autre côté n'est pas encore passé ; les écarts ; les limites (date de l'export sans conversion de fuseau, aucun
@@ -96,6 +100,9 @@ En tant que **Comptable**, je veux régler mes comptes Wise, importer mes relev�
 manuel utilisateur.
 
 ## Change Log
+
+- 2026-11-22 — amendée par la fiche 39-11e (zip de Wise et format des frais) : AC-2 (bouton, compte rendu, refus
+  neufs) et AC-4 (renvoi à `sec:wise-export`) ; amendement relu par la validation P1 de 39-11e.
 
 - 2026-11-20 — fiche rédigée (phase 1 KISS), non validée.
 - 2026-11-20 — validation P1 (Claude Opus 5.5, contexte frais) : 0 CRITICAL, 0 HIGH, 3 MEDIUM, 2 LOW, remédiés dans la
