@@ -970,9 +970,11 @@ async fn partielle_traitee_a_la_main_par_l_api(pool: MySqlPool) {
 async fn partielle_perimee_ou_refusee(pool: MySqlPool) {
     let (ctx, regle, ids) = monter_partielle(&pool).await;
     let avant = ctx.count("SELECT COUNT(*) FROM journal_entries").await;
-    // Groupe incomplet : périmé.
+    // Groupe incomplet — les deux lignes de carte sans la ligne de frais, que
+    // le jugement seul accepterait : périmé (l'ensemble relu diffère).
+    let carte_usd = ctx.tx("CARD-90000020", ctx.usd).await;
     let (s, b) = ctx
-        .accepter(vec![groupe(&ids[..2], regle, ctx.charge)])
+        .accepter(vec![groupe(&[ids[0], carte_usd], regle, ctx.charge)])
         .await;
     assert_eq!(s, 200, "{b}");
     assert_eq!(
