@@ -72,7 +72,7 @@
 		GeneralLedgerDto,
 		LedgerQuery,
 		AgedReceivablesDto,
-		GroupedRow,
+		GroupedRowBase,
 		GroupingParams,
 	} from '$lib/features/reports/reports.types';
 	import type { FiscalYearResponse } from '$lib/features/fiscal-years/fiscal-years.types';
@@ -184,35 +184,49 @@
 		return genSeq;
 	}
 
-	// Story 46-2 — vue groupée du bilan et du compte de résultat (AC-1 à AC-6, AC-10).
+	// Story 46-2 — vue groupée du bilan et du compte de résultat (AC-1 à AC-6, AC-10) ;
+	// Story 46-6b — et de la balance, avec sa propre mémoire.
 	// Relue de la mémoire du navigateur AVANT la première requête : la première
 	// demande part avec la vue retenue, sans passer par la vue par défaut.
 	const companyId = untrack(() => data.companyId ?? null);
 	let groupingViews = $state<Record<GroupedReport, GroupingView>>({
 		'balance-sheet': readGroupingView(companyId, 'balance-sheet'),
 		'income-statement': readGroupingView(companyId, 'income-statement'),
+		'trial-balance': readGroupingView(companyId, 'trial-balance'),
 	});
 	// Paramètres de la dernière réponse AFFICHÉE de chaque rapport : l'export les
 	// reprend tels quels (AC-6), et non la vue en cours de redemande.
 	let displayedGrouping: Record<GroupedReport, GroupingParams | undefined> = {
 		'balance-sheet': undefined,
 		'income-statement': undefined,
+		'trial-balance': undefined,
 	};
 	// Redemande après un changement de présentation : l'écran garde l'affichage
 	// précédent (sans clignotement), marqué `aria-busy` (AC-3).
 	let refreshing = $state(false);
-	const isGroupedTab = $derived(
-		activeTab === 'balance-sheet' || activeTab === 'income-statement',
-	);
+	/** L'onglet est-il un rapport qui a une vue groupée ? */
+	function isGroupedReport(tab: TabId): tab is GroupedReport {
+		return tab === 'balance-sheet' || tab === 'income-statement' || tab === 'trial-balance';
+	}
+	const isGroupedTab = $derived(isGroupedReport(activeTab));
 	const activeGroupingView = $derived(
 		isGroupedTab ? groupingViews[activeTab as GroupedReport] : null,
 	);
+	/** Le rapport groupé affiché d'un onglet, ou `null`. */
+	function displayedReport(
+		report: GroupedReport,
+	): BalanceSheetDto | IncomeStatementDto | TrialBalanceDto | null {
+		switch (report) {
+			case 'balance-sheet':
+				return balanceSheet;
+			case 'income-statement':
+				return incomeStatement;
+			case 'trial-balance':
+				return trialBalance;
+		}
+	}
 	const activeMaxDepth = $derived(
-		activeTab === 'balance-sheet'
-			? (balanceSheet?.grouping?.maxDepth ?? null)
-			: activeTab === 'income-statement'
-				? (incomeStatement?.grouping?.maxDepth ?? null)
-				: null,
+		isGroupedTab ? (displayedReport(activeTab as GroupedReport)?.grouping?.maxDepth ?? null) : null,
 	);
 
 	/** Retient la vue d'un rapport, à l'écran et dans la mémoire du navigateur. */
@@ -230,7 +244,7 @@
 		if (!isGroupedTab) return;
 		const report = activeTab as GroupedReport;
 		setGroupingView(report, next);
-		const displayed = report === 'balance-sheet' ? balanceSheet : incomeStatement;
+		const displayed = displayedReport(report);
 		// Revue P1 M2 (a) — pendant le premier chargement (`loading`, rien
 		// d'affiché), la demande en vol est partie avec l'ancienne vue : la
 		// redemander, sans quoi les contrôles diraient une vue que l'écran
@@ -251,8 +265,8 @@
 	}
 
 	/**
-	 * Remet l'onglet actif d'accord avec ses contrôles : si c'est le bilan ou le
-	 * compte de résultat, affiché avec une autre vue que celle des contrôles, et
+	 * Remet l'onglet actif d'accord avec ses contrôles : si c'est un rapport groupé (bilan,
+	 * compte de résultat, balance), affiché avec une autre vue que celle des contrôles, et
 	 * qu'aucune génération n'est en vol, il est redemandé (affichage gardé).
 	 *
 	 * Appelée au retour sur l'onglet (`selectTab`) et à la fin d'une génération
@@ -261,8 +275,8 @@
 	 * la redemande attend donc qu'elle finisse.
 	 */
 	function resyncActiveGroupedTab(): void {
-		if (activeTab !== 'balance-sheet' && activeTab !== 'income-statement') return;
-		const displayed = activeTab === 'balance-sheet' ? balanceSheet : incomeStatement;
+		if (!isGroupedReport(activeTab)) return;
+		const displayed = displayedReport(activeTab);
 		if (displayed && !loading && !displayedMatchesView(activeTab)) {
 			void generate({ keepDisplay: true });
 		}
@@ -278,20 +292,20 @@
 		if (finishedTab !== activeTab) resyncActiveGroupedTab();
 	}
 
-	function onToggleGroup(row: GroupedRow): void {
+	function onToggleGroup(row: GroupedRowBase): void {
 		if (!activeGroupingView) return;
 		changeGrouping(toggleGroup(activeGroupingView, row.accountId, row.open === true));
 	}
 
 	/**
-	 * Une réponse du bilan ou du compte de résultat est affichée : ses paramètres
+	 * Une réponse d'un rapport groupé (bilan, compte de résultat, balance) est affichée : ses paramètres
 	 * deviennent ceux de l'export, et la mémoire reprend les listes de l'écho (les
 	 * groupes disparus du plan, ignorés par l'API, en sortent — AC-10).
 	 */
 	function acceptGrouped(
 		report: GroupedReport,
 		params: GroupingParams | undefined,
-		dto: BalanceSheetDto | IncomeStatementDto,
+		dto: BalanceSheetDto | IncomeStatementDto | TrialBalanceDto,
 	): void {
 		displayedGrouping[report] = params;
 		// Revue P1 M2 — l'écho n'est repris que s'il répond à la vue en cours :
@@ -503,8 +517,12 @@
 					break;
 				}
 				case 'trial-balance': {
-					const result = await getTrialBalance(query);
-					if (mySeq === genSeq) trialBalance = result;
+					const params = groupingParamsOf(groupingViews['trial-balance']);
+					const result = await getTrialBalance(query, params);
+					if (mySeq === genSeq) {
+						trialBalance = result;
+						acceptGrouped('trial-balance', params, result);
+					}
 					break;
 				}
 				case 'journals': {
@@ -1051,6 +1069,12 @@
 				view={activeGroupingView}
 				maxDepth={activeMaxDepth}
 				onChange={changeGrouping}
+				levelHint={activeTab === 'trial-balance'
+					? i18nMsg(
+							'reports-groups-level-hint-trial-balance',
+							"Le total des débits et celui des crédits restent ceux de tous les comptes. Un groupe dont les comptes non nuls sont de natures contraires (débitrice et créditrice) n'est pas totalisé : ses sous-comptes paraissent à sa place. Un affichage replié est un affichage de travail.",
+						)
+					: undefined}
 			/>
 		{/if}
 		{#if loading}
@@ -1062,7 +1086,7 @@
 		{:else if activeTab === 'income-statement' && incomeStatement}
 			<IncomeStatementView dto={incomeStatement} {onToggleGroup} />
 		{:else if activeTab === 'trial-balance' && trialBalance}
-			<TrialBalanceView dto={trialBalance} />
+			<TrialBalanceView dto={trialBalance} {onToggleGroup} />
 		{:else if activeTab === 'journals' && journalReport}
 			<JournalReportView dto={journalReport} />
 		{:else if activeTab === 'vat' && vatReport}

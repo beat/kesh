@@ -15,6 +15,9 @@
 //!
 //! Story 46-3 — le bilan et le compte de résultat **par groupes**
 //! (`render_grouped_*`), et [`texte_pdf`], l'extracteur de texte PDF des tests.
+//! Story 46-6b — la balance des comptes par groupes, par les mêmes lignes
+//! ([`render_grouped_trial_balance_pdf`](pdf::render_grouped_trial_balance_pdf),
+//! [`render_grouped_trial_balance_csv`](csv::render_grouped_trial_balance_csv)).
 
 pub mod aged_receivables;
 pub mod balance_sheet;
@@ -70,9 +73,16 @@ pub use pdf::{
     render_journal_report_pdf, render_trial_balance_pdf,
 };
 
-// Story 46-3 — exports du bilan et du compte de résultat par groupes
-pub use csv::{render_grouped_balance_sheet_csv, render_grouped_income_statement_csv};
-pub use pdf::{render_grouped_balance_sheet_pdf, render_grouped_income_statement_pdf};
+// Story 46-3 — exports du bilan et du compte de résultat par groupes ;
+// Story 46-6b — de la balance.
+pub use csv::{
+    render_grouped_balance_sheet_csv, render_grouped_income_statement_csv,
+    render_grouped_trial_balance_csv,
+};
+pub use pdf::{
+    render_grouped_balance_sheet_pdf, render_grouped_income_statement_pdf,
+    render_grouped_trial_balance_pdf,
+};
 
 // Story 11-2 — re-exports rapport TVA
 pub use csv::render_vat_report_csv;

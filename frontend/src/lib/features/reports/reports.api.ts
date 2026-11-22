@@ -84,11 +84,19 @@ export async function getIncomeStatement(
 	return apiClient.get<IncomeStatementDto>(`/api/v1/reports/income-statement?${qs}`);
 }
 
-export async function getTrialBalance(query: ReportQuery): Promise<TrialBalanceDto> {
+/**
+ * Balance des comptes ; `grouping` comme pour {@link getBalanceSheet} (Story
+ * 46-6b : la réponse porte alors `grouping` et `groupedRows`, un tableau).
+ */
+export async function getTrialBalance(
+	query: ReportQuery,
+	grouping?: GroupingParams,
+): Promise<TrialBalanceDto> {
 	const qs = buildQuery({
 		fiscalYearId: query.fiscalYearId,
 		periodStart: query.periodStart,
 		periodEnd: query.periodEnd,
+		...groupingQueryParams(grouping),
 	});
 	return apiClient.get<TrialBalanceDto>(`/api/v1/reports/trial-balance?${qs}`);
 }
@@ -365,9 +373,9 @@ export function formatCurrencyFigure(v: string | undefined): string {
  * Pour le rapport `journals`, le paramètre optionnel `journal` est inclus si fourni.
  *
  * Story 46-2 (AC-6) — `grouping` : les paramètres de groupement de la dernière
- * requête affichée du bilan ou du compte de résultat, que l'export reprend tels
- * quels pour rendre ce que montre l'écran (rendu groupé : 46-3). Ignoré pour les
- * autres rapports.
+ * requête affichée du bilan, du compte de résultat ou de la balance (46-6b), que
+ * l'export reprend tels quels pour rendre ce que montre l'écran (rendu groupé :
+ * 46-3, 46-6b). Ignoré pour les autres rapports.
  */
 export function getReportExportUrl(
 	type: ReportType,
@@ -384,7 +392,7 @@ export function getReportExportUrl(
 	if (type === 'journals') {
 		params.journal = (query as JournalReportQuery).journal;
 	}
-	if (type === 'balance-sheet' || type === 'income-statement') {
+	if (type === 'balance-sheet' || type === 'income-statement' || type === 'trial-balance') {
 		Object.assign(params, groupingQueryParams(grouping));
 	}
 	const qs = buildQuery(params);
@@ -462,8 +470,8 @@ export function slugify(input: string, fallback: string): string {
  * @param query — Query params (`fiscalYearId`, période, journal optionnel).
  * @param format — `'pdf'` ou `'csv'`.
  * @param filename — Filename suggéré au browser (construit via `buildExportFilename`).
- * @param grouping — Story 46-2 : paramètres de groupement du bilan ou du compte de
- *   résultat affiché (voir `getReportExportUrl`).
+ * @param grouping — Story 46-2 : paramètres de groupement du bilan, du compte de
+ *   résultat ou de la balance (46-6b) affiché (voir `getReportExportUrl`).
  */
 // --- Story 21-7 : Balance âgée débiteurs ---
 

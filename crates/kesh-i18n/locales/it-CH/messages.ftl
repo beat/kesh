@@ -4087,6 +4087,7 @@ reports-groups-level = Livello di dettaglio
 reports-groups-level-n = Livello { $level }
 reports-groups-level-all = Tutti i conti
 reports-groups-level-hint = Le sezioni legali del bilancio restano (Attivi, Passivi, Patrimonio netto). Una visualizzazione ripiegata, in particolare al livello 1, è una visualizzazione di lavoro, non un conto annuale.
+reports-groups-level-hint-trial-balance = Il totale del dare e quello dell'avere restano quelli di tutti i conti. Un gruppo i cui conti non nulli sono di natura opposta (dare e avere) non viene totalizzato: i suoi sottoconti appaiono al suo posto. Una visualizzazione ripiegata è una visualizzazione di lavoro.
 reports-groups-open-all = Apri tutto
 reports-groups-close-all = Chiudi tutto
 reports-groups-subtotals = Subtotali

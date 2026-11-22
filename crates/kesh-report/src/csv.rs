@@ -22,8 +22,8 @@ use crate::balance_sheet::{AccountBalance, BalanceSheet};
 use crate::errors::ReportError;
 use crate::general_ledger::{FiscalYearBreak, GeneralLedger};
 use crate::groupes::{
-    AvecGroupes, GenreLigne, Grouping, LigneRapport, PositionSousTotal, SectionsBilan,
-    SectionsResultat,
+    AvecGroupes, GenreLigne, Grouping, LigneBalanceGroupee, LigneGroupeeAffichee, LigneRapport,
+    PositionSousTotal, SectionsBilan, SectionsResultat,
 };
 use crate::income_statement::IncomeStatement;
 use crate::journal_report::JournalReport;
@@ -237,10 +237,56 @@ fn type_ligne(kind: GenreLigne) -> &'static str {
     }
 }
 
-/// Les lignes groupées d'une section : niveau, type, numéro et nom (cellules de texte neutralisées par `txt`), et
-/// le solde arrondi — vide sur le titre d'un groupe ouvert dont le sous-total
-/// est en pied (sa ligne `soustotal` le porte) ; devise et solde en devise sur
-/// la ligne qui porte une devise et son montant.
+/// Les cellules d'une ligne groupée, communes au bilan, au compte de résultat
+/// (Story 46-3, AC-5) et à la balance (Story 46-6b).
+struct CellulesGroupees {
+    /// `Niveau` (la profondeur) et `TypeLigne`.
+    groupe: [String; 2],
+    /// Numéro et nom, neutralisés par `txt`.
+    texte: [String; 2],
+    /// Les montants arrondis, ou vides sur le titre d'un groupe ouvert dont le
+    /// sous-total est en pied (sa ligne `soustotal` les porte).
+    montants: Vec<String>,
+    /// Les colonnes en devise, si le rapport en a (`fx`) : la devise et les
+    /// montants en devise de la ligne qui en porte et écrit ses montants,
+    /// vides sinon.
+    devise: Option<Vec<String>>,
+}
+
+/// Les cellules de la ligne groupée `l` (règle de rendu de la 46-1,
+/// [`LigneGroupeeAffichee::porte_montant`]), montants écrits par `fmt`.
+fn cellules_groupees<L: LigneGroupeeAffichee>(
+    l: &L,
+    position: PositionSousTotal,
+    fx: bool,
+    fmt: fn(Decimal) -> String,
+) -> CellulesGroupees {
+    let montant = l.porte_montant(position);
+    let montants: Vec<String> = l
+        .montants()
+        .into_iter()
+        .map(|v| if montant { fmt(v) } else { String::new() })
+        .collect();
+    let devise = fx.then(|| match l.devise() {
+        Some((cur, en_devise)) if montant => std::iter::once(cur.to_string())
+            .chain(en_devise.into_iter().map(fmt))
+            .collect(),
+        _ => vec![String::new(); montants.len() + 1],
+    });
+    CellulesGroupees {
+        groupe: [
+            l.profondeur().to_string(),
+            type_ligne(l.genre()).to_string(),
+        ],
+        texte: [txt(l.numero()), txt(l.nom())],
+        montants,
+        devise,
+    }
+}
+
+/// Les lignes groupées d'une section du bilan ou du compte de résultat
+/// ([`cellules_groupees`]) : niveau, type, numéro, nom, solde, puis la devise
+/// et le solde en devise.
 fn write_grouped_rows<W: Write>(
     wtr: &mut csv::Writer<W>,
     d: &Disposition,
@@ -249,24 +295,15 @@ fn write_grouped_rows<W: Write>(
     position: PositionSousTotal,
 ) -> Result<(), ReportError> {
     for l in lignes {
-        let montant = !(l.kind == GenreLigne::Groupe
-            && l.open == Some(true)
-            && position == PositionSousTotal::Pied);
-        let fmt = |v: Decimal| if montant { (d.fmt)(v) } else { String::new() };
-        let extra = d.fx.then(|| match (&l.currency, l.balance_currency) {
-            (Some(cur), Some(fx)) if montant => vec![cur.clone(), (d.fmt)(fx)],
-            _ => vec![String::new(); 2],
-        });
+        let c = cellules_groupees(l, position, d.fx, d.fmt);
+        let [niveau, type_l] = &c.groupe;
+        let [numero, nom] = &c.texte;
         d.ecrire(
             wtr,
             section,
-            Some([&l.depth.to_string(), type_ligne(l.kind)]),
-            [
-                &txt(&l.account_number),
-                &txt(&l.account_name),
-                &fmt(l.balance),
-            ],
-            extra,
+            Some([niveau, type_l]),
+            [numero, nom, &c.montants[0]],
+            c.devise,
         )?;
     }
     Ok(())
@@ -520,19 +557,78 @@ fn rendre_resultat_csv<W: Write>(
 /// solde de compte) est **remplacée** par l'ouverture et la clôture. Après les
 /// comptes, la ligne calculée du résultat reporté (numéro vide, comme au bilan),
 /// puis la ligne `Total` (mouvements ; ouverture et clôture vides).
-pub fn render_trial_balance_csv<W: Write>(
+pub fn render_trial_balance_csv<W: Write>(tb: &TrialBalance, writer: W) -> Result<(), ReportError> {
+    rendre_balance_csv(tb, None, writer)
+}
+
+/// Génère le CSV de la balance **telle que l'écran la groupe** (Story 46-6b,
+/// AC-2) : avec `groupedRows` (46-6a), deux colonnes en **tête** — `Niveau` et
+/// `TypeLigne`, là où se placerait une colonne `Section`, que la balance n'a
+/// pas — et une ligne par ligne groupée, aux mêmes valeurs et à la même règle
+/// de rendu que le bilan ([`cellules_groupees`]) ; montants arrondis au
+/// centime ([`kesh_core::types::format_two_decimals`]). Les colonnes en devise
+/// paraissent si une ligne groupée porte une devise ; un groupe en devise
+/// unique les remplit comme un compte. Les lignes du résultat reporté et
+/// `Total` restent ce qu'elles sont, `Niveau;TypeLigne` vides. Sans
+/// `groupedRows`, c'est [`render_trial_balance_csv`], à l'octet (AC-3).
+pub fn render_grouped_trial_balance_csv<W: Write>(
+    report: &AvecGroupes<TrialBalance, Vec<LigneBalanceGroupee>>,
+    writer: W,
+) -> Result<(), ReportError> {
+    rendre_balance_csv(
+        &report.rapport,
+        report.grouping.as_ref().zip(report.grouped_rows.as_deref()),
+        writer,
+    )
+}
+
+/// Un enregistrement de la balance : en mode groupé (`groupe`), les deux
+/// cellules `tete` (`Niveau`, `TypeLigne`) d'abord ; puis `base` et les
+/// colonnes en devise. À plat, l'enregistrement d'avant la Story 46-6b.
+fn write_tb_record<W: Write>(
+    wtr: &mut csv::Writer<W>,
+    groupe: bool,
+    tete: [&str; 2],
+    base: &[&str],
+    extra: Option<Vec<String>>,
+) -> Result<(), ReportError> {
+    let mut rec: Vec<&str> = Vec::with_capacity(base.len() + 2);
+    if groupe {
+        rec.extend(tete);
+    }
+    rec.extend_from_slice(base);
+    write_fx_record(wtr, &rec, extra)
+}
+
+/// La balance, à plat (`groupes = None`) ou par groupes : un seul rendu, dont
+/// seuls les colonnes de tête, le corps et l'arrondi diffèrent (Story 46-6b).
+fn rendre_balance_csv<W: Write>(
     tb: &TrialBalance,
+    groupes: Option<(&Grouping, &[LigneBalanceGroupee])>,
     mut writer: W,
 ) -> Result<(), ReportError> {
     write_bom(&mut writer)?;
     let mut wtr = make_writer(writer);
+    let groupe = groupes.is_some();
+    // Groupé : arrondi au centime (46-3, AC-6) ; à plat, l'écriture d'avant.
+    let fmt: fn(Decimal) -> String = if groupe {
+        format_two_decimals
+    } else {
+        format_amount_iso
+    };
 
     // Story 37-4, AC-5 : colonnes en devise seulement si un compte en devise
-    // figure dans le rapport ; aucune ligne de total en devise (devises mêlées).
-    let fx = tb.rows.iter().any(|r| r.currency.is_some());
+    // figure dans le rapport (groupé : si une ligne groupée en porte une, comme
+    // au bilan) ; aucune ligne de total en devise (devises mêlées).
+    let fx = match groupes {
+        None => tb.rows.iter().any(|r| r.currency.is_some()),
+        Some((_, lignes)) => lignes.iter().any(|l| l.currency.is_some()),
+    };
     let vides = || fx.then(|| vec![String::new(); 5]);
-    write_fx_record(
+    write_tb_record(
         &mut wtr,
+        groupe,
+        ["Niveau", "TypeLigne"],
         &[
             "NumeroCompte",
             "NomCompte",
@@ -554,48 +650,64 @@ pub fn render_trial_balance_csv<W: Write>(
         }),
     )?;
 
+    // Cas rapport vide : en-tête seul, à plat comme groupé.
     if tb.rows.is_empty() {
         wtr.flush().map_err(map_io_err)?;
         return Ok(());
     }
 
-    for row in &tb.rows {
-        let extra = match &row.currency {
-            Some(cur) if fx => Some(vec![
-                cur.clone(),
-                row.opening_currency
-                    .map(format_currency_amount_iso)
-                    .unwrap_or_default(),
-                row.total_debit_currency
-                    .map(format_currency_amount_iso)
-                    .unwrap_or_default(),
-                row.total_credit_currency
-                    .map(format_currency_amount_iso)
-                    .unwrap_or_default(),
-                row.closing_currency
-                    .map(format_currency_amount_iso)
-                    .unwrap_or_default(),
-            ]),
-            _ => vides(),
-        };
-        write_fx_record(
-            &mut wtr,
-            &[
-                &txt(&row.account_number),
-                &txt(&row.account_name),
-                &format_amount_iso(row.opening_balance),
-                &format_amount_iso(row.total_debit),
-                &format_amount_iso(row.total_credit),
-                &format_amount_iso(row.closing_balance),
-            ],
-            extra,
-        )?;
+    match groupes {
+        None => {
+            for row in &tb.rows {
+                let extra = match &row.currency {
+                    Some(cur) if fx => Some(vec![
+                        cur.clone(),
+                        row.opening_currency
+                            .map(format_currency_amount_iso)
+                            .unwrap_or_default(),
+                        row.total_debit_currency
+                            .map(format_currency_amount_iso)
+                            .unwrap_or_default(),
+                        row.total_credit_currency
+                            .map(format_currency_amount_iso)
+                            .unwrap_or_default(),
+                        row.closing_currency
+                            .map(format_currency_amount_iso)
+                            .unwrap_or_default(),
+                    ]),
+                    _ => vides(),
+                };
+                write_fx_record(
+                    &mut wtr,
+                    &[
+                        &txt(&row.account_number),
+                        &txt(&row.account_name),
+                        &format_amount_iso(row.opening_balance),
+                        &format_amount_iso(row.total_debit),
+                        &format_amount_iso(row.total_credit),
+                        &format_amount_iso(row.closing_balance),
+                    ],
+                    extra,
+                )?;
+            }
+        }
+        Some((g, lignes)) => {
+            for l in lignes {
+                let c = cellules_groupees(l, g.subtotal_position, fx, fmt);
+                let mut base: Vec<&str> = c.groupe.iter().map(String::as_str).collect();
+                base.extend(c.texte.iter().map(String::as_str));
+                base.extend(c.montants.iter().map(String::as_str));
+                write_fx_record(&mut wtr, &base, c.devise)?;
+            }
+        }
     }
 
     // Ligne calculée : libellé fixe, comme au CSV du bilan.
-    let retained = format_amount_iso(tb.retained_earnings);
-    write_fx_record(
+    let retained = fmt(tb.retained_earnings);
+    write_tb_record(
         &mut wtr,
+        groupe,
+        ["", ""],
         &[
             "",
             "Résultat reporté (calculé)",
@@ -607,14 +719,16 @@ pub fn render_trial_balance_csv<W: Write>(
         vides(),
     )?;
 
-    write_fx_record(
+    write_tb_record(
         &mut wtr,
+        groupe,
+        ["", ""],
         &[
             "Total",
             "",
             "",
-            &format_amount_iso(tb.total_debit),
-            &format_amount_iso(tb.total_credit),
+            &fmt(tb.total_debit),
+            &fmt(tb.total_credit),
             "",
         ],
         vides(),
@@ -2669,6 +2783,177 @@ mod tests {
         assert_eq!(
             String::from_utf8(buf[3..].to_vec()).unwrap(),
             "Section;Niveau;TypeLigne;NumeroCompte;NomCompte;Solde\r\n"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // Story 46-6b — CSV de la balance par groupes
+    // ------------------------------------------------------------------
+
+    use crate::essai_groupes::{
+        balance, balance_essai, balance_essai_groupee, balance_usd_groupee,
+    };
+
+    /// Les lignes du CSV d'une balance groupée (sans le BOM).
+    fn csv_balance(
+        env: &AvecGroupes<TrialBalance, Vec<crate::LigneBalanceGroupee>>,
+    ) -> Vec<String> {
+        let mut buf = Vec::new();
+        render_grouped_trial_balance_csv(env, &mut buf).unwrap();
+        assert_eq!(&buf[..3], UTF8_BOM);
+        String::from_utf8(buf[3..].to_vec())
+            .unwrap()
+            .split("\r\n")
+            .map(String::from)
+            .collect()
+    }
+
+    /// AC-2, AC-4 — `Niveau;TypeLigne` en tête, une ligne par ligne groupée,
+    /// quatre montants arrondis au centime (débit exact de `10` : 10.011 →
+    /// 10.01) ; résultat reporté et `Total` avec deux cellules vides en tête.
+    #[test]
+    fn balance_csv_groupee_header() {
+        let l = csv_balance(&balance_essai_groupee(&options(
+            NiveauDetail::Tous,
+            PositionSousTotal::Titre,
+            &[],
+            &[],
+        )));
+        assert_eq!(
+            l,
+            vec![
+                "Niveau;TypeLigne;NumeroCompte;NomCompte;SoldeOuverture;TotalDebit;TotalCredit;SoldeCloture",
+                "1;groupe;10;Actifs circulants;5.00;10.01;0.00;15.01",
+                "2;groupe;100;Liquidités;5.00;10.01;0.00;15.01",
+                "3;compte;1000;Caisse;0.00;10.01;0.00;10.01",
+                "3;compte;1020;Banque;5.00;0.01;0.00;5.01",
+                "1;groupe;14;Immobilisations;300.00;0.00;0.00;300.00",
+                "2;compte;1500;Machines;300.00;0.00;0.00;300.00",
+                "1;compte;2000;Fournisseurs;305.00;0.00;10.01;315.01",
+                ";;;Résultat reporté (calculé);0.00;;;0.00",
+                ";;Total;;;10.01;10.01;",
+                "",
+            ]
+        );
+    }
+
+    /// AC-2 — en pied : le titre d'un groupe ouvert a ses montants vides, sa
+    /// ligne `soustotal` les porte ; un groupe fermé les porte sur son titre.
+    #[test]
+    fn balance_csv_groupee_footer_et_groupe_ferme() {
+        let l = csv_balance(&balance_essai_groupee(&options(
+            NiveauDetail::Niveau(2),
+            PositionSousTotal::Pied,
+            &[],
+            &[14],
+        )));
+        for attendu in [
+            "1;groupe;10;Actifs circulants;;;;",
+            "2;groupe;100;Liquidités;5.00;10.01;0.00;15.01",
+            "1;soustotal;10;Actifs circulants;5.00;10.01;0.00;15.01",
+            "1;groupe;14;Immobilisations;300.00;0.00;0.00;300.00",
+        ] {
+            assert!(
+                l.contains(&attendu.to_string()),
+                "{attendu:?} absent de {l:?}"
+            );
+        }
+        assert!(!l.iter().any(|x| x.contains(";1500;")), "{l:?}");
+    }
+
+    /// AC-2 — colonnes en devise : un groupe en devise unique les remplit
+    /// comme un compte (montants en devise arrondis), une ligne sans devise et
+    /// les lignes calculées les laissent vides.
+    #[test]
+    fn balance_csv_groupee_devise() {
+        let l = csv_balance(&balance_usd_groupee(&options(
+            NiveauDetail::Tous,
+            PositionSousTotal::Titre,
+            &[],
+            &[],
+        )));
+        assert_eq!(
+            l[0],
+            "Niveau;TypeLigne;NumeroCompte;NomCompte;SoldeOuverture;TotalDebit;TotalCredit;SoldeCloture;Devise;SoldeOuvertureDevise;TotalDebitDevise;TotalCreditDevise;SoldeClotureDevise"
+        );
+        for attendu in [
+            "1;groupe;10;Devises;90.00;9.45;0.00;99.45;USD;100.00;10.51;0.00;110.51",
+            "2;compte;1026;Caisse USD;0.00;0.45;0.00;0.45;USD;0.00;0.51;0.00;0.51",
+            "1;compte;2000;Fournisseurs;90.00;0.00;9.45;99.45;;;;;",
+            ";;Total;;;9.45;9.45;;;;;;",
+        ] {
+            assert!(
+                l.contains(&attendu.to_string()),
+                "{attendu:?} absent de {l:?}"
+            );
+        }
+        // En pied, le titre ouvert laisse aussi ses colonnes en devise vides.
+        let l = csv_balance(&balance_usd_groupee(&options(
+            NiveauDetail::Tous,
+            PositionSousTotal::Pied,
+            &[],
+            &[],
+        )));
+        assert!(
+            l.contains(&"1;groupe;10;Devises;;;;;;;;;".to_string()),
+            "{l:?}"
+        );
+        assert!(
+            l.contains(
+                &"1;soustotal;10;Devises;90.00;9.45;0.00;99.45;USD;100.00;10.51;0.00;110.51"
+                    .to_string()
+            ),
+            "{l:?}"
+        );
+    }
+
+    /// AC-2 — balance vide groupée : l'en-tête seul, comme à plat.
+    #[test]
+    fn balance_csv_groupee_vide() {
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let env = AvecGroupes::balance(balance(vec![]), &crate::essai_groupes::arbre(), &o);
+        assert_eq!(
+            csv_balance(&env),
+            vec![
+                "Niveau;TypeLigne;NumeroCompte;NomCompte;SoldeOuverture;TotalDebit;TotalCredit;SoldeCloture",
+                "",
+            ]
+        );
+    }
+
+    /// AC-3 — sans `grouping`, le CSV groupé est celui d'avant, à l'octet.
+    #[test]
+    fn balance_csv_sans_groupes_est_le_rendu_a_plat() {
+        let tb = balance_essai();
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        render_trial_balance_csv(&tb, &mut a).unwrap();
+        render_grouped_trial_balance_csv(&AvecGroupes::sans_groupes(tb), &mut b).unwrap();
+        assert_eq!(a, b);
+    }
+
+    /// Une cellule de texte d'une ligne groupée de la balance est neutralisée
+    /// comme à plat (Story 37-5) ; un montant négatif reste un nombre.
+    #[test]
+    fn balance_csv_groupee_neutralise_le_texte() {
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(10, "=Groupe", None),
+            noeud(1000, "@Caisse", Some(10)),
+        ]);
+        let tb = balance(vec![crate::essai_groupes::tb_ligne(
+            1000,
+            "@Caisse",
+            AccountType::Asset,
+            [dec!(-1), dec!(0), dec!(0), dec!(-1)],
+        )]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let l = csv_balance(&AvecGroupes::balance(tb, &arbre, &o));
+        assert!(
+            l.contains(&"1;groupe;10;'=Groupe;-1.00;0.00;0.00;-1.00".to_string()),
+            "{l:?}"
+        );
+        assert!(
+            l.contains(&"2;compte;1000;'@Caisse;-1.00;0.00;0.00;-1.00".to_string()),
+            "{l:?}"
         );
     }
 }

@@ -19,6 +19,7 @@ import {
 	getBalanceSheet,
 	getIncomeStatement,
 	getReportExportUrl,
+	getTrialBalance,
 	groupingQueryParams,
 } from './reports.api';
 import type { GroupingParams } from './reports.types';
@@ -64,9 +65,29 @@ describe('requêtes du bilan et du compte de résultat', () => {
 	});
 });
 
-describe("URL d'export (AC-6, paramètres de la 46-3)", () => {
-	it('bilan et compte de résultat : les mêmes paramètres que l’écran', () => {
-		for (const type of ['balance-sheet', 'income-statement'] as const) {
+describe('requête de la balance (Story 46-6b)', () => {
+	beforeEach(() => getMock.mockClear());
+
+	it('getTrialBalance transmet niveau, position et listes', async () => {
+		await getTrialBalance({ fiscalYearId: 3 }, g);
+		const url = getMock.mock.calls[0][0] as string;
+		expect(url.startsWith('/api/v1/reports/trial-balance?')).toBe(true);
+		const p = params(url);
+		expect(p.get('detailLevel')).toBe('2');
+		expect(p.get('subtotalPosition')).toBe('footer');
+		expect(p.get('open')).toBe('12,7');
+		expect(p.get('closed')).toBe('40');
+	});
+
+	it('sans groupement : la requête d’avant, à l’identique', async () => {
+		await getTrialBalance({ fiscalYearId: 3 });
+		expect(getMock.mock.calls[0][0]).toBe('/api/v1/reports/trial-balance?fiscalYearId=3');
+	});
+});
+
+describe("URL d'export (AC-6, paramètres de la 46-3 et de la 46-6b)", () => {
+	it('bilan, compte de résultat et balance : les mêmes paramètres que l’écran', () => {
+		for (const type of ['balance-sheet', 'income-statement', 'trial-balance'] as const) {
 			const url = getReportExportUrl(type, { fiscalYearId: 1 }, 'csv', g);
 			expect(url.startsWith(`/api/v1/reports/${type}/export?`)).toBe(true);
 			const p = params(url);
@@ -85,7 +106,8 @@ describe("URL d'export (AC-6, paramètres de la 46-3)", () => {
 	});
 
 	it('les autres rapports ne reçoivent jamais de paramètre de groupement', () => {
-		for (const type of ['trial-balance', 'journals', 'vat'] as const) {
+		// Story 46-6b : la balance a quitté cette liste (elle reçoit les paramètres).
+		for (const type of ['journals', 'vat'] as const) {
 			const p = params(getReportExportUrl(type, { fiscalYearId: 1 }, 'csv', g));
 			expect(p.has('detailLevel')).toBe(false);
 			expect(p.has('open')).toBe(false);

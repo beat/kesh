@@ -4086,6 +4086,7 @@ reports-groups-level = Detailstufe
 reports-groups-level-n = Stufe { $level }
 reports-groups-level-all = Alle Konten
 reports-groups-level-hint = Die gesetzlichen Abschnitte der Bilanz bleiben bestehen (Aktiven, Passiven, Eigenkapital). Eine zusammengeklappte Darstellung, insbesondere auf Stufe 1, ist eine Arbeitsansicht und keine Jahresrechnung.
+reports-groups-level-hint-trial-balance = Die Summe der Soll- und die der Habenbuchungen bleiben jene aller Konten. Eine Gruppe, deren Konten ungleich null gegensätzlicher Natur sind (Soll und Haben), wird nicht summiert: Ihre Unterkonten erscheinen an ihrer Stelle. Eine zusammengeklappte Darstellung ist eine Arbeitsansicht.
 reports-groups-open-all = Alle aufklappen
 reports-groups-close-all = Alle zuklappen
 reports-groups-subtotals = Zwischensummen

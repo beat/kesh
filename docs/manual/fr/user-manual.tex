@@ -4065,6 +4065,38 @@ d'ouverture}, les \textbf{mouvements} débit et crédit, et le \textbf{solde de 
 
 Seul filtre : la période.
 
+\paragraph{La balance par groupes.} La balance a la même barre de présentation que le bilan
+(\S\ref{sec:rapports-groupes}) --- hiérarchie des groupes, niveau de détail, \emph{Tout ouvrir},
+\emph{Tout fermer}, place des sous-totaux, flèche de chaque groupe ---, avec sa propre mémoire~:
+la présentation du bilan ne change pas celle de la balance. Par défaut, la hiérarchie est montrée,
+tous les groupes ouverts, les sous-totaux sur le titre. Chaque groupe porte, dans chacune des quatre
+colonnes, la somme de ses comptes~; un groupe dont tous les comptes non nuls sont dans une même
+devise étrangère a, comme un compte, sa seconde ligne dans cette devise. La ligne
+«~Résultat reporté (calculé)~» vient après les groupes, hors d'eux~; le total des débits et celui
+des crédits, et les deux contrôles, ne changent pas avec la présentation. Hiérarchie masquée, la
+balance redevient la liste à plat décrite ci-dessus.
+
+Trois règles propres à la balance, qui n'a pas de sections~:
+\begin{itemize}
+    \item \textbf{Un groupe ne totalise que des comptes de même nature.} Un groupe qui mêle des
+          comptes de nature débitrice (actifs, charges) et créditrice (passifs, produits) n'est pas
+          montré dès que des comptes \textbf{des deux natures} y portent un montant non nul~: ses
+          sous-groupes et ses comptes remontent d'un rang. Au plan PME, ce sont les classes
+          \emph{6}, \emph{7} et \emph{8}, et leurs groupes \emph{70} et \emph{80}~; un compte à
+          zéro --- un compte miroir, par exemple --- ne dissout rien.
+    \item \textbf{\emph{2~Passifs} reste un groupe} à la balance (au bilan, il n'est pas montré dès
+          qu'un compte de capitaux propres a un solde, ses dettes et ses fonds propres tombant dans deux
+          sections), puisque dettes et fonds propres sont tous
+          de nature créditrice.
+    \item \textbf{Un compte de groupe sans solde ni mouvement n'a pas de ligne propre}~: le groupe
+          est montré par son titre. Un groupe qui n'est pas montré et dont le compte est à zéro
+          --- au plan PME, \emph{6}, \emph{7}, \emph{70}, \emph{8} et \emph{80} --- ne paraît donc
+          pas du tout.
+\end{itemize}
+
+Les boutons d'export PDF et CSV reprennent la présentation affichée
+(\S\ref{sec:rapports-exports}).
+
 \subsection{Grand livre}\label{sec:grand-livre}
 
 \emph{Rapports} → \emph{Grand livre}. C'est l'\textbf{extrait d'un compte} : ce qui a fait son
@@ -4268,7 +4300,9 @@ ligne, qui porte la somme de ses comptes. Le PDF abrège seulement, d'un «~…~
 dépassent un nombre fixe de caractères (intitulé de compte de la balance, pièce, journal, libellé et
 contreparties du grand livre, nom d'un compte en devise au bilan et au compte de résultat, et, par
 groupes, tout libellé de plus de 48~caractères au premier niveau (47 au deuxième, 45 au troisième, 44 au quatrième,
-42 au cinquième, 40 au plus profond~; sur une ligne en devise, 34 au premier niveau et moins en retrait), même celui d'un compte que l'export à plat n'abrège pas). Dans le PDF, les montants sont \textbf{alignés à droite} dans leur colonne,
+42 au cinquième, 40 au plus profond~; sur une ligne en devise, 34 au premier niveau et moins en retrait), même celui d'un compte que l'export à plat n'abrège pas~;
+à la balance par groupes, l'intitulé garde sa colonne~: 22~caractères au premier niveau, comme à plat, 21 au deuxième,
+19 au troisième, 18 au quatrième, 16 au cinquième, 14 au plus profond). Dans le PDF, les montants sont \textbf{alignés à droite} dans leur colonne,
 les décimales l'une sous l'autre, totaux compris~; au bilan et au compte de résultat, le solde en
 devise («~USD 1'233.57~») l'est dans sa propre colonne. Les secondes lignes en petit du grand livre
 et de la balance, qui sont des phrases, restent alignées à gauche.
@@ -4276,8 +4310,8 @@ Le titre du rapport, dans les propriétés du fichier PDF, garde ses accents («
 résultat~», «~Décompte TVA~»).
 \end{keshnote}
 
-\paragraph{Le bilan et le compte de résultat par groupes.} L'export du bilan et du compte de
-résultat \textbf{suit l'écran}~: même niveau de détail, mêmes groupes ouverts ou fermés, mêmes
+\paragraph{Le bilan, le compte de résultat et la balance par groupes.} L'export du bilan, du
+compte de résultat et de la balance \textbf{suit l'écran}~: même niveau de détail, mêmes groupes ouverts ou fermés, mêmes
 sous-totaux, sur la ligne du titre ou en pied. Exporté sans niveau, il reste tel qu'avant.
 \begin{itemize}
     \item \textbf{PDF} --- sous la période, une ligne dit le niveau imprimé («~Niveau~2~», ou
@@ -4295,6 +4329,12 @@ sous-totaux, sur la ligne du titre ou en pied. Exporté sans niveau, il reste te
           \texttt{propre}, \texttt{soustotal}), une ligne par ligne de l'écran~; le solde du titre
           d'un groupe ouvert dont le sous-total est en pied est vide, sa ligne \texttt{soustotal}
           le porte.
+    \item \textbf{La balance} --- au PDF, les mêmes lignes, sur ses quatre colonnes (ouverture,
+          débit, crédit, clôture)~; un groupe en devise unique a, comme un compte, sa seconde ligne en
+          petit dans sa devise. Au CSV, \texttt{Niveau} et \texttt{TypeLigne} viennent \textbf{en
+          tête} de chaque ligne, puisque la balance n'a pas de colonne \texttt{Section}~; un groupe
+          en devise unique remplit les colonnes en devise comme un compte. Le résultat reporté, le
+          total des mouvements et le contrôle d'ouverture restent sous les groupes, comme à plat.
 \end{itemize}
 Les montants s'arrondissent au centime au moment de s'écrire. Un sous-total est l'arrondi de la
 somme exacte de ses comptes, \textbf{non la somme de leurs montants arrondis}~: deux comptes à

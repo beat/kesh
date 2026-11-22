@@ -1355,9 +1355,10 @@ async fn export_pdf_groupe_fidele_au_json(pool: MySqlPool) {
     }
 }
 
-/// AC-1, AC-8 — les refus des paramètres de groupes de la 46-1, sur les deux
-/// exports et les deux formats : `400 VALIDATION_ERROR` qui nomme le
-/// paramètre, paramètre répété compris ; `format` est contrôlé d'abord.
+/// AC-1, AC-8 — les refus des paramètres de groupes de la 46-1, sur les
+/// exports du bilan, du compte de résultat et (Story 46-6b, AC-2) de la
+/// balance, aux deux formats : `400 VALIDATION_ERROR` qui nomme le paramètre,
+/// paramètre répété compris ; `format` est contrôlé d'abord.
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
 async fn export_groupes_refus_du_contrat(pool: MySqlPool) {
     let jeu = jeu_pme(&pool).await;
@@ -1374,7 +1375,8 @@ async fn export_groupes_refus_du_contrat(pool: MySqlPool) {
         ("&detailLevel=2&detailLevel=3", "detailLevel"),
         ("&detailLevel=2&open=1&open=2", "open"),
     ];
-    for route in ["balance-sheet", "income-statement"] {
+    // Story 46-6b : la balance suit le même contrat.
+    for route in ["balance-sheet", "income-statement", "trial-balance"] {
         for format in ["pdf", "csv"] {
             for (suite, parametre) in refus {
                 let resp = export_pme(&app, &jeu, route, jeu.fy_2025, format, suite).await;
@@ -1402,13 +1404,216 @@ async fn export_groupes_refus_du_contrat(pool: MySqlPool) {
     }
 }
 
-/// AC-8 (et 46-6a AC-9) — l'export de la balance ignore les paramètres de
-/// groupes, répétés compris : même corps qu'en leur absence (jusqu'à la 46-6b).
+/// Un montant arrondi au centime, sans apostrophe, tel que le CSV groupé
+/// l'écrit — écrit ici indépendamment du rendu.
+fn montant_csv(brut: &str) -> String {
+    montant_suisse(brut).replace('\'', "")
+}
+
+/// Un libellé tronqué comme le PDF le fait au-delà de `max` caractères (« … »
+/// final), écrit ici indépendamment du rendu.
+fn tronque(texte: &str, max: usize) -> String {
+    if texte.chars().count() <= max {
+        texte.to_string()
+    } else {
+        format!("{}…", texte.chars().take(max - 1).collect::<String>())
+    }
+}
+
+/// Story 46-6b, AC-2 — l'export de la balance est **fidèle à l'écran** : avec
+/// les mêmes paramètres (niveau 2, un groupe ouvert et un fermé à la main,
+/// sous-totaux en pied), la suite des lignes du PDF entre l'en-tête des
+/// colonnes et le résultat reporté est exactement celle de `groupedRows` du
+/// JSON (46-6a), selon la règle de rendu — quatre colonnes arrondies au
+/// centime, seconde ligne en devise d'une ligne en devise, libellé tronqué à
+/// la colonne de l'intitulé ([`kesh_report::pdf::limite_nom_groupe_balance`]) ;
+/// l'en-tête dit le niveau. Le CSV, mêmes paramètres : `Niveau;TypeLigne` en
+/// tête et une ligne par ligne groupée, aux mêmes cellules.
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
-async fn export_balance_ignore_les_parametres_de_groupes(pool: MySqlPool) {
+async fn export_balance_groupee_fidele_au_json(pool: MySqlPool) {
+    let jeu = jeu_pme(&pool).await;
+    let app = spawn_app(pool).await;
+    let suite = format!(
+        "&detailLevel=2&subtotalPosition=footer&open={}&closed={}",
+        jeu.id("10"),
+        jeu.id("20")
+    );
+    let mut vu_devise = false;
+    for fy in [jeu.fy_2025, jeu.fy_2026] {
+        let json: Value = app
+            .client
+            .get(app.url(&format!(
+                "/api/v1/reports/trial-balance?fiscalYearId={fy}{suite}"
+            )))
+            .bearer_auth(&jeu.jwt)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(
+            !json["grouping"]["open"].as_array().unwrap().is_empty()
+                && !json["grouping"]["closed"].as_array().unwrap().is_empty(),
+            "{fy} : écarts manuels non retenus ({})",
+            json["grouping"]
+        );
+        let groupees = json["groupedRows"].as_array().unwrap();
+        assert!(groupees.len() >= 5, "{fy} : jeu trop maigre ({groupees:?})");
+
+        // Le PDF.
+        let resp = export_pme(&app, &jeu, "trial-balance", fy, "pdf", &suite).await;
+        assert_eq!(resp.status(), 200, "{fy}");
+        // Les pieds de page (« page 1 / 2 ») ne sont pas des lignes du rapport.
+        let pdf: Vec<String> = kesh_report::texte_pdf::lignes(&resp.bytes().await.unwrap())
+            .into_iter()
+            .filter(|l| !l.starts_with("page "))
+            .collect();
+        assert!(
+            pdf.contains(&"Niveau 2, détail ajusté à la main".to_string()),
+            "{fy} : en-tête {pdf:?}"
+        );
+        let entete = pdf
+            .iter()
+            .find(|l| l.starts_with("N° compte Intitulé"))
+            .unwrap_or_else(|| panic!("en-tête des colonnes absent : {pdf:?}"))
+            .clone();
+        let mut attendu: Vec<String> = Vec::new();
+        let mut csv_attendu: Vec<String> = Vec::new();
+        for l in groupees {
+            let kind = l["kind"].as_str().unwrap();
+            let nom = l["accountName"].as_str().unwrap();
+            let numero = l["accountNumber"].as_str().unwrap();
+            let depth = l["depth"].as_u64().unwrap() as u32;
+            let libelle = match kind {
+                "group" | "account" => nom.to_string(),
+                "own" => format!("{nom} (solde propre)"),
+                "subtotal" => format!("Total {nom}"),
+                autre => panic!("kind inconnu : {autre}"),
+            };
+            let montant = !(kind == "group" && l["open"] == true);
+            let cles = [
+                "openingBalance",
+                "totalDebit",
+                "totalCredit",
+                "closingBalance",
+            ];
+            let mut morceaux: Vec<String> = Vec::new();
+            if kind != "subtotal" {
+                morceaux.push(numero.to_string());
+            }
+            morceaux.push(tronque(
+                &libelle,
+                kesh_report::pdf::limite_nom_groupe_balance(depth),
+            ));
+            if montant {
+                morceaux.extend(cles.map(|c| montant_suisse(l[c].as_str().unwrap())));
+            }
+            attendu.push(morceaux.join(" "));
+            let cur = l["currency"].as_str().filter(|_| montant);
+            if let Some(cur) = cur {
+                vu_devise = true;
+                let fx = [
+                    "openingCurrency",
+                    "totalDebitCurrency",
+                    "totalCreditCurrency",
+                    "closingCurrency",
+                ]
+                .map(|c| montant_suisse(l[c].as_str().unwrap_or("0")));
+                attendu.push(format!(
+                    "{cur} ouverture {} · débit {} · crédit {} · clôture {}",
+                    fx[0], fx[1], fx[2], fx[3]
+                ));
+            }
+            let mut cellules = vec![
+                depth.to_string(),
+                type_csv(kind).to_string(),
+                numero.to_string(),
+                nom.to_string(),
+            ];
+            cellules.extend(cles.map(|c| {
+                if montant {
+                    montant_csv(l[c].as_str().unwrap())
+                } else {
+                    String::new()
+                }
+            }));
+            csv_attendu.push(cellules.join(";"));
+        }
+        assert_eq!(
+            lignes_entre(&pdf, &entete, "Résultat reporté"),
+            attendu,
+            "{fy} : PDF groupé"
+        );
+
+        // Le CSV, mêmes paramètres.
+        let resp = export_pme(&app, &jeu, "trial-balance", fy, "csv", &suite).await;
+        assert_eq!(resp.status(), 200, "{fy} csv");
+        let corps = resp.text().await.unwrap();
+        let lignes: Vec<&str> = corps.trim_start_matches('\u{feff}').split("\r\n").collect();
+        assert!(
+            lignes[0].starts_with(
+                "Niveau;TypeLigne;NumeroCompte;NomCompte;SoldeOuverture;TotalDebit;TotalCredit;SoldeCloture"
+            ),
+            "{}",
+            lignes[0]
+        );
+        let colonnes = lignes[0].split(';').count();
+        let corps_groupe: Vec<String> = lignes[1..=groupees.len()]
+            .iter()
+            .map(|l| l.split(';').take(8).collect::<Vec<_>>().join(";"))
+            .collect();
+        assert_eq!(corps_groupe, csv_attendu, "{fy} : CSV groupé");
+        assert!(
+            lignes[groupees.len() + 1].starts_with(";;;Résultat reporté (calculé);"),
+            "{fy} : {lignes:?}"
+        );
+        assert!(
+            lignes[groupees.len() + 2].starts_with(";;Total;;;"),
+            "{fy} : {lignes:?}"
+        );
+        assert!(
+            lignes[1..=groupees.len() + 2]
+                .iter()
+                .all(|l| l.split(';').count() == colonnes),
+            "{fy} : colonnes inégales"
+        );
+    }
+    assert!(vu_devise, "le jeu PME doit porter une ligne en devise");
+}
+
+/// `TypeLigne` du CSV pour un `kind` du JSON.
+fn type_csv(kind: &str) -> &'static str {
+    match kind {
+        "group" => "groupe",
+        "account" => "compte",
+        "own" => "propre",
+        "subtotal" => "soustotal",
+        autre => panic!("kind inconnu : {autre}"),
+    }
+}
+
+/// Story 46-6b, AC-2 — l'export de la balance **lit** désormais les
+/// paramètres de groupes : un paramètre répété est refusé (`400
+/// VALIDATION_ERROR`, couvert par `export_groupes_refus_du_contrat`), ce qui
+/// remplace le test de la 46-3 (AC-8) et de la 46-6a (AC-9) qui l'affirmait
+/// **ignoré** ; avec `detailLevel`, le corps diffère de celui d'avant ; sans,
+/// il est celui d'avant (`export_balance_sans_parametre_identique_a_la_fixture_de_base`).
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn export_balance_lit_les_parametres_de_groupes(pool: MySqlPool) {
     let jeu = jeu_pme(&pool).await;
     let app = spawn_app(pool).await;
     for format in ["csv", "pdf"] {
+        let repete = export_pme(
+            &app,
+            &jeu,
+            "trial-balance",
+            jeu.fy_2025,
+            format,
+            "&detailLevel=2&detailLevel=3",
+        )
+        .await;
+        assert_eq!(repete.status(), 400, "{format}");
         let sans = export_pme(&app, &jeu, "trial-balance", jeu.fy_2025, format, "").await;
         assert_eq!(sans.status(), 200);
         let sans = sans.bytes().await.unwrap();
@@ -1418,18 +1623,18 @@ async fn export_balance_ignore_les_parametres_de_groupes(pool: MySqlPool) {
             "trial-balance",
             jeu.fy_2025,
             format,
-            "&detailLevel=2&detailLevel=3&open=1&open=2",
+            "&detailLevel=1",
         )
         .await;
         assert_eq!(avec.status(), 200, "{format}");
         let avec = avec.bytes().await.unwrap();
         if format == "csv" {
-            assert_eq!(avec, sans);
+            assert_ne!(avec, sans);
+            assert!(String::from_utf8_lossy(&avec).contains("Niveau;TypeLigne"));
         } else {
-            assert_eq!(
-                kesh_report::texte_pdf::lignes(&avec),
-                kesh_report::texte_pdf::lignes(&sans)
-            );
+            let avec = kesh_report::texte_pdf::lignes(&avec);
+            assert_ne!(avec, kesh_report::texte_pdf::lignes(&sans));
+            assert!(avec.contains(&"Niveau 1".to_string()), "{avec:?}");
         }
     }
 }

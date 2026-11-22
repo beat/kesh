@@ -1,5 +1,6 @@
 /**
- * Story 46-2 — la vue groupée du bilan et du compte de résultat : son état
+ * Story 46-2 — la vue groupée du bilan et du compte de résultat (et, depuis la
+ * Story 46-6b, de la balance, avec sa propre mémoire) : son état
  * (hiérarchie montrée ou masquée, niveau de détail, place des sous-totaux,
  * groupes ouverts ou fermés à la main), ses transitions, et sa mémoire par
  * navigateur.
@@ -23,8 +24,8 @@ import type {
 	SubtotalPosition,
 } from './reports.types';
 
-/** Les deux rapports qui ont une vue groupée. */
-export type GroupedReport = 'balance-sheet' | 'income-statement';
+/** Les rapports qui ont une vue groupée : le bilan, le compte de résultat et la balance (46-6b). */
+export type GroupedReport = 'balance-sheet' | 'income-statement' | 'trial-balance';
 
 /** Ce que l'utilisateur a choisi pour un rapport. */
 export interface GroupingView {

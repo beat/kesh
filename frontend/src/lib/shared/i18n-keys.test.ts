@@ -1162,7 +1162,11 @@ const ATTENDU = {
 	// `kesh-gate-logs/s46-2/front-test-unit.log`) — la barre de présentation par groupes
 	// (`GroupingControls.svelte`) et les lignes groupées (`GroupedReportRows.svelte`), bloc
 	// `reports-groups-*`.
-	sitesTotal: 3515,
+	// Story 46-6b (2026-11-22) : **3515 → 3517**, relevé par la garde (« expected 3517 to be 3515 »,
+	// `kesh-gate-logs/s46-6b/front-test-unit.log`) — l'info-bulle du niveau propre à la balance
+	// (`reports-groups-level-hint-trial-balance`, `reports/+page.svelte`) et le badge « archivé »
+	// des lignes groupées de la balance (`reports-archived-label`, `GroupedReportRows.svelte`).
+	sitesTotal: 3517,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/

@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Story 46-2 (AC-2, AC-7) — la barre de présentation du bilan et du compte de
-	// résultat : hiérarchie montrée ou masquée, niveau de détail, « Tout ouvrir »,
+	// résultat (et de la balance, Story 46-6b) : hiérarchie montrée ou masquée, niveau de détail, « Tout ouvrir »,
 	// « Tout fermer », place des sous-totaux. Elle ne calcule rien : elle rend la
 	// vue suivante à la page (`onChange`), qui la mémorise et redemande le rapport.
 	import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
@@ -18,8 +18,14 @@
 		/** `grouping.maxDepth` de la dernière réponse groupée ; `null` avant la première. */
 		maxDepth: number | null;
 		onChange: (next: GroupingView) => void;
+		/**
+		 * Story 46-6b — l'info-bulle du niveau de détail propre au rapport (la
+		 * balance n'a pas les sections légales du bilan) ; absente : celle du bilan
+		 * et du compte de résultat.
+		 */
+		levelHint?: string;
 	}
-	let { view, maxDepth, onChange }: Props = $props();
+	let { view, maxDepth, onChange, levelHint }: Props = $props();
 
 	let levels = $derived(detailLevelOptions(maxDepth ?? 0, view.detailLevel));
 	// Désactivé hiérarchie masquée, avant toute réponse groupée, et pour un plan
@@ -27,10 +33,11 @@
 	let levelDisabled = $derived(!view.shown || maxDepth === null || maxDepth <= 1);
 	let levelValue = $derived(String(view.detailLevel));
 	let hint = $derived(
-		i18nMsg(
-			'reports-groups-level-hint',
-			'Les sections légales du bilan restent (Actifs, Passifs, Capitaux propres). Un affichage replié, au niveau 1 en particulier, est un affichage de travail, non des comptes annuels.',
-		),
+		levelHint ??
+			i18nMsg(
+				'reports-groups-level-hint',
+				'Les sections légales du bilan restent (Actifs, Passifs, Capitaux propres). Un affichage replié, au niveau 1 en particulier, est un affichage de travail, non des comptes annuels.',
+			),
 	);
 
 	function onLevel(event: Event): void {

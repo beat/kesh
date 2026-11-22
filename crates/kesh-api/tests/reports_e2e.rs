@@ -2597,9 +2597,10 @@ async fn balance_groupee_niveau_2_et_tous(pool: MySqlPool) {
 
 /// Revue P1, L-4 — un paramètre de groupes répété : refus clair sur les
 /// rapports groupés (400 `VALIDATION_ERROR` qui le nomme) ; ignoré, comme
-/// avant, par la TVA, qui partage `ReportQuery`, et par l'export de la balance
-/// (`ExportQuery`, jusqu'à la Story 46-6b). Story 46-6a : la balance, qui
-/// l'ignorait, le refuse désormais comme le bilan (adapté, Change Log).
+/// avant, par la TVA, qui partage `ReportQuery`. Story 46-6a : la balance, qui
+/// l'ignorait, le refuse désormais comme le bilan (adapté, Change Log). Story
+/// 46-6b : son export aussi (bascule déclarée au Change Log ; les refus de
+/// l'export sont dans `reports_export_e2e::export_groupes_refus_du_contrat`).
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
 async fn groupes_parametre_repete(pool: MySqlPool) {
     let jeu = jeu_pme(&pool).await;
@@ -2620,7 +2621,16 @@ async fn groupes_parametre_repete(pool: MySqlPool) {
             );
         }
     }
-    for route in ["vat", "trial-balance/export"] {
+    let resp = get_pme(
+        &app,
+        &jeu,
+        "trial-balance/export",
+        jeu.fy_2025,
+        "&format=csv&open=1&open=2&detailLevel=x&detailLevel=y",
+    )
+    .await;
+    assert_eq!(resp.status(), 400, "l'export de la balance lit les groupes (46-6b)");
+    for route in ["vat"] {
         let resp = get_pme(
             &app,
             &jeu,

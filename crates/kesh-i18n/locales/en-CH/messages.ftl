@@ -4092,6 +4092,7 @@ reports-groups-level = Level of detail
 reports-groups-level-n = Level { $level }
 reports-groups-level-all = All accounts
 reports-groups-level-hint = The legal sections of the balance sheet remain (Assets, Liabilities, Equity). A collapsed view, at level 1 in particular, is a working view, not annual financial statements.
+reports-groups-level-hint-trial-balance = The debit and credit totals remain those of all accounts. A group whose non-zero accounts are of opposite natures (debit and credit) is not totalled: its sub-accounts appear in its place. A collapsed view is a working view.
 reports-groups-open-all = Expand all
 reports-groups-close-all = Collapse all
 reports-groups-subtotals = Subtotals
