@@ -237,7 +237,7 @@ fn type_ligne(kind: GenreLigne) -> &'static str {
     }
 }
 
-/// Les lignes groupées d'une section : niveau, type, numéro, nom tel quel, et
+/// Les lignes groupées d'une section : niveau, type, numéro et nom (cellules de texte neutralisées par `txt`), et
 /// le solde arrondi — vide sur le titre d'un groupe ouvert dont le sous-total
 /// est en pied (sa ligne `soustotal` le porte) ; devise et solde en devise sur
 /// la ligne qui porte une devise et son montant.
@@ -2360,7 +2360,7 @@ mod tests {
     // ------------------------------------------------------------------
 
     use crate::essai_groupes::{
-        bilan, bilan_essai, bilan_essai_groupe, noeud, options, resultat, resultat_essai, usd,
+        ab, bilan, bilan_essai, bilan_essai_groupe, noeud, options, resultat, resultat_essai, usd,
     };
     use crate::groupes::{ArbreComptes, AvecGroupes, NiveauDetail, PositionSousTotal};
 
@@ -2535,6 +2535,106 @@ mod tests {
             [
                 "Actifs;1;groupe;'-10;'=1+1;-5.00",
                 "Actifs;2;compte;'+1000;'@x;-5.00",
+            ]
+        );
+    }
+
+    /// AC-5 (revue P2, L1) — chaque section du CSV groupé du bilan porte ses
+    /// **propres** lignes : actifs, passifs et capitaux propres de soldes
+    /// distincts, chacun sous son groupe ; une section remplacée par une autre
+    /// (même nombre de lignes) ou une ligne fausse rougit ici, ce que ne voit
+    /// pas le décompte de lignes de `export_pdf_groupe_fidele_au_json`.
+    #[test]
+    fn bilan_csv_groupe_chaque_section_porte_ses_lignes() {
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(10, "Actifs circulants", None),
+            noeud(1000, "Caisse", Some(10)),
+            noeud(20, "Dettes", None),
+            noeud(2000, "Fournisseurs", Some(20)),
+            noeud(28, "Fonds propres", None),
+            noeud(2800, "Capital", Some(28)),
+        ]);
+        let mut bs = bilan(vec![ab(1000, "Caisse", dec!(10), AccountType::Asset)]);
+        bs.liabilities = vec![ab(2000, "Fournisseurs", dec!(4), AccountType::Liability)];
+        bs.equity = vec![ab(2800, "Capital", dec!(6), AccountType::Liability)];
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let mut buf = Vec::new();
+        render_grouped_balance_sheet_csv(&AvecGroupes::bilan(bs, &arbre, &o), &mut buf).unwrap();
+        let s = String::from_utf8(buf[3..].to_vec()).unwrap();
+        let l: Vec<&str> = s.split("\r\n").collect();
+        for attendu in [
+            "Actifs;1;groupe;10;Actifs circulants;10.00",
+            "Actifs;2;compte;1000;Caisse;10.00",
+            "Passifs;1;groupe;20;Dettes;4.00",
+            "Passifs;2;compte;2000;Fournisseurs;4.00",
+            "CapitauxPropres;1;groupe;28;Fonds propres;6.00",
+            "CapitauxPropres;2;compte;2800;Capital;6.00",
+        ] {
+            assert!(l.contains(&attendu), "{attendu:?} absent de {l:?}");
+        }
+        // Et rien d'autre dans les sections : une ligne par ligne groupée.
+        for (section, n) in [("Actifs;", 2), ("Passifs;", 2), ("CapitauxPropres;", 3)] {
+            let vues = l.iter().filter(|x| x.starts_with(section)).count();
+            assert_eq!(vues, n, "{section} dans {l:?}");
+        }
+    }
+
+    /// AC-5 (revue P2, L1) — le compte de résultat groupé en CSV : produits et
+    /// charges sous leurs groupes, `Total produits`, `Total charges` et
+    /// `ResultatNet` (arrondi au centime) avec deux cellules vides de plus.
+    #[test]
+    fn compte_de_resultat_csv_groupe() {
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let env = AvecGroupes::compte_de_resultat(
+            resultat_essai(),
+            &crate::essai_groupes::arbre_resultat(),
+            &o,
+        );
+        let mut buf = Vec::new();
+        render_grouped_income_statement_csv(&env, &mut buf).unwrap();
+        let s = String::from_utf8(buf[3..].to_vec()).unwrap();
+        let l: Vec<&str> = s.split("\r\n").collect();
+        assert_eq!(
+            l[..9],
+            [
+                "Section;Niveau;TypeLigne;NumeroCompte;NomCompte;Solde",
+                "Produits;1;groupe;3;Produits d'exploitation;150.00",
+                "Produits;2;compte;3000;Ventes;100.00",
+                "Produits;2;compte;3200;Services;50.00",
+                "Total produits;;;;;150.00",
+                "Charges;1;compte;4000;Achats;40.00",
+                "Total charges;;;;;40.00",
+                "ResultatNet;;;;;110.00",
+                "",
+            ]
+        );
+    }
+
+    /// AC-5 (revue P2, L2) — la colonne en devise du CSV groupé suit les
+    /// **lignes groupées**, non les comptes : un compte en USD replié dans un
+    /// groupe fermé de devises mélangées ne la fait pas paraître.
+    #[test]
+    fn bilan_csv_groupe_ferme_en_devises_melangees_sans_colonne_en_devise() {
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(10, "Liquidités", None),
+            noeud(1000, "Caisse", Some(10)),
+            noeud(1025, "Banque USD", Some(10)),
+        ]);
+        let bs = bilan(vec![
+            ab(1000, "Caisse", dec!(10), AccountType::Asset),
+            usd(1025, "Banque USD", dec!(9), dec!(10)),
+        ]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[10]);
+        let mut buf = Vec::new();
+        render_grouped_balance_sheet_csv(&AvecGroupes::bilan(bs, &arbre, &o), &mut buf).unwrap();
+        let s = String::from_utf8(buf[3..].to_vec()).unwrap();
+        let l: Vec<&str> = s.split("\r\n").collect();
+        assert_eq!(
+            l[..3],
+            [
+                "Section;Niveau;TypeLigne;NumeroCompte;NomCompte;Solde",
+                "Actifs;1;groupe;10;Liquidités;19.00",
+                "Total actifs;;;;;19.00",
             ]
         );
     }

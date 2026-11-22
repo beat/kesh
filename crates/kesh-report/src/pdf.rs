@@ -1182,7 +1182,8 @@ const GROUPE_RETRAIT_MAX_MM: f32 = 5.0 * GROUPE_RETRAIT_PAS_MM;
 /// Longueur maximale du libellé d'une ligne groupée **sans devise**, au retrait
 /// nul : de `MARGIN_LEFT_MM + 25` (40 mm) au plus long montant plausible, qui
 /// commence vers 171,6 mm (gras : 171,3) — 48 caractères à 2,7 mm la capitale
-/// grasse tiennent dans 130 mm. Le rendu à plat ne tronque pas le nom d'un
+/// grasse moyenne tiennent dans 130 mm (des capitales larges, `M` ou `W`, à la longueur maximale
+/// recouvriraient le montant, comme au rendu à plat en devise). Le rendu à plat ne tronque pas le nom d'un
 /// compte CHF ; le rendu groupé, qui le décale, si.
 const GROUPE_NOM_MAX_CHARS: usize = 48;
 
@@ -4316,6 +4317,37 @@ mod tests {
                 "1026 Dollars B USD 10.01 9.01",
             ]
         );
+    }
+
+    /// AC-3 (revue P2, L2) — la colonne en devise du PDF groupé suit les
+    /// **lignes groupées**, non les comptes : un compte en USD replié dans un
+    /// groupe fermé de devises mélangées ne fait paraître ni « Devise » ni
+    /// « CHF » en tête de colonne. Sonde : le même rapport groupé ouvert, où la
+    /// ligne du compte porte sa devise, les fait paraître.
+    #[test]
+    fn bilan_groupe_ferme_en_devises_melangees_sans_colonne_en_devise() {
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(10, "Liquidités", None),
+            noeud(1000, "Caisse", Some(10)),
+            noeud(1025, "Banque USD", Some(10)),
+        ]);
+        let bs = bilan(vec![
+            ab(1000, "Caisse", dec!(10), AccountType::Asset),
+            usd(1025, "Banque USD", dec!(9), dec!(10)),
+        ]);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let rendre = |fermes: &[i64]| {
+            let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], fermes);
+            let env = AvecGroupes::bilan(bs.clone(), &arbre, &o);
+            crate::texte_pdf::lignes(&render_grouped_balance_sheet_pdf(&env, &ctx).unwrap())
+        };
+        let ferme = rendre(&[10]);
+        assert!(
+            !ferme.iter().any(|x| x.starts_with("Devise") || x == "CHF"),
+            "{ferme:?}"
+        );
+        let ouvert = rendre(&[]);
+        assert!(ouvert.contains(&"Devise CHF".to_string()), "{ouvert:?}");
     }
 
     /// AC-3 — garder-avec-la-suite : un titre de groupe ouvert ne reste pas

@@ -1,6 +1,6 @@
 # Story 46-3 : PDF et CSV du bilan et du compte de résultat par groupes
 
-Status: review
+Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D8, D9 (étendue), Q2, Q3 ; FR-46-3, FR-46-8,
 FR-46-9, FR-46-11 ; NFR-46-1, NFR-46-2. Release visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1,
@@ -453,3 +453,14 @@ Journaux hors dépôt, `kesh-gate-logs/s46-3/` : `t1-ecrire.log` (fixtures au co
   (`5addbcc1`) : M1, M2, M3, L1 (garde du zéro négatif rétablie, seul changement de production), L3 (manuel), L6
   corrigés ; L2, L4, L5 notés au Dev Agent Record ; six tests, neuf mutations tuées, gate nextest 6225/6225. Prompt de
   la passe P2 (complète, Opus) : `kesh-gate-logs/s46-3/revue-p2-prompt.md`. Tendance : P1 0/0/3/6.
+- 2026-11-22 — **Revue de code P2** (Claude Opus 5.5, complète, une lentille, contexte frais, à `ae37d9d5`) : 0 C / 0 H /
+  0 M / 6 L, la remédiation de la P1 relue et vérifiée ; boucle close. **Remédiation sans toucher la production** :
+  L1 (CSV groupé : `bilan_csv_groupe_chaque_section_porte_ses_lignes`, `compte_de_resultat_csv_groupe`), L2 (colonne en
+  devise d'un groupe fermé en devises mélangées : `bilan_csv_groupe_ferme_en_devises_melangees_sans_colonne_en_devise`,
+  `bilan_groupe_ferme_en_devises_melangees_sans_colonne_en_devise`), L4 et L5 (doc-comments de `write_grouped_rows`,
+  `format_two_decimals`, `api-external.md`, manuel : limites par niveau de retrait), L6 (doc-comment de
+  `GROUPE_NOM_MAX_CHARS` nuancé) ; quatre tests neufs ; cinq mutations jouées une à une dans une copie hors dépôt
+  (`kesh-gate-logs/s46-3/mutations-p2.log`) : N7, N7b, N13, N14, N15, toutes tuées sur une assertion nommée. L3 (suffixe
+  « (solde propre) » tronqué, production) et les L2, L4, L5 de la P1 sont écrites dans
+  `kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md`, à ouvrir. Tendance : P1 0/0/3/6 → P2 0/0/0/6. Modèles : Opus 5.5
+  (développement, P1 et P2).

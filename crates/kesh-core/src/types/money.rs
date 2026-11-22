@@ -95,7 +95,7 @@ impl Money {
 /// [`Money::round_to_centimes`] : `10.0050` → `10.01`, `-10.0050` → `-10.01`.
 /// Un `format!("{:.2}", d)` sur un `Decimal`, lui, **tronque** (#1245) :
 /// `10.0050` y sort `10.00`. Un résidu négatif de moins d'un demi-centime
-/// (`-0.004`) sort `0.00`, sans signe, comme un zéro signé (`-0.00`).
+/// (`-0.004`) sort `0.00`, sans signe ; un zéro signé (`-0.00`) aussi.
 ///
 /// ⚠️ **Provisoire, à remplacer par la 48-11 à l'intégration** (Story 46-3,
 /// décision du responsable de l'Epic 46 du 2026-11-22) : remplaçant minimal de
