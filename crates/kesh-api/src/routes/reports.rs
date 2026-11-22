@@ -35,11 +35,13 @@ use kesh_report::{
     JournalReport, LigneBalanceGroupee, PdfContext, ProjectExpensesReport, ProjectReturnReport,
     ReportPeriod, SectionsBilan, SectionsResultat, TrialBalance, VatReport,
     render_aged_receivables_csv, render_balance_sheet_csv, render_balance_sheet_pdf,
-    render_general_ledger_csv, render_general_ledger_pdf, render_income_statement_csv,
-    render_income_statement_pdf, render_journal_report_csv, render_journal_report_pdf,
-    render_project_expenses_csv, render_project_expenses_pdf, render_project_return_csv,
-    render_project_return_pdf, render_trial_balance_csv, render_trial_balance_pdf,
-    render_vat_report_csv, render_vat_report_pdf,
+    render_general_ledger_csv, render_general_ledger_pdf, render_grouped_balance_sheet_csv,
+    render_grouped_balance_sheet_pdf, render_grouped_income_statement_csv,
+    render_grouped_income_statement_pdf, render_income_statement_csv, render_income_statement_pdf,
+    render_journal_report_csv, render_journal_report_pdf, render_project_expenses_csv,
+    render_project_expenses_pdf, render_project_return_csv, render_project_return_pdf,
+    render_trial_balance_csv, render_trial_balance_pdf, render_vat_report_csv,
+    render_vat_report_pdf,
 };
 use serde::Deserialize;
 
@@ -442,6 +444,7 @@ pub async fn export_balance_sheet(
     State(state): State<AppState>,
     Extension(current_user): Extension<CurrentUser>,
     Query(query): Query<ExportQuery>,
+    Query(paires): Query<Vec<(String, String)>>,
 ) -> Result<Response, AppError> {
     let format = validate_format(&query.format)?;
 
@@ -456,18 +459,23 @@ pub async fn export_balance_sheet(
     let start = std::time::Instant::now();
 
     let acces = ContexteAcces::depuis_api(&current_user);
+    // Story 46-3 (AC-1) : format, puis accès, puis groupes — l'ordre des
+    // routes JSON ; `ExportQuery` reste inchangé (paires brutes).
+    acces.exiger(rapports::EXIGENCES_BILAN.export)?;
+    let groupes = groupes_de(&paires)?;
     let lecture = state.lecture();
-    let rapport = rapports::bilan(&acces, &lecture, query.demande(), Export(format)).await?;
-
+    let rapport =
+        rapports::bilan_par_groupes(&acces, &lecture, query.demande(), groupes, Export(format))
+            .await?;
     let (ctx, company_name) = load_pdf_context(&acces, &lecture).await?;
     let period = attendu(rapport.periode())?.clone();
 
     let body = rapport
         .exporter(&state.trace(), |report| {
             let body: Vec<u8> = match format {
-                ExportFormat::Pdf => render_balance_sheet_pdf(&report.rapport, &ctx)?,
+                ExportFormat::Pdf => render_grouped_balance_sheet_pdf(report, &ctx)?,
                 ExportFormat::Csv => {
-                    render_csv_to_vec(|w| render_balance_sheet_csv(&report.rapport, w))?
+                    render_csv_to_vec(|w| render_grouped_balance_sheet_csv(report, w))?
                 }
             };
             mesurer(&span, start, &body);
@@ -574,6 +582,7 @@ pub async fn export_income_statement(
     State(state): State<AppState>,
     Extension(current_user): Extension<CurrentUser>,
     Query(query): Query<ExportQuery>,
+    Query(paires): Query<Vec<(String, String)>>,
 ) -> Result<Response, AppError> {
     let format = validate_format(&query.format)?;
 
@@ -588,18 +597,28 @@ pub async fn export_income_statement(
     let start = std::time::Instant::now();
 
     let acces = ContexteAcces::depuis_api(&current_user);
+    // Story 46-3 (AC-1) : format, puis accès, puis groupes — l'ordre des
+    // routes JSON ; `ExportQuery` reste inchangé (paires brutes).
+    acces.exiger(rapports::EXIGENCES_COMPTE_DE_RESULTAT.export)?;
+    let groupes = groupes_de(&paires)?;
     let lecture = state.lecture();
-    let rapport =
-        rapports::compte_de_resultat(&acces, &lecture, query.demande(), Export(format)).await?;
+    let rapport = rapports::compte_de_resultat_par_groupes(
+        &acces,
+        &lecture,
+        query.demande(),
+        groupes,
+        Export(format),
+    )
+    .await?;
     let (ctx, company_name) = load_pdf_context(&acces, &lecture).await?;
     let period = attendu(rapport.periode())?.clone();
 
     let body = rapport
         .exporter(&state.trace(), |report| {
             let body: Vec<u8> = match format {
-                ExportFormat::Pdf => render_income_statement_pdf(&report.rapport, &ctx)?,
+                ExportFormat::Pdf => render_grouped_income_statement_pdf(report, &ctx)?,
                 ExportFormat::Csv => {
-                    render_csv_to_vec(|w| render_income_statement_csv(&report.rapport, w))?
+                    render_csv_to_vec(|w| render_grouped_income_statement_csv(report, w))?
                 }
             };
             mesurer(&span, start, &body);
