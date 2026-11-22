@@ -206,6 +206,12 @@ fn bornes_des_schemas() {
         assert_eq!(l["minimum"], json!(1), "{nom} minimum");
         assert_eq!(mesurees[nom], (max, defaut), "{nom} : valeurs de la fiche");
     }
+    // `kesh_balance` : le maximum avec `detailLevel` (mode groupé) est porté
+    // par `dependentSchemas`, et vaut la constante du code.
+    assert_eq!(
+        schema("kesh_balance")["dependentSchemas"]["detailLevel"]["properties"]["limit"]["maximum"],
+        json!(outils::rapports::LIMITE_MAX_MCP_BALANCE_GROUPEE)
+    );
 }
 
 /// Story 32-9b — le statut d'une pièce dit une seule valeur partout : la
@@ -2780,11 +2786,17 @@ async fn tailles_mesurees_en_devise(pool: MySqlPool) {
     // `ouverts` non vide) et la dernière tranche pleine, qui porte le
     // sous-total en pied du groupe (genre `subtotal`).
     let max_g = outils::rapports::LIMITE_MAX_MCP_BALANCE_GROUPEE;
+    let total_groupe = structure(
+        &b.appeler(&jeton, "kesh_balance", groupee(1)).await,
+        "kesh_balance groupée",
+    )["total"]
+        .as_i64()
+        .unwrap();
     let r = b
         .appeler(
             &jeton,
             "kesh_balance",
-            json!({"fiscalYearId": p.exercice_id, "limit": max_g, "offset": 58 - max_g,
+            json!({"fiscalYearId": p.exercice_id, "limit": max_g, "offset": total_groupe - max_g,
                    "detailLevel": "all", "subtotalPosition": "footer", "open": [groupe]}),
         )
         .await;

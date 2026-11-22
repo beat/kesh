@@ -94,7 +94,7 @@ macro_rules! description_groupes {
     ($plates:literal) => {
         concat!(
             regles_groupes!(),
-            "Avec detailLevel, limit vaut 20 par défaut et 37 au plus (23 et 42 à plat) ; groupes porte l'écho des \
+            "Avec detailLevel, groupes porte l'écho des \
              choix retenus et les lignes groupées de chaque section (genre group, account, own \
              ou subtotal ; un identifiant inconnu est ignoré) et les listes plates (",
             $plates,
@@ -563,7 +563,8 @@ impl McpTool for KeshBalance {
          (devise, code ISO 4217) porte aussi ses colonnes dans sa devise (champs suffixés \
          « devise », null sur un compte en CHF) ; les totaux restent en CHF. ",
             regles_groupes!(),
-            "Avec detailLevel, limit vaut 20 par défaut et 37 au plus (23 et 42 à plat) ; groupes porte l'écho des choix retenus et, dans groupes.lignes, \
+            "Avec detailLevel, limit vaut 20 par défaut et 37 au plus (le schéma annonce 42 et 23, bornes à plat, et \
+             porte 37 en dependentSchemas) ; groupes porte l'écho des choix retenus et, dans groupes.lignes, \
              les lignes groupées (genre group, account, own ou subtotal ; un identifiant inconnu \
              est ignoré) ; la liste plate lignes est vide, et la tranche (limit, offset) porte \
              sur les lignes groupées, que total compte : un groupe et son sous-total en pied \
@@ -574,7 +575,7 @@ impl McpTool for KeshBalance {
     }
 
     fn schema_entree(&self) -> &'static str {
-        r#"{"type":"object","properties":{"fiscalYearId":{"type":"integer","minimum":1},"periodStart":{"type":"string","format":"date"},"periodEnd":{"type":"string","format":"date"},"limit":{"type":"integer","minimum":1,"maximum":42,"default":23},"offset":{"type":"integer","minimum":0},"detailLevel":{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]},"subtotalPosition":{"type":"string","enum":["header","footer"]},"open":{"type":"array","items":{"type":"integer"},"maxItems":500},"closed":{"type":"array","items":{"type":"integer"},"maxItems":500}},"required":["fiscalYearId"],"additionalProperties":false}"#
+        r#"{"type":"object","properties":{"fiscalYearId":{"type":"integer","minimum":1},"periodStart":{"type":"string","format":"date"},"periodEnd":{"type":"string","format":"date"},"limit":{"type":"integer","minimum":1,"maximum":42,"default":23},"offset":{"type":"integer","minimum":0},"detailLevel":{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]},"subtotalPosition":{"type":"string","enum":["header","footer"]},"open":{"type":"array","items":{"type":"integer"},"maxItems":500},"closed":{"type":"array","items":{"type":"integer"},"maxItems":500}},"required":["fiscalYearId"],"dependentSchemas":{"detailLevel":{"properties":{"limit":{"maximum":37}}}},"additionalProperties":false}"#
     }
 
     fn portee(&self) -> Portee {
@@ -963,6 +964,8 @@ mod tests {
             ] {
                 assert!(d.contains(mot), "{mot} : {d}");
             }
+            // Ni le bilan ni le compte de résultat n'ont de `limit`.
+            assert!(!d.contains("limit"), "{d}");
         }
         assert!(
             KeshBilan

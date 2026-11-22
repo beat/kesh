@@ -150,11 +150,12 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    de `regrouper` sur `pme.json`, comptes de groupe sans solde propre, script
    `kesh-gate-logs/s46-specs/sim-balance-pme.py`) : 42 au niveau 2 et 97 à `all` quand des comptes des deux natures
    portent un montant dans `6` à `8` (ces groupes dissous) ; **au plus 43 au niveau 2 et 107 à `all`** quand aucun
-   groupe n'est dissous (p. ex. balance entièrement nulle à `all`). La conclusion ne change pas. Bornes : le schéma JSON est statique (`limit` maximum 42, défaut 23, ceux du mode plat) et la **description** dit les bornes du mode groupé (37 au plus, 20 par défaut), le code les appliquant selon `detailLevel` ; la
+   groupe n'est dissous (p. ex. balance entièrement nulle à `all`). La conclusion ne change pas. Bornes : le schéma JSON annonce `limit` maximum 42, défaut 23 (mode plat) et porte le maximum du mode groupé (37) par un `dependentSchemas` sur `detailLevel` (un `default` conditionnel n'existe pas : le défaut 20 est dit par la **description**), le code appliquant les bornes selon `detailLevel` ; la
    ligne groupée est mesurée (`tailles_mesurees_en_devise` étendu, groupe et pied compris) ; si elle dépasse la plate,
-   les **deux** bornes baissent ensemble, avec `LIMITE_DEFAUT_BALANCE` / `LIMITE_MAX_MCP_BALANCE`
-   (`rapports.rs:25-29`), `bornes_attendues` et la table `mesurees` de `bornes_des_schemas`
-   (`mcp_outils_e2e.rs:98`, `:161-181`) ; chiffre daté dans la doc du module. **Sans argument neuf** (C-46-6a-5) : la
+   le mode groupé a ses **propres** bornes (`LIMITE_DEFAUT_BALANCE_GROUPEE` / `LIMITE_MAX_MCP_BALANCE_GROUPEE`, 20 / 37,
+   `rapports.rs:59-68`), choisies selon `detailLevel`, tandis que `LIMITE_DEFAUT_BALANCE` / `LIMITE_MAX_MCP_BALANCE` (23 / 42)
+   restent celles du plat (`bornes_attendues` et la table `mesurees` de `bornes_des_schemas` portent le plat ; le test
+   `balance_bornes_selon_le_mode` le groupé) ; le schéma porte le maximum groupé par `dependentSchemas` ; chiffre daté dans la doc du module. **Sans argument neuf** (C-46-6a-5) : la
    sortie est celle d'aujourd'hui **au seul champ `groupes: null` près**. Le littéral du commit de base (dates de la
    période en jetons, comme 46-4 AC-2) **reste tel qu'écrit à T0** ; le test en analyse la partie JSON, y ajoute la
    clé `groupes` à `null` au niveau supérieur, la re-sérialise par le même chemin que la sortie
@@ -456,4 +457,13 @@ Journaux hors dépôt, `kesh-gate-logs/s46-6a/` : `t0-capture*.log` (fixtures du
   (`mcp_outils_e2e`, `reports_e2e`, `textes_coherents`, `kesh-report` lib : 282 passés), nextest complet **6208 passés,
   14 ignorés** (journal `kesh-gate-logs/s46-6a/gate-backend.log`) ; pas d'E2E ni de `gate-ci.sh`. Prompt de la passe
   ciblée P2 : `kesh-gate-logs/s46-6a/revue-p2-prompt.md`.
+- 2026-11-22 — **Remédiation de la revue P2 ciblée** (0 C / 0 H / 3 M / 1 L). M1 : la phrase de `limit` sortie de la macro
+  `description_groupes!` (bilan et compte de résultat n'ont pas de `limit`) et le test `descriptions_des_groupes`
+  contrôle qu'aucune de leurs descriptions n'en parle. M2 : `dependentSchemas` sur `detailLevel` porte le maximum 37
+  dans le schéma de `kesh_balance` (le défaut 20 reste dit par la description) ; assertion dans `bornes_des_schemas`.
+  M3 : fiche (AC-6) alignée sur les bornes par mode, références de lignes corrigées. LOW-1 : le total est lu, non
+  codé en dur. Gates : voir ci-dessous.
+  *Gates au dernier commit de code* : fmt, clippy workspace et nextest complet par `test-fast.sh` (**6208 passés, 14
+  ignorés**, `kesh-gate-logs/s46-6a/gate-backend.log`, dont `mcp_outils_e2e` et les `mcp_*`) ; pas d'E2E ni de
+  `gate-ci.sh`. Prompt de la passe ciblée P3 : `kesh-gate-logs/s46-6a/revue-p3-prompt.md`.
 
