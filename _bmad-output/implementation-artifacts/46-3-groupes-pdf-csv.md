@@ -345,6 +345,48 @@ Journaux hors dépôt, `kesh-gate-logs/s46-3/` : `t1-ecrire.log` (fixtures au co
   levé par l'amendement ; à l'intégration de la 48-11, rebrancher `format_swiss_amount_arrondi` et le formateur du CSV
   groupé sur sa fonction, puis retirer `format_two_decimals` si elle ne la reprend pas (fichier d'epic, § dépendances).
 
+- **Remédiation de la revue P1** (commit `5addbcc1`, rapport `kesh-gate-logs/s46-3/revue-p1-rapport.md`, C 0 / H 0 /
+  M 3 / L 6) :
+  - **M1** : `bilan_groupe_equation_arrondie_au_centime` (passif 10.004, résultat 0.001 : termes `10.00` et `0.00`,
+    équation 10.005 → `10.01`, à plat `10.00`) et `compte_de_resultat_groupe_resultat_net_arrondi_au_centime`
+    (110.005 → `110.01`, à plat `110.00`) ; doc-comment de `bilan_groupe_totaux_arrondis_au_centime` restreint aux
+    totaux de section et aux lignes calculées (son équation vaut 10.010, que les deux formateurs écrivent `10.01`).
+  - **M2** : `bilan_csv_groupe_echappe_les_cellules_texte` — numéros `-10`, `+1000` et noms `=1+1`, `@x` d'un groupe et
+    d'un compte, attendus `'-10;'=1+1` et `'+1000;'@x`, montant `-5.00` non neutralisé.
+  - **M3** : `bilan_groupe_libelles_longs_tronques_selon_le_retrait` (noms de 60 caractères aux profondeurs 1 à 4 :
+    « … » à 48, 47, 45, 44 caractères, longueurs écrites en dur, non tirées de `limite_nom_groupe`) et
+    `bilan_groupe_libelle_long_en_devise_tronque_plus_court` (34 et 33 en devise).
+  - **L1** : garde du zéro négatif rétablie dans `format_two_decimals` (seul changement de production) — la mutation
+    « équivalente » M8 du développement ne l'était pas : `-dec!(0.00)` traverse `round_dp_with_strategy` signé ; cas
+    `-0.00` et `-0.0000` ajoutés au test, doc-comment et commentaire corrigés.
+  - **L3** : manuel rendu exact plutôt que code aligné sur le rendu à plat (moins risqué : aucun rendu changé, et la
+    limite protège la colonne des montants d'un nom décalé) — « par groupes, tout libellé de plus de 48 caractères —
+    34 sur une ligne en devise —, un de moins par 2,5 mm de retrait, même celui d'un compte que l'export à plat n'abrège
+    pas ». PDF compilé dans une copie (`make user` après `touch`), aucun « Overfull », phrase relue au texte aplati.
+  - **L6** : `bilan_csv_groupe_devise_footer` — titre ouvert en `footer` d'un groupe en devise : solde, devise et solde
+    en devise vides ; le sous-total les porte.
+  - **Notés, sans correctif** : **L2** (la marge de `GROUPE_NOM_MAX_CHARS` ne vaut que pour la capitale moyenne : un nom
+    de 48 `M` ou `W` gras au plus long montant recouvrirait celui-ci ; même limite que le rendu à plat de la 37-4 en
+    devise, pas de régression ; à reprendre si une mesure par chasse remplace le compte de caractères) ; **L4**
+    (`texte_pdf::lignes` ne distingue pas les pages : deux textes de même ordonnée en fin et en début de page
+    fusionneraient ; extracteur de test seulement, aucun cas réel) ; **L5** (le test de fidélité JSON/PDF n'exerce ni
+    `own`, ni `header`, ni de groupe en devise ; ces genres restent gardés par les tests unitaires).
+  - **Tests ajoutés par la remédiation** (recomptés `grep -cE '^\s*#\[(tokio::)?(test|sqlx::test)'`, de `b46981ba` à
+    `5addbcc1`) : **6** — `pdf.rs` 67 → 71, `csv.rs` 31 → 33 ; `money.rs` 21 inchangé (deux cas ajoutés à un test
+    existant). De `92434d16` à `5addbcc1` : **29**.
+  - **Mutations** des neuf de la revue (copie `git archive` de `5addbcc1` hors dépôt, cible `kesh-wt46s3-mut` à part,
+    supprimées ; témoin non muté vert, 40 passés ; « tuée » = `panicked at` + nom), `mutations-p1.log` : **9 sur 9
+    tuées** — A troncature retirée et B retrait ignoré (les deux tests de troncature), C limite en devise ignorée
+    (`…_en_devise_tronque_plus_court`), E et F `txt()` retiré du numéro ou du nom (`bilan_csv_groupe_echappe_les_cellules_texte`),
+    I devise d'un titre sans montant (`bilan_csv_groupe_devise_footer`), L équation au formateur à plat
+    (`bilan_groupe_equation_arrondie_au_centime`), M résultat net au formateur à plat
+    (`compte_de_resultat_groupe_resultat_net_arrondi_au_centime`), Z garde du zéro négatif retirée
+    (`format_two_decimals_arrondit_puis_formate`).
+  - **Gates** au dernier commit de code `5addbcc1` : `cargo fmt` sans changement, clippy workspace `-D warnings` vert
+    (`clippy-p1.log`) ; `scripts/test-fast.sh --ci` (base `kesh_s463` remise à zéro) **vert**, nextest **6225 exécutés,
+    6225 passés**, 14 ignorés (`gate-backend-p1.log`). Frontend non rejoué : aucun fichier `frontend/` touché. Aucun E2E
+    (aucune spec neuve), pas de `gate-ci.sh` (fin d'epic).
+
 ### File List
 
 - `crates/kesh-core/src/types/money.rs`, `crates/kesh-core/src/types/mod.rs` — `format_two_decimals` (provisoire).
@@ -405,3 +447,9 @@ Journaux hors dépôt, `kesh-gate-logs/s46-3/` : `t1-ecrire.log` (fixtures au co
   documentation ; 23 tests ; gates au dernier commit de code `b46981ba` (Dev Agent Record). Une mutation survivante
   (totaux des rendus groupés au formateur à plat) a fait ajouter deux tests ; une mutation équivalente (garde du zéro
   négatif) a fait retirer la garde. Story en `review` ; prompt de la revue P1 : `kesh-gate-logs/s46-3/revue-p1-prompt.md`.
+- 2026-11-22 — **Revue de code P1** (Claude Opus 5.5, complète, une lentille, contexte frais) : 0 C / 0 H / 3 M / 6 L —
+  trois gardes de test manquantes (mutations survivantes : arrondi de l'équation et du résultat net groupés,
+  neutralisation des formules au CSV groupé, troncature des libellés groupés), pas de défaut de rendu. **Remédiation**
+  (`5addbcc1`) : M1, M2, M3, L1 (garde du zéro négatif rétablie, seul changement de production), L3 (manuel), L6
+  corrigés ; L2, L4, L5 notés au Dev Agent Record ; six tests, neuf mutations tuées, gate nextest 6225/6225. Prompt de
+  la passe P2 (complète, Opus) : `kesh-gate-logs/s46-3/revue-p2-prompt.md`. Tendance : P1 0/0/3/6.
