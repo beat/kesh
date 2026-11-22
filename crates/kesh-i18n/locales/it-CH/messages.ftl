@@ -4079,3 +4079,20 @@ projects-reassign-warning-locked = Registrazioni bloccate fino al { $date }.
 projects-reassign-warning-reports = I rapporti analitici di questo periodo cambieranno.
 projects-reassign-confirm = Conferma
 projects-reassign-done = Conto analitico cambiato.
+
+# Story 46-2 — bilancio e conto economico per gruppi di conti (schermate)
+reports-groups-controls-label = Presentazione per gruppi di conti
+reports-groups-hierarchy = Gerarchia dei gruppi
+reports-groups-level = Livello di dettaglio
+reports-groups-level-n = Livello { $level }
+reports-groups-level-all = Tutti i conti
+reports-groups-level-hint = Le sezioni legali del bilancio restano (Attivi, Passivi, Patrimonio netto). Una visualizzazione ripiegata, in particolare al livello 1, è una visualizzazione di lavoro, non un conto annuale.
+reports-groups-open-all = Apri tutto
+reports-groups-close-all = Chiudi tutto
+reports-groups-subtotals = Subtotali
+reports-groups-subtotals-header = sulla riga del titolo
+reports-groups-subtotals-footer = in fondo
+reports-groups-toggle-open = Apri il gruppo { $number } { $name }
+reports-groups-toggle-close = Chiudi il gruppo { $number } { $name }
+reports-groups-subtotal = Totale { $name }
+reports-groups-own-balance = { $name } (saldo proprio)

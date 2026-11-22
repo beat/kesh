@@ -1158,7 +1158,11 @@ const ATTENDU = {
 	// garde après la fusion : **3499** (« expected 3499 to be +0 »,
 	// `kesh-gate-logs/fix-api-parent-compte/reprise-v0190-i18n-1.log`), non additionné — il égale
 	// 3495 (0.19.0) + 4 (le champ parent du dialogue de modification), les deux côtés gardés.
-	sitesTotal: 3499,
+	// Story 46-2 (2026-11-22) : **3499 → 3515**, relevé par la garde (« expected 3515 to be 3499 »,
+	// `kesh-gate-logs/s46-2/front-test-unit.log`) — la barre de présentation par groupes
+	// (`GroupingControls.svelte`) et les lignes groupées (`GroupedReportRows.svelte`), bloc
+	// `reports-groups-*`.
+	sitesTotal: 3515,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/

@@ -423,8 +423,12 @@ const SUFFIXES = ['Label', 'Text', 'Display'];
  * (`reconciliation/gap-label.ts`, tout par `i18nMsg`), séparé de `gapSenseLabel` pour la
  * minuscule en milieu de phrase ; `ecartee` **21**, `conforme` **108 → 109**, relevés par la
  * garde (`kesh-gate-logs/e433/rem2-vitest-1.log`), non additionnés.
+ *
+ * **130 → 131** (Story 46-2) : `toggleLabel` (`reports/GroupedReportRows.svelte`, tout par
+ * `i18nMsg`) ; `ecartee` **21**, `conforme` **109 → 110**, relevés par la garde
+ * (`kesh-gate-logs/s46-2/front-test-unit.log`), non additionnés.
  */
-const CANDIDATES_ATTENDUES = 130;
+const CANDIDATES_ATTENDUES = 131;
 
 /** Les trois délimiteurs de littéral en JS/TS. */
 const QUOTES = ["'", '"', '`'];
@@ -941,7 +945,7 @@ describe('libellés en dur — l’angle mort #255', () => {
 			else if (c.retours.length > 0) classes.ecartee += 1;
 			else classes.conforme += 1;
 		}
-		expect(classes).toEqual({ nonAnalysee: 0, enViolation: 0, ecartee: 21, conforme: 109 });
+		expect(classes).toEqual({ nonAnalysee: 0, enViolation: 0, ecartee: 21, conforme: 110 });
 		// La somme est recalculée depuis les classes, jamais depuis le total qu'elle contrôle.
 		const somme = Object.values(classes).reduce((a, b) => a + b, 0);
 		expect(somme).toBe(CANDIDATES_ATTENDUES);
