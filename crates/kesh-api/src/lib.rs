@@ -1000,6 +1000,10 @@ pub fn build_router_avec_registre(
             "/api/v1/paypal/accept",
             post(routes::paypal::accept_proposals),
         )
+        // Story 39-11c (Epic 39) : revue et acceptation Wise, sur le même
+        // moteur (mêmes rôles et clés ; acceptation rejouée sur interblocage).
+        .route("/api/v1/wise/review", get(routes::wise::review))
+        .route("/api/v1/wise/accept", post(routes::wise::accept_proposals))
         // Story v016-2a (#816) : saisir un relevé à la main (Comptable+, clés
         // `read-write` comme l'import). Corps JSON borné par une limite PROPRE,
         // indépendante de `KESH_BANK_IMPORT_MAX_MB` (revue de code P1, E1) :

@@ -1,6 +1,6 @@
 # Story 39-11c : rapprochement des lignes Wise — frais, conversions, autre côté déjà passé (virements, versements Stripe), règles, écarts
 
-Status: ready-for-dev
+Status: done
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, numéros de ligne relevés au code de `origin/main` (`fd04099f`),
 revérifiés à la validation P1. Epic 39, **phase 1 KISS** (G5 à G10, § *Ce que la phase 1 attend de l'Epic 38*).
@@ -153,14 +153,56 @@ ce qu'il ne sait pas rapprocher, afin de tenir mon compte Wise sans saisie et sa
 8. **AC-8 — Aucune migration, i18n.** Genres et motifs calculés ; libellés des motifs et codes neufs aux quatre
    locales (`crates/kesh-i18n/locales/*`), `crates/kesh-api/src/errors.rs`.
 
+## Amendement du 21.11
+
+Décisions du responsable de l'epic du 21.11 (signature des epics), intégrées avant le développement ; elles
+l'emportent sur les AC ci-dessus là où elles diffèrent.
+
+- **A-1 — Paiement par carte converti : une écriture groupée** (décision (b)). Le CSV importé est celui « avec frais
+  indiqués séparément », un fichier par solde. Un paiement par carte `CARD-<id>` est **converti** quand au moins une de
+  ses lignes porte le segment de conversion écrit par l'import (`DE→CHF <montant> au cours <cours>`, 39-11b) ; ses
+  lignes `CARD-<id>` (une par solde débité) et `FEE-CARD-<id>` **en attente**, sur tous les soldes du libellé, sont
+  regroupées avant toute proposition et sortent du classement ligne à ligne (ni frais, ni règle). Proposition
+  `card_group { bankTransactionIds, ruleId, counterpartyAccountId }` : la règle est la première qui correspond à la
+  ligne principale (celle en CHF, à défaut la `CARD-<id>` de plus petit identifiant), de contrepartie **en CHF**.
+  Écriture unique du journal *Banque* : **la charge au montant du marchand** (somme des lignes en CHF et des montants
+  CHF des segments de conversion, frais exclus), **chaque solde Wise crédité de sa part** (ses lignes `CARD-` et
+  `FEE-CARD-`, au cours mensuel retenu pour un solde en devise), **la différence de change sur sa ligne** (compte de
+  perte ou de gain de change de la société ; absent → `failed[]` `FX_ACCOUNT_INVALID`). Toutes les transactions du
+  groupe passent `reconciled` sur cette écriture ; la règle compte une application. Refus de forme (une ligne
+  positive, un segment vers une autre devise que le CHF, un segment absent sur une ligne en devise) → « à examiner »,
+  motif `card_group_unsupported` ; aucune règle → `card_group_no_rule`. Le marchand en devise étrangère (segment vers
+  une autre devise que le CHF) n'est pas un groupe : sa ligne suit les règles, ses frais le compte de frais (jamais vu
+  en partielle). Rejugement à l'acceptation : l'ensemble des lignes en attente du paiement, relu sous les verrous, est
+  celui de la proposition (sinon périmée, `card_group_changed`).
+- **A-2 — Annuler une ligne d'un paiement groupé** : l'écriture est contre-passée (aucune ligne n'est « l'autre
+  côté » d'une autre : toutes au débit) et **toutes** les transactions encore rattachées à l'écriture redeviennent en
+  attente avec elle, dans le même geste (`reconciliation_cancel::cancel_in_tx`, étape (5)), au lieu de rester
+  rapprochées d'une écriture contre-passée. Inerte pour l'existant : hors groupe, une écriture qui n'est pas un retrait
+  seul n'a qu'une transaction rattachée. Changement de `kesh-db` : gate complet.
+- **A-3 — Ce qu'on n'accepte pas se traite à la main par l'API** (décision (c)) : une proposition non acceptée reste
+  en attente et reparaît à la revue suivante ; une ligne se traite à la main par une écriture
+  (`POST /api/v1/journal-entries`, ligne en devise comprise) puis son rattachement
+  (`POST /api/v1/reconciliation/transactions/{id}/link-entry`), une écriture par ligne. Un test HTTP le joue sur un paiement
+  groupé. L'écran viendra plus tard.
+- **A-4 — Contrepartie d'une règle** (décision (d)) : en CHF ou dans la devise de la transaction, déjà dans le moteur
+  (`matching_rule`, `COUNTERPARTY_CURRENCY_MISMATCH`) ; en CHF seulement pour un paiement groupé.
+- **A-5 — Classement précisé** (constaté sur les fixtures de 39-11a) : un dépôt porte aussi le préfixe `BALANCE`
+  (« Argent reçu de Stripe », type de détail `DEPOSIT`) ; `Conversion` exige donc, en plus du préfixe `BALANCE` ou
+  `CONVERSION_ORDER`, le segment de conversion ; le versement Stripe se juge **avant** la conversion. Ordre : frais,
+  versement Stripe, conversion, virement (`TRANSFER`), autre. Le virement est un genre propre (`transfer`) : la revue
+  commune le laisse à Wise, qui lit l'autre côté déjà passé puis, à défaut, les règles (AC-4, AC-5).
+- La correction du lecteur pour un même `CARD-<id>` débité puis recrédité (`DuplicateId`) est la story 39-11a2 ; les
+  tests de cette story n'en ont pas besoin.
+
 ## Tâches
 
-- [ ] T0 — Lire 38-11c telle que développée ; noter chaque fonction réutilisée ou généralisée (G10) ; constater si le
+- [x] T0 — Lire 38-11c telle que développée ; noter chaque fonction réutilisée ou généralisée (G10) ; constater si le
   constructeur de conversion à une écriture et le prédicat étendu y sont.
-- [ ] T1 — `wise.rs` : `classify`, revue pure (AC-2, AC-4 à AC-6), tests purs.
-- [ ] T2 — Conversions : paire, constructeur commun, prédicat de l'autre côté s'il manque (AC-3).
-- [ ] T3 — Routes minces de revue et d'acceptation sur le moteur de 38-11c ; registre, trace (AC-1, AC-7).
-- [ ] T4 — Codes, i18n (AC-8) ; non-régression.
+- [x] T1 — `wise.rs` : `classify`, revue pure (AC-2, AC-4 à AC-6), tests purs.
+- [x] T2 — Conversions : paire, constructeur commun, prédicat de l'autre côté s'il manque (AC-3).
+- [x] T3 — Routes minces de revue et d'acceptation sur le moteur de 38-11c ; registre, trace (AC-1, AC-7).
+- [x] T4 — Codes, i18n (AC-8) ; non-régression.
 
 ## Stratégie de tests
 
@@ -247,3 +289,268 @@ depuis votre banque, versement Stripe), le reste par vos règles ; ce qui ne se 
   `payout_without_receipt`) → la 39-11c seule propose le rattachement de la réception Wise à l'écriture du versement.
 - 2026-11-20 — Validation P5 ciblée (Claude Sonnet 5.5, passe ciblée, contexte frais, rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P5-ciblee.md`) : 0 C/H/M, 2 LOW remédiés — G4, 39-11b AC-5 et 39-11c AC-6 disent la même chose (l'import juge à son instant, la revue relit la même règle sur l'état présent) ; 39-11c AC-3 : 40-7c n'écrit le texte qu'en dernier recours.
 - 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : `PROVIDER_PROPOSAL_STALE` et `provider.proposal_accepted` servis (replis `WISE_PROPOSAL_STALE` et `wise.proposal_accepted` retirés) ; `link_sale` → `link_entry` (38-11c2) ; moteur servi générique par 38-11c2 (plus de généralisation G10 par défaut) ; rattachement en devise = 38-11c1 AC-1, prédicat de l'autre côté = 38-11c1 AC-1b (repli seulement si l'Epic 38 arrive après). Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.
+- 2026-11-22 — développement (Claude Opus 5.5), branche `story/39-11c` partie d'`epic/39-wise` (`3a9861f0`) ;
+  amendement du 21.11 écrit avant le code (`07f04c4e`). Voir le Dev Agent Record.
+- 2026-11-22 — remédiation de la revue de code P1 (1 MEDIUM, 9 LOW) : garde `card_group_statements_missing` (M1), tests
+  du gain de change et de la règle forgée (L1), échelle du montant CHF (L2), prédicats d'annulation alignés (L5), segment lu
+  à sa place (L7), fixture sans raison sociale réelle (L4). Voir le Dev Agent Record ; passe P2 à lancer.
+- 2026-11-22 — revue de code P2 (passe complète, une lentille ; 0 C, 0 H, 2 MEDIUM, 5 LOW, rapport
+  `kesh-gate-logs/s39-11c/revue-p2-rapport.md`), remédiée (`5c62870f`) : part déjà rapprochée d'un paiement groupé
+  (M1-P2, `card_group_partly_reconciled`), couverture d'une date par la continuité des relevés (M2-P2,
+  `bank_imports::date_coverage`), solde en devise exigé quand ses relevés encadrent la date sans se suivre (écart au remède
+  « chaque solde », limite écrite), L-a à L-d. Trend : P1 1 MEDIUM → P2 2 MEDIUM (défauts de la garde ajoutée en P1) ;
+  passe P3 ciblée à lancer (`kesh-gate-logs/s39-11c/revue-p3-prompt.md`).
+- 2026-11-22 — revue de code P3 (passe complète, une lentille ; 0 C, 0 H, 1 MEDIUM, 4 LOW, rapport
+  `kesh-gate-logs/s39-11c/revue-p3-rapport.md`), remédiée (`3fa3c97f`) : M1-P3 traité par la documentation et un test,
+  non par le code (le remède de code retiré : il contredisait l'amendement A-3, et la prémisse « même charge écrite deux
+  fois » est fausse au chiffre) ; L1 corrigé (frais passé seul sans effet sur le groupe) ; L2 tests de `Gap` (relevé sans
+  solde d'ouverture) et `NoPrevious` ; L3, L4 limites écrites, notées pour le manuel (fiche de la 39-11d). Trend : P1 1
+  MEDIUM → P2 2 MEDIUM → P3 1 MEDIUM (une promesse de la documentation) ; passe P4 ciblée à lancer
+  (`kesh-gate-logs/s39-11c/revue-p4-prompt.md`).
+
+## Dev Agent Record
+
+### T0 — ce que 38-11c2 livre et ce que la story réutilise
+
+Moteur commun servi tel quel (aucune généralisation G10) : `load_review_in_tx`, `prepare_accept`, `accept_once`,
+`PreparedAccept::finish`, `accept_common` (`fee`, `rule`, `link_entry`, `conversion`), `rejudge`, `check_counterparty`,
+`month_rate`, `mark_reconciled`, `entry_refusal`, `db_refusal`, `stale` (`crates/kesh-api/src/routes/provider_accept.rs`) ;
+`ProviderSpec` (`linkable`, `ruleable`, `conversion_unpaired` en `Placement::Gap`), `ProviderKind::Specific`,
+`Review::map_proposals`, `matching_rule` (`crates/kesh-reconciliation/src/provider_review.rs`). Le plan et le
+constructeur de conversion (`plan_conversion`, `create_provider_conversion_in_tx`) et le prédicat de l'autre côté à deux
+branches (`other_side_predicate`, 38-11c1 AC-1b) **y sont** : cette story ne les touche pas (T2 réduit à la paire par
+le même identifiant, `wise::conversion_match`). Deux retouches du moteur : `record_rule_applied` extrait d'`accept_rule`
+(compteur et trace `reconciliation_rule.applied`, appelé aussi par le paiement groupé, DRY) et `failed` rendu public.
+Champ `known_chf` de `ProviderEntry` : non employé (le paiement groupé écrit sa propre écriture à plusieurs lignes).
+
+### Ce qui a été écrit
+
+- `crates/kesh-reconciliation/src/wise.rs` (neuf, pur) : `classify` (ordre de l'amendement A-5), `exchange_of`
+  (segment de conversion de 39-11b, forme exacte seulement), `SPEC`, `WiseProposal` (`card_group` + genres communs,
+  désérialisation `untagged`), `card_groups` / `judge_card_group` / `shares_by_account` (A-1), `fees_without_origin`,
+  `chf_rule_accounts`.
+- `crates/kesh-api/src/routes/wise.rs` (neuf) : `GET /api/v1/wise/review` (revue commune, puis paiements groupés,
+  autre côté déjà passé filtré à 5 jours en Rust, règles des virements, écarts `fee_without_origin` et `balance_gap`
+  par `bank_imports::continuity_gap`) ; `POST /api/v1/wise/accept` (`accept_proposals`, enveloppe
+  `retry_app_on_deadlock("wise::accept")`, jamais `retry_with`, nom ≠ `post_accept`) ; `impl EngineProposal for
+  WiseProposal` ; `accept_card_group` (rejugement de l'ensemble des lignes, de la règle, contrepartie CHF, écriture
+  charge / parts / différence de change, `FX_ACCOUNT_INVALID` sans compte de différence).
+- `crates/kesh-db/src/repositories/provider_review.rs` : `pending_by_transaction_ids`, `opening_statements_in_period`,
+  `fx_difference_accounts`.
+- `crates/kesh-db/src/repositories/reconciliation_cancel.rs` + `settlement_cancellation.rs` (A-2) : prédicat unique
+  `PROVIDER_GROUP_SIBLING` (même `provider` et `provider_account`) ; à l'annulation d'une écriture contre-passée, les
+  autres lignes du même paiement de prestataire redeviennent en attente (étape 5 bis, comptes ouverts contrôlés, une
+  trace `reconciliation.cancelled` chacune, `groupedWith`) ; le rang 3 de la vue et du geste ne les compte plus
+  comme blocage. Toute autre transaction rattachée reste refusée `MATCHED_BANK_TRANSACTION` (test existant
+  `another_transaction_on_the_same_entry_still_refuses` vert sans changement — il avait rougi sur une première forme
+  qui remettait en attente **toute** autre transaction : corrigée avant commit).
+- Routes (`lib.rs`), registre (`audit_route_registry.rs` : `wise::accept_proposals` `Traced, Rejouee` ; totaux 153→154
+  tracées, 161→162 routes, 31→32 rejouées, 165→166), inventaire des comptes clos (`bank_account_closed_inventory.rs` :
+  44→45 sites, raison de `cancel_in_tx` complétée), manuel d'administration (« 154 des 162 routes », « 154 + 4 + 4 =
+  162 », `.tex` seul), `docs/api-external.md` (section « Le rapprochement d'un compte Wise »).
+- **AC-8 i18n** : aucun code d'erreur HTTP neuf (les refus réutilisent `PROVIDER_PROPOSAL_STALE`, `FX_ACCOUNT_INVALID`,
+  `COUNTERPARTY_CURRENCY_MISMATCH`…) ; les motifs de la revue ne sont traduits nulle part (aucun écran, comme ceux de
+  PayPal) : aucune clé ajoutée. Aucune migration.
+
+### Tests (recomptés à `c07265c1`, périmètre `3a9861f0..HEAD`)
+
+- 13 tests purs neufs (`#[test]` de `crates/kesh-reconciliation/src/wise.rs`).
+- 9 tests HTTP neufs (`#[sqlx::test]` de `crates/kesh-api/tests/wise_reconciliation_e2e.rs`) : revue et acceptation
+  du tout (12 propositions, soldes EUR 160.00 et USD 317.01 égaux à la variation Wise) ; conversion à une écriture,
+  annulation d'un côté puis rattachement à nouveau ; paiement partiel groupé (écriture 97.95 / 86.60 / 13.89 USD à
+  0.90 = 12.50 / perte 1.15), annulation d'une ligne (les trois en attente, vue non bloquée), proposition reparue ;
+  traitement à la main par l'API (décision (c)) ; péremption, contrepartie, `FX_ACCOUNT_INVALID`,
+  `card_group_no_rule` ; écarts (`conversion_half_missing` ×2, `fee_without_origin`, un `balance_gap` malgré un relevé
+  postérieur chevauchant la fin, aucun pour le chevauchant) ; droits (clé `read` 403) et refus globaux ; interblocage
+  injecté dans un paiement groupé rejoué (`wise::accept`), rien dans `failed[]` ; coût.
+- **Mesure (AC-4)** : 300 virements en attente, 20 000 écritures sur le compte du plan du solde CHF, une lecture
+  `find_matched_elsewhere` par virement : test en **3,86 s** au gate complet (3,91 s au ciblé), montage compris ;
+  pas de lecture par page.
+- Assertions existantes inchangées (PayPal 38-11c2, annulation 34-11b, `reconciliation_e2e`) ; seuls les compteurs des
+  registres ont bougé.
+- **Sondes par mutation** (`kesh-gate-logs/s39-11c/mutation.sh`, worktree restauré, `git status` vide après) : M1
+  (étape 5 bis inerte) → `partielle_en_une_ecriture_puis_annulation` rouge ; M2 (lignes groupées laissées dans la
+  revue commune) → même test rouge ; M3 (seuil des 5 jours à 100) → `revue_puis_acceptation_du_tout` rouge ; M4
+  (ensemble relu non comparé) → **vert à la première sonde** : le test proposait le groupe sans la ligne de carte USD,
+  que le jugement refusait déjà ; renforcé (`c07265c1`, groupe sans sa ligne de frais), M4 rouge, vert sans mutation
+  (`mutation-m4.log`) ; M5 (conversion sans segment) → `chaque_genre_et_sa_preseance` rouge ; M6 (différence de change
+  nulle) → `partielle_en_une_ecriture_puis_annulation` rouge. Une première passe des sondes (`mutation-invalide.log`)
+  ne valait rien : deux fichiers `wise.rs` copiés sous le même nom, restauration croisée (fichier remis par
+  `git checkout`, script corrigé).
+
+### Gates (journaux `kesh-gate-logs/s39-11c/`)
+
+- Ciblé `cible-1.sh` (filtre : kesh-reconciliation, libs kesh-api et kesh-db, binaires Wise, PayPal, registres,
+  annulation, rattachement, règlements groupés) : 1900 / 1900 à `2870da3b` (`nextest-cible-2.log` → `cible-1.log`) ;
+  deux passages précédents rouges, corrigés (compteurs des registres, nom de colonne `details_json`, ordre des
+  identifiants du test, forme de l'étape 5 bis).
+- **Backend complet** au dernier commit de code `c07265c1` : `scripts/test-fast.sh --ci` (fmt, clippy workspace
+  `-D warnings`, nextest) **6488 exécutés, 6488 passés, 16 ignorés** (`gate-backend.log`).
+- **Frontend** (aucun fichier du frontend touché) : `npm run check` 0 erreur (29 avertissements préexistants),
+  `lint-i18n-ownership` vert, Vitest **4829 tests, 280 fichiers**, `build` vert, à `2870da3b` (les commits suivants ne
+  touchent qu'un test Rust).
+- **E2E** : aucun — la story n'ajoute aucune spec (décision du responsable pour cette nuit) ; **E2E complet et
+  `gate-ci.sh` à la fin de l'epic**.
+
+### Points relevés hors périmètre
+
+- `docs/api-external.md` ne décrivait pas la revue et l'acceptation **PayPal** (38-11c2) : la section Wise les
+  rappelle sans les documenter ; à reprendre par 38-11d ou à la fin de l'epic.
+- La vue d'annulation (`GET /reconciliation/transactions/{id}`) ne dit pas que les autres lignes d'un paiement groupé
+  reviendront en attente : l'écran le dira avec 39-11d.
+- Un paiement partiel dont un seul relevé est importé (la ligne CHF sans la ligne convertie) passe par une règle au
+  montant de la ligne : la somme reste juste quand l'autre relevé arrive (le groupe de la ligne convertie seule porte le
+  reste du montant du marchand), mais en deux écritures.
+- Fusion avec l'Epic 40 : `ProviderSpec` inchangé ; aucun conflit attendu hors des compteurs des registres (à
+  recompter).
+
+### Remédiation de la revue de code P1 (2026-11-22, rapport `kesh-gate-logs/s39-11c/revue-p1-rapport.md`)
+
+0 CRITICAL, 0 HIGH, 1 MEDIUM, 9 LOW à la revue ; périmètre des décomptes ci-dessous : `b56fd531..HEAD`.
+
+- **M1 (corrigé)** : une partielle dont un seul solde est importé ne donne plus deux écritures. Garde
+  `missing_statement_balances` (`routes/wise.rs`) : pour chaque solde **en CHF** du compte Wise absent du groupe, un relevé
+  importé doit couvrir la date du paiement (`bank_imports::overlapping_statements`) ; sinon revue « à examiner »
+  `card_group_statements_missing` (`details.missingBankAccountIds`), et acceptation refusée `PROVIDER_PROPOSAL_STALE`
+  (`details.reason = card_group_statements_missing`, mêmes identifiants). **Écart au remède proposé, à confirmer** : la
+  garde ne porte que sur les soldes en CHF (une partielle débite d'abord le solde du marchand, en CHF), non sur chaque
+  solde absent : le montage de test et l'usage réel importent CHF et USD sans EUR, et exiger un relevé EUR aurait mis
+  toute partielle « à examiner ». Limite écrite (`docs/api-external.md`, entrée d'issue) : une partielle sur deux soldes
+  en devise dont l'un manque, et un frais `FEE-CARD` importé plus tard par un second fichier du **même** solde que la carte,
+  ne se décèlent pas. Aucune clé i18n : aucun écran n'affiche encore ces motifs (39-11d).
+- **Sondes par mutation de la garde M1** (copie hors dépôt, `scratchpad/s39-11c-p1fix/sonde.sh`, journaux `m0` à `mC`) :
+  copie non mutée verte (`partielle_dont_un_seul_solde_est_importe` 1/1) ; A (garde de la revue retirée) → rouge,
+  `assertion left == right` à `wise_reconciliation_e2e.rs:1044` (nombre de propositions) ; B (garde de l'acceptation
+  retirée) → rouge à `:1060` (refus de la proposition forgée) ; C (relevé jamais requis) → rouge à `:1044`. ⚠️ Deux pièges
+  de la méthode, payés : (1) une première série de sondes ne compilait pas (`frontend/tests/e2e/fixtures` exclu de la copie) :
+  aucune « tuée » comptée ; (2) la copie partageait la cible cargo de la worktree : cargo prend pour à jour des artefacts
+  compilés depuis un autre chemin (empreintes indépendantes du chemin) — la copie mutée C a servi de binaire à la copie
+  « non mutée » suivante, puis au premier gate de la worktree (test rouge à tort) ; remède : `touch` des sources avant chaque
+  passe, et pour la worktree avant son gate. **Une copie de sonde prend sa propre cible cargo.**
+- **Gate de la remédiation** (journaux `kesh-gate-logs/s39-11c/`) : ciblé (`wise_reconciliation_e2e`, `wise_*`,
+  `reconciliation_e2e`, `settlement_*`, `textes_coherents`, `audit_route_registry`) 293 / 293 avant les sondes ; **backend
+  complet** `scripts/test-fast.sh --ci` (fmt, clippy workspace `-D warnings`, nextest) **6491 exécutés, 6491 passés,
+  16 ignorés** (`gate-backend.log`, après `touch` des sources, cf. plus haut ; 6488 + 3 tests HTTP neufs). Frontend : aucune
+  clé i18n ajoutée, aucun fichier du frontend touché — non rejoué. Aucun E2E (aucune spec neuve).
+- **L1** : trois tests HTTP — `partielle_dont_un_seul_solde_est_importe` (USD seul : « à examiner », forgée refusée, rien
+  d'écrit ; le relevé CHF arrive : une proposition, **une** écriture), `partielle_gain_de_change` (cours 0.80 : 13.89 USD =
+  11.11 CHF, gain 0.24 au crédit du compte de gain), `regle_forgee_sur_un_versement_stripe` (`kind_changed`). L'interblocage
+  de deux annulations : test trop lourd, **entrée d'issue**.
+- **L2** : `judge_card_group` refuse un montant CHF d'échelle > 2 (`merchant_scale`).
+- **L3** : commentaire de `ProviderEntry.known_chf` corrigé (aucun appelant). La constante `DESCRIPTION_MAX_CHARS` de
+  `routes/wise.rs` double celle de la 40-7c : **à unifier à la fusion** avec `ENTRY_DESCRIPTION_MAX_CHARS`.
+- **L4** : « Stripe Payments Europe » remplacé par « Stripe Fictif SA » dans les deux ajouts de la story (test pur de
+  `wise.rs`, relevé du test `ecarts`) ; les fixtures d'import des stories précédentes ne sont pas touchées.
+- **L5** : `settlement_entry_cancel_blocker` aligné sur `status = 'reconciled'` (`NOT (bt.status = 'reconciled' AND …)`).
+  Message de la vue et de la réponse sur le retour en attente des autres lignes : laissé à la 39-11d (écran). Interblocage
+  des deux annulations et compte des autres lignes : **issue**.
+- **L7** : `exchange_of` lit le **dernier** élément conforme (`rsplit`) : une description conforme, avant le segment,
+  ne l'emporte plus.
+- **L8, L9** : laissés (moteur partagé avec la 40-7c ; perf) — entrées d'issue. **L6** : échec fermé, conforme à A-5, laissé.
+- Hors changement : la conversion **totale** (crédit du solde en devise au cours du mois, différence de change) reste
+  celle de l'amendement A-1 ; question au responsable de l'epic.
+
+### Remédiation de la revue de code P2 (2026-11-22, rapport `kesh-gate-logs/s39-11c/revue-p2-rapport.md`)
+
+0 CRITICAL, 0 HIGH, 2 MEDIUM, 5 LOW à la revue. Commit de code `5c62870f` ; périmètre des décomptes : `be75a3a8..5c62870f`.
+
+- **M1-P2 (corrigé)** : la garde du paiement groupé devient `card_group_blocker` (`routes/wise.rs`), **une** fonction pour
+  la revue et l'acceptation, qui rend le motif et ses détails (mêmes des deux côtés : `toReview[].code`, ou
+  `PROVIDER_PROPOSAL_STALE` avec `details.reason`). Motif 1, jugé d'abord : une ligne `CARD-<id>` ou `FEE-CARD-<id>` du
+  même paiement **déjà rapprochée**, sur un solde du compte Wise → `card_group_partly_reconciled`
+  (`details.reconciledBankTransactionIds`, `details.journalEntryIds`) ; lecture `provider_review::reconciled_by_transaction_ids`,
+  factorisée avec `pending_by_transaction_ids` (`select_by_transaction_ids`, SQL de ce dernier inchangé). Élargi au **même**
+  solde que le groupe (le remède disait « un autre solde ») : une ligne du paiement rapprochée seule l'est toujours à tort,
+  quel que soit son solde. Sonde `p2_sonde_chf_d_abord` devenue le test `partielle_chf_d_abord_deja_rapprochee`.
+- **M2-P2 (corrigé)** : motif 2, `card_group_statements_missing`, jugé par `bank_imports::date_coverage` (kesh-db, neuf,
+  enum `DateCoverage`) : `Covered` si un relevé contient la date, ou si le premier relevé qui la suit prolonge sans écart le
+  relevé à solde qui la précède (même règle de clôture et d'ouverture que `continuity_gap`) ; `Gap` (relevés de part et
+  d'autre qui ne se suivent pas, ou relevé suivant sans solde d'ouverture), `NoPrevious`, `NothingAfter`. Tests
+  `totale_apres_la_derniere_ligne_chf` (« à examiner », puis proposée et acceptée en une écriture une fois le relevé CHF
+  suivant importé, continu) et `totale_releve_chf_suivant_discontinu` (reste « à examiner », acceptation forgée refusée).
+- **Soldes en devise (recommandation de la revue, faite en partie)** : exigé du solde CHF sauf `Covered` (inchangé dans
+  son principe) ; d'un solde en devise **seulement** sur `Gap`. Exiger tout solde qui a un relevé (la recommandation) aurait
+  mis « à examiner » tout paiement postérieur au dernier relevé d'un solde **dormant** — un solde qui n'a plus bougé n'a
+  aucun fichier à importer (rapport P2, M2) — ou antérieur au premier relevé d'un solde ouvert plus tard : jugé trop risqué
+  pour des livres tenus ; **limite écrite** (L-a) : une partielle sur deux soldes en devise dont l'un n'a rien d'importé
+  autour de la date se propose sans lui (écriture de la seule part présente) ; sa part arrivée ensuite tombe sous le motif 1,
+  jamais une seconde écriture. Test `partielle_deux_devises_dont_une_absente` (la limite, puis le cas fermé par `Gap`).
+- **L-a** : `docs/api-external.md` dit la règle de couverture, le motif neuf, les limites, et « jamais une seconde écriture »
+  hors la limite du frais `FEE-CARD` (qui se propose seul, en écriture de frais) ; la phrase « jamais deux écritures »
+  retirée. **L-b** : test pur `montant_du_marchand_au_centime` (zéros de queue admis, centime fractionnaire refusé, sur la
+  ligne CHF et dans le segment). **L-c** : test pur `segment_le_dernier_element_conforme`. **L-d** : test HTTP
+  `annulation_bloquee_par_une_ligne_liee_non_rapprochee` (ligne sœur forgée en attente avec son écriture :
+  `MATCHED_BANK_TRANSACTION` à la vue, `cancelBlockedDocumentId` nommé, geste refusé). **L-e** : rien à faire.
+- **Tests** (recomptés aux deux bornes) : `#[sqlx::test]` de `wise_reconciliation_e2e.rs` 12 → 17 ; `#[test]` de
+  `kesh-reconciliation/src/wise.rs` 13 → 15. Aucune clé i18n (aucun écran n'affiche ces motifs, 39-11d) ; le manuel
+  utilisateur ne décrit pas encore le rapprochement Wise (grep `card_group`, `paiement group` : aucun site) ; aucune migration.
+- **Sondes par mutation** (copie `git archive` hors dépôt, cible propre `kesh-targets/s39-11c-mut`, base
+  `kesh_s3911c_mut`, supprimées ; journal `kesh-gate-logs/s39-11c/mutation-p2fix.log`) : témoin non muté 9/9 vert avant et
+  après ; chaque mutation tuée sur assertion nommée — A (motif 1 inerte) → `partielle_chf_d_abord_deja_rapprochee`
+  `:1144` ; B (continuité jamais retenue) → `totale_apres_la_derniere_ligne_chf` `:1229` ; C (`Gap` pris pour couvert) →
+  `totale_releve_chf_suivant_discontinu` `:1278` et `partielle_deux_devises_dont_une_absente` `:1354` ; D (`Gap` d'un solde
+  en devise non exigé) → `partielle_deux_devises_dont_une_absente` `:1354` ; E (prédicat d'annulation sans
+  `status = 'reconciled'`) → `annulation_bloquee_…` `:1396` ; F (échelle > 3) → `montant_du_marchand_au_centime`
+  `wise.rs:783` ; G (`split` au lieu de `rsplit`) → `segment_le_dernier_element_conforme` `wise.rs:796`.
+- **Gates** : ciblé (`cible-1.sh` : fmt, clippy workspace `-D warnings`, nextest des binaires touchés) **1910 / 1910**,
+  8 ignorés (`cible-p2fix.log`) ; **backend complet** au commit de code `5c62870f` : `scripts/test-fast.sh --ci` (fmt, clippy
+  workspace `-D warnings`, nextest) **6498 exécutés, 6498 passés, 16 ignorés** (`gate-backend.log` ; 6491 + 7 tests neufs),
+  lancé avec `KESH_NO_MEMGUARD=1` sous `heavy.sh` : le bus systemd utilisateur de la station refusait la connexion
+  (`mem-guard` ne pouvait pas créer de portée ; premier passage arrêté là, rc 1, aucun test joué). Frontend non touché, non rejoué. Aucun E2E (aucune spec
+  neuve) ; E2E complet et `gate-ci.sh` à la fin de l'epic.
+
+### Remédiation de la revue de code P3 (2026-11-22, rapport `kesh-gate-logs/s39-11c/revue-p3-rapport.md`)
+
+0 CRITICAL, 0 HIGH, 1 MEDIUM, 4 LOW à la revue. Commit de code `3fa3c97f` ; périmètre des décomptes : `08c5f6c5..3fa3c97f`.
+
+- **M1-P3 (documentation et test, remède de code retiré)** : le remède demandé — juger aussi les propositions `rule` et
+  `fee` d'une ligne `CARD-`/`FEE-CARD-` contre ses sœurs rapprochées — a été écrit (contrôle commun à la revue et à
+  l'acceptation), puis retiré : il faisait rougir `partielle_traitee_a_la_main_par_l_api`, le test de l'amendement A-3
+  (une ligne d'un paiement groupé se traite à la main, « une écriture par ligne », puis le reste suit la revue : la ligne
+  CHF par règle). Prémisse vérifiée au chiffre : il n'y a **pas** de seconde écriture de la même charge. Le groupe passé
+  sans la ligne CHF a pour marchand la seule part USD (11.35) ; la ligne CHF par règle, sa seule part (86.60) ; les deux
+  écritures font la charge (97.95), les crédits CHF (86.60) et USD (12.50, 13.89 USD) et la perte de change (1.15) de
+  l'écriture unique de `partielle_en_une_ecriture_puis_annulation`. La sonde `p3_sonde_usd_d_abord_puis_chf` devient le
+  test `partielle_usd_d_abord_puis_ligne_chf`, qui l'affirme sur le mouvement des quatre comptes. La phrase « jamais une
+  seconde écriture » de `docs/api-external.md` devient vraie autrement : deux écritures possibles, **aucun montant compté
+  deux fois** ; la doc de `card_group_blocker` dit pourquoi le motif 1 ne vaut que pour un groupe. Décision soumise à
+  l'orchestrateur (voir le rapport de remédiation).
+- **L1 (corrigé)** : motif 1 réduit aux lignes de carte (`reconciled_card_lines`, `routes/wise.rs`) : un frais
+  `FEE-CARD-<id>` passé seul ne bloque plus le groupe, proposé sans lui (son écriture crédite le solde USD de la seule
+  carte, 13.85) ; un frais importé après le groupe se propose seul (`fee`). Tests `frais_d_abord_puis_la_carte`,
+  `frais_apres_le_groupe_passe_seul`.
+- **L2 (tests)** : `totale_releve_chf_suivant_sans_solde_d_ouverture` (relevé suivant à `opening_balance` NULL, `Gap`),
+  `totale_sans_releve_chf_anterieur` (`NoPrevious`, solde CHF exigé), `partielle_solde_en_devise_ouvert_apres`
+  (`NoPrevious`, solde en devise non exigé). M5 (retrait de `period_to < date`) : mutant équivalent, laissé.
+- **L3, L4 (écrits)** : `docs/api-external.md` et doc de `card_group_blocker` — continuité tenue pour preuve (lignes qui
+  s'annulent, solde à zéro, deux relevés du même jour), solde en devise épars qui met tout paiement « à examiner » ;
+  section « Limites du rapprochement à reprendre au manuel » de la fiche de la 39-11d.
+- **Tests** (recomptés aux deux bornes) : `#[sqlx::test]` de `wise_reconciliation_e2e.rs` 17 → 23. Aucune clé i18n,
+  aucun écran, aucune migration.
+- **Sondes par mutation** (copie `git archive` dans `kesh-gate-logs/s39-11c/p3fix/src`, cible propre
+  `kesh-targets/s39-11c-mut`, base `kesh_s3911c_mut`, une mutation par invocation de `heavy.sh`, `CARGO_BUILD_JOBS=4` ;
+  copie, cible et base supprimées ; journal `kesh-gate-logs/s39-11c/p3fix/mutations.log`) : témoin 7/7 vert avant et
+  après ; tuées sur assertion nommée — C (frais compté au motif 1) → `frais_d_abord_puis_la_carte` `:1456` ; M7
+  (ouverture absente prise pour couverte) → `totale_releve_chf_suivant_sans_solde_d_ouverture` `:1564` ; N1 (`NoPrevious`
+  pris pour couvert) → `totale_sans_releve_chf_anterieur` `:1602` ; N2 (`NoPrevious` d'un solde en devise exigé) →
+  `partielle_solde_en_devise_ouvert_apres` `:1636`.
+- **Gates** : ciblé (`p3fix-cible.sh` : fmt, clippy workspace `-D warnings`, nextest `wise_reconciliation_e2e` et
+  `kesh-reconciliation wise::`) **38 / 38** (`p3fix-cible.log`) ; **backend complet** au commit de code `3fa3c97f` : `scripts/test-fast.sh --ci` (fmt, clippy workspace `-D warnings`,
+  nextest) **6504 exécutés, 6504 passés, 16 ignorés** (`p3fix-gate-backend.log` ; 6498 + 6 tests neufs), `KESH_NO_MEMGUARD=1`
+  sous `heavy.sh`. Frontend non touché, non rejoué ; aucun E2E (aucune spec neuve) ; E2E complet et `gate-ci.sh` à la fin
+  de l'epic.
+
+- **Revue de code P4 (ciblée, une lentille sur `3fa3c97f`)** : 0 CRITICAL, 0 HIGH, 0 MEDIUM, 2 LOW, remédiés sans code de
+  production (rapport `kesh-gate-logs/s39-11c/revue-p4-rapport.md`). L1-P4 : la phrase de `docs/api-external.md` bornée au
+  cas de la ligne CHF seule ; frais à part au compte de frais, un centime d'arrondi possible ; même nuance à la fiche 39-11d.
+  L2-P4 : commentaire du test `frais_apres_le_groupe_passe_seul` corrigé. **Tendance** P1 -> P4 : revue P1 à P3 avec
+  remédiations, P4 sans rien au-dessus de LOW, boucle close. Modèles : rotation Sonnet/Opus, P4 ciblée. Décision M1-P3
+  retenue : deux écritures sans double comptage (décision A-3). Gate : `cargo test -p kesh-api --test textes_coherents`, fmt.
+
+### Notes de version
+
+*Ajouté* — Les lignes d'un relevé Wise se rapprochent sur proposition (`GET /api/v1/wise/review`,
+`POST /api/v1/wise/accept`) : frais au compte de frais, conversions au cours de Wise, rattachement à l'écriture déjà
+passée de l'autre côté (virement, versement Stripe), le reste par vos règles ; un paiement par carte converti, pris sur
+plusieurs soldes, devient une seule écriture au montant du marchand ; ce qui ne se rapproche pas est listé avec son
+motif.
