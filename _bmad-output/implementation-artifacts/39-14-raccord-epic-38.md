@@ -180,14 +180,14 @@ rendu, AC-2 ; T4), `tests/audit_label_registry.rs` (inventaire), `tests/audit_ro
 
 ## Fichiers communs (39-11c en remédiation sur `story/39-11c`)
 
-`tests/audit_route_registry.rs` (commentaire du point (vi) ; la 39-11c y ajoute des routes) et `sprint-status.yaml`
-(chacun sa ligne). La 39-11c ne touche ni `wise_imports.rs`, ni `provider_imports.rs`, ni `paypal_imports.rs` ; son
+`sprint-status.yaml` (chacun sa ligne ; `tests/audit_route_registry.rs` est touché des deux côtés, sans conflit à la
+fusion à blanc). La 39-11c ne touche ni `wise_imports.rs`, ni `provider_imports.rs`, ni `paypal_imports.rs` ; son
 `date_coverage` relit période et ouverture stockées, que D1 garde au fichier entier (compatible, L7).
 
 **`epic/40-stripe`** (`73fa1573`, validation P2, M2) change aussi `provider_imports.rs` ; qui fusionne en second :
 (1) `AUDIT_ACTIONS` et l'entrée `SITES_INDIRECTS` : garder `stripe_import.created` **et** `wise_import.created` ;
-(2) `ProviderLine` : l'union des champs (`value_date` de Stripe, `counterparty_iban` et `direction` d'ici) — **quatre
-sites de conflit de texte** : les champs du type, le littéral du test `line()` de `provider_imports.rs`, et le
+(2) `ProviderLine` : l'union des champs (`value_date` de Stripe, `counterparty_iban` et `direction` d'ici) — **trois
+sites de conflit de texte** (le quatrième conflit de cette story est `AUDIT_ACTIONS`, point (1)) : les champs du type, le littéral du test `line()` de `provider_imports.rs`, et le
 littéral de `provider_lines_of_row` dans `paypal_imports.rs` (~l. 309 ; non annoncé jusqu'à la revue P1, M1) ; ceux
 de Wise sont à compléter de `value_date: None` (sa valeur d'avant), ceux de Stripe et de PayPal de
 `counterparty_iban: None, direction: None`, et `into_new_bank_transaction` recopie les trois ; (3) `dedupe_groups`
@@ -196,8 +196,10 @@ garde sa signature (D3) : les tests de `stripe_imports.rs` compilent ; (4) Strip
 (commentaire de Stripe : « à replier à l'intégration ») : rien ne casse à la fusion, mais **deux définitions
 restent**, à unifier par celui qui fusionne en second (celles de `paypal_imports.rs` retirées, les `use` de Wise
 **et** les usages propres de PayPal repointés) ; `parse_form` et `ProviderImportForm` s'ajoutent sans conflit.
-Les autres conflits d'une fusion à blanc (`errors.rs`, `lib.rs`, `bank_accounts.rs`, registres, catalogues i18n,
-`sprint-status.yaml`, documents) ne viennent pas de cette story.
+Les autres conflits d'une fusion à blanc d'`epic/40-stripe` viennent d'autres stories de l'Epic 39 (notamment la 39-11b :
+`crates/kesh-db/src/entities/bank_account.rs`, `routes/bank_accounts.rs`, `tests/bank_account_opening_balance_e2e.rs`,
+`errors.rs`, `lib.rs`, registres, catalogues i18n, `sprint-status.yaml`, documents) ; ils se listent à la fusion réelle,
+non ici. Le littéral `ProviderLine` de `wise_imports.rs` ne conflictue pas mais devra recevoir `value_date: None`.
 
 ## Note de version
 
@@ -276,7 +278,7 @@ station) ; les quatre autres une à une, chacune dans son appel de `heavy.sh`, `
 ### Fichiers communs et points relevés
 
 - Avec `story/39-11c` : `tests/audit_route_registry.rs` (commentaire du point (vi) seul) et `sprint-status.yaml`.
-- Avec `epic/40-stripe` : `provider_imports.rs` (quatre points, dont `paypal_imports.rs` ; § *Fichiers communs*).
+- Avec `epic/40-stripe` : `provider_imports.rs` et `paypal_imports.rs` (§ *Fichiers communs*).
 - **À tracer en issue par l'orchestrateur** (cette story n'ouvre pas d'issue) : point 10 de la 39-11b
   (`json.paypal.or(json.wise)`, `bank_account.rs:215`, et `served()` pour l'Epic 40) ; commentaires
   d'`existing_transaction_ids` et d'`existing_transactions_by_ids` (`kesh-db`) devenus inexacts, la première sans
@@ -284,7 +286,7 @@ station) ; les quatre autres une à une, chacune dans son appel de `heavy.sh`, `
 
 ### Remédiation de la revue de code P1 (`revue-p1-rapport.md`)
 
-- M1 : § *Fichiers communs* corrigée (quatre sites de conflit de texte dont `paypal_imports.rs` ; bornes et `truncate_*`
+- M1 : § *Fichiers communs* corrigée (trois sites `ProviderLine` dont `paypal_imports.rs`, plus `AUDIT_ACTIONS` ; bornes et `truncate_*`
   **copiés** par `epic/40-stripe`, deux définitions à unifier), fusion à blanc rejouée dans un clone hors dépôt
   (supprimé) : les conflits de cette story sont bien ceux-là, les autres (`errors.rs`, `lib.rs`, `bank_accounts.rs`,
   registres, i18n, documents) viennent d'autres stories.
@@ -322,3 +324,11 @@ station) ; les quatre autres une à une, chacune dans son appel de `heavy.sh`, `
   (clone des groupes, grep de l'AC-1 qui vise l'état final).
 - 2026-11-22 — Fiche rédigée (raccord, liste « À raccorder » de la 39-11b, points 1 à 10 ; points 4 et 6 relevés au
   code ; doublon par sens ajouté).
+
+### Revue P2 ciblée (Haiku, `7e234beb`) et remédiation de l'orchestrateur
+
+- P2 : 0/0/2/2. M1 (« quatre sites » pour trois énumérés) et M2 (liste des autres conflits incomplète :
+  `bank_account.rs`, `bank_account_opening_balance_e2e.rs`) corrigés dans § *Fichiers communs* : trois sites
+  `ProviderLine` plus `AUDIT_ACTIONS`, autres conflits attribués aux autres stories de l'Epic 39 et listés à la fusion
+  réelle. L1 (aucun conflit à blanc sur `audit_route_registry.rs` avec la 39-11c) et L2 (`value_date: None` à ajouter au
+  littéral de `wise_imports.rs`) intégrés à la même section. Fiche seule, aucune ligne de code ; passe P3 ciblée à suivre.
