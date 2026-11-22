@@ -526,6 +526,8 @@ async fn import_continuite_et_doublons_de_lignes(pool: MySqlPool) {
         (f["inserted"].clone(), f["duplicates"].clone()),
         (json!(2), json!(1))
     );
+    // Story 39-11e : `rows` = lignes lues = insérées + doublons.
+    assert_eq!(f["rows"], 3);
     assert_eq!(f["warnings"], json!([]), "chevauchement : pas d'écart");
     let import_a = f["importId"].as_i64().unwrap();
     assert_ne!(import_a, premier);
