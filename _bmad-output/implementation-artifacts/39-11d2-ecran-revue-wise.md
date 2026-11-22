@@ -1,6 +1,6 @@
 # Story 39-11d2 : la revue et l'acceptation Wise à l'écran
 
-Status: drafted
+Status: ready-for-dev
 
 *Fiche rédigée le 2026-11-22, branche `story/39-11d2`, partie de `story/39-11d` (`440ae42c` à la rédaction ; la branche avance par sa revue P1, reprise par la condition préalable). Epic 39, phase 1
 KISS. **Reprend l'AC-3 de la 39-11d**, reporté par son amendement A3 (la revue Wise, Story 39-11c, n'était pas dans la
@@ -58,7 +58,8 @@ qu'elle n'est pas faite, cette story attend.**
    en tête) et `merchantAmount` (montant du marchand en CHF, deux décimales, chaîne) ; les quatre motifs `card_group_*`
    portent `details.lines` (mêmes résumés) ; `card_group_statements_missing` porte en plus `details.missingCurrencies`
    (devises des soldes de `missingBankAccountIds`, que le serveur connaît : `BankAccountSummary` n'a pas de devise),
-   posé **dans `card_group_blocker`** (son itérateur porte déjà `(id, devise)`), donc servi à la revue **et** dans
+   posé **dans `card_group_blocker`** (son itérateur porte déjà `(id, devise)` ; paires triées ensemble, pour que
+   `missingCurrencies[i]` reste la devise de `missingBankAccountIds[i]`), donc servi à la revue **et** dans
    `failed[].details` d'un `PROVIDER_PROPOSAL_STALE` de même raison. La conversion vers le type de revue se fait à la
    fin de `build_wise_review` (le `map_proposals` initial, `review.map_proposals(WiseProposal::Common)`, reste), d'après
    une table `id principale → (lignes, montant du marchand)` tenue pendant la boucle des groupes. Le **corps de l'acceptation ne change pas** (`WiseProposal`, champs
@@ -155,13 +156,16 @@ qu'elle n'est pas faite, cette story attend.**
    phrase commune « Rechargez la revue » (`withdrawal_foreign_currency`, inatteignable depuis Wise — `rejudge` refuse
    avant par `kind_changed` —, exclu par écrit). Un test Vitest **dédié** compare les littéraux `stale(…, "<raison>")`
    de `provider_accept.rs` (hors `#[cfg(test)]`) et de `routes/wise.rs` à cette liste **augmentée de l'exclusion**
-   (dix raisons ; le relevé de `CODES_MOTEUR` ne lit que les codes en majuscules) ; les deux raisons du blocker ne sont
+   (dix raisons ; motif ancré sur `stale(<identifiant>, "<raison>")`, la définition `pub fn stale(…, reason: &str)`
+   exclue, sans quoi il en compte onze ; le relevé de `CODES_MOTEUR` ne lit que les codes en majuscules) ; les deux raisons du blocker ne sont
    pas des littéraux de `stale` (`failed(primary, PROVIDER_PROPOSAL_STALE, …)`) et sont gardées par
    `WISE_TO_REVIEW_CODES` (AC-3). `RATE_UNAVAILABLE` reçoit un libellé **propre aux prestataires** dans `providerFailedLabel` (clé
    `provider-failed-rate-unavailable`, ajouté à `PROVIDER_COMMON_FAILED_CODES`) : « Aucun cours mensuel { $currency }
    retenu pour { $month } : récupérez ou saisissez ce cours dans les cours de change, puis acceptez de nouveau. » — le
    mois formaté depuis `details.month` (`AAAA-MM-01`) comme `monthLabel` de `lib/features/journal-entries/fx-refusals.ts`,
-   exportée ou partagée, jamais brut — ; le libellé générique (`fx-refusals.ts`, « gardez la ligne comme cours saisi ») ne convient pas à une proposition ;
+   exportée sous un nom propre (`fxMonthLabel` : `exchange-rates-grid.ts` exporte déjà un `monthLabel` d'une autre
+   signature), jamais brut ; `details` absents ou vides tolérés (le premier test de `provider-labels.test.ts` appelle
+   `providerFailedLabel(code)` sans eux) — ; le libellé générique (`fx-refusals.ts`, « gardez la ligne comme cours saisi ») ne convient pas à une proposition ;
    `FX_ACCOUNT_INVALID`, `COUNTERPARTY_CURRENCY_MISMATCH`, `PERIOD_LOCKED` par les libellés existants. Un
    `400` global (corps refusé) s'affiche par `errorMessageOf`. La revue se relit après l'acceptation. Vitest : corps d'un
    groupe (identifiants, règle, contrepartie ; sans `lines`), ordre, paquets, refus d'un groupe périmé.
@@ -268,3 +272,9 @@ s'acceptent d'un geste.
   cours formaté, test de la liste commune qui change d'assertion, `stripe-import.spec.ts` nommée, place de la phrase
   des contrôles de clôture, commentaires périmés à greper, `ProviderReviewPage.test.ts`, liste des raisons augmentée
   de l'exclusion.
+- 2026-11-22 — validation P4 ciblée sur la remédiation P3 (`0326e98c`, Sonnet, lecture seule) : 0 CRITICAL, 0 HIGH,
+  0 MEDIUM, 3 LOW (rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11d2-P4.md`), remédiés dans la fiche seule :
+  nom `fxMonthLabel` (homonyme), `details` absents tolérés, motif du test des raisons ancré, paires `(id, devise)` triées
+  ensemble. **Boucle close** sur une passe sans rien au-dessus de LOW. Tendance : P1 1 HIGH, 7 MEDIUM, 9 LOW → P2 5 MEDIUM,
+  11 LOW → P3 1 MEDIUM, 8 LOW → P4 0 au-dessus de LOW (3 LOW). Modèles : Opus (P1, P3), Sonnet (P2, P4 ciblée). Les LOW
+  de la P4 ne sont relus par aucune passe : à recontrôler à l'étape 0 du développement.
