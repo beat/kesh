@@ -1426,7 +1426,8 @@ fn tronque(texte: &str, max: usize) -> String {
 /// colonnes et le résultat reporté est exactement celle de `groupedRows` du
 /// JSON (46-6a), selon la règle de rendu — quatre colonnes arrondies au
 /// centime, seconde ligne en devise d'une ligne en devise, libellé tronqué à
-/// la colonne de l'intitulé ([`kesh_report::pdf::limite_nom_groupe_balance`]) ;
+/// la colonne de l'intitulé — celles du numéro et de l'intitulé pour un
+/// sous-total, sans numéro ([`kesh_report::pdf::limite_nom_groupe_balance`]) ;
 /// l'en-tête dit le niveau. Le CSV, mêmes paramètres : `Niveau;TypeLigne` en
 /// tête et une ligne par ligne groupée, aux mêmes cellules.
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
@@ -1504,7 +1505,7 @@ async fn export_balance_groupee_fidele_au_json(pool: MySqlPool) {
             }
             morceaux.push(tronque(
                 &libelle,
-                kesh_report::pdf::limite_nom_groupe_balance(depth),
+                kesh_report::pdf::limite_nom_groupe_balance(depth, kind != "subtotal"),
             ));
             if montant {
                 morceaux.extend(cles.map(|c| montant_suisse(l[c].as_str().unwrap())));

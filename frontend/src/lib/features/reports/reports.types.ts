@@ -63,9 +63,10 @@ export type GroupedRowKind = 'group' | 'account' | 'own' | 'subtotal';
 
 /**
  * Ce que toute ligne groupée porte, quel que soit le rapport (Story 46-6b) :
- * genre, profondeur, compte, devise unique éventuelle, état d'un groupe
- * (`open`, sur `group` seulement) et compte actif (`active`, sur `account` et
- * `own`). Les montants sont propres à chaque rapport.
+ * genre, profondeur, compte, devise unique éventuelle et solde dans cette
+ * devise, état d'un groupe (`open`, sur `group` seulement) et compte actif
+ * (`active`, sur `account` et `own`). Les autres montants sont propres à chaque
+ * rapport.
  */
 export interface GroupedRowBase {
 	kind: GroupedRowKind;
@@ -74,6 +75,11 @@ export interface GroupedRowBase {
 	accountNumber: string;
 	accountName: string;
 	currency?: string;
+	/**
+	 * Le solde en devise, présent avec `currency` : au bilan et au compte de
+	 * résultat, le solde de la ligne ; à la balance, son net des mouvements.
+	 */
+	balanceCurrency?: string;
 	open?: boolean;
 	active?: boolean;
 }
@@ -84,7 +90,6 @@ export interface GroupedRowBase {
  */
 export interface GroupedRow extends GroupedRowBase {
 	balance: string;
-	balanceCurrency?: string;
 	role?: AccountRole | null;
 }
 

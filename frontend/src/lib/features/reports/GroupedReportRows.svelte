@@ -171,9 +171,10 @@
 				>{/if}
 			{#if shown && !currencyRow}
 				<!-- Sans `currencyRow`, les lignes sont celles du bilan ou du compte de
-				     résultat (`GroupedRow`), dont `balanceCurrency` est le solde en devise. -->
+				     résultat, dont `balanceCurrency` (porté par `GroupedRowBase`) est le
+				     solde en devise. -->
 				<AccountCurrencyBalance
-					account={row as unknown as GroupedRow}
+					account={row}
 					testIdPrefix={row.kind === 'group' || row.kind === 'subtotal' ? 'group-fx' : 'account-fx'}
 				/>
 			{/if}

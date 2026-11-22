@@ -1198,6 +1198,14 @@ fn retrait_groupe_mm(depth: u32) -> f32 {
 /// bilan et le compte de résultat ont leur nom à 25 mm de la marge et une
 /// longue colonne de nom ; la balance, son intitulé à 20 mm
 /// ([`TB_COL_X`]) et une colonne de 55 mm ([`TB_NAME_MAX_CHARS`]).
+///
+/// Une ligne **sans numéro** (le sous-total « Total <nom> », ou une ligne dont
+/// le numéro est vide) a son propre départ et sa propre longueur
+/// ([`Self::x_sans_numero_mm`], [`Self::nom_max_sans_numero`]) : à la balance,
+/// son libellé part de la colonne du numéro, qu'elle n'occupe pas, et gagne
+/// les 20 mm de cette colonne (revue de code P1 de la 46-6b : à 22
+/// caractères, « Total Capitaux étrangers à court terme » et « … à long
+/// terme » s'abrégeaient tous deux en « Total Capitaux étra… »).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Gabarit {
     /// Abscisse du libellé au retrait nul, en mm depuis la marge gauche (le
@@ -1205,33 +1213,61 @@ struct Gabarit {
     x_nom_mm: f32,
     /// Longueur maximale du libellé au retrait nul, en caractères.
     nom_max: usize,
+    /// Abscisse du libellé d'une ligne sans numéro, au retrait nul.
+    x_sans_numero_mm: f32,
+    /// Longueur maximale du libellé d'une ligne sans numéro, au retrait nul.
+    nom_max_sans_numero: usize,
 }
 
 impl Gabarit {
     /// Le bilan et le compte de résultat : [`ACCOUNT_NAME_MAX_CHARS_FX`] sur
     /// une ligne en devise (`en_devise`), [`GROUPE_NOM_MAX_CHARS`] sinon.
+    /// Une ligne sans numéro y garde le départ et la longueur des autres.
     fn bilan(en_devise: bool) -> Self {
+        let nom_max = if en_devise {
+            ACCOUNT_NAME_MAX_CHARS_FX
+        } else {
+            GROUPE_NOM_MAX_CHARS
+        };
         Self {
             x_nom_mm: 25.0,
-            nom_max: if en_devise {
-                ACCOUNT_NAME_MAX_CHARS_FX
-            } else {
-                GROUPE_NOM_MAX_CHARS
-            },
+            nom_max,
+            x_sans_numero_mm: 25.0,
+            nom_max_sans_numero: nom_max,
         }
     }
 
-    /// La balance : l'intitulé dans sa colonne, en devise ou non (la devise
-    /// est sur la seconde ligne).
+    /// La balance par groupes : l'intitulé dans sa colonne, en devise ou non
+    /// (la devise est sur la seconde ligne) ; une ligne sans numéro part de la
+    /// colonne du numéro ([`TB_NAME_MAX_CHARS_SANS_NUMERO`]). Le rendu à plat
+    /// de la balance n'emploie pas ce gabarit.
     const BALANCE: Self = Self {
         x_nom_mm: TB_COL_X[1],
         nom_max: TB_NAME_MAX_CHARS,
+        x_sans_numero_mm: TB_COL_X[0],
+        nom_max_sans_numero: TB_NAME_MAX_CHARS_SANS_NUMERO,
     };
 
-    /// Le plus long libellé qu'une ligne de profondeur `depth` imprime sans le
-    /// tronquer : [`Self::nom_max`] moins un caractère par 2,5 mm de retrait.
-    fn limite(self, depth: u32) -> usize {
-        self.nom_max - (retrait_groupe_mm(depth) / 2.5) as usize
+    /// Le plus long libellé qu'une ligne de profondeur `depth`, avec ou sans
+    /// numéro (`avec_numero`), imprime sans le tronquer : [`Self::nom_max`]
+    /// (ou [`Self::nom_max_sans_numero`]) moins un caractère par 2,5 mm de
+    /// retrait.
+    fn limite(self, depth: u32, avec_numero: bool) -> usize {
+        let max = if avec_numero {
+            self.nom_max
+        } else {
+            self.nom_max_sans_numero
+        };
+        max - (retrait_groupe_mm(depth) / 2.5) as usize
+    }
+
+    /// L'abscisse du libellé au retrait nul, avec ou sans numéro.
+    fn x(self, avec_numero: bool) -> f32 {
+        if avec_numero {
+            self.x_nom_mm
+        } else {
+            self.x_sans_numero_mm
+        }
     }
 }
 
@@ -1245,14 +1281,16 @@ impl Gabarit {
 /// Publique pour les tests de fidélité (Story 46-3, AC-4), qui s'assurent
 /// qu'aucun libellé de leur jeu ne l'atteint.
 pub fn limite_nom_groupe(depth: u32, en_devise: bool) -> usize {
-    Gabarit::bilan(en_devise).limite(depth)
+    Gabarit::bilan(en_devise).limite(depth, true)
 }
 
 /// [`limite_nom_groupe`] pour la balance (Story 46-6b) : [`TB_NAME_MAX_CHARS`]
-/// moins un caractère par 2,5 mm de retrait. Publique pour le test de fidélité
-/// de la balance, qui en tronque ses libellés attendus.
-pub fn limite_nom_groupe_balance(depth: u32) -> usize {
-    Gabarit::BALANCE.limite(depth)
+/// pour une ligne qui porte un numéro (`avec_numero`), sinon — le sous-total
+/// « Total <nom> » — [`TB_NAME_MAX_CHARS_SANS_NUMERO`], moins un caractère par
+/// 2,5 mm de retrait. Publique pour le test de fidélité de la balance, qui en
+/// tronque ses libellés attendus.
+pub fn limite_nom_groupe_balance(depth: u32, avec_numero: bool) -> usize {
+    Gabarit::BALANCE.limite(depth, avec_numero)
 }
 
 /// La ligne de l'en-tête d'un rapport groupé (C-46-3-1) : « Niveau 2 » ou
@@ -1294,7 +1332,8 @@ struct LibelleGroupe {
     montant: bool,
     /// Retrait, en mm ([`retrait_groupe_mm`]).
     retrait_mm: f32,
-    /// Abscisse du libellé au retrait nul ([`Gabarit::x_nom_mm`]).
+    /// Abscisse du libellé au retrait nul ([`Gabarit::x_nom_mm`], ou
+    /// [`Gabarit::x_sans_numero_mm`] sans numéro).
     x_nom_mm: f32,
 }
 
@@ -1307,7 +1346,9 @@ impl LibelleGroupe {
     /// - `Propre` « <nom> (solde propre) » ;
     /// - `Compte` comme un compte du rendu à plat.
     ///
-    /// Le texte est tronqué à la limite du `gabarit` ([`Gabarit::limite`]).
+    /// Le texte est tronqué à la limite du `gabarit` ([`Gabarit::limite`]) ;
+    /// une ligne sans numéro — un sous-total, ou un numéro vide — prend le
+    /// départ et la longueur des lignes sans numéro du gabarit.
     fn de(
         l: &impl LigneGroupeeAffichee,
         position: PositionSousTotal,
@@ -1329,13 +1370,15 @@ impl LibelleGroupe {
             ),
             GenreLigne::Compte => (Some(numero), nom.to_string(), false),
         };
+        let numero = numero.filter(|n| !n.is_empty());
+        let avec_numero = numero.is_some();
         Self {
             numero: numero.map(String::from),
-            texte: truncate_with_ellipsis(&texte, gabarit.limite(depth)),
+            texte: truncate_with_ellipsis(&texte, gabarit.limite(depth, avec_numero)),
             gras,
             montant: l.porte_montant(position),
             retrait_mm: retrait_groupe_mm(depth),
-            x_nom_mm: gabarit.x_nom_mm,
+            x_nom_mm: gabarit.x(avec_numero),
         }
     }
 
@@ -1427,6 +1470,13 @@ const TB_AMOUNT_RIGHT_MM: [f32; 4] = [117.0, 143.0, 169.0, AMOUNT_RIGHT_MM];
 /// Longueur maximale de l'intitulé d'un compte dans la balance PDF : 22
 /// caractères tiennent dans 55 mm, même en capitales.
 const TB_NAME_MAX_CHARS: usize = 22;
+
+/// Longueur maximale, à la balance **par groupes**, du libellé d'une ligne sans
+/// numéro (le sous-total « Total <nom> ») : il part de la colonne du numéro et
+/// gagne ses 20 mm, soit 8 caractères à 2,5 mm — 30 caractères dans 75 mm,
+/// jusqu'au même bord que l'intitulé (revue de code P1 de la 46-6b). Le rendu
+/// à plat n'a pas de ligne sans numéro.
+const TB_NAME_MAX_CHARS_SANS_NUMERO: usize = TB_NAME_MAX_CHARS + 8;
 
 /// Dessine une ligne de la balance : six cellules, `None` = cellule vide. Les
 /// deux premières (N°, intitulé) s'écrivent à gauche de leur colonne, les
@@ -3921,6 +3971,11 @@ mod tests {
         let debut = |t: &str, size: f32, bord: f32| right_aligned_x(t, size, true, bord);
         // Balance : l'intitulé (55 mm depuis 35 mm), puis quatre colonnes.
         let mut fin = MARGIN_LEFT_MM + TB_COL_X[1] + 55.0;
+        // Par groupes, une ligne sans numéro part de la colonne du numéro et
+        // finit, à 2,5 mm le caractère, au même bord que l'intitulé (46-6b).
+        assert!(
+            MARGIN_LEFT_MM + TB_COL_X[0] + 2.5 * TB_NAME_MAX_CHARS_SANS_NUMERO as f32 <= fin + 1e-4
+        );
         for bord in TB_AMOUNT_RIGHT_MM {
             assert!(
                 debut(long, FONT_SIZE_PT, bord) > fin,
@@ -4857,9 +4912,10 @@ mod tests {
             vec![
                 "10 Actifs circulants",
                 "100 Liquidités 5.00 10.01 0.00 15.01",
-                // « Total Actifs circulants » (23 caractères) passe la colonne de
-                // l'intitulé (22) : abrégé, comme tout intitulé de la balance.
-                "Total Actifs circulan… 5.00 10.01 0.00 15.01",
+                // « Total Actifs circulants » (23 caractères) passerait la colonne
+                // de l'intitulé (22) ; sans numéro, il part de la colonne du
+                // numéro et dispose de 30 caractères : entier (revue P1).
+                "Total Actifs circulants 5.00 10.01 0.00 15.01",
                 "14 Immobilisations 300.00 0.00 0.00 300.00",
                 "2000 Fournisseurs 305.00 0.00 10.01 315.01",
             ]
@@ -4934,9 +4990,13 @@ mod tests {
     /// l'intitulé, moins son retrait ([`limite_nom_groupe_balance`]).
     #[test]
     fn balance_groupee_libelle_tronque_a_sa_colonne() {
-        assert_eq!(limite_nom_groupe_balance(1), TB_NAME_MAX_CHARS);
-        assert_eq!(limite_nom_groupe_balance(2), TB_NAME_MAX_CHARS - 1);
-        assert_eq!(limite_nom_groupe_balance(9), TB_NAME_MAX_CHARS - 8);
+        assert_eq!(limite_nom_groupe_balance(1, true), TB_NAME_MAX_CHARS);
+        assert_eq!(limite_nom_groupe_balance(2, true), TB_NAME_MAX_CHARS - 1);
+        assert_eq!(limite_nom_groupe_balance(9, true), TB_NAME_MAX_CHARS - 8);
+        // Sans numéro (un sous-total), la colonne du numéro en plus.
+        assert_eq!(limite_nom_groupe_balance(1, false), 30);
+        assert_eq!(limite_nom_groupe_balance(2, false), 29);
+        assert_eq!(limite_nom_groupe_balance(9, false), 22);
         let long = "Capitaux étrangers à court terme";
         let arbre =
             ArbreComptes::depuis_noeuds(vec![noeud(20, long, None), noeud(2000, long, Some(20))]);
@@ -4960,5 +5020,81 @@ mod tests {
             l.contains(&format!("2000 {} 1.00 0.00 0.00 1.00", tronque(21))),
             "{l:?}"
         );
+    }
+
+    /// Revue de code P1 de la 46-6b, MEDIUM-1 — deux sous-totaux longs qui ne
+    /// diffèrent qu'en fin de libellé restent distincts au PDF : sans numéro,
+    /// « Total <nom> » part de la colonne du numéro (à la marge, plus le
+    /// retrait) et dispose de 30 caractères au retrait nul, 29 au deuxième
+    /// niveau ; les titres numérotés gardent la colonne de l'intitulé, et un
+    /// titre sans numéro à afficher (numéro vide) prend la place d'un
+    /// sous-total.
+    #[test]
+    fn balance_groupee_sous_totaux_longs_distincts() {
+        let (court, long) = (
+            "Capitaux étrangers à court terme",
+            "Capitaux étrangers à long terme",
+        );
+        let racine = "Capitaux étrangers et fonds propres";
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            crate::groupes::NoeudCompte {
+                numero: String::new(),
+                ..noeud(2, racine, None)
+            },
+            noeud(20, court, Some(2)),
+            noeud(2000, "Fournisseurs", Some(20)),
+            noeud(24, long, Some(2)),
+            noeud(2400, "Dettes bancaires", Some(24)),
+        ]);
+        let passif = kesh_db::entities::AccountType::Liability;
+        let tb = balance(vec![
+            crate::essai_groupes::tb_ligne(
+                2000,
+                "Fournisseurs",
+                passif,
+                [dec!(1), dec!(0), dec!(0), dec!(1)],
+            ),
+            crate::essai_groupes::tb_ligne(
+                2400,
+                "Dettes bancaires",
+                passif,
+                [dec!(2), dec!(0), dec!(0), dec!(2)],
+            ),
+        ]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Pied, &[], &[]);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let bytes =
+            render_grouped_trial_balance_pdf(&AvecGroupes::balance(tb, &arbre, &o), &ctx).unwrap();
+        let l = crate::texte_pdf::lignes(&bytes);
+        assert!(
+            l.contains(&"Total Capitaux étrangers à c… 1.00 0.00 0.00 1.00".to_string()),
+            "{l:?}"
+        );
+        assert!(
+            l.contains(&"Total Capitaux étrangers à l… 2.00 0.00 0.00 2.00".to_string()),
+            "{l:?}"
+        );
+        // Le titre numéroté garde sa colonne et sa limite (21 au deuxième niveau).
+        assert!(l.contains(&"20 Capitaux étrangers à…".to_string()), "{l:?}");
+        // Le titre sans numéro, 30 caractères au premier niveau, à la marge.
+        assert!(
+            l.contains(&"Capitaux étrangers et fonds p…".to_string()),
+            "{l:?}"
+        );
+        // Le sous-total part de la colonne du numéro, au retrait du deuxième
+        // niveau ; le titre, de la colonne de l'intitulé.
+        let x = |prefixe: &str| {
+            pdf_poses(&bytes)
+                .into_iter()
+                .find(|p| p.text.starts_with(prefixe))
+                .unwrap_or_else(|| panic!("« {prefixe} » absent"))
+                .x_mm
+        };
+        let retrait = retrait_groupe_mm(2);
+        assert!((x("Total Capitaux étrangers à") - (MARGIN_LEFT_MM + retrait)).abs() < 0.01);
+        assert!(
+            (x("Capitaux étrangers à") - (MARGIN_LEFT_MM + TB_COL_X[1] + retrait)).abs() < 0.01
+        );
+        assert!((x("Capitaux étrangers et") - MARGIN_LEFT_MM).abs() < 0.01);
     }
 }

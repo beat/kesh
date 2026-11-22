@@ -142,7 +142,11 @@ Fiches 46-1, 46-2, 46-3, 46-6a.
   CSV reprennent la présentation affichée (CSV : colonnes `Niveau;TypeLigne` en tête) ; sans présentation par
   groupes, ils restent ceux d'avant.
 - **Changed (API)** — `GET /reports/trial-balance/export` lit `detailLevel`, `subtotalPosition`, `open` et
-  `closed` : un de ces paramètres répété, ignoré jusqu'ici, est refusé (`400 VALIDATION_ERROR`).
+  `closed`, qu'il ignorait jusqu'ici, avec les refus de la balance (`400 VALIDATION_ERROR`, message qui nomme le
+  paramètre) : un de ces paramètres répété ; une valeur invalide (`detailLevel` qui n'est ni un entier de 1 à 20 ni
+  `all`, `subtotalPosition` autre que `header` ou `footer`, un élément de `open` ou `closed` qui n'est pas un
+  entier, un même identifiant dans les deux listes, plus de 500 identifiants) ; `subtotalPosition`, `open` ou
+  `closed` sans `detailLevel`. Un export qui passait avec ces paramètres invalides est désormais refusé.
 
 ## Dev Agent Record
 
@@ -198,8 +202,10 @@ Journaux et captures : `kesh-gate-logs/s46-6b/` (hors dépôt).
   affirmaient que l'export de la balance **ignore** un paramètre répété : il le **refuse** désormais (`400
   VALIDATION_ERROR`) ; la balance entre dans `export_groupes_refus_du_contrat`.
 - **Limite constatée, assumée** : au PDF, la colonne de l'intitulé de la balance (22 caractères, comme à plat) abrège
-  souvent les libellés « Total <nom> » des sous-totaux en pied et les noms en retrait (« Total Actifs circulan… ») ;
-  le manuel le dit. L'élargir déplacerait les colonnes de montant du rendu à plat (AC-3).
+  les noms longs en retrait ; le manuel le dit. L'élargir déplacerait les colonnes de montant du rendu à plat (AC-3).
+  *(Annoté le 2026-11-22, remédiation de la revue P1, MEDIUM-1 : elle abrégeait aussi les sous-totaux au point de les
+  confondre — « Total Capitaux étrangers à court terme » et « … à long terme » en « Total Capitaux étra… » ; un
+  sous-total, sans numéro, part désormais de la colonne du numéro, 30 caractères au retrait nul.)*
 - **Tests ajoutés** (recomptés de `416547b14` à `b9f722845`, `#[test]`/`#[sqlx::test]` et `it(`) : `pdf.rs` 72 → 78
   (+6), `csv.rs` 36 → 42 (+6), `reports_export_e2e.rs` 24 → 26 (+3 neufs, −1 remplacé ; le test de fixtures de la
   46-3 factorisé avec le neuf), `reports_e2e.rs` 47 → 47 (un test basculé) ; Vitest `TrialBalanceView.test.ts` 9 → 15
