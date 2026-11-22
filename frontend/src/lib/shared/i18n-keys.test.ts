@@ -1223,6 +1223,7 @@ const ATTENDU = {
 	// **3742** (« expected 3742 to be 3741 »), relevé par la garde ; au diff : 1 site ajouté,
 	// 0 retiré.
 	// Propagation d'epic/40-stripe (38-13, 40-8b, 40-9) dans epic/39-wise : relevé par la garde.
+	// **3825** = 3817 + 8 (40-8b + 7, 40-9 + 1 ; la 38-13 ne retire aucun site).
 	sitesTotal: 3825,
 	sitesNonResolus: 31,
 	relais: 6,
