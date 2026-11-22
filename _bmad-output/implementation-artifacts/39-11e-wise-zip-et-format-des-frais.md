@@ -1,6 +1,6 @@
 # Story 39-11e : le zip de Wise tel que téléchargé, et le bon format des frais
 
-Status: review
+Status: done
 
 *Fiche rédigée le 2026-11-22, branche `story/39-11e` partie d'`epic/39-wise` (`b3826e2d`), numéros de ligne relevés à
 ce commit. Epic 39, **phase 1 KISS** (amende G1 et tranche Q-39-11). **Dépend de** : 39-11a et 39-11a2 (lecteur),
@@ -361,6 +361,8 @@ binaires de test à chaque mutation, a été arrêté après le témoin et la pr
 ### Écarts et points relevés
 
 - La limite de D5 (bon fichier à une seule ligne à frais coupée par la borne) est écrite au manuel, non levée.
+- Limite de D5 relevée à la revue P1 (L3) : un relevé « sans » qui porte une ligne `FEE-` isolée et une seule ligne à frais sans
+  sa `FEE-` passe (`fee_origins` non vide, `missing.len() < 2`) ; écrite au manuel et à l'API, issue `enhancement` P3 à ouvrir.
 - Nom d'archive (`archive`) et `ignoredEntries` ne se relisent pas par `GET /bank-imports/{id}` (AC-3 ; une migration
   serait nécessaire).
 - Écran (bouton qui accepte le zip, traduction des refus) : 39-11d.
@@ -383,3 +385,10 @@ binaires de test à chaque mutation, a été arrêté après le témoin et la pr
 - 2026-11-22 — développement (Claude Opus 5.5) : D5 d'abord (`e18be4cb`), puis le zip (`3174200e`, `ac3e1fe4`) ; 26 tests
   neufs (1 ignoré), 18 mutations tuées, relevés réels vérifiés par le test ignoré, gate backend vert (6498 / 17 ignorés).
   `review` ; prompt de la revue P1 : `kesh-gate-logs/s39-11e/revue-p1-prompt.md`.
+- 2026-11-22 — revue de code P1 (Claude Sonnet 5.5, contexte frais, rapport `kesh-gate-logs/s39-11e/revue-p1-rapport.md`) :
+  **0 CRITICAL, 0 HIGH, 0 MEDIUM, 3 LOW** ; 107 tests rejoués, décomptes recomptés conformes. Tendance : validation P1 0/0/0/10
+  (Sonnet) -> revue P1 0/0/0/3 (Sonnet). Les trois LOW sont documentaires, appliqués sans toucher la production : L1 (la
+  borne de 64 compte toutes les entrées, dossiers compris : manuel et `docs/api-external.md`), L2 (deux entrées de même nom :
+  la seconde est ignorée, écrit au manuel et à l'API), L3 (relevé « sans » avec une `FEE-` isolée et une seule ligne à frais :
+  limite écrite au manuel, à l'API et ici ; issue `enhancement` P3 à ouvrir). Aucune passe de plus : aucune ligne de code de
+  production touchée, aucun finding au-dessus de LOW. Dernier commit de code `ac3e1fe4`, gate backend vert (6498). Story `done`.
