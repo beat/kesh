@@ -86,7 +86,7 @@ function bilan(params: GroupingParams | undefined, open = true, echo?: Partial<G
 	};
 }
 
-async function generer(r: ReturnType<typeof render>) {
+async function generer(r: { getByRole: (role: 'button', opts: { name: string }) => HTMLElement }) {
 	await fireEvent.click(r.getByRole('button', { name: 'Générer' }));
 }
 
