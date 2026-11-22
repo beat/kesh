@@ -8,7 +8,9 @@
  * ⚠️ **Aucune règle d'ouverture n'est calculée ici** (C-46-2-1) : l'écran
  * redemande le rapport à l'API à chaque changement, et c'est la 46-1 qui dit
  * quels groupes sont ouverts. Ce module ne fait que tenir les choix de
- * l'utilisateur et les traduire en paramètres de requête.
+ * l'utilisateur et les traduire en paramètres de requête. Seule exception, qui ne
+ * décide d'aucun affichage : un clic qui rend à un groupe l'état du niveau le
+ * retire des listes (`openByLevel`, Story 46-7).
  *
  * Mémoire (AC-5, AC-10) : `localStorage`, **une clé par société et par
  * rapport** (par navigateur, non par utilisateur, comme `kesh-mode`), toute
@@ -174,17 +176,42 @@ export function sameGroupingParams(
 }
 
 /**
+ * L'état qu'un groupe de profondeur `depth` reçoit du seul niveau, sans clic :
+ * la règle d'ouverture du contrat de la 46-1 (`est_ouvert`, listes vides) —
+ * ouvert si le niveau est « Tous les comptes » ou si `depth < detailLevel`.
+ * Elle ne sert qu'à garder les listes manuelles minimales ({@link toggleGroup}) :
+ * l'état affiché reste celui que l'API rend (C-46-2-1).
+ */
+function openByLevel(detailLevel: DetailLevel, depth: number): boolean {
+	return detailLevel === 'all' || depth < detailLevel;
+}
+
+/**
  * Un clic sur l'accordéon d'un groupe (AC-3) : il prime sur le niveau. Ouvrir un
- * groupe fermé l'ajoute à `open` et le retire de `closed` ; fermer un groupe
- * ouvert l'ajoute à `closed` et le retire de `open`.
+ * groupe fermé par le niveau l'ajoute à `open` ; fermer un groupe ouvert par le
+ * niveau l'ajoute à `closed` ; le groupe quitte toujours l'autre liste. Un clic
+ * qui **rend au groupe l'état du niveau** (le rouvrir après l'avoir fermé à la
+ * main, ou l'inverse) le retire des deux listes au lieu de l'y inscrire : sans
+ * quoi l'écran, qui montre l'état du niveau, garderait une liste non vide, et le
+ * PDF exporté dirait « détail ajusté à la main » (Story 46-7, relevé de la revue
+ * d'intégration de l'Epic 46).
  *
  * @param isOpen — l'état du groupe tel que l'API l'a rendu (`open` de sa ligne).
+ * @param depth — la profondeur de sa ligne (`depth`), qui fixe l'état du niveau.
  */
-export function toggleGroup(view: GroupingView, groupId: number, isOpen: boolean): GroupingView {
+export function toggleGroup(
+	view: GroupingView,
+	groupId: number,
+	isOpen: boolean,
+	depth: number,
+): GroupingView {
 	const open = view.open.filter((id) => id !== groupId);
 	const closed = view.closed.filter((id) => id !== groupId);
-	if (isOpen) closed.push(groupId);
-	else open.push(groupId);
+	const wanted = !isOpen;
+	if (wanted !== openByLevel(view.detailLevel, depth)) {
+		if (wanted) open.push(groupId);
+		else closed.push(groupId);
+	}
 	return { ...view, open, closed };
 }
 

@@ -66,11 +66,39 @@ describe('paramètres égaux (revue P1 M2)', () => {
 });
 
 describe('règle des clics (AC-3)', () => {
-	it('ouvrir un groupe fermé : ajouté à open, retiré de closed', () => {
-		expect(toggleGroup(vue({ closed: [7, 8] }), 7, false)).toMatchObject({ open: [7], closed: [8] });
+	it('ouvrir un groupe fermé par le niveau : ajouté à open, retiré de closed', () => {
+		expect(toggleGroup(vue({ detailLevel: 2, closed: [7, 8] }), 7, false, 2)).toMatchObject({
+			open: [7],
+			closed: [8],
+		});
 	});
-	it('fermer un groupe ouvert : ajouté à closed, retiré de open', () => {
-		expect(toggleGroup(vue({ open: [7, 3] }), 7, true)).toMatchObject({ open: [3], closed: [7] });
+	it('fermer un groupe ouvert par le niveau : ajouté à closed, retiré de open', () => {
+		expect(toggleGroup(vue({ open: [7, 3] }), 7, true, 1)).toMatchObject({ open: [3], closed: [7] });
+	});
+	// Story 46-7 (revue d'intégration de l'Epic 46, L3) : un clic qui rend au
+	// groupe l'état du niveau vide sa place dans les listes, sans quoi le PDF dit
+	// « détail ajusté à la main » alors que l'écran montre l'état du niveau.
+	it('fermer puis rouvrir un groupe ouvert par le niveau : listes vides', () => {
+		const fermee = toggleGroup(vue({ detailLevel: 2 }), 7, true, 1);
+		expect(fermee).toMatchObject({ open: [], closed: [7] });
+		expect(toggleGroup(fermee, 7, false, 1)).toMatchObject({ open: [], closed: [] });
+	});
+	it('ouvrir puis refermer un groupe fermé par le niveau : listes vides', () => {
+		const ouverte = toggleGroup(vue({ detailLevel: 2 }), 9, false, 2);
+		expect(ouverte).toMatchObject({ open: [9], closed: [] });
+		expect(toggleGroup(ouverte, 9, true, 2)).toMatchObject({ open: [], closed: [] });
+	});
+	it('« Tous les comptes » : rouvrir un groupe fermé à la main le retire de closed', () => {
+		expect(toggleGroup(vue({ closed: [7, 8] }), 7, false, 5)).toMatchObject({
+			open: [],
+			closed: [8],
+		});
+	});
+	it('une entrée redondante (open d\'un groupe déjà ouvert par le niveau) se ferme quand même', () => {
+		expect(toggleGroup(vue({ detailLevel: 3, open: [4] }), 4, true, 1)).toMatchObject({
+			open: [],
+			closed: [4],
+		});
 	});
 	it('changer de niveau vide les deux listes', () => {
 		expect(withDetailLevel(vue({ open: [1], closed: [2] }), 3)).toMatchObject({
