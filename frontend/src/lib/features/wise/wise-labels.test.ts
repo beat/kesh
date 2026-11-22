@@ -68,6 +68,22 @@ describe('wiseImportErrorLines (Story 39-11d)', () => {
 		expect(out[0]).toContain('« chf.csv »');
 	});
 
+	// Revue P2 L3 : le serveur ajoute `archive` aux `details` de toute raison de
+	// `WISE_CSV_INVALID` ; chaque phrase nomme alors le zip d'où vient le relevé.
+	it.each([
+		['WISE_CSV_MISSING_COLUMNS', { columns: ['ID'] }],
+		['WISE_CSV_DUPLICATE_COLUMN', { columns: ['Amount'] }],
+		['WISE_CSV_EMPTY', {}],
+		['WISE_CSV_ENCODING', { cause: 'x' }],
+		['WISE_CSV_MIXED_CURRENCIES', { currencies: ['CHF', 'EUR'] }],
+		['WISE_CSV_DUPLICATE_ID', { id: 'CARD-9', lines: [4, 9] }],
+		['WISE_CSV_RUNNING_BALANCE_BREAK', { line: 6, expected: '10.00', found: '12.00' }],
+	])('relevé refusé %s sorti d’un zip : le fichier et son archive nommés', (reason, more) => {
+		const out = wiseImportErrorLines(invalid(reason, { archive: 'r.zip', ...more }));
+		expect(out).toHaveLength(1);
+		expect(out[0]).toContain('« chf.csv » (archive « r.zip »)');
+	});
+
 	it('relevé refusé WISE_CSV_LINES : une phrase par ligne, cause traduite', () => {
 		const out = wiseImportErrorLines(
 			invalid('WISE_CSV_LINES', {
