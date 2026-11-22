@@ -26,7 +26,7 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
 1. **`check_single_currency`** (`crates/kesh-import/src/wise.rs:530-541`, Story 39-11a, LOW L2 de la revue P2) :
    pour chaque ligne, `Vec::contains` sur les devises déjà vues — coût en O(lignes × devises distinctes), et une
    allocation par fichier même à une seule devise ; les devises étant des codes de trois lettres validés
-   (`wise.rs:686-688`), le gain réel est mince : c'est surtout un chemin normal linéaire et sans allocation. Le refus
+   (`wise.rs:686-691`), le gain réel est mince : c'est surtout un chemin normal linéaire et sans allocation. Le refus
    `WiseCsvError::MixedCurrencies(Vec<String>)` porte les devises **dans l'ordre de leur première apparition** dans le
    fichier (doc de la variante, `wise.rs:298-301`), ordre relu par `routes/wise_imports.rs:358` (détail
    `currencies` du `422 WISE_CSV_INVALID`) et figé par `tests/wise_csv.rs:308-314` (deux devises seulement).
@@ -43,7 +43,8 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
 
 - **D1 — Contrôle de devise linéaire, même erreur.** Comparer chaque ligne à la devise de la première ligne ; tant
   qu'elles sont égales, aucune collection. À la première différence, construire la liste des devises distinctes dans
-  l'ordre de première apparition par un `HashSet` des devises vues (un passage). Sortie **identique** à l'actuelle,
+  l'ordre de première apparition : un `Vec` de sortie, poussé quand `HashSet::insert` des devises vues rend vrai (un
+  passage ; jamais l'itération du `HashSet`, qui perdrait l'ordre). Sortie **identique** à l'actuelle,
   pour tout fichier.
 - **D2 — `existing_transaction_ids` écrite sur `existing_transactions_by_ids`.** Elle garde sa signature publique
   (`HashSet<String>` des identifiants tels que stockés) — `epic/40-stripe` l'appelle encore
@@ -66,7 +67,7 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
 - **AC-2** — Un fichier dont les lignes portent, dans l'ordre du fichier, CHF, USD, EUR, USD, CHF (une devise non
   initiale répétée, un retour de la première, un ordre qui n'est pas l'alphabétique) est refusé par
   `MixedCurrencies(vec!["CHF", "USD", "EUR"])`. Test neuf dans `crates/kesh-import/tests/wise_csv.rs` (fixture CHF,
-  lignes 0 à 4 par `set` emboîtés). **Test de caractérisation** : l'ancien code rend le même résultat ; il vaut
+  dont les lignes 0 et 4 sont déjà en CHF : lignes 1 à 3 changées en USD, EUR, USD par trois `set` emboîtés). **Test de caractérisation** : l'ancien code rend le même résultat ; il vaut
   contre les mutations (a) et (b), qui doivent le faire rougir.
 - **AC-3** — `two_currencies_are_refused` reste vert sans modification.
 - **AC-4** — `existing_transaction_ids` ne contient plus de requête SQL ; elle délègue à
@@ -74,9 +75,12 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
   `crates/kesh-db/tests/bank_transactions_repository.rs`, de caractérisation lui aussi (l'ancien code le passe) :
   identifiant présent au débit et au crédit rendu une fois, identifiant absent non rendu ; **une vraie seconde
   société**, avec son compte et le même identifiant importé, exclue ; un autre compte de la société portant le même
-  identifiant exclu ; et des identifiants de société et de compte **distincts** pour le compte visé (seconde société
-  créée d'abord, ou compte visé qui n'est pas le premier), afin qu'une délégation qui permute `company_id` et
-  `bank_account_id` rougisse. Le test porte lui-même ses assertions de compte et de société.
+  identifiant exclu. Pour qu'une délégation qui permute `company_id` et `bank_account_id` rougisse, il faut
+  qu'**aucune ligne seedée ne porte** (`company_id` = id du compte visé, `bank_account_id` = id de la société visée) —
+  des identifiants seulement distincts ne suffisent pas (contre-exemple de la validation P2). Le test le garantit par
+  une **assertion de montage** : `existing_transactions_by_ids(conn, account, company, &ids)` (arguments permutés à
+  dessein) rend un résultat vide, alors que l'appel juste rend `CARD-1`. Le test porte lui-même ses assertions de
+  compte et de société.
 - **AC-5** — Les commentaires des deux fonctions décrivent leurs appelants réels (D3) ; aucun renvoi à 39-12a3 ni à
   « l'import PayPal » comme seul appelant.
 - **AC-6** — Liste des issues à ouvrir (hors dépôt) : les deux entrées soldées barrées, avec le commit.
@@ -98,7 +102,9 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
 - Mutations visées, chacune tuée sur une assertion nommée : (a) ne pas dédoublonner (pousser chaque devise différente
   de la première) → test d'AC-2 ; (b) perdre l'ordre (trier) → test d'AC-2 ; (c) `existing_transaction_ids` qui rend
   un ensemble vide → test d'AC-4 ; (d) filtre de compte retiré de la requête → test d'AC-4 (et celui
-  d'`existing_transactions_by_ids`) ; (e) `company_id` et `bank_account_id` permutés à la délégation → test d'AC-4.
+  d'`existing_transactions_by_ids`) ; (e) `company_id` et `bank_account_id` permutés à la délégation → test d'AC-4
+  (assertion de montage comprise) ; (f) liste tirée de l'itération du `HashSet` → test d'AC-2 (rouge par intermittence :
+  jouée plusieurs fois, déclarée comme telle).
 
 ## Modules touchés (2)
 
@@ -138,3 +144,11 @@ Aucune ligne de CHANGELOG : rien de visible ne change (dette interne).
   seconde société et des identifiants distincts, mutation (e) ajoutée ; L1 : « quadratique » nuancé ; L2 : contrat
   décrit une fois, renvoi circulaire retiré (D3) ; L3 : raison de garder la fonction écrite avec le fait relevé
   (D2) ; L4 : mutations nommées par assertion. Passe P2 à lancer (un MEDIUM rendu).
+- 2026-11-22 — Validation P2 (Opus, `kesh-gate-logs/s39-13/validation-p2-rapport.md`) : 0 C, 0 H, 1 M, 3 L. M1 : la
+  condition « identifiants distincts » d'AC-4 ne tuait pas la permutation (contre-exemple) : remplacée par la condition
+  exacte et une assertion de montage aux arguments permutés ; L1 : ordre gardé par un `Vec` poussé à l'insertion, mutation
+  (f) ; L2 : trois `set` (lignes 1 à 3) ; L3 : citation `wise.rs:686-691`. Passe P3 à lancer.
+- 2026-11-22 — Hors plafond, documentation seule (demande de l'orchestrateur, LOW-4 de la revue d'intégration
+  d'`epic/39-wise`, `kesh-gate-logs/integration/epic-39-fusion-11d2-40-revue.md`) : la ligne `PROVIDER_ACCOUNT_NOT_FOUND`
+  de `docs/api-external.md` nomme aussi `GET /wise/review` et `POST /wise/accept` (`10d38b1c4`), relu au code
+  (`provider_accept.rs:272` et `:672`, appelés par `routes/wise.rs:193` et `:609`).
