@@ -22,7 +22,7 @@ afin que l'epic ne fasse pas monter le compte d'issues plus que nécessaire.
 
 0. **Entrée** : le registre de la dette du fichier d'epic porte, pour chaque story 47-1 à 47-4, les findings non
    remédiés de ses revues (chaque fiche sœur l'alimente à la clôture de sa boucle, § *References*), et le Project
-   Lead ouvre les issues d'après lui (l'agent de Beat n'en ouvre pas) ; la liste des lignes (story d'origine, passe,
+   Lead ouvre les issues d'après lui (l'agent du responsable de l'epic n'en ouvre pas) ; la liste des lignes (story d'origine, passe,
    sévérité, objet, numéro d'issue s'il existe, priorité, étiquettes) est copiée au Change Log. **Le registre, non
    la liste des issues, fait foi** : une ligne dont l'issue n'est pas encore ouverte reste candidate (AC 1). Le
    registre **vide** à la date de la story, la 47-5 est close sans code, le constat écrit (AC 3 et 5 sans objet ;
@@ -49,7 +49,7 @@ afin que l'epic ne fasse pas monter le compte d'issues plus que nécessaire.
    à côté du compte du tag v0.20.0 (tag précédent, relevé par le Project Lead) et de l'objectif de l'epic (fichier d'epic, § *Décomptes d'issues*).
 5. Les issues traitées se ferment par le corps de la PR de release (`closes #N`), jamais par un message de commit
    (grep des mots-clés sur `git log` avant la PR) ; les lignes `closes #N` sont préparées par la story, la PR est
-   ouverte et l'état des issues vérifié après la fusion par le Project Lead (l'agent de Beat n'a ni PR ni `gh`).
+   ouverte et l'état des issues vérifié après la fusion par le Project Lead (l'agent du responsable de l'epic n'a ni PR ni `gh`).
 
 ## Tâches / sous-tâches
 

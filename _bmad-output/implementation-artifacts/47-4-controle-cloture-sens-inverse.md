@@ -2,7 +2,7 @@
 
 Status: superseded
 
-> ⚠️ **Superseded le 2026-11-19 — refonte « miroir seul, KISS »** (fichier d'epic, § *Décision du 2026-11-19 : miroir seul*) : le contrôle de clôture K10 est retiré de l'epic : un solde de sens inverse sans miroir se voit déjà, négatif, au bilan et au compte de résultat ; K10 aurait ajouté un code de contrôle, des clés i18n, une ligne d'écran et la mise à dix de neuf sites pour signaler ce que le rapport montre. À rouvrir en issue (`enhancement`) si Guy ou Beat le veulent — Guy avait répondu « avertissement non bloquant » à Q6 avant la décision du 2026-11-19. Fiche laissée telle quelle pour l'historique ; ne pas développer.
+> ⚠️ **Superseded le 2026-11-19 — refonte « miroir seul, KISS »** (fichier d'epic, § *Décision du 2026-11-19 : miroir seul*) : le contrôle de clôture K10 est retiré de l'epic : un solde de sens inverse sans miroir se voit déjà, négatif, au bilan et au compte de résultat ; K10 aurait ajouté un code de contrôle, des clés i18n, une ligne d'écran et la mise à dix de neuf sites pour signaler ce que le rapport montre. À rouvrir en issue (`enhancement`) si Guy ou le responsable de l'epic le veulent — Guy avait répondu « avertissement non bloquant » à Q6 avant la décision du 2026-11-19. Fiche laissée telle quelle pour l'historique ; ne pas développer.
 
 Epic : `_bmad-output/planning-artifacts/epic-47-comptes-miroirs.md` — FR-47-5 ; Q6 (avertissement **non bloquant**,
 Guy, 2026-11-19), D8. Dépend de la **47-1a** (colonnes de lien). Maquette : § M6 du formulaire d'approbation.

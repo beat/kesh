@@ -313,7 +313,7 @@ Sonnet 5.5.
   `homepage_summary_e2e::mirror_leaves_the_homepage_on_real_balances` (`kesh-gate-logs/s47-3/mut-accueil.log`) ;
   (2) présentation sans retri : rouge sur `presentation::tests::banque_a_decouvert_passe_au_passif`
   (`mut-retri.log`).
-- **Gates rejoués sur la cible propre** `/home/beat/claude/kesh-targets/kesh-wt47s3`, au commit `50a8c906` :
+- **Gates rejoués sur la cible propre** `<station>/kesh-targets/kesh-wt47s3`, au commit `50a8c906` :
   backend (nextest, base `kesh_s473`) **6202 passés, 14 ignorés** ; E2E complet **480 passés, 10 échecs attendus**
   (les sept de la KF-029 #97, KF-065 #1282 ×2, KF-067 #1284) ; frontend **4658 tests** (`npm run check`,
   `lint-i18n-ownership`, build verts). **`gate-ci` (`cargo test -j1`, journal `s47-3/gate-ci.log`) : INCOMPLET** —

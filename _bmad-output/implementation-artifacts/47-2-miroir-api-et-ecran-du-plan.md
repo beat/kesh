@@ -449,7 +449,7 @@ Journaux hors dépôt, `kesh-gate-logs/s47-2/` : `pipeline-1.log` (première sé
   l'ignorent) rouges (`mutations-back-1.log`, ⚠️ lancées alors que B1 était resté appliqué par un essai interrompu par
   `timeout` — fichier restauré avant les commits, vérifié par `git diff`) ; B1 (`null` traduit en inchangé) rejouée seule,
   rouge (`mutations-back.log`).
-- **T5 — gates au dernier commit de code `90c4b5aa`**, cible propre `/home/beat/claude/kesh-targets/kesh-wt47`,
+- **T5 — gates au dernier commit de code `90c4b5aa`**, cible propre `<station>/kesh-targets/kesh-wt47`,
   `CARGO_INCREMENTAL=0`, par `heavy.sh` :
   - **incidents** : (1) la cible partagée `kesh-target` rendait le binaire `accounts_e2e` d'une autre worktree (tests
     absents de cette branche) — les nextest ciblés joués dessus sont **sans valeur** et ont été rejoués sur la cible

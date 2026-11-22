@@ -271,7 +271,7 @@ compte de présentation sur lequel aucune écriture ne se passe.
 ## Change Log
 
 - 2026-11-19 — **Refonte du 2026-11-19 (miroir seul, KISS)** : fiche renommée de `47-1a-liens-modele-et-depot`,
-  réécrite sur la décision de Beat et Guy (fichier d'epic, § *Décision du 2026-11-19*). Retirés : `offset_account_id`,
+  réécrite sur la décision du responsable de l'epic et Guy (fichier d'epic, § *Décision du 2026-11-19*). Retirés : `offset_account_id`,
   paire écrite des deux côtés, transitions paire ↔ miroir, raisons `bothLinks`, `onCreate`, `CHECK` « pas les deux »,
   cas (d) « paire non réciproque » du lecteur. Ajoutés : la cible est un compte de présentation (non imputable, sans
   rôle, sans écriture), la garde des lignes au point de passage (AC-6), le miroir à la création, le mapping et les
@@ -316,7 +316,7 @@ compte de présentation sur lequel aucune écriture ne se passe.
   (`e1c1653c`), simplicité. Non exercés : acceptation du `CHECK` sur `id` par MariaDB (T0), manuels, i18n (rien de neuf
   vs P1). Rapport : `kesh-gate-logs/epic-47-validation/47-1-miroir-modele-et-depot-P2.md`.
 
-- 2026-11-20 — **T0 du développement : arrêt, question à Beat et Guy (AC-1, D10).** Reprise de `origin/main`
+- 2026-11-20 — **T0 du développement : arrêt, question au responsable de l'epic et Guy (AC-1, D10).** Reprise de `origin/main`
   (`fd04099f`, trois commits : 0.20.0 kickoff, bilan 0.19.0, #1353) dans `epic/47-comptes-miroirs` par fusion
   (`cc4b48d3`) ; seul conflit, `sprint-status.yaml`, résolu en gardant les deux côtés (bloc de main entier, puis le
   bloc de l'Epic 47 ; aucune clé en double). Migrations à la reprise : 95, dernière `20261118000001` ; la 49-1a
@@ -431,7 +431,7 @@ Claude Opus 5.5 (workflow `bmad-dev-story`), 2026-11-20.
 
 ### Debug Log References
 
-Journaux hors dépôt, `/home/beat/claude/kesh-gate-logs/s47-1/` : `check-ws.log` (compilation), `regen-squash.log` et
+Journaux hors dépôt, `<station>/kesh-gate-logs/s47-1/` : `check-ws.log` (compilation), `regen-squash.log` et
 `squash-regen-brut.sql` (régénération du squash), `cible-nextest.log` (gate ciblé), `mutations.log`, `gate-backend.log`,
 `front-*.log`, `e2e.log` / `e2e-backend.log`, `gate-ci.log`.
 

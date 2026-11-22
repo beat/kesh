@@ -93,7 +93,7 @@ afin de remettre un document lisible sans masquer ce qui a été regroupé.
 5. **Libellés** : les textes du PDF (titre de la note, « comprend », « déduit », « solde propre », « solde », mention
    et sa phrase) sont de **nouveaux champs de `SectionLabels`**, valeurs FR-CH dans `fr_ch_defaults()` — c'est la seule
    voie réelle : `load_pdf_context` (`routes/reports.rs:928`) ne résout aucun libellé par i18n, il appelle
-   `PdfContext::fr_ch_default` (« i18n PDF complète déférée », L4/L11). **Même décision que #1327** (Beat,
+   `PdfContext::fr_ch_default` (« i18n PDF complète déférée », L4/L11). **Même décision que #1327** (le responsable de l'epic,
    2026-11-18) : les clés `reports-pdf-…` correspondantes sont **posées dans les quatre catalogues** (parité
    vérifiée) mais **non lues** par les PDF, pas de mot allemand isolé dans un PDF français ; l'issue de traduction des
    PDF les reprendra. Le CSV garde ses en-têtes FR-CH en dur (L1/L4/L11, D3 de la 9-2a), valeurs `miroir` /
@@ -176,7 +176,7 @@ un rapport à nombreuses sources (saut de page, césure : AC 2) ; texte hors Win
 
 ### References
 
-- Fiche 47-2a ; release 0.20.0 § *Correctifs de Beat* (#1327 avant la 48-11) ; `CLAUDE.md` § *Le prompt d'une passe
+- Fiche 47-2a ; release 0.20.0 § *Correctifs du responsable de l'epic* (#1327 avant la 48-11) ; `CLAUDE.md` § *Le prompt d'une passe
   doit NOMMER le manuel*.
 
 ## Change Log

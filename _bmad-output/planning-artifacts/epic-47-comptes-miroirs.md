@@ -5,16 +5,16 @@ ci-dessous.)*
 
 ## Décision du 2026-11-19 : miroir seul
 
-**Beat et Guy, après étude de l'art. 959a CO** (et de l'interdiction de compenser, CO 958c al. 1 ch. 7) : l'epic ne
+**Le responsable de l'epic et Guy, après étude de l'art. 959a CO** (et de l'interdiction de compenser, CO 958c al. 1 ch. 7) : l'epic ne
 garde **que la fonction miroir**. Un compte peut avoir un **compte miroir**, qui **ne porte aucune écriture** et ne sert
 qu'à la présentation — bilan, compte de résultat, total de l'actif et du passif, résultat. Le solde du compte source,
 s'il est de sens inverse de sa nature, se présente sous le miroir, de l'autre côté : c'est la présentation que veut le
-CO, **sans aucune compensation**. Consigne de Beat : implémentation et interface **aussi simples que possible (KISS)**.
+CO, **sans aucune compensation**. Consigne du responsable de l'epic : implémentation et interface **aussi simples que possible (KISS)**.
 
 Cas d'usage : « Gains de change » seul porte les écritures de change, « Pertes de change » est son miroir (un gain net
 négatif paraît en charge) ; une dette sociale à solde débiteur paraît à l'actif ; une banque à découvert, au passif.
 
-**Approbation de Beat (2026-11-20)**, page de revue « miroir seul » : principe et écrans **approuvés** ; retrait du
+**Approbation du responsable de l'epic (2026-11-20)**, page de revue « miroir seul » : principe et écrans **approuvés** ; retrait du
 contrôle K10 **d'accord** ; cinq stories **approuvées**. Développement autorisé, 47-1 en premier.
 
 ### Règles retenues
@@ -143,13 +143,13 @@ type » est à ajouter au rejeu de l'exemple par niveaux, à la fusion.
 
 ## Kickoff du 2026-11-18 et orientation du 2026-11-19 (historique)
 
-**Kickoff : 2026-11-18** (esquisse) ; **orientation approuvée par Guy le 2026-11-19** (§ *Revue de Guy*) **et par Beat le même jour, telle quelle** (§ *Revue de Beat*) : **kickoff accompli le 2026-11-19**. Numéro réservé à Beat (contributeur) par Guy ; responsable : Beat.
+**Kickoff : 2026-11-18** (esquisse) ; **orientation approuvée par Guy le 2026-11-19** (§ *Revue de Guy*) **et par le responsable de l'epic le même jour, telle quelle** (§ *Revue du responsable de l'epic*) : **kickoff accompli le 2026-11-19**. Numéro réservé au responsable de l'epic (contributeur) par Guy ; responsable : le responsable de l'epic.
 Branche `epic/47-comptes-miroirs`, partie de `main` = `773df80d` (v0.19.0). **Passe après l'Epic 46** (rapports par
 groupes de comptes), préparé en parallèle. Release : un epic = une release, **ultérieure à la 0.20.0** (Guy, 2026-11-19), numéro au tag par le Project Lead.
 
 Règles des fichiers communs (`CLAUDE.md` § *Travailler à plusieurs développeurs*) : rien au `CHANGELOG.md` (section
 *Note de version* par fiche) ; aucun PDF de manuel commité ; i18n et `sprint-status.yaml` en bloc propre ; compteurs
-recomptés après chaque reprise de `main`. Pas d'issue ni de PR à ce stade (Beat : lecture seule sur le dépôt de Guy).
+recomptés après chaque reprise de `main`. Pas d'issue ni de PR à ce stade (le responsable de l'epic : lecture seule sur le dépôt de Guy).
 
 ## Intention
 
@@ -162,7 +162,7 @@ recomptés après chaque reprise de `main`. Pas d'issue ni de PR à ce stade (Be
 - **Paire compensée** : deux comptes de types opposés dont seul le **net** paraît, sur le compte du sens du net
   (pertes de change 6960 et gains de change 6961 de l'Epic 37 : une ligne).
 
-Besoin réel : à la recette de l'exercice 2024 de Beat, il a fallu au 31.12 des écritures de reclassement (quatre
+Besoin réel : à la recette de l'exercice 2024 du responsable de l'epic, il a fallu au 31.12 des écritures de reclassement (quatre
 passifs débiteurs vers des comptes d'actif créés pour cela, gains et pertes de change virés) pour retrouver bilan et
 compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritures inutiles.
 
@@ -179,46 +179,46 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
 | Sauvegarde | une **colonne** facultative manquante est tolérée par la règle générique ; une **table** manquante est refusée hors liste close | `kesh-api/src/admin_backup/import.rs:600-640` ; `kesh-db/src/backup.rs:156-245` |
 | Migrations | 95 ; `kesh_version_min_required` = 0.17.6 | `docs/migrations-idempotence-audit.md:17, 121` |
 
-## Décisions — décidées (Guy et Beat, 2026-11-19)
+## Décisions — décidées (Guy et le responsable de l'epic, 2026-11-19)
 
 - **D1 — Modèle : deux colonnes sur `accounts`, pas de table.** `mirror_account_id BIGINT NULL` (compte miroir) et
   `offset_account_id BIGINT NULL` (partenaire de paire, posé **des deux côtés**, réciproque, écrit dans une
   transaction). Pointeurs sans clé étrangère, comme `fx_gain_account_id`. Raison : une table neuve rend toute
   sauvegarde 0.19.0 inimportable (ou exige une liste d'absences admises) ; deux colonnes facultatives passent la règle
   générique. Un compte n'a pas les deux (`CHECK`). Pas de chaîne : un compte miroir n'a lui-même ni miroir ni paire.
-  *Guy, 2026-11-19 :* d'accord, deux colonnes facultatives, compatibles avec l'import des sauvegardes 0.19.0 ; une table l'empêcherait. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* d'accord, deux colonnes facultatives, compatibles avec l'import des sauvegardes 0.19.0 ; une table l'empêcherait. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ **remplacé par la décision du 2026-11-19** en partie : une seule colonne, `mirror_account_id` (R1) ; `offset_account_id` et le `CHECK` « pas les deux » disparaissent avec la paire. Le choix des colonnes plutôt qu'une table (sauvegardes) tient.
 - **D2 — Miroir** : de l'autre côté du même rapport (actif ↔ passif hors fonds propres ; produit ↔ charge), même
   société. Le compte miroir peut être non imputable (compte de présentation créé pour l'usage) ou porter ses propres
   écritures ; sa ligne = son solde + le solde inversé de ses sources. Un compte dont le solde est dans son sens normal
   reste à sa place.
-  *Guy, 2026-11-19 :* d'accord ; pas de chaîne : un miroir ne pointe jamais vers un compte qui a lui-même un miroir — **refus nommé** (47-1 AC3). → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* d'accord ; pas de chaîne : un miroir ne pointe jamais vers un compte qui a lui-même un miroir — **refus nommé** (47-1 AC3). → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ **remplacé par la décision du 2026-11-19** : le miroir ne porte **aucune** écriture (non imputable, sans rôle, R2, R4) ; sa ligne vaut la somme des soldes inversés de ses sources (R5). « Pas de chaîne » et « plusieurs sources » tiennent (R3).
 - **D3 — Paire** : deux comptes de **types opposés** du même rapport (produit/charge ; actif/passif). Le net paraît
   sur le compte du sens du net, sous son numéro et son libellé ; net nul → aucune ligne. Deux comptes de même type ne
   forment pas de paire : leur somme est un groupe (Epic 46).
-  *Guy, 2026-11-19 :* approuvé, sous réserve de Q9 : la paire compense une charge et un produit (CO 958c al. 1 ch. 7) → avertissement à sa création, mention « présentation compensée » au PDF. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* approuvé, sous réserve de Q9 : la paire compense une charge et un produit (CO 958c al. 1 ch. 7) → avertissement à sa création, mention « présentation compensée » au PDF. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ **remplacé par la décision du 2026-11-19** : paires retirées de l'epic.
 - **D4 — Bascule à la date d'arrêté de tout rapport** (bilan à toute date, compte de résultat sur toute période), pas
   seulement à la clôture : Kesh calcule les soldes en direct et ne passe aucune écriture de clôture.
-  *Guy, 2026-11-19 :* d'accord, un rapport intermédiaire se présente comme celui de clôture. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* d'accord, un rapport intermédiaire se présente comme celui de clôture. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
 - **D5 — Une seule fonction de présentation** dans `kesh-report` (pure, testée seule), appliquée aux lignes avant
   les totaux et avant les groupes de l'Epic 46. Bilan et compte de résultat seulement ; écran, PDF, CSV, API, MCP.
   L'équation du bilan tient (les deux côtés bougent du même montant) ; le résultat net ne change pas.
-  *Guy, 2026-11-19 :* approuvé ; présentation d'abord, puis regroupement (Q5). → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* approuvé ; présentation d'abord, puis regroupement (Q5). → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ tient (R5) ; « écran, PDF, CSV, API, MCP » : présentation appliquée partout, sans rendu propre au PDF, au CSV ni au MCP (R7).
 - **D6 — Présentation brute toujours disponible** : paramètre `presentation=brute` à l'API (et bascule à l'écran)
   rend le rapport d'aujourd'hui, compte par compte, signé. Défaut : présentée. L'accueil reste sur les totaux bruts.
-  *Guy, 2026-11-19 :* essentiel : la présentation brute reste disponible **partout** (écran, PDF, CSV, API), notamment pour les comptes annuels officiels si une paire est utilisée (Q9). → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* essentiel : la présentation brute reste disponible **partout** (écran, PDF, CSV, API), notamment pour les comptes annuels officiels si une paire est utilisée (Q9). → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ **remplacé par la décision du 2026-11-19** : pas de présentation brute (R6) ; le motif (comptes officiels avec une paire) tombe avec la paire, et la balance donne les soldes réels.
 - **D7 — Balance de vérification, grand livre, journal, TVA, projets : inchangés.** Le détail par compte y reste.
-  *Guy, 2026-11-19 :* confirmé (Q4) : balance, grand livre et journal montrent les soldes réels. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* confirmé (Q4) : balance, grand livre et journal montrent les soldes réels. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
 - **D8 — Fonds propres et lignes calculées exclus** : un compte de rôle de fonds propres ne prend ni miroir ni paire ;
   une perte (reportée ou de l'exercice) reste en déduction des fonds propres (CO 959a).
-  *Guy, 2026-11-19 :* d'accord ; fonds propres hors du mécanisme, une perte reste en déduction (CO 959a). → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* d'accord ; fonds propres hors du mécanisme, une perte reste en déduction (CO 959a). → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
 - **D9 — Traçabilité** : chaque ligne présentée porte à l'API ses `sources` (compte, solde brut) ; l'écran les montre
   au survol ou au dépliage ; le PDF et le CSV, une marque et une note.
-  *Guy, 2026-11-19 :* d'accord ; la marque du PDF dit en clair **« présentation compensée »** quand une paire est appliquée (Q9). → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* d'accord ; la marque du PDF dit en clair **« présentation compensée »** quand une paire est appliquée (Q9). → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ **remplacé par la décision du 2026-11-19** : `mirrorOf` à l'API, mention à l'écran ; ni marque ni note au PDF et au CSV, ni mention « présentation compensée » (R7).
 - **D10 — Migration de la 47-1, non breaking** : `2026112?000001_account_presentation_links.sql` (horodatage au
   développement), DDL seul : deux `ADD COLUMN … BIGINT NULL`, deux index, `CHECK` (pas soi-même, pas les deux). Ne
@@ -226,7 +226,7 @@ compte de résultat de l'ancien logiciel ligne à ligne. L'epic rend ces écritu
   sites positionnels ; P7 : rien à trier (aucune écriture de données) ; squash `test-schema` mis à jour. Une sauvegarde
   0.19.0 s'importe (colonnes facultatives) ; la version précédente refuse la base migrée et les sauvegardes neuves :
   retour par la sauvegarde d'avant la mise à jour. **Annoncée au projet au kickoff** (tableau des fichiers communs).
-  *Guy, 2026-11-19 :* d'accord sur le principe. **Ordre : cette migration passe après celle de l'Epic 49 (`20261118000002`, release 0.20.0 du 2026-11-27)**, dans une release ultérieure à la 0.20.0 ; l'Epic 47 dépend de l'Epic 46. Annoncée au projet GitHub au kickoff, avec **la sauvegarde complète avant mise à jour en tête des notes**. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* d'accord sur le principe. **Ordre : cette migration passe après celle de l'Epic 49 (`20261118000002`, release 0.20.0 du 2026-11-27)**, dans une release ultérieure à la 0.20.0 ; l'Epic 47 dépend de l'Epic 46. Annoncée au projet GitHub au kickoff, avec **la sauvegarde complète avant mise à jour en tête des notes**. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ adapté par la décision du 2026-11-19 : `<horodatage>_account_mirror.sql`, une colonne, un index ; le `CHECK` « pas soi-même » : écart constaté au T0 le 2026-11-20 (MariaDB 10.11 : ERROR 1901, AUTO_INCREMENT interdit dans un CHECK) ; contrainte retirée, refus tenu par le code ; tout le reste (non breaking, après `20261118000002`, P5–P8, squash, sauvegarde) tient (fiche 47-1).
 
 ## Exigences
@@ -283,7 +283,7 @@ Chaque story compte au plus cinq modules (règle de splitting préventif), décl
 5. **47-5** en dernier, une fois 47-1 à 47-4 closes.
 
 **Si le temps manque** (coupure du jeudi soir : n'entrent que les stories closes ; `CLAUDE.md` § *Cadence*) : epic de
-contributeur, l'orchestrateur n'y touche pas ; la coupure se décide par **Beat**, et **le Project Lead garde le dernier
+contributeur, l'orchestrateur n'y touche pas ; la coupure se décide par **le responsable de l'epic**, et **le Project Lead garde le dernier
 mot**. La **47-5** sort la première (ses lignes du registre restent ouvertes en issues, et l'absence de solde s'écrit à
 la PR de release et à la rétrospective) ; la 47-1 ne sort jamais ; l'epic ne se publie pas amputé de sa présentation
 (47-3) ni de son écran de pose (47-2) : sans elles, le miroir n'a aucun effet visible, et **l'epic entier attend une
@@ -295,7 +295,7 @@ Hors epic : la story de correction de bugs de la release (`CLAUDE.md` § *Cadenc
 
 ## Registre de la dette de l'epic
 
-Les revues de chaque story consignent ici, à la clôture de leur boucle (chaque fiche 47-1 à 47-4 le rappelle en § *References*), une ligne par finding **non remédié** qui devrait s'ouvrir en issue (« on trace toujours ») : story, passe, sévérité, objet, issue (numéro reporté quand le Project Lead l'ouvre), sort (ouverte, retenue en 47-5, corrigée en 47-5, reportée). L'agent de Beat n'ouvre pas d'issue (lecture seule sur le dépôt de Guy) : le Project Lead ouvre les issues d'après ce registre, et la 47-5 en part. Une ligne par problème, sans regroupement ; l'étiquette `bug` seulement pour un comportement faux visible (`CLAUDE.md` § *Priorités des défauts*).
+Les revues de chaque story consignent ici, à la clôture de leur boucle (chaque fiche 47-1 à 47-4 le rappelle en § *References*), une ligne par finding **non remédié** qui devrait s'ouvrir en issue (« on trace toujours ») : story, passe, sévérité, objet, issue (numéro reporté quand le Project Lead l'ouvre), sort (ouverte, retenue en 47-5, corrigée en 47-5, reportée). L'agent du responsable de l'epic n'ouvre pas d'issue (lecture seule sur le dépôt de Guy) : le Project Lead ouvre les issues d'après ce registre, et la 47-5 en part. Une ligne par problème, sans regroupement ; l'étiquette `bug` seulement pour un comportement faux visible (`CLAUDE.md` § *Priorités des défauts*).
 
 | Story | Passe | Sévérité | Objet | Issue | Sort |
 |---|---|---|---|---|---|
@@ -353,7 +353,7 @@ avant la 47-4 ; ordre des migrations contrôlé à cette reprise si l'Epic 46 en
 ## Décomptes d'issues
 
 **Relevés par le Project Lead au kickoff de la 0.20.0** (`release-0.20.0.md` § *Décompte au kickoff et objectif*, sur
-`origin/main` à `fd04099f`) ; non remesurés ici (`gh` hors de portée de l'agent de Beat) :
+`origin/main` à `fd04099f`) ; non remesurés ici (`gh` hors de portée de l'agent du responsable de l'epic) :
 
 | | Tag v0.19.0 | Kickoff 0.20.0 (2026-11-18) | Le soir du 2026-11-18 |
 |---|---|---|---|
@@ -361,7 +361,7 @@ avant la 47-4 ; ordre des migrations contrôlé à cette reprise si l'Epic 46 en
 | Bugs (`bug` ou `known-failure`) | 247 | 247 | 257 |
 | P1 ouvertes | 14 | 14 | 14 |
 
-Hors les 56 issues masquées du compte de l'agent de Beat (#1266–#1271, #1277–#1326), non comptées (décision de Guy).
+Hors les 56 issues masquées du compte de l'agent du responsable de l'epic (#1266–#1271, #1277–#1326), non comptées (décision de Guy).
 **Plafond de la story de solde (47-5)** : **2 issues**, fixé ici au kickoff (`CLAUDE.md` § *Priorités des défauts*) ; annoté le 2026-11-22 : le plafond vaut pour les issues, les LOW des 47-1 et 47-2 corrigés au second temps (décision du 22.11) n'en comptent pas.
 **Objectif de l'epic** : moins d'issues ouvertes au tag de cette release que **au tag précédent, v0.20.0** (CLAUDE.md § *Priorités des défauts* : objectif, non barrière) ; ce compte n'existe pas encore (la 0.20.0 n'est pas taguée) et se relève au tag par le Project Lead, comme le compte du tag de l'epic à la PR de release et à la rétrospective, avec l'écart et sa cause. Le tableau ci-dessus est la base du kickoff, non la référence de l'objectif.
 
@@ -369,38 +369,38 @@ Hors les 56 issues masquées du compte de l'agent de Beat (#1266–#1271, #1277�
 release précédente (la 0.20.0, compte **à relever au tag v0.20.0**) ; le compte au tag de l'Epic 47 s'écrit à sa PR
 de release et à sa rétrospective, avec l'écart et sa cause.
 
-## Questions — répondues (Guy, 2026-11-19), réponses adoptées (Guy et Beat, 2026-11-19)
+## Questions — répondues (Guy, 2026-11-19), réponses adoptées (Guy et le responsable de l'epic, 2026-11-19)
 
 - **Q1** — Modèle : deux colonnes sur le compte (D1) ou table de paires/miroirs ? (D1 recommandé : sauvegardes.)
-  *Guy, 2026-11-19 :* colonnes sur le compte (D1). → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* colonnes sur le compte (D1). → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
 - **Q2** — Bascule à toute date d'arrêté (D4) ou à la date de clôture seulement ?
-  *Guy, 2026-11-19 :* à toute date (D4). → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* à toute date (D4). → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
 - **Q3** — Comptes en devise : lien admis entre devises différentes ? Proposé : admis ; le solde en devise de la
   ligne présentée n'est montré que si toutes ses sources ont la même devise.
-  *Guy, 2026-11-19 :* oui, avec la règle proposée (solde en devise seulement si les sources ont la même devise). → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* oui, avec la règle proposée (solde en devise seulement si les sources ont la même devise). → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ **remplacé par la décision du 2026-11-19** : la ligne du miroir est en devise principale seulement (R8) ; un miroir en devise est admis.
 - **Q4** — Balance et grand livre hors périmètre (D7) : confirmé ?
-  *Guy, 2026-11-19 :* confirmé : balance, grand livre et journal montrent les soldes réels, sans présentation. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* confirmé : balance, grand livre et journal montrent les soldes réels, sans présentation. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
 - **Q5** — Epic 46 : présentation avant regroupement (§ *Dépendance*) ; point d'entrée à convenir avec son auteur.
-  *Guy, 2026-11-19 :* oui : présentation d'abord, puis regroupement ; la ligne va au groupe du compte qui la porte. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* oui : présentation d'abord, puis regroupement ; la ligne va au groupe du compte qui la porte. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
 - **Q6** — Contrôle de clôture (47-4) : avertissement non bloquant, ou rien ?
-  *Guy, 2026-11-19 :* **avertissement non bloquant**, qui signale les comptes à solde inverse sans miroir ni paire, sans empêcher de clore. → **décidé (Guy et Beat, 2026-11-19).**
-  ⇒ **remplacé par la décision du 2026-11-19** : K10 retiré de l'epic (le solde négatif se voit au rapport) ; à rouvrir en issue si Guy ou Beat le veulent.
+  *Guy, 2026-11-19 :* **avertissement non bloquant**, qui signale les comptes à solde inverse sans miroir ni paire, sans empêcher de clore. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
+  ⇒ **remplacé par la décision du 2026-11-19** : K10 retiré de l'epic (le solde négatif se voit au rapport) ; à rouvrir en issue si Guy ou le responsable de l'epic le veulent.
 - **Q7** — Libellé de la ligne présentée : celui du compte qui la porte (proposé), ou un libellé de présentation
   propre au lien (colonne de plus) ?
-  *Guy, 2026-11-19 :* le libellé du compte qui porte la ligne. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* le libellé du compte qui porte la ligne. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
 - **Q8** — Vocabulaire : « compte miroir » sert déjà, dans le code, aux paires de contre-passation
   (`homepage_summary.rs`). Garder « miroir » à l'écran, ou « compte de présentation inverse » ?
-  *Guy, 2026-11-19 :* « compte miroir » convient : le mot n'apparaît que dans des commentaires internes du code, jamais à l'écran ni au manuel. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* « compte miroir » convient : le mot n'apparaît que dans des commentaires internes du code, jamais à l'écran ni au manuel. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
 - **Q9** — Compensation et CO 958c al. 1 ch. 7 (interdiction de compenser) : la paire est un choix de l'utilisateur ;
   Kesh l'admet sans restriction, ou avec un avertissement au plan comptable ?
-  *Guy, 2026-11-19 :* **avec un avertissement.** Le miroir ne compense rien (un découvert au passif est la présentation correcte) ; la paire compense une charge et un produit, ce que CO 958c al. 1 ch. 7 interdit dans les comptes annuels. Donc : **avertissement à la création de la paire**, mention **« présentation compensée »** au PDF du rapport, **présentation brute toujours disponible** (D6) pour les comptes officiels. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* **avec un avertissement.** Le miroir ne compense rien (un découvert au passif est la présentation correcte) ; la paire compense une charge et un produit, ce que CO 958c al. 1 ch. 7 interdit dans les comptes annuels. Donc : **avertissement à la création de la paire**, mention **« présentation compensée »** au PDF du rapport, **présentation brute toujours disponible** (D6) pour les comptes officiels. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ **remplacé par la décision du 2026-11-19** : sans paire, rien n'est compensé ; ni avertissement ni mention.
 - **Q10** — Archiver un compte cible d'un miroir ou partenaire d'une paire : refuser, ou retirer le lien ?
-  *Guy, 2026-11-19 :* **refuser l'archivage** tant qu'un compte pointe vers la cible, avec un message qui **nomme le compte lié**. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* **refuser l'archivage** tant qu'un compte pointe vers la cible, avec un message qui **nomme le compte lié**. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ tient pour le miroir (R4 : archivage du miroir refusé, sources nommées) ; « partenaire d'une paire » caduc.
 - **Q11** — Accueil (D6) : reste brut ? (Ses totaux ne recoupent alors que le compte de résultat brut.)
-  *Guy, 2026-11-19 :* oui, l'accueil reste sur les totaux bruts. → **décidé (Guy et Beat, 2026-11-19).**
+  *Guy, 2026-11-19 :* oui, l'accueil reste sur les totaux bruts. → **décidé (Guy et le responsable de l'epic, 2026-11-19).**
   ⇒ tient (R6) ; la phrase de `api-external.md` sur l'égalité des totaux de l'accueil et du compte de résultat est corrigée par la 47-3.
 
 ## Revue de Guy (2026-11-19)
@@ -424,11 +424,11 @@ Page de revue relue par Guy : **toutes les sections approuvées** (intention, ex
   Inscrit aux critères de 47-1, 47-2, 47-3 ; **leurs prompts de revue nomment les manuels** et exigent le contrôle du
   PDF (`CLAUDE.md` § *Le prompt d'une passe doit NOMMER le manuel*).
 
-## Revue de Beat (2026-11-19) : approuvé tel quel
+## Revue du responsable de l'epic (2026-11-19) : approuvé tel quel
 
-Beat a relu la page de revue complétée des réponses de Guy et **l'approuve telle quelle, sans autre commentaire** :
+Le responsable de l'epic a relu la page de revue complétée des réponses de Guy et **l'approuve telle quelle, sans autre commentaire** :
 toutes les décisions D1–D10 et toutes les réponses de Guy aux questions Q1–Q11 sont **adoptées** ; chaque D et
-chaque Q porte ci-dessus la mention « décidé (Guy et Beat, 2026-11-19) ». Le kickoff (47-0) est accompli ;
+chaque Q porte ci-dessus la mention « décidé (Guy et le responsable de l'epic, 2026-11-19) ». Le kickoff (47-0) est accompli ;
 `sprint-status.yaml` : `epic-47: in-progress`, `47-0-kickoff: done`.
 
 ## Validation des fiches (2026-11-19)
@@ -464,7 +464,7 @@ fiches visées : 47-1a AC-15 et AC-9, 47-2a AC-1 et AC-2).
 **Reste à faire au développement** :
 
 - **47-1a, T0** : vérifier sur la MariaDB de dev que le `CHECK` « pas soi-même » (sur `id`, colonne
-  `AUTO_INCREMENT`) est accepté ; arrêt et question à Beat s'il est refusé (D10, C-47-1a-4). *(Fait à la 47-1 : écart constaté au T0 le 2026-11-20 (MariaDB 10.11 : ERROR 1901, AUTO_INCREMENT interdit dans un CHECK) ; contrainte retirée, refus tenu par le code.)* Horodatage de la migration
+  `AUTO_INCREMENT`) est accepté ; arrêt et question au responsable de l'epic s'il est refusé (D10, C-47-1a-4). *(Fait à la 47-1 : écart constaté au T0 le 2026-11-20 (MariaDB 10.11 : ERROR 1901, AUTO_INCREMENT interdit dans un CHECK) ; contrainte retirée, refus tenu par le code.)* Horodatage de la migration
   postérieur à `20261118000002` **et** à la migration de l'Epic 49 (compte en dur et fenêtre `N = total − 34` de
   `migrations_upgrade_path.rs`), contrôlé à la reprise de `main`.
 - **Tailles MCP** : 47-1b, plafonds de `kesh_plan_comptable` **mesurés** (estimés 34 / 61, jamais devinés ; changement
@@ -474,16 +474,16 @@ fiches visées : 47-1a AC-15 et AC-9, 47-2a AC-1 et AC-2).
   47-2b attend **#1327** (`fix/pdf-montants-alignes`) et **#1346** (`fix/bilan-resultat-reporte`) fusionnés, et la 48-11
   si elle passe avant ; 47-1b et 47-3a résolvent avec **#1351** (`fix/api-parent-compte`) selon l'ordre de fusion ;
   migration de l'**Epic 49** avant la nôtre.
-- **Annonce de la migration** au projet GitHub « Kesh » : par le **Project Lead** (l'agent de Beat n'écrit pas sur le
+- **Annonce de la migration** au projet GitHub « Kesh » : par le **Project Lead** (l'agent du responsable de l'epic n'écrit pas sur le
   dépôt de Guy).
 
 ## Avant le développement
 
 *(Annoté le 2026-11-19, refonte « miroir seul, KISS » : reste à faire — revalidation en boucle des fiches 47-1 à 47-5 (P1 par Sonnet ou Opus), `Status: ready-for-dev` à la clôture de chaque boucle ; la décision du 2026-11-19 est à reporter au projet GitHub par le Project Lead (titre de l'epic, annonce de la migration à une colonne).)*
 
-Fait le 2026-11-19 : réponses de Beat (approuvé tel quel), décomptes repris du kickoff de la 0.20.0, fiches complètes
+Fait le 2026-11-19 : réponses du responsable de l'epic (approuvé tel quel), décomptes repris du kickoff de la 0.20.0, fiches complètes
 47-1a à 47-5 (`Status: drafted`), fichier de l'Epic 46 lu pour Q5 (`epic/46-rapports-groupes`, `4d23b3f9`).
-Reste : approbation des fiches et maquettes par Beat (formulaire hors dépôt), puis validation en boucle de chaque
+Reste : approbation des fiches et maquettes par le responsable de l'epic (formulaire hors dépôt), puis validation en boucle de chaque
 fiche (`CLAUDE.md` § *Review Iteration Rule*), `Status: ready-for-dev` à sa clôture ; point d'entrée du regroupement
 convenu dans la fiche 46-1 (Q5). *(Annoté le 2026-11-19 : validation des huit fiches faite, § *Validation des fiches*
 ci-dessus ; `Status: ready-for-dev`.)*
