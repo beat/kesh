@@ -1,6 +1,6 @@
 # Story 46-3 : PDF et CSV du bilan et du compte de résultat par groupes
 
-Status: in-progress
+Status: review
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D8, D9 (étendue), Q2, Q3 ; FR-46-3, FR-46-8,
 FR-46-9, FR-46-11 ; NFR-46-1, NFR-46-2. Release visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1,
@@ -151,7 +151,7 @@ dur, i18n des PDF différée).
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** — Reprise de `main` et de la branche d'epic : la **46-1** doit y être fusionnée (sinon arrêt) ; relever
+- [x] **T0** — Reprise de `main` et de la branche d'epic : la **46-1** doit y être fusionnée (sinon arrêt) ; relever
       au Change Log, ligne lue citée, les noms du § *L'API de la 46-1* (Dev Notes) tels qu'ils sont dans la branche, et
       si la **47-3** est fusionnée (`grep -rn "present_balance_sheet" crates/kesh-api/src/services/rapports.rs`). La
       48-11 doit être dans `main` (sinon **arrêt**, le dire au Change Log) ; relever ses noms de
@@ -159,13 +159,13 @@ dur, i18n des PDF différée).
       relevés à l'écriture de la fiche : la fiche 48-11 était « à écrire » au 2026-11-20 et aucune branche ne la
       portait). Si la 48-11 sort de la 0.20.0 (ordre de sortie de `epic-48-corrections-0-20-0.md`), la 46-3 attend
       quand même sa fusion dans `main` — le responsable de l'epic et le Project Lead décident alors de l'ordre.
-- [ ] **T1 — fixtures** (AC-2) au commit de base, avant toute modification.
-- [ ] **T2 — route** (AC-1) : dans `export_balance_sheet` et `export_income_statement`, un second extracteur
+- [x] **T1 — fixtures** (AC-2) au commit de base, avant toute modification.
+- [x] **T2 — route** (AC-1) : dans `export_balance_sheet` et `export_income_statement`, un second extracteur
       `Query(paires): Query<Vec<(String, String)>>`, `acces.exiger(… .export)?` puis `groupes_de(&paires)?`, et l'appel
       de `bilan_par_groupes` / `compte_de_resultat_par_groupes` ; **`ExportQuery` inchangé** (revue P2 de la 46-1,
       L-6). Le rendu choisi dans la closure d'`exporter` selon `report.grouped_rows` (`Some` : rendu groupé ; `None` :
       rendu à plat de `&report.rapport`, comme aujourd'hui).
-- [ ] **T3 — PDF** (AC 3, 4, 6) : deux fonctions **neuves** de rendu groupé, qui reçoivent l'enveloppe
+- [x] **T3 — PDF** (AC 3, 4, 6) : deux fonctions **neuves** de rendu groupé, qui reçoivent l'enveloppe
       `&AvecGroupes<BalanceSheet, SectionsBilan>` / `&AvecGroupes<IncomeStatement, SectionsResultat>` de la 46-1
       (C-46-1-4 ; `kesh_report::groupes`, même crate) — `rapport` pour l'en-tête, les totaux, les lignes calculées et la
       garde « rapport vide », `grouping` pour la ligne de niveau et la position des sous-totaux, `grouped_rows` pour le
@@ -176,10 +176,10 @@ dur, i18n des PDF différée).
       ligne groupée partagée par les deux rapports **et** par la balance (46-6b) ; l'en-tête, les totaux, les lignes
       calculées, l'équation et la garde « rapport vide » se **partagent** avec les fonctions à plat (extraits en
       fonctions communes, comportement inchangé ; zone de la 48-11, voir le tableau des fichiers communs de l'epic), seul le corps des sections diffère (DRY).
-- [ ] **T4 — CSV** (AC 5, 6) : de même, deux fonctions neuves à côté de `render_balance_sheet_csv` (`csv.rs:143`) et
+- [x] **T4 — CSV** (AC 5, 6) : de même, deux fonctions neuves à côté de `render_balance_sheet_csv` (`csv.rs:143`) et
       `render_income_statement_csv` (`:277`), inchangées.
-- [ ] **T5 — tests, documentation** (AC 8).
-- [ ] **T6 — gate complet** ; E2E complet au dernier commit de code.
+- [x] **T5 — tests, documentation** (AC 8).
+- [x] **T6 — gate complet** ; E2E complet au dernier commit de code.
 
 ## Dev Notes
 
@@ -252,19 +252,114 @@ zéro (#1346), l'alignement (#1327).
 
 ## Note de version
 
-*(à écrire au développement)* — Les exports PDF et CSV du bilan et du compte de résultat suivent l'écran : niveau,
-groupes ouverts ou fermés, sous-totaux sur le titre ou en pied ; le PDF dit le niveau imprimé. Sans paramètre,
-l'export ne change pas (CSV identique à l'octet, PDF aux mêmes lignes de texte).
+**Added** — Les exports PDF et CSV du bilan et du compte de résultat suivent l'écran par groupes de comptes
+(`detailLevel`, `subtotalPosition`, `open`, `closed`, comme les routes JSON) : niveau, groupes ouverts ou fermés,
+sous-totaux sur le titre ou en pied ; le PDF dit le niveau imprimé, décale chaque ligne selon sa profondeur et met les
+groupes en gras ; le CSV gagne les colonnes `Niveau` et `TypeLigne`. Les montants de ces exports groupés s'arrondissent
+au centime, l'équidistant loin de zéro. Sans paramètre, l'export ne change pas (CSV identique à l'octet, PDF aux mêmes
+lignes de texte).
+
+### Choix du développement
+
+- **C-46-3-4** — Une seule fonction de rendu par rapport et par format (`rendre_bilan_pdf`, `rendre_resultat_pdf`,
+  `rendre_bilan_csv`, `rendre_resultat_csv`), avec `groupes: Option<(&Grouping, &Sections…)>` : à `None`, le rendu à
+  plat, appel pour appel ; seul le corps des sections change, et le formateur des montants (T3, DRY). Les fonctions
+  publiques à plat gardent leur signature, leurs appelants et leurs tests ; les fonctions groupées
+  (`render_grouped_*`) prennent l'enveloppe `AvecGroupes` et retombent sur le rendu à plat quand elle n'a pas de
+  groupes — la route les appelle toujours, et la sélection se fait là, en un seul endroit.
+- **C-46-3-5** — Libellés : le titre d'un groupe porte son numéro ; la ligne de sous-total, « Total <nom> », n'en porte
+  pas (comme les totaux de section) ; la ligne du solde propre porte le numéro du groupe. Au CSV, numéro et nom restent
+  bruts sur toutes les lignes : `TypeLigne` dit le genre.
+- **C-46-3-6** — Retrait de 4 mm par niveau, au plus 20 mm ; le numéro et le nom se décalent ensemble. Le rendu groupé
+  tronque aussi le nom d'un compte CHF (48 caractères au retrait nul, moins un par 2,5 mm de retrait ;
+  `limite_nom_groupe`), que le rendu à plat ne tronque pas : le retrait mange la place.
+- **C-46-3-7** — Colonne en devise du rapport groupé : présente si une ligne **imprimée** porte une devise. Un compte
+  en devise replié dans un groupe fermé de devises mélangées ne la fait pas apparaître : rien ne s'y écrirait.
+- **C-46-3-8** — Le jeu PME de la 46-1 passe dans `crates/kesh-api/tests/support/jeu_pme.rs`, inclus par `#[path]`
+  dans `reports_e2e.rs` et `reports_export_e2e.rs` (sans copie) ; les fixtures JSON de la 46-1 restent vertes.
+- **C-46-3-9** — Comptes miroirs (AC-4, dernier alinéa) : la 47-3 n'est pas dans la branche d'epic au T0
+  (`present_balance_sheet` n'apparaît qu'en commentaire, `services/rapports.rs:798`) ; ce cas revient au recâblage
+  par le second arrivé (fiche 47-3, § *Recâblage*).
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`bmad-dev-story`), 2026-11-22.
+
 ### Debug Log References
+
+Journaux hors dépôt, `kesh-gate-logs/s46-3/` : `t1-ecrire.log` (fixtures au commit de base), `c1.log`, `c2.log`
+(gates ciblés), `clippy-a.log`, `clippy-b.log`, `gate-backend-final.log` (gate final), `front-*.log`,
+`mutations.log` (et `mutations-1-sans-touch.log`, `mutations-2.log`, runs antérieurs), `revue-p1-prompt.md`.
 
 ### Completion Notes List
 
+- **T0** (relevé à `92434d16`, branche d'epic) : la 46-1 est fusionnée (`ed822f21`) ; noms du § *L'API de la 46-1*
+  conformes — `groupes.rs:872` `AvecGroupes<T, S> { rapport, grouping, grouped_rows }`, `:785` `LigneRapport`, `:280`
+  `GenreLigne`, `:747` `Grouping` ; `services/rapports.rs:786` `bilan_par_groupes(acces, lecture, demande, groupes,
+  usage)`, `:822` `compte_de_resultat_par_groupes` ; `routes/reports.rs:93` `groupes_de(&[(String, String)])`. La
+  **47-3 n'est pas fusionnée** : `grep -rn "present_balance_sheet" crates/kesh-api/src/services/rapports.rs` ne rend
+  que le commentaire `:798` (C-46-3-9). La **48-11 n'est pas dans `main`** (`origin/main` `a1de7ea7`, ligne
+  `48-11-arrondi-au-centime: backlog`) : condition d'arrêt levée par la décision du responsable de l'epic du 22.11
+  (§ *Amendement du 22.11*).
+- **T1** : fixtures `crates/kesh-api/tests/fixtures/rapports-groupes/export-{bilan,resultat}-{2025,2026}.{csv,pdf.txt}`
+  écrites au commit `ded0a090`, dont le diff de `pdf.rs` ne touche que le test `pdf_text_y` (passé à l'extracteur
+  partagé) : aucun rendu modifié. Le jeu PME de la 46-1 est passé, sans copie, dans `tests/support/jeu_pme.rs`
+  (C-46-3-8) ; les fixtures JSON de la 46-1 restent vertes (`rapports_sans_parametre_identiques_a_la_fixture_de_base`).
+- **T2** : `export_balance_sheet`, `export_income_statement` — second extracteur `Query<Vec<(String, String)>>`, ordre
+  `validate_format` → `acces.exiger(… .export)` → `groupes_de`, appel des `*_par_groupes` ; `ExportQuery` inchangé.
+- **T3, T4** : rendus groupés `render_grouped_{balance_sheet,income_statement}_{pdf,csv}` ; une seule fonction de
+  rendu par rapport et par format (C-46-3-4). Libellés neufs dans `SectionLabels` (`grouped_level`,
+  `grouped_all_accounts`, `grouped_manual_detail`, `grouped_subtotal_prefix`, `grouped_own_suffix`). AC-6 :
+  `kesh_core::types::format_two_decimals` (amendement), `format_swiss_amount_arrondi` au PDF ; aucun `{:.2}` neuf
+  (`git diff 92434d16..HEAD | grep '^+' | grep ':\.2}'` ne rend que deux commentaires qui le nomment).
+- **T5** : `docs/api-external.md` § « Aux exports » ; manuel utilisateur FR, § *Visualisation et exports* — phrase
+  « aucun des deux ne perd de ligne » restreinte à l'export à plat, liste des textes abrégés complétée, paragraphe
+  « Le bilan et le compte de résultat par groupes », avertissement de l'affichage de travail (art. 959a CO). `.tex`
+  seul ; PDF compilé dans une copie (`make user`, 3 passes, stable) et contrôlé aplati (`pdftotext … | tr '\n' ' '`) :
+  les trois passages s'y lisent.
+- **Tests ajoutés** (recomptés `grep -cE '^\s*#\[(test|sqlx::test)'`, de `92434d16` à `HEAD`) : **23** — `pdf.rs`
+  56 → 67 (+11), `csv.rs` 25 → 31 (+6), `texte_pdf.rs` +1, `money.rs` 20 → 21 (+1), `reports_export_e2e.rs` 20 → 24
+  (+4 : fixtures sans paramètre, fidélité JSON/PDF/CSV, refus, balance qui ignore les paramètres) ; plus un exemple de
+  documentation (`format_two_decimals`). `reports_e2e.rs` inchangé (45).
+- **Mutations** (copie `git archive` hors dépôt, cible à part supprimée ; « tuée » = test nommé en échec sur
+  `panicked at`), au commit `b46981ba`, `mutations.log` : **9 sur 9 tuées** — M1 `open` ignoré au PDF
+  (`bilan_groupe_footer_et_groupe_ferme`), M2 arrondi remplacé par une troncature (8 tests), M3 garder-avec-la-suite
+  retiré (`bilan_groupe_titre_garde_avec_la_suite`), M4 retrait non borné (`bilan_groupe_retrait_croissant_et_borne`),
+  M5 solde du titre ouvert en pied écrit au CSV (`bilan_csv_groupe_footer_et_ferme`), M6 écart manuel ignoré à
+  l'en-tête (`bilan_groupe_footer_et_groupe_ferme`), M7 totaux du PDF groupé au formateur à plat
+  (`bilan_groupe_totaux_arrondis_au_centime`), M9 colonnes `Niveau;TypeLigne` retirées (5 tests), M10 formateur à plat
+  au CSV groupé (3 tests). Historique : au premier run, M7 **survivait** (aucun total à demi-centime) — d'où les deux
+  tests `*_totaux_arrondis_au_centime` ; la garde du zéro négatif de `format_two_decimals` (M8) survivait aussi,
+  mutation **équivalente** (`round_dp_with_strategy` rend déjà un zéro sans signe, le cas `-0.004` du test le tient) :
+  garde retirée (`53ff5f29`). Le premier run (`mutations-1-sans-touch.log`) ne vaut pas : la restauration d'un fichier
+  sans `touch` laissait à cargo le binaire muté de M2 pour les suivantes ; corrigé dans le script.
+- **Gates** au dernier commit de code `b46981ba` : `scripts/test-fast.sh --ci` (base `kesh_s463` remise à zéro) **vert**
+  — fmt, clippy `-D warnings`, nextest **6219 exécutés, 6219 passés**, 14 ignorés, un instable rejoué vert
+  (`admin_auto_backup_e2e::disque_sature_pendant_l_ecriture`, connu, sans rapport) ; frontend complet vert à
+  `ae03d401` (aucun fichier `frontend/` touché depuis, ni par la story) — `check`, `lint-i18n-ownership`, Vitest
+  **4627** (278 fichiers), `build`. **E2E partiel : aucune spec** — la story n'ajoute aucune spec Playwright (règle de
+  la nuit du 22.11) ; E2E complet et `gate-ci.sh` à la branche d'intégration de fin.
+- **Hors périmètre** : la ligne `46-3` de `sprint-status.yaml` disait « commence après la fusion de la 48-11 » —
+  levé par l'amendement ; à l'intégration de la 48-11, rebrancher `format_swiss_amount_arrondi` et le formateur du CSV
+  groupé sur sa fonction, puis retirer `format_two_decimals` si elle ne la reprend pas (fichier d'epic, § dépendances).
+
 ### File List
+
+- `crates/kesh-core/src/types/money.rs`, `crates/kesh-core/src/types/mod.rs` — `format_two_decimals` (provisoire).
+- `crates/kesh-report/src/pdf.rs` — rendus groupés, `format_swiss_amount_arrondi`, `grouper_milliers`,
+  `draw_header_with`, `draw_totals_footer_with`, `LibelleGroupe`, `limite_nom_groupe`, libellés neufs, tests.
+- `crates/kesh-report/src/csv.rs` — rendus groupés, `Disposition`, tests.
+- `crates/kesh-report/src/texte_pdf.rs` (neuf) — extracteur de texte PDF partagé des tests.
+- `crates/kesh-report/src/essai_groupes.rs` (neuf, `cfg(test)`) — jeu d'essai des rendus groupés.
+- `crates/kesh-report/src/lib.rs` — modules et réexports.
+- `crates/kesh-api/src/routes/reports.rs` — paramètres de groupes aux deux exports.
+- `crates/kesh-api/tests/support/jeu_pme.rs` (neuf), `crates/kesh-api/tests/reports_e2e.rs`,
+  `crates/kesh-api/tests/reports_export_e2e.rs`, `crates/kesh-api/tests/fixtures/rapports-groupes/export-*` (8).
+- `docs/api-external.md`, `docs/manual/fr/user-manual.tex`.
+- `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`,
+  cette fiche.
 
 ## Change Log
 
@@ -305,3 +400,8 @@ l'export ne change pas (CSV identique à l'octet, PDF aux mêmes lignes de texte
   AC-8) ; lignes de `routes/reports.rs` séparées par commit (F5). Rapport :
   `kesh-gate-logs/s46-specs/validation-p1-rapport.md`.
 - 2026-11-21 — **Validation** (boucle close) : P1 (Claude Sonnet 5.5, 0 C / 0 H / 0 M au-dessus de LOW ; tendance 0/0/2/10 → 0/0/0/10) puis P2 (Claude Opus 5.5, contexte frais, à `e61c9029`) 0 C / 0 H / 0 M / 10 L sur les trois fiches (46-3 : 4, 46-6a : 5, 46-4 : 1) ; aucun finding au-dessus de LOW. LOW de la P2 appliqués dans la fiche : G1 (jeu d'essai et libellés rendus), G2 (test du retrait par `depth` ajouté à l'AC-8), G3 (extracteur partagé créé par la story), G4 (`csv.rs:41`), G7 (test d'ignorance demandé une seule fois), G5 (note de version). Rapport : `kesh-gate-logs/s46-specs/validation-p2-rapport.md`. `ready-for-dev`.
+- 2026-11-22 — **Développement** (Claude Opus 5.5, `bmad-dev-story`) : amendement du 22.11 (remplaçant provisoire de
+  la 48-11) écrit avant le code ; fixtures au commit de base (`ded0a090`) ; route, rendus groupés PDF et CSV, arrondi,
+  documentation ; 23 tests ; gates au dernier commit de code `b46981ba` (Dev Agent Record). Une mutation survivante
+  (totaux des rendus groupés au formateur à plat) a fait ajouter deux tests ; une mutation équivalente (garde du zéro
+  négatif) a fait retirer la garde. Story en `review` ; prompt de la revue P1 : `kesh-gate-logs/s46-3/revue-p1-prompt.md`.
