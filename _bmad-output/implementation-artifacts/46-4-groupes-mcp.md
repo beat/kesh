@@ -3,7 +3,7 @@
 Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D8, Q5 ; FR-46-4, FR-46-11 ; NFR-46-6. Release
-visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1, 2026-11-19) ; fiche écrite le 2026-11-20, à
+visée **0.21.0** (prévision). Approuvée par le responsable de l'epic et par Guy (revue 1, 2026-11-19) ; fiche écrite le 2026-11-20, à
 valider en boucle. **Suit la 46-1 ; précède la 46-6a.** Aucune migration. La balance par groupes au MCP est la 46-6a.
 
 ## Story

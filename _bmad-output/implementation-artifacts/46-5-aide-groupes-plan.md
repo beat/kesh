@@ -2,10 +2,10 @@
 
 Status: ready-for-dev
 
-*Revue de Beat (2026-11-19) : approuvée ; **proposition d'interface (maquette) avant de décider** de la story (Q9) ; approuvée par Guy le 2026-11-19 (revue 1).*
+*Revue du responsable de l'epic (2026-11-19) : approuvée ; **proposition d'interface (maquette) avant de décider** de la story (Q9) ; approuvée par Guy le 2026-11-19 (revue 1).*
 
 *Esquisse du 2026-11-18, reprise le 2026-11-20. Epic 46, D12. **Conditionnelle** (Q9) : ni validée en boucle ni
-développée avant la maquette de l'AC-0 et la décision de Beat et de Guy. `fix/api-parent-compte` est fusionné dans
+développée avant la maquette de l'AC-0 et la décision du responsable de l'epic et de Guy. `fix/api-parent-compte` est fusionné dans
 `main` (#1351, `d29aa557`) : `PUT /accounts/{id}` accepte `parentId`, refuse un cycle et un parent qui porte des
 écritures. Release visée 0.21.0 si décidée ; sinon la story sort de l'epic, qui compte alors six stories. Aucune
 migration attendue.*
@@ -21,8 +21,8 @@ de mes comptes, afin de structurer mon plan (une banque = un groupe, puis les li
 
 ## Critères d'acceptation (esquisse)
 
-0. **AC-0 — Maquette avant décision (Q9, Beat).** Une maquette de l'interface (sélection, proposition, aperçu de
-   l'arbre) est présentée à Beat et à Guy ; **la story n'est décidée, ni développée, qu'après cette maquette**. La règle
+0. **AC-0 — Maquette avant décision (Q9, responsable).** Une maquette de l'interface (sélection, proposition, aperçu de
+   l'arbre) est présentée au responsable de l'epic et à Guy ; **la story n'est décidée, ni développée, qu'après cette maquette**. La règle
    « numéro sans son dernier chiffre » y est confirmée ou changée.
 
 1. **AC-1 — Proposition.** Pour une sélection de comptes, Kesh propose un groupe = « numéro sans son dernier chiffre »
@@ -37,7 +37,7 @@ de mes comptes, afin de structurer mon plan (une banque = un groupe, puis les li
 ## Points à trancher avec la maquette (validation P1, allégée — la fiche est conditionnelle)
 
 La fiche n'est **pas validée en boucle** (Q9) : cette passe ne la confronte qu'au code de `origin/main` et lui
-inscrit ce que la maquette doit trancher ; elle se **revalide en entier** après la décision de Beat et de Guy.
+inscrit ce que la maquette doit trancher ; elle se **revalide en entier** après la décision du responsable de l'epic et de Guy.
 
 1. **Atomicité (AC-3).** `accounts::create` (`:189`) et `accounts::update` (`:1079`) prennent le **pool** et ouvrent
    chacun leur transaction (`pool.begin()`, `:192`, `:1091`) ; les enchaîner n'est donc **pas** « dans une transaction ».
@@ -50,7 +50,7 @@ inscrit ce que la maquette doit trancher ; elle se **revalide en entier** après
    normalisé par le dépôt (un compte qui a des sous-comptes actifs n'est pas imputable, `entities/account.rs:233`).
    `PUT /accounts/{id}` remplace tous les champs et exige la `version` du compte : un déplacement = un `PUT` par
    compte, `version` relue à l'aperçu ; un parent archivé est refusé (`routes/accounts.rs:83`).
-3. **Numéro d'un groupe qui existe déjà.** Le cas de Beat (10 numéros par banque, groupe = numéro sans son dernier
+3. **Numéro d'un groupe qui existe déjà.** Le cas du responsable de l'epic (10 numéros par banque, groupe = numéro sans son dernier
    chiffre) tombe sur un numéro **déjà pris** quand le plan est celui de la PME (`1020 Banque`, mouvementé : refusé
    comme parent, #1351). L'aperçu doit le dire et laisser saisir un autre numéro.
 4. **Parent du groupe proposé.** Par défaut, le **parent commun** des comptes sélectionnés (p. ex. `10` pour des

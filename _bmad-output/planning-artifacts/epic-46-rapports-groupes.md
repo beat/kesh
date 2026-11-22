@@ -1,7 +1,7 @@
 # Epic 46 — Rapports par groupes de comptes
 
 **Kickoff : 2026-11-18** (branche `epic/46-rapports-groupes`, partie de `main` à `773df80d`, release v0.19.0).
-Numéro **46** réservé par Guy ; responsable **Beat** (contributeur). État : **revue 1 approuvée par Beat et par Guy
+Numéro **46** réservé par Guy ; responsable de l'epic (contributeur). État : **revue 1 approuvée par le responsable de l'epic et par Guy
 (2026-11-19)** ; `main` reprise le 2026-11-20 (`d29aa557` : #1346, #1327, #1351 fusionnées) ; **fiches écrites le
 2026-11-20, `drafted`**, validation en boucle à suivre (`CLAUDE.md` § *Review Iteration Rule*). Aucun code écrit.
 
@@ -26,13 +26,13 @@ Le bilan et le compte de résultat se présentent **par groupes de comptes**, av
 hiérarchie du plan** (`accounts.parent_id`), et un **niveau de détail choisi au moment de l'affichage ou de
 l'impression** : des seuls groupes de premier niveau jusqu'au détail de chaque compte. Écran, PDF, CSV, API et MCP.
 
-Besoin réel de Beat : son ancien logiciel présentait le bilan par groupes (1 ACTIFS › 10 Actifs circulants ›
+Besoin réel du responsable de l'epic : son ancien logiciel présentait le bilan par groupes (1 ACTIFS › 10 Actifs circulants ›
 100 Trésorerie › comptes, avec le solde en devise d'un groupe). Il structure son plan ainsi : **10 numéros réservés
 par banque** (néobanques comprises : Wise, PayPal…), un compte par devise, **un compte de groupe par banque = le numéro
 sans son dernier chiffre**, puis un groupe de toutes les liquidités, plus court encore (**groupe 10**).
 
 **Hors périmètre** (prévu plus tard) : des **modèles de sortie** (presets) qui enregistrent ces choix ; les rubriques
-légales imposées (Q7) ; le grand livre (Q6) ; **la balance est dans le périmètre** (46-6, Beat).
+légales imposées (Q7) ; le grand livre (Q6) ; **la balance est dans le périmètre** (46-6, responsable).
 
 ## Inventaire du code (relevé le 2026-11-18 à `773df80d`)
 
@@ -50,53 +50,53 @@ légales imposées (Q7) ; le grand livre (Q6) ; **la balance est dans le périm�
 | Écrans | `BalanceSheetView.svelte` (groupes de rôle), `IncomeStatementView.svelte`, `reports.api.ts`, `reports.types.ts` | `frontend/src/lib/features/reports/` |
 | Lecture de `parent_id` | **aucun rapport** ne la lit (relevé de la fiche `fix-api-parent-compte`, AC-7) | — |
 
-## Décisions (proposées au kickoff, approuvées par Beat et par Guy le 2026-11-19 ; annotations de Beat sous chacune)
+## Décisions (proposées au kickoff, approuvées par le responsable de l'epic et par Guy le 2026-11-19 ; annotations du responsable de l'epic sous chacune)
 
 - **D1 — Les groupes viennent de `parent_id` seul**, jamais du numéro (comme la règle « jamais par numéro » de 14-1).
   Un groupe = tout compte qui a au moins un sous-compte. Le préfixe de numéro ne sert qu'à l'outil d'aide (46-5). *(Q1)*
-  *Beat, 2026-11-19 :* approuvé (Q1 : par `parent_id`).
+  *Responsable de l'epic, 2026-11-19 :* approuvé (Q1 : par `parent_id`).
 - **D2 — Aucune migration.** Les soldes par compte restent calculés par les requêtes actuelles ; une seule lecture
   de l'arbre des comptes de la société s'y ajoute ; l'agrégation est une **fonction pure** (`kesh-report/src/groupes.rs`),
   testée sans base.
-  *Beat, 2026-11-19 :* approuvé.
+  *Responsable de l'epic, 2026-11-19 :* approuvé.
 - **D3 — Niveau de détail = profondeur dans l'arbre**, non longueur du numéro : niveau 1 = racines, niveau k =
   nœuds de profondeur ≤ k, « tous » = chaque compte. Un compte plus profond que le niveau est **replié** dans son
   ancêtre de ce niveau. Un compte sans parent (racine sans enfant) s'affiche à tout niveau. Le mode **« à plat »**
   (sans groupes) reste celui d'aujourd'hui.
-  *Beat, 2026-11-19 :* approuvé.
+  *Responsable de l'epic, 2026-11-19 :* approuvé.
 - **D4 — Le squelette légal du bilan demeure** : Actifs, Dettes, Fonds propres, puis les deux lignes calculées (14-1,
   14-3c, CO 959a). Les groupes s'emboîtent **dans** chaque section. Un groupe dont les comptes tombent dans plusieurs
   sections (p. ex. `2 Passifs` = dettes + fonds propres ; `7 Résultats annexes` = produits + charges) **n'est pas
   affiché** : ses enfants remontent d'un niveau. Les totaux restent exacts. Les lignes calculées restent hors groupe,
   en fin de fonds propres. En mode groupé, l'ordre des fonds propres suit l'arbre (numéros) ; sous-titres de rôle
   seulement en mode à plat. *(Q4)*
-  *Beat, 2026-11-19 :* approuvé (Q4 : squelette légal gardé, groupe à cheval dissous).
+  *Responsable de l'epic, 2026-11-19 :* approuvé (Q4 : squelette légal gardé, groupe à cheval dissous).
 - **D5 — Solde propre d'un groupe.** Un compte de groupe qui porte lui-même des écritures (admis à la création) donne
   une ligne « solde propre » parmi ses enfants ; son sous-total l'inclut.
-  *Beat, 2026-11-19 :* approuvé.
+  *Responsable de l'epic, 2026-11-19 :* approuvé.
 - **D6 — Groupes vides masqués** : un groupe dont le sous-total CHF **et** le solde en devise sont nuls ne s'affiche
   pas (même règle que `HAVING` des comptes). *(Q2)*
-  *Beat, 2026-11-19 :* **modifié** (Q2) : un groupe non affiché laisse son total à son parent ; pas d'option. Les groupes à solde nul restent masqués.
+  *Responsable de l'epic, 2026-11-19 :* **modifié** (Q2) : un groupe non affiché laisse son total à son parent ; pas d'option. Les groupes à solde nul restent masqués.
 - **D7 — Solde en devise d'un groupe** : donné seulement si **tous** ses comptes à solde non nul sont dans la **même
   devise étrangère** ; sinon absent. Les totaux de section restent en CHF (NFR-37-4-3). *(Q3)*
-  *Beat, 2026-11-19 :* **modifié** (Q3) : une seule devise : devise + CHF ; sinon CHF seul, **sans ligne supplémentaire**.
+  *Responsable de l'epic, 2026-11-19 :* **modifié** (Q3) : une seule devise : devise + CHF ; sinon CHF seul, **sans ligne supplémentaire**.
 - **D8 — Contrat additif.** Sans paramètre, JSON, CSV et PDF restent **identiques** à aujourd'hui. Avec le paramètre
   `detailLevel` (`1`…`n` | `all`), chaque section gagne un champ `groupedRows` : lignes déjà ordonnées
   `{ kind: group|account|own, depth, accountId, number, name, balance, currency?, balanceCurrency? }`. Les trois rendus
   et le MCP lisent la même liste. *(Q5 pour le MCP)*
-  *Beat, 2026-11-19 :* approuvé (Q5 tel que proposé) ; le MCP suit, avec la position des sous-totaux (46-4). *Précisé à la 46-1, § Le contrat (validation P3, 2026-11-20) : les noms de champs de la fiche font foi (`accountNumber`, `accountName`, `open`, `active`, `role`, `mirrorOf`, genre `subtotal` en pied) ; le schéma ci-dessus n'en est qu'une esquisse.*
+  *Responsable de l'epic, 2026-11-19 :* approuvé (Q5 tel que proposé) ; le MCP suit, avec la position des sous-totaux (46-4). *Précisé à la 46-1, § Le contrat (validation P3, 2026-11-20) : les noms de champs de la fiche font foi (`accountNumber`, `accountName`, `open`, `active`, `role`, `mirrorOf`, genre `subtotal` en pied) ; le schéma ci-dessus n'en est qu'une esquisse.*
 - **D9 — Choix du niveau à l'écran** : un sélecteur « À plat · Niveau 1 · … · Tous les comptes » sur le bilan et le
   compte de résultat ; le niveau passe à l'export (PDF, CSV). Retenu par visiteur (`localStorage`, convenance) ; aucun
   preset enregistré (hors périmètre).
-  *Beat, 2026-11-19 :* approuvé, **étendu** (Q10) : hiérarchie visible, accordéons ouverts par défaut ; contrôles « tout ouvrir / tout fermer » et « hiérarchie masquée / montrée » ; **choix de la position des sous-totaux** (sur la ligne du titre au-dessus des comptes, ou ligne de sous-total au-dessous) ; PDF **fidèle à l'écran** ; tout pilotable par l'API et le MCP.
+  *Responsable de l'epic, 2026-11-19 :* approuvé, **étendu** (Q10) : hiérarchie visible, accordéons ouverts par défaut ; contrôles « tout ouvrir / tout fermer » et « hiérarchie masquée / montrée » ; **choix de la position des sous-totaux** (sur la ligne du titre au-dessus des comptes, ou ligne de sous-total au-dessous) ; PDF **fidèle à l'écran** ; tout pilotable par l'API et le MCP.
 - **D10 — Ordre des frères** : par numéro, comme aujourd'hui (comparaison de chaînes, `ORDER BY a.number`).
-  *Beat, 2026-11-19 :* approuvé.
+  *Responsable de l'epic, 2026-11-19 :* approuvé.
 - **D11 — Balance et grand livre hors périmètre.** *(Q6)*
-  *Beat, 2026-11-19 :* **modifié** (Q6) : la **balance** passe dans le périmètre (46-6) ; le grand livre reste hors périmètre (« pas utile »).
+  *Responsable de l'epic, 2026-11-19 :* **modifié** (Q6) : la **balance** passe dans le périmètre (46-6) ; le grand livre reste hors périmètre (« pas utile »).
 - **D12 — Structuration du plan par l'utilisateur** : avec `fix/api-parent-compte`, l'écran du plan suffit. L'outil
   d'aide (46-5) **propose**, l'utilisateur confirme ; rien n'est créé d'office (`CLAUDE.md` § *Un appariement
   automatique propose*). *(Q9)*
-  *Beat, 2026-11-19 :* approuvé ; maquette d'interface avant de décider 46-5 (Q9).
+  *Responsable de l'epic, 2026-11-19 :* approuvé ; maquette d'interface avant de décider 46-5 (Q9).
 
 ## Exigences
 
@@ -107,7 +107,7 @@ légales imposées (Q7) ; le grand livre (Q6) ; **la balance est dans le périm�
 - FR-46-3 — PDF et CSV au niveau choisi, groupes en gras, retrait par profondeur. → 46-3
 - FR-46-4 — Outils MCP `kesh_bilan`, `kesh_compte_de_resultat` avec le niveau. → 46-4
 - FR-46-5 — Aide à la création des groupes d'un plan existant. → 46-5 (conditionnelle ; maquette avant décision)
-- FR-46-6 — Balance par groupes (Q6, Beat) : niveaux, sous-totaux, écran, PDF, CSV, API, MCP. → 46-6a, 46-6b
+- FR-46-6 — Balance par groupes (Q6, responsable) : niveaux, sous-totaux, écran, PDF, CSV, API, MCP. → 46-6a, 46-6b
 - FR-46-7 — Un groupe non affiché laisse son total à son parent (Q2). → 46-1, 46-2
 - FR-46-8 — Solde en devise d'un groupe : devise + CHF si une seule devise, sinon CHF seul, aucune ligne supplémentaire (Q3). → 46-1, 46-2, 46-3
 - FR-46-9 — Position des sous-totaux au choix : sur la ligne du titre, au-dessus des comptes, ou en ligne de sous-total au-dessous ; PDF fidèle à l'écran. → 46-2, 46-3
@@ -123,7 +123,7 @@ légales imposées (Q7) ; le grand livre (Q6) ; **la balance est dans le périm�
   fait ni boucle ni panique : le compte est traité en racine, avec `tracing::warn!`.
 - NFR-46-5 — Quatre locales ; `i18n-keys`, `i18n-libelle-en-dur` verts ; manuel utilisateur FR (`.tex`).
 - NFR-46-6 — MCP : `mcp_contrat`, `mcp_gardes_lexicales` verts, tailles re-mesurées.
-- NFR-46-7 — Respect de l'art. 959a CO (Q7, Beat), lecture (a) : la présentation par groupes conserve les sections
+- NFR-46-7 — Respect de l'art. 959a CO (Q7, responsable), lecture (a) : la présentation par groupes conserve les sections
   légales du bilan (Actifs, Dettes, Fonds propres, lignes calculées) ; aucun rattachement de compte à une rubrique. → 46-1
 
 ## Remarques de Guy sur la revue 1 (2026-11-19) et décisions (2026-11-20)
@@ -226,34 +226,34 @@ défauts*) ; objectif au tag de la release de l'epic : moins qu'au tag v0.19.0 (
 ## Questions ouvertes
 
 - **Q1 — Source des groupes** : `parent_id` seul (D1), ou aussi un regroupement par préfixe de numéro sans compte de
-  groupe ? *(Beat)*
-  *Beat, 2026-11-19 :* par `parent_id`.
-- **Q2 — Groupes vides** : masqués (D6), ou option « afficher les groupes vides » ? *(Beat)*
-  *Beat, 2026-11-19 :* quand un groupe n'est pas affiché, son parent affiche le total (pas d'option).
-- **Q3 — Solde en devise d'un groupe** : une seule devise seulement (D7), ou une ligne par devise (USD x, EUR y) ? *(Beat)*
-  *Beat, 2026-11-19 :* si une seule devise : devise + CHF ; sinon CHF seul, pas de lignes supplémentaires.
+  groupe ? *(responsable)*
+  *Responsable de l'epic, 2026-11-19 :* par `parent_id`.
+- **Q2 — Groupes vides** : masqués (D6), ou option « afficher les groupes vides » ? *(responsable)*
+  *Responsable de l'epic, 2026-11-19 :* quand un groupe n'est pas affiché, son parent affiche le total (pas d'option).
+- **Q3 — Solde en devise d'un groupe** : une seule devise seulement (D7), ou une ligne par devise (USD x, EUR y) ? *(responsable)*
+  *Responsable de l'epic, 2026-11-19 :* si une seule devise : devise + CHF ; sinon CHF seul, pas de lignes supplémentaires.
 - **Q4 — Bilan** : squelette légal conservé et groupes à cheval dissous (D4), ou l'arbre remplace les sections
-  (`1 ACTIFS`, `2 PASSIFS` comme titres) ? Où placer les lignes calculées ? *(Beat, puis Guy)*
-  *Beat, 2026-11-19 :* on garde le squelette légal ; un groupe à cheval est dissous.
-- **Q5 — API et MCP** : nom et forme du paramètre (`detailLevel`), champ `groupedRows` ; le MCP en a-t-il besoin ? *(Beat, Guy)*
-  *Beat, 2026-11-19 :* approuvé tel que proposé.
-- **Q6 — Balance et grand livre** : par groupes aussi (sous-totaux de la balance) ? Proposé : non, plus tard. *(Beat)*
-  *Beat, 2026-11-19 :* balance : **maintenant** (story 46-6) ; grand livre : pas utile.
+  (`1 ACTIFS`, `2 PASSIFS` comme titres) ? Où placer les lignes calculées ? *(responsable, puis Guy)*
+  *Responsable de l'epic, 2026-11-19 :* on garde le squelette légal ; un groupe à cheval est dissous.
+- **Q5 — API et MCP** : nom et forme du paramètre (`detailLevel`), champ `groupedRows` ; le MCP en a-t-il besoin ? *(responsable, Guy)*
+  *Responsable de l'epic, 2026-11-19 :* approuvé tel que proposé.
+- **Q6 — Balance et grand livre** : par groupes aussi (sous-totaux de la balance) ? Proposé : non, plus tard. *(responsable)*
+  *Responsable de l'epic, 2026-11-19 :* balance : **maintenant** (story 46-6) ; grand livre : pas utile.
 - **Q7 — Rubriques légales du bilan suisse (art. 959a CO)** : imposer ou contrôler la correspondance des groupes aux
   rubriques minimales ? Proposé : non (le plan PME y correspond déjà). *(Guy)*
-  *Beat, 2026-11-19 :* respecter l'art. 959a CO (NFR-46-7).
+  *Responsable de l'epic, 2026-11-19 :* respecter l'art. 959a CO (NFR-46-7).
   *Décision du 2026-11-20 (remarque 3 de Guy) :* **lecture (a)** — le bilan garde ses sections légales et les groupes
   s'y rangent (D4) ; aucune donnée neuve, aucune migration ; une présentation repliée (niveau 1 en particulier) est
   **un affichage de travail, non des comptes annuels** (écrit à l'API, 46-1, et au manuel, 46-2 et 46-3).
-- **Q8 — Ordre avec l'Epic 47** (comptes miroirs, qui s'appuiera sur ces générateurs) : 46 d'abord ? *(Guy, Beat)*
-  *Beat, 2026-11-19 :* approuvé tel que proposé : 46 avant 47 (déjà noté par Guy).
+- **Q8 — Ordre avec l'Epic 47** (comptes miroirs, qui s'appuiera sur ces générateurs) : 46 d'abord ? *(Guy, responsable)*
+  *Responsable de l'epic, 2026-11-19 :* approuvé tel que proposé : 46 avant 47 (déjà noté par Guy).
 - **Q9 — Outil d'aide (46-5)** : utile, ou l'écran du plan suffit-il après `fix/api-parent-compte` ? Règle de
-  proposition : « numéro sans son dernier chiffre » ? *(Beat)*
-  *Beat, 2026-11-19 :* l'outil peut être intéressant ; **proposition d'UI (maquette) avant de décider** ; règle « numéro sans le dernier chiffre » à confirmer alors.
-- **Q10 — Niveau par défaut à l'écran** : « Tous les comptes » groupé, ou « à plat » comme aujourd'hui ? *(Beat)*
-  *Beat, 2026-11-19 :* hiérarchie visible avec accordéons ouverts par défaut ; contrôles « tout ouvrir / tout fermer » et « hiérarchie masquée / montrée » (FR-46-10).
+  proposition : « numéro sans son dernier chiffre » ? *(responsable)*
+  *Responsable de l'epic, 2026-11-19 :* l'outil peut être intéressant ; **proposition d'UI (maquette) avant de décider** ; règle « numéro sans le dernier chiffre » à confirmer alors.
+- **Q10 — Niveau par défaut à l'écran** : « Tous les comptes » groupé, ou « à plat » comme aujourd'hui ? *(responsable)*
+  *Responsable de l'epic, 2026-11-19 :* hiérarchie visible avec accordéons ouverts par défaut ; contrôles « tout ouvrir / tout fermer » et « hiérarchie masquée / montrée » (FR-46-10).
 
-## Revue de Beat (2026-11-19)
+## Revue du responsable de l'epic (2026-11-19)
 
 Sections approuvées (intention, décisions, questions, stories) ; réponses point par point annotées plus haut.
 Changements : D6 (total d'un groupe non affiché remonté au parent), D7 (devise + CHF ou CHF seul), D9 (hiérarchie
@@ -266,7 +266,7 @@ La page pour Guy (`data-not-committed/epic-46-revue-pour-guy.html`) porte ces r�
 
 ## Avant le développement
 
-1. ~~Revue de Beat et approbation de Guy~~ : faites (2026-11-19).
+1. ~~Revue du responsable de l'epic et approbation de Guy~~ : faites (2026-11-19).
 2. Décomptes d'issues mesurés (46-0) ; **fiches écrites (2026-11-20), validation en boucle à mener**.
 3. ~~Fusion des trois correctifs~~ : faite (`main` `d29aa557`, reprise le 2026-11-20). Reste : la **48-11** dans `main`
    avant la 46-3 ; la maquette de la 46-5 avant sa décision.
@@ -284,9 +284,9 @@ La page pour Guy (`data-not-committed/epic-46-revue-pour-guy.html`) porte ces r�
 - 2026-11-20 — **P2** des fiches 46-1, 46-2, 46-3 (Claude Sonnet 5.5, contexte frais ; rapports `*-P2.md`) : 46-1 0/0/1/4,
   46-2 0/0/0/2, 46-3 0/0/1/1 (C/H/M/L), remédiés. `AvecGroupes<T, S>` (deux paramètres) ; entrée typée de la
   validation pour le MCP ; garde « rapport vide » des rendus groupés (46-3) ; groupes dissous du plan PME relevés.
-  « hiérarchie masquée » = vue à plat : **décidé par Beat le 2026-11-20** (46-2 C-46-2-2).
+  « hiérarchie masquée » = vue à plat : **décidé par le responsable de l'epic le 2026-11-20** (46-2 C-46-2-2).
 - 2026-11-20 — **P3 ciblée** (Claude Haiku 5.5, contexte frais, commit `8a7f0f73`) des fiches 46-1, 46-2, 46-3 : 0 C / 0 H / 1 M / 1 L, remédiés. M : la table des fichiers communs gardait `AvecGroupes<T>` (propagation du P2 incomplète) → `AvecGroupes<T, S>` ; L : les noms de champs de D8 renvoient désormais au contrat de la 46-1. **Hors périmètre de cette passe, à propager à la 46-6a et à la 46-6b (fiches d'un autre agent, non touchées)** : `AvecGroupes<T>` à un paramètre aux lignes 24, 40, 69 et 106 de la 46-6a, `AvecGroupes<TrialBalance>` à la ligne 45 de la 46-6b ; à lire `AvecGroupes<T, S>` (C-46-1-4). Rapport : `kesh-gate-logs/epic-46/validation/46-123-P3-ciblee.md`.
-- 2026-11-20 — **Décisions de Beat** : (1) « hiérarchie masquée » = la liste à plat des comptes, comme l'écran d'aujourd'hui ; (2) le rechargement à chaque clic de la 46-2 (aller-retour API, trace d'audit `report.generated`) est accepté **quel que soit l'état du stockage** (précisé le même jour : la vue est mémorisée dans la mesure où le navigateur le permet) — niveau et groupes ouverts ou fermés retrouvés au retour sur la page : 46-2 AC-10 (`localStorage`, clé par société et par rapport, restaurée avant la première requête).
+- 2026-11-20 — **Décisions du responsable de l'epic** : (1) « hiérarchie masquée » = la liste à plat des comptes, comme l'écran d'aujourd'hui ; (2) le rechargement à chaque clic de la 46-2 (aller-retour API, trace d'audit `report.generated`) est accepté **quel que soit l'état du stockage** (précisé le même jour : la vue est mémorisée dans la mesure où le navigateur le permet) — niveau et groupes ouverts ou fermés retrouvés au retour sur la page : 46-2 AC-10 (`localStorage`, clé par société et par rapport, restaurée avant la première requête).
 - 2026-11-21 — **Corrections des fiches 46-3 et 46-6a avant développement**, sur l'API réelle de la 46-1 (`story/46-1`,
   `de0a582f`) et ses revues (P1 L-4, L-5 ; P2 L-6 : paramètres de groupes lus par `groupes_de`, jamais par des champs
   ajoutés à `ExportQuery` ou `ReportQuery`), et sur la 47-3 (point d'insertion de la présentation miroir ; un miroir

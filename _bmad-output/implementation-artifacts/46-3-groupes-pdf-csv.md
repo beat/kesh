@@ -3,7 +3,7 @@
 Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D8, D9 (étendue), Q2, Q3 ; FR-46-3, FR-46-8,
-FR-46-9, FR-46-11 ; NFR-46-1, NFR-46-2. Release visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1,
+FR-46-9, FR-46-11 ; NFR-46-1, NFR-46-2. Release visée **0.21.0** (prévision). Approuvée par le responsable de l'epic et par Guy (revue 1,
 2026-11-19) ; fiche écrite le 2026-11-20, à valider en boucle. **Suit la 46-1 ; commence après la fusion de la 48-11
 dans `main`** (arrondi au centime, Epic 48, release 0.20.0) — la PR #1327 (PDF aligné) est déjà fusionnée. Aucune
 migration. **Corrigée le 2026-11-21, avant développement**, sur l'API réelle de la 46-1 (relevée sur `story/46-1` à

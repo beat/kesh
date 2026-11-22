@@ -11,7 +11,7 @@ Fiche écrite le 2026-11-20 sur la remarque 2 de Guy (« décrire la story de la
 
 **Découpage** : la balance par groupes (la « 46-6 » de la revue 1) touche plus de cinq modules (`kesh-report` modèle
 et rendus, service et route, MCP, écran, i18n, manuel) : règle de splitting préventif, d'où **46-6a** (modèle, API,
-MCP) et **46-6b** (écran, PDF, CSV). Le grand livre reste hors périmètre (Beat : « pas utile »).
+MCP) et **46-6b** (écran, PDF, CSV). Le grand livre reste hors périmètre (responsable de l'epic : « pas utile »).
 
 ## Story
 

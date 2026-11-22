@@ -4,7 +4,7 @@ Status: done
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D1 à D10, Q2, Q3, Q4, Q5, Q7 ; FR-46-1, FR-46-7,
 FR-46-8, FR-46-9 (contrat), FR-46-11 ; NFR-46-1 à NFR-46-4, NFR-46-7. Release visée **0.21.0** (prévision). Approuvée
-par Beat et par Guy (revue 1, 2026-11-19) ; fiche écrite le 2026-11-20, à valider en boucle. **Aucune migration.**
+par le responsable de l'epic et par Guy (revue 1, 2026-11-19) ; fiche écrite le 2026-11-20, à valider en boucle. **Aucune migration.**
 Part de la branche d'epic après la reprise de `main` du 2026-11-20 (`d29aa557` : #1346, #1327, #1351 fusionnées).
 
 ## Story
@@ -268,7 +268,7 @@ invariants NFR-46-2 se vérifient sur les sections présentées.
 
 ### References
 
-- Fichier d'epic (D1–D12, FR, NFR) ; réponses de Beat et de Guy (`kesh-gate-logs/epic-46/`, revue 1 du 2026-11-19).
+- Fichier d'epic (D1–D12, FR, NFR) ; réponses du responsable de l'epic et de Guy (`kesh-gate-logs/epic-46/`, revue 1 du 2026-11-19).
 - `CLAUDE.md` § *Review Iteration Rule* (le prompt de chaque passe nomme `docs/api-external.md`) ; § *Migration
   breaking policy* (aucune migration ici).
 
@@ -288,7 +288,7 @@ Claude Opus 5.5 (bmad-dev-story), 2026-11-20.
 
 ### Debug Log References
 
-Journaux hors dépôt, `/home/beat/claude/kesh-gate-logs/s46-1/`, tous sur la cible propre `kesh-targets/kesh-wt46s1`
+Journaux hors dépôt, `<journaux>/s46-1/`, tous sur la cible propre `kesh-targets/kesh-wt46s1`
 (`CARGO_INCREMENTAL=0`) sauf mention :
 - `t0-fixture.log` (génération des fixtures, cible partagée abandonnée) et `verif-fixtures-base.log` (contre-épreuve sur
   l'arbre de base, cible à part : passé) ;
@@ -331,7 +331,7 @@ explicitement), aucune ne dépend de l'horloge de test : la fixture ne casse pas
 `#[sqlx::test]` neuve, montage déterministe) : aucune normalisation nécessaire.
 
 **Cible cargo.** La première génération des fixtures et un premier clippy ont tourné sur la cible partagée
-`/home/beat/claude/kesh-target`, abandonnée le 2026-11-20 (empreintes indépendantes du chemin) ; **tout a été rejoué**
+`<cible partagée>`, abandonnée le 2026-11-20 (empreintes indépendantes du chemin) ; **tout a été rejoué**
 sur la cible propre `kesh-targets/kesh-wt46s1` (`CARGO_INCREMENTAL=0`), et les fixtures contre-éprouvées sur l'arbre de
 base avec une cible à part, supprimée ensuite (`verif-fixtures-base.sh`).
 
@@ -369,7 +369,7 @@ celui du miroir. Les générateurs ne changent pas.
 parent de son type (`routes/accounts.rs:76`, `check_parent_in_company`). Un miroir de passif rangé sous un groupe
 d'actif (p. ex. un découvert `1020.1` sous `10`) fait dissoudre `10` et `1` dans le bilan groupé dès qu'un découvert
 est présenté au passif : sommes justes (AC-4, voulu), mais groupes d'actif absents de l'affichage groupé. Point versé
-à `kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md` (n° 20), à trancher avec Beat ; la revue du code d'intégration de
+à `kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md` (n° 20), à trancher avec le responsable de l'epic ; la revue du code d'intégration de
 l'Epic 46 avec la 47-3 doit le savoir.
 
 **Écarts à la fiche, déclarés.**

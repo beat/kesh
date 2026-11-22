@@ -2,7 +2,7 @@
 
 Status: done
 
-*Esquisse du 2026-11-18 (renumérotée 46-7 le 2026-11-19 : la balance prend le 46-6). Revue de Beat : approuvée. Story de solde (`CLAUDE.md` § *Priorités des défauts*, « Tarir la source, puis solder »).
+*Esquisse du 2026-11-18 (renumérotée 46-7 le 2026-11-19 : la balance prend le 46-6). Revue du responsable de l'epic : approuvée. Story de solde (`CLAUDE.md` § *Priorités des défauts*, « Tarir la source, puis solder »).
 Plafond : **2 issues**, fixé au fichier d'epic (§ *Stories*). **Dernière story de l'epic**, après 46-1 à 46-6b (et
 46-5 si décidée), avant le tag de la release (0.21.0, prévision).*
 
