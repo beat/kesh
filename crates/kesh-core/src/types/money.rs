@@ -113,10 +113,9 @@ impl Money {
 /// assert_eq!(format_two_decimals(dec!(-0.004)), "0.00");
 /// ```
 pub fn format_two_decimals(amount: Decimal) -> String {
+    // `round_dp_with_strategy` rend un zéro sans signe (`-0.004` → `0.00`) :
+    // aucun « -0.00 » à écarter, ce que le test `-0.004` tient.
     let mut arrondi = amount.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
-    if arrondi.is_zero() {
-        arrondi = Decimal::ZERO;
-    }
     arrondi.rescale(2);
     arrondi.to_string()
 }
