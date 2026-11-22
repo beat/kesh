@@ -1,6 +1,8 @@
 # Story 39-12b : bouton « Télécharger depuis Wise », manuels, E2E
 
-Status: drafted
+Status: deferred
+
+**En attente (22.11) : téléchargement par l'API suspendu jusqu'à la réponse du support Wise ; validation P3 non remédiée (rapport `kesh-gate-logs/s39-12a-specs/validation-p3-rapport.md`).**
 
 *Fiche réécrite le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement) : plus de clé de signature SCA. Branche `epic/39-wise`. Epic 39, **phase 2** ; **socle S7 et S8**

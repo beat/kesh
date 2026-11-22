@@ -1,6 +1,8 @@
 # Story 39-12a4b : paiements par carte partiellement convertis dans le téléchargement Wise — cours, lignes déjà dans Kesh, compte rendu « à vérifier », refus
 
-Status: drafted
+Status: deferred
+
+**En attente (22.11) : téléchargement par l'API suspendu jusqu'à la réponse du support Wise ; validation P3 non remédiée (rapport `kesh-gate-logs/s39-12a-specs/validation-p3-rapport.md`).**
 
 *Fiche rédigée le 2026-11-21 (amendements du 21.11 de 39-12a2 et 39-12a3 ; suivi de la décision (a) du 21.11 du
 responsable de l'epic, journal des décisions de signature des epics du 21.11, sous `kesh-gate-logs/`) ; amendée le même

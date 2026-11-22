@@ -1,6 +1,8 @@
 # Story 39-12a4a1 : paiements par carte partiellement convertis — continuité des soldes : ancrages, segments, refus (`kesh-import`)
 
-Status: drafted
+Status: deferred
+
+**En attente (22.11) : téléchargement par l'API suspendu jusqu'à la réponse du support Wise ; validation P3 non remédiée (rapport `kesh-gate-logs/s39-12a-specs/validation-p3-rapport.md`).**
 
 *Fiche rédigée le 2026-11-21 sous le numéro 39-12a4a (amendements du 21.11 de 39-12a2 et 39-12a3), **scindée le même
 jour** à la validation P1 (finding M15, règle des petites stories) : cette story porte la **continuité** (ancrages,

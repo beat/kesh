@@ -1,6 +1,8 @@
 # Story 39-12a4a2 : paiements par carte partiellement convertis — estimation au cours, confirmation, import des partielles exactes (`kesh-import`)
 
-Status: drafted
+Status: deferred
+
+**En attente (22.11) : téléchargement par l'API suspendu jusqu'à la réponse du support Wise ; validation P3 non remédiée (rapport `kesh-gate-logs/s39-12a-specs/validation-p3-rapport.md`).**
 
 *Fiche née le 2026-11-21 du découpage de 39-12a4a à la validation P1 (finding M15, règle des petites stories) : elle
 reprend la partie « estimation » de l'ancienne fiche (AC-4, l'étalonnage et l'AC-9), **recalibrée** (findings M3 à M6,
@@ -120,6 +122,21 @@ cours de Wise quand il ne le peut pas.
 
 **Limites et risque résiduel** (finding M5 de la validation P2) : (1) le rendement est mesuré sur les données qui ont réglé la bande ; la recette AC-7 le mesure sur de nouvelles données avant la livraison ; (2) une solution unique n'est pas une preuve : si elle est fausse d'un centime et importée, le CSV « avec frais séparés » importé ensuite ne la corrige pas — sa ligne `FEE-CARD-x` n'est pas reconnue par R1 (l'origine en base n'a pas le montant « fichier + frais »), `FEE-CARD-x` serait insérée et `CARD-x` ignorée (même identifiant, même sens) : **frais comptés deux fois, sans signal**. 39-12a3b ferme ce chemin : une ligne de frais dont l'origine est en base sans remplir R1 fait **refuser l'import** (`WISE_FEE_ORIGIN_MISMATCH`), ce que le manuel dit avec sa sortie (annuler l'import téléchargé ou l'importer du CSV seul) ; (3) la sortie d'un « à vérifier » reste le relevé CSV de sa période. Le geste « valider la répartition proposée » (39-12a4c) n'est pas pris par cette décision : sans lui, la sortie reste le CSV.
 
+## Décision du 22.11 (règle du centime, remplace l'AC-4b de la décision C)
+
+*Prise par le responsable de l'epic le 22.11, après la validation P3 (H1 : la bande de p élargie jusqu'à la première solution rendait des solutions uniques fausses). Écrite ici, **non encore propagée** aux AC (la fiche est en attente) : à la reprise, elle remplace l'AC-4b et la ligne `FR-39-12a4a2-4`, et les findings M1 à M5 et L1 à L9 de la P3 restent à traiter.*
+
+Une part estimée au cours peut être **ajustée d'au plus un centime, vers le haut ou vers le bas**, pour que la continuité des soldes tombe juste sur le solde connu suivant. **Ancrages** : ceux de 39-12a4a1 AC-2 (solde actuel, zéros de règle dont le zéro après une conversion totale, point de contrôle placé). Règle, sans I/O et sans énumération :
+
+1. **Estimation** — chaque part d'un groupe (39-12a4a1 AC-3 : au moins deux parts inconnues d'une devise entre deux ancrages, somme exacte `Σ`) est estimée au cours : `conv = arrondi_demi_sup(couv / cours)`, `e = conv + max(0.01, arrondi_demi_sup(conv × t̂))`, `t̂` de l'AC-2 ; sa valeur non arrondie est `v = couv / cours + max(0.01, couv / cours × t̂)`. Une part n'a d'estimation propre que si sa couverture `couv` se calcule à partir de parts connues, déduites ou déjà résolues (à trois devises, l'USD vidé d'une partielle n'est estimable que si sa part EUR l'est, et inversement) ; les groupes se résolvent dans l'ordre où leurs parts deviennent estimables, jusqu'à ce que plus rien ne change (au plus un tour par groupe).
+2. **Écart** — `k = (Σ − Σ e) / 0.01` (entier). Si `|k| ≤ n` (n = nombre de parts du groupe), les `|k|` parts au plus fort reste d'arrondi (`v − e` le plus grand si `k > 0`, le plus petit si `k < 0` ; à égalité, la plus ancienne dans l'ordre de 39-12a2 AC-5) bougent de 0.01 dans le sens de `k` ; chaque part bouge d'au plus 0.01 ; le groupe est alors importé.
+3. **« À vérifier », pré-rempli, jamais importé** — `|k| > n` ; aucun ancrage après la part (segment non refermé) ; une part du groupe sans estimation propre. Un trou de solde reste un refus `BalanceGap` (39-12a4a1 AC-6).
+4. **Marque** — une part ajustée est marquée comme telle au compte rendu (champ `adjusted: bool` de la part, ou motif), pour que l'utilisateur sache qu'elle peut différer d'un centime de la répartition de Wise ; le solde aux ancrages reste exact. Le CSV « avec frais séparés » importé ensuite la signale (`WISE_FEE_ORIGIN_MISMATCH`, 39-12a3b).
+
+Une part **seule** inconnue de son segment reste déduite par la continuité et confirmée par l'AC-4 (tolérance T) : elle n'est pas une estimation.
+
+**Rejeu sur les données de la recherche** (métadonnées seulement ; détail au fichier de recherche, § « Règle du centime du 22.11 », hors dépôt) : téléchargement mensuel 10 importées sur 10, aucune ajustée ; lectures plus longues : beaucoup de parts « à vérifier » faute d'estimation propre (partielle à trois devises dans un groupe), et, en trimestriel, deux partielles importées différentes d'un centime du relevé (dont une ajustée) — le risque que la décision accepte, à mesurer de nouveau à la reprise.
+
 ## Tâches
 
 - [ ] T1 — Cours en entrée, `MissingRate`, `rates_needed` (AC-1).
@@ -158,6 +175,8 @@ vérifier avec ses parts estimées, jamais importé d'office ; un trou dans les 
 - Le Change Log ne reporte de la recette AC-7 que des métadonnées.
 
 ## Change Log
+
+- 2026-11-22 — **décision du 22.11** (règle du centime) écrite en section propre, AC non encore alignés ; **fiche en attente** (téléchargement par l'API suspendu jusqu'à la réponse du support Wise), validation P3 non remédiée. Statut `deferred`.
 
 - 2026-11-22 — **remédiation de la validation P2** (rapport `kesh-gate-logs/s39-12a-specs/validation-p2-rapport.md`) et **décision C du responsable de l'epic** (recherche « option C » : règle du dernier centime) : « Décision à prendre » devient « Décision C du 22.11 », AC-4b neuf (résolution d'un groupe par somme exacte, atteignabilité et bande de p élargie jusqu'à la première solution, solution unique importée, sinon « à vérifier » pré-rempli), rendement « lecture d'un coup » recalculé (10 importées sur ces relevés, limite : bande réglée sur les mêmes données, mesure sur nouvelles données à la recette) ; **M5** — mécanisme du centime faux décrit au vrai (R1 échoue, `FEE-CARD-x` insérée, frais doublés), refus `WISE_FEE_ORIGIN_MISMATCH` en 39-12a3b ; **M4** — `rien à raccorder` vrai par `non_exhaustive` et `code()` (39-12a2 AC-6) ; **L6**, **L7**, **L8**, **L12**. Statut `drafted`, validation P3 à lancer.
 

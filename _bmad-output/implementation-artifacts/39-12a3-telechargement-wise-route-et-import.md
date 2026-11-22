@@ -1,6 +1,8 @@
 # Story 39-12a3 : téléchargement des mouvements Wise — route, tâche en fond, import, doublons avec le CSV, audit
 
-Status: drafted
+Status: deferred
+
+**En attente (22.11) : téléchargement par l'API suspendu jusqu'à la réponse du support Wise ; validation P3 non remédiée (rapport `kesh-gate-logs/s39-12a-specs/validation-p3-rapport.md`).**
 
 *Fiche réécrite le 2026-11-20 sur la **voie activités** (recherche du 2026-11-20, `data-not-committed/wise-recherche.md`,
 métadonnées seulement) ; elle portait le numéro **39-12a2** (« téléchargement des relevés Wise — route, tâche en fond,

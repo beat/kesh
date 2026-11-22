@@ -1,6 +1,8 @@
 # Story 39-12a2b : activités Wise de 2026 — approvisionnement (`BALANCE_DEPOSIT`) et prélèvement (`DIRECT_DEBIT_TRANSACTION`) en lignes de relevé (`kesh-import`)
 
-Status: drafted
+Status: deferred
+
+**En attente (22.11) : téléchargement par l'API suspendu jusqu'à la réponse du support Wise ; validation P3 non remédiée (rapport `kesh-gate-logs/s39-12a-specs/validation-p3-rapport.md`).**
 
 *Fiche née le 2026-11-21 de la validation P1 des fiches 39-12a (finding M1, question Q2 : « dans une story, non dans une
 issue », parce que ces deux types arrêtent tout téléchargement qui remonte avant eux — tout l'exercice 2025 et le début

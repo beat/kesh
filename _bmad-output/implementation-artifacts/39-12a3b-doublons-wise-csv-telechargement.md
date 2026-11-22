@@ -1,6 +1,8 @@
 # Story 39-12a3b : doublons Wise entre un CSV et un téléchargement — frais de conversion inclus, montant différent, conversion automatique, paiement par carte converti
 
-Status: drafted
+Status: deferred
+
+**En attente (22.11) : téléchargement par l'API suspendu jusqu'à la réponse du support Wise ; validation P3 non remédiée (rapport `kesh-gate-logs/s39-12a-specs/validation-p3-rapport.md`).**
 
 *Fiche née le 2026-11-21 du découpage de 39-12a3 (amendement du 21.11, A-2 : règle des petites stories). Son AC-1 est
 l'AC-4 de 39-12a3, **reprise telle quelle** (validée en P1 à P5 et aux passes ciblées de la voie activités, le
