@@ -4420,9 +4420,11 @@ mod tests {
         assert_eq!(format_swiss_amount(dec!(10.005)), "10.00");
     }
 
-    /// AC-6 — les totaux de section, les lignes calculées et l'équation d'un
-    /// rendu groupé s'arrondissent aussi (10.005 → 10.01), là où le rendu à plat
-    /// tronque encore (10.00, #1245, corrigé par la 48-11).
+    /// AC-6 — les totaux de section et les lignes calculées d'un rendu groupé
+    /// s'arrondissent aussi (10.005 → 10.01), là où le rendu à plat tronque
+    /// encore (10.00, #1245, corrigé par la 48-11). L'équation y vaut
+    /// 10.005 + 0.005 = 10.010, que les deux formateurs écrivent `10.01` : elle
+    /// est gardée par [`bilan_groupe_equation_arrondie_au_centime`].
     #[test]
     fn bilan_groupe_totaux_arrondis_au_centime() {
         let mut bs = bilan(vec![ab(1000, "Caisse", dec!(10.005), AccountType::Asset)]);
@@ -4445,6 +4447,126 @@ mod tests {
         }
         let plat = crate::texte_pdf::lignes(&render_balance_sheet_pdf(&bs, &ctx).unwrap());
         assert!(plat.contains(&"Total actifs 10.00".to_string()), "{plat:?}");
+    }
+
+    /// AC-6 — l'équation du bilan groupé est l'arrondi de sa somme exacte,
+    /// même quand ses termes ne sont pas à demi-centime : passif 10.004 et
+    /// résultat 0.001 s'écrivent `10.00` et `0.00`, leur somme 10.005 `10.01`
+    /// (le rendu à plat tronque : `10.00`).
+    #[test]
+    fn bilan_groupe_equation_arrondie_au_centime() {
+        let mut bs = bilan(vec![ab(1000, "Caisse", dec!(10.005), AccountType::Asset)]);
+        bs.liabilities = vec![ab(
+            2000,
+            "Fournisseurs",
+            dec!(10.004),
+            AccountType::Liability,
+        )];
+        bs.total_liabilities = dec!(10.004);
+        bs.equity_result = dec!(0.001);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let env = AvecGroupes::bilan(bs.clone(), &arbre_essai(), &o);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let l = crate::texte_pdf::lignes(&render_grouped_balance_sheet_pdf(&env, &ctx).unwrap());
+        for attendu in [
+            "Total passifs 10.00",
+            "Total capitaux propres 0.00",
+            "Total passifs + Capitaux propres 10.01",
+        ] {
+            assert!(
+                l.contains(&attendu.to_string()),
+                "« {attendu} » absent de {l:?}"
+            );
+        }
+        let plat = crate::texte_pdf::lignes(&render_balance_sheet_pdf(&bs, &ctx).unwrap());
+        assert!(
+            plat.contains(&"Total passifs + Capitaux propres 10.00".to_string()),
+            "{plat:?}"
+        );
+    }
+
+    /// AC-6 — le résultat net du compte de résultat groupé s'arrondit au
+    /// centime : 100.005 + 50 − 40 = 110.005 → `110.01` (à plat : `110.00`).
+    #[test]
+    fn compte_de_resultat_groupe_resultat_net_arrondi_au_centime() {
+        let is_ = crate::essai_groupes::resultat(
+            vec![
+                ab(3000, "Ventes", dec!(100.005), AccountType::Revenue),
+                ab(3200, "Services", dec!(50), AccountType::Revenue),
+            ],
+            vec![ab(4000, "Achats", dec!(40), AccountType::Expense)],
+        );
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let env = AvecGroupes::compte_de_resultat(is_.clone(), &arbre_resultat(), &o);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let l = crate::texte_pdf::lignes(&render_grouped_income_statement_pdf(&env, &ctx).unwrap());
+        assert!(l.contains(&"Résultat net 110.01".to_string()), "{l:?}");
+        let plat = crate::texte_pdf::lignes(&render_income_statement_pdf(&is_, &ctx).unwrap());
+        assert!(
+            plat.contains(&"Résultat net 110.00".to_string()),
+            "{plat:?}"
+        );
+    }
+
+    /// Un nom de 60 caractères qui commence par `tete`.
+    fn nom_long(tete: &str) -> String {
+        format!("{tete:x<60}")
+    }
+
+    /// AC-3 — un libellé groupé trop long finit par « … » à 48 caractères au
+    /// retrait nul, un de moins par 2,5 mm de retrait (4 mm par niveau) : 48,
+    /// 47, 45, 44 aux profondeurs 1 à 4 — même un nom de compte CHF, que le
+    /// rendu à plat n'abrège pas.
+    #[test]
+    fn bilan_groupe_libelles_longs_tronques_selon_le_retrait() {
+        let noms: Vec<String> = (1..=4).map(|d| nom_long(&format!("Niveau{d} "))).collect();
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(1, &noms[0], None),
+            noeud(11, &noms[1], Some(1)),
+            noeud(111, &noms[2], Some(11)),
+            noeud(1111, &noms[3], Some(111)),
+        ]);
+        let bs = bilan(vec![ab(1111, &noms[3], dec!(5), AccountType::Asset)]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let env = AvecGroupes::bilan(bs, &arbre, &o);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let l = crate::texte_pdf::lignes(&render_grouped_balance_sheet_pdf(&env, &ctx).unwrap());
+        let tronque =
+            |nom: &str, n: usize| format!("{}…", nom.chars().take(n - 1).collect::<String>());
+        assert_eq!(
+            entre(&l, "Actifs", "Total actifs"),
+            vec![
+                format!("1 {} 5.00", tronque(&noms[0], 48)),
+                format!("11 {} 5.00", tronque(&noms[1], 47)),
+                format!("111 {} 5.00", tronque(&noms[2], 45)),
+                format!("1111 {} 5.00", tronque(&noms[3], 44)),
+            ]
+        );
+    }
+
+    /// AC-3 — une ligne groupée en devise a moins de place : son libellé finit
+    /// par « … » à 34 caractères au retrait nul, 33 au premier retrait.
+    #[test]
+    fn bilan_groupe_libelle_long_en_devise_tronque_plus_court() {
+        let (groupe, compte) = (nom_long("Dollars "), nom_long("Banque "));
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(102, &groupe, None),
+            noeud(1025, &compte, Some(102)),
+        ]);
+        let bs = bilan(vec![usd(1025, &compte, dec!(9), dec!(10))]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let env = AvecGroupes::bilan(bs, &arbre, &o);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let l = crate::texte_pdf::lignes(&render_grouped_balance_sheet_pdf(&env, &ctx).unwrap());
+        let tronque =
+            |nom: &str, n: usize| format!("{}…", nom.chars().take(n - 1).collect::<String>());
+        assert_eq!(
+            entre(&l, "Actifs", "Total actifs"),
+            vec![
+                format!("102 {} USD 10.00 9.00", tronque(&groupe, 34)),
+                format!("1025 {} USD 10.00 9.00", tronque(&compte, 33)),
+            ]
+        );
     }
 
     /// AC-3 — compte de résultat groupé : même rendu de lignes.

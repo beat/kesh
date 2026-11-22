@@ -95,7 +95,7 @@ impl Money {
 /// [`Money::round_to_centimes`] : `10.0050` → `10.01`, `-10.0050` → `-10.01`.
 /// Un `format!("{:.2}", d)` sur un `Decimal`, lui, **tronque** (#1245) :
 /// `10.0050` y sort `10.00`. Un résidu négatif de moins d'un demi-centime
-/// (`-0.004`) sort `0.00`, sans signe.
+/// (`-0.004`) sort `0.00`, sans signe, comme un zéro signé (`-0.00`).
 ///
 /// ⚠️ **Provisoire, à remplacer par la 48-11 à l'intégration** (Story 46-3,
 /// décision du responsable de l'Epic 46 du 2026-11-22) : remplaçant minimal de
@@ -113,9 +113,14 @@ impl Money {
 /// assert_eq!(format_two_decimals(dec!(-0.004)), "0.00");
 /// ```
 pub fn format_two_decimals(amount: Decimal) -> String {
-    // `round_dp_with_strategy` rend un zéro sans signe (`-0.004` → `0.00`) :
-    // aucun « -0.00 » à écarter, ce que le test `-0.004` tient.
     let mut arrondi = amount.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
+    // Un reste qui s'annule à l'arrondi sort sans signe (`-0.004` → `0.00`),
+    // mais un zéro déjà signé (`-0.00`, la négation d'un zéro) traverse
+    // `round_dp_with_strategy` tel quel : on l'écarte, comme
+    // `round_for_display` du PDF.
+    if arrondi.is_zero() {
+        arrondi = Decimal::ZERO;
+    }
     arrondi.rescale(2);
     arrondi.to_string()
 }
@@ -301,6 +306,8 @@ mod tests {
             (dec!(12), "12.00"),
             (dec!(0), "0.00"),
             (dec!(-0.004), "0.00"),
+            (-dec!(0.00), "0.00"),
+            (-dec!(0.0000), "0.00"),
             (dec!(12345678.905), "12345678.91"),
         ] {
             assert_eq!(format_two_decimals(montant), attendu, "{montant}");

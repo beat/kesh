@@ -2483,6 +2483,62 @@ mod tests {
         );
     }
 
+    /// AC-5 — en `footer`, le titre ouvert d'un groupe en devise laisse vides
+    /// le solde, la devise et le solde en devise ; son sous-total les porte.
+    #[test]
+    fn bilan_csv_groupe_devise_footer() {
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(102, "Banques USD", None),
+            noeud(1025, "Banque USD", Some(102)),
+        ]);
+        let bs = bilan(vec![usd(1025, "Banque USD", dec!(9.005), dec!(10.005))]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Pied, &[], &[]);
+        let mut buf = Vec::new();
+        render_grouped_balance_sheet_csv(&AvecGroupes::bilan(bs, &arbre, &o), &mut buf).unwrap();
+        let s = String::from_utf8(buf[3..].to_vec()).unwrap();
+        let l: Vec<&str> = s.split("\r\n").collect();
+        assert_eq!(
+            l[1..4],
+            [
+                "Actifs;1;groupe;102;Banques USD;;;",
+                "Actifs;2;compte;1025;Banque USD;9.01;USD;10.01",
+                "Actifs;1;soustotal;102;Banques USD;9.01;USD;10.01",
+            ]
+        );
+    }
+
+    /// AC-5 — les cellules texte du CSV groupé (numéro et nom, d'un groupe
+    /// comme d'un compte) sont neutralisées comme à plat : une cellule qui
+    /// commence par `=`, `+`, `-` ou `@` prend une apostrophe ; le montant, non.
+    #[test]
+    fn bilan_csv_groupe_echappe_les_cellules_texte() {
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            crate::groupes::NoeudCompte {
+                numero: "-10".into(),
+                ..noeud(10, "=1+1", None)
+            },
+            crate::groupes::NoeudCompte {
+                numero: "+1000".into(),
+                ..noeud(1000, "@x", Some(10))
+            },
+        ]);
+        let mut compte = crate::essai_groupes::ab(1000, "@x", dec!(-5), AccountType::Asset);
+        compte.account_number = "+1000".into();
+        let bs = bilan(vec![compte]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let mut buf = Vec::new();
+        render_grouped_balance_sheet_csv(&AvecGroupes::bilan(bs, &arbre, &o), &mut buf).unwrap();
+        let s = String::from_utf8(buf[3..].to_vec()).unwrap();
+        let l: Vec<&str> = s.split("\r\n").collect();
+        assert_eq!(
+            l[1..3],
+            [
+                "Actifs;1;groupe;'-10;'=1+1;-5.00",
+                "Actifs;2;compte;'+1000;'@x;-5.00",
+            ]
+        );
+    }
+
     /// AC-2 — sans groupes, le CSV « groupé » est le CSV à plat, à l'octet.
     #[test]
     fn csv_groupe_sans_groupes_est_le_csv_a_plat() {
