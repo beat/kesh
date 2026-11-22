@@ -3395,7 +3395,11 @@ mod tests {
             active: Some(true),
             role: None,
         };
-        for gabarit in [Gabarit::bilan(false), Gabarit::bilan(true), Gabarit::BALANCE] {
+        for gabarit in [
+            Gabarit::bilan(false),
+            Gabarit::bilan(true),
+            Gabarit::BALANCE,
+        ] {
             for depth in 1..=6 {
                 let limite = gabarit.limite(depth, true);
                 let propre = LibelleGroupe::de(

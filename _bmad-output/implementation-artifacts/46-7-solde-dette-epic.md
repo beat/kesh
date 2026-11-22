@@ -66,15 +66,28 @@ ne laisse pas de LOW sans suite.
 
 ## Tâches principales
 
-- [ ] Liste des issues 46-* ; choix dans le plafond ; correctifs
+- [x] Liste de la dette de l'epic ; choix dans le plafond (amendement du 2026-11-22)
+- [x] D10 — `toggleGroup` rend au niveau un groupe ramené à son état de départ (`3247ef5ee`)
+- [x] D4 — la ligne « solde propre » d'un PDF groupé garde son suffixe (`894040c9a`)
+- [x] LOW de la revue de fusion de la 46-6b : phrase du CSV groupé, doc d'API, commentaires de l'E2E (`cffecfc3c`)
+- [x] Liste des issues à ouvrir mise à jour (D4, D10 barrés ; D3 versé)
 
 ## Fichiers
 
-Selon les issues retenues.
+- `frontend/src/lib/features/reports/reports-grouping.ts` (`openByLevel`, `toggleGroup` à quatre arguments, en-tête du
+  module), `reports-grouping.test.ts`, `frontend/src/routes/(app)/reports/+page.svelte` (appel avec `row.depth`) ;
+- `crates/kesh-report/src/pdf.rs` (`truncate_keeping_suffix`, `LibelleGroupe::de`, deux tests),
+  `crates/kesh-api/tests/reports_export_e2e.rs` (`tronque_propre`, fidélité de la balance) ;
+- `docs/manual/fr/user-manual.tex`, `docs/api-external.md` ; fiches 46-2, 46-3, 46-6b (phrase de leurs notes de
+  version) ; commentaires de `frontend/tests/e2e/reports-balance-groupes.spec.ts` et `helpers/reports-groupes.ts`.
 
 ## Note de version
 
-*(à écrire au développement)*
+- **Fixed** — Rapports par groupes : fermer puis rouvrir un groupe (ou l'inverse) le rend à l'état que lui donne le
+  niveau, et le PDF exporté ne dit plus « détail ajusté à la main » quand l'écran montre exactement le niveau choisi.
+- **Fixed** — PDF des rapports par groupes : la ligne « (solde propre) » d'un compte de groupe à nom long garde son
+  suffixe ; seul le nom est abrégé (sauf au plus profond niveau de la balance, dont la colonne est plus étroite que le
+  suffixe).
 
 ## Change Log
 
