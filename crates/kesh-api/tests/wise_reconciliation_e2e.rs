@@ -768,11 +768,55 @@ fn releves_partielle() -> (Vec<u8>, Vec<u8>) {
     let chf = format!(
         "{HEADER}\nCARD-90000020,10-03-2020,10-03-2020 12:00:00.000,-86.60,CHF,Carte Boutique Exemple,,0.00,,,,,,,Boutique Exemple,,,,,,,DEBIT,CARD\n"
     );
-    let usd = format!(
-        "{HEADER}\nCARD-90000020,10-03-2020,10-03-2020 12:00:00.000,-13.85,USD,Carte Boutique Exemple,,0.00,USD,CHF,0.81950,,,,Boutique Exemple,,,,,0.04,11.35,DEBIT,CARD\n\
-         FEE-CARD-90000020,10-03-2020,10-03-2020 11:59:59.999,-0.04,USD,Frais de conversion,,13.85,,,,,,,,,,,,,,DEBIT,CARD\n"
-    );
-    (chf.into_bytes(), usd.into_bytes())
+    (chf.into_bytes(), releve_usd_carte("10-03-2020"))
+}
+
+/// La part USD du paiement `CARD-90000020` (USD −13.85 converti pour 11.35
+/// CHF, frais USD −0.04), datée `date` (`JJ-MM-AAAA`) : seule, une conversion
+/// totale.
+fn releve_usd_carte(date: &str) -> Vec<u8> {
+    format!(
+        "{HEADER}\nCARD-90000020,{date},{date} 12:00:00.000,-13.85,USD,Carte Boutique Exemple,,0.00,USD,CHF,0.81950,,,,Boutique Exemple,,,,,0.04,11.35,DEBIT,CARD\n\
+         FEE-CARD-90000020,{date},{date} 11:59:59.999,-0.04,USD,Frais de conversion,,13.85,,,,,,,,,,,,,,DEBIT,CARD\n"
+    )
+    .into_bytes()
+}
+
+/// Un relevé d'une devise fait de virements reçus `(identifiant, date,
+/// montant, solde après)` — des lignes sans rapport avec le paiement par
+/// carte, qui fixent la période et les soldes du relevé.
+fn releve_virements(devise: &str, lignes: &[(&str, &str, &str, &str)]) -> Vec<u8> {
+    let mut csv = format!("{HEADER}\n");
+    for (id, date, montant, solde) in lignes {
+        csv.push_str(&format!(
+            "{id},{date},{date} 09:00:00.000,{montant},{devise},Virement reçu,,{solde},,,,Client Fictif,,,,,,,,,,CREDIT,TRANSFER\n"
+        ));
+    }
+    csv.into_bytes()
+}
+
+/// La règle « Boutique » des paiements par carte.
+async fn regle_boutique(ctx: &Ctx) -> i64 {
+    ctx.regle(
+        "Boutique",
+        "counterparty_contains",
+        "Boutique Exemple",
+        Some("CARD"),
+    )
+    .await
+}
+
+/// Les éléments de `liste` dont le motif commence par `card_group`.
+fn de_groupe(liste: &Value) -> Vec<Value> {
+    liste
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| {
+            f["code"].as_str().unwrap_or("").starts_with("card_group") || f["type"] == "card_group"
+        })
+        .cloned()
+        .collect()
 }
 
 async fn monter_partielle(pool: &MySqlPool) -> (Ctx, i64, [i64; 3]) {
@@ -780,14 +824,7 @@ async fn monter_partielle(pool: &MySqlPool) -> (Ctx, i64, [i64; 3]) {
     let (chf, usd) = releves_partielle();
     let (s, b) = ctx.importer(&[("chf.csv", &chf), ("usd.csv", &usd)]).await;
     assert_eq!(s, 201, "import : {b}");
-    let regle = ctx
-        .regle(
-            "Boutique",
-            "counterparty_contains",
-            "Boutique Exemple",
-            Some("CARD"),
-        )
-        .await;
+    let regle = regle_boutique(&ctx).await;
     // L'ordre de la revue : la ligne principale (en CHF), puis par identifiant
     // (les frais, une milliseconde avant leur ligne, sont importés d'abord).
     let mut autres = [
@@ -1032,14 +1069,7 @@ async fn partielle_dont_un_seul_solde_est_importe(pool: MySqlPool) {
     let (chf, usd) = releves_partielle();
     let (s, b) = ctx.importer(&[("usd.csv", &usd)]).await;
     assert_eq!(s, 201, "import : {b}");
-    let regle = ctx
-        .regle(
-            "Boutique",
-            "counterparty_contains",
-            "Boutique Exemple",
-            Some("CARD"),
-        )
-        .await;
+    let regle = regle_boutique(&ctx).await;
     let revue = ctx.revue().await;
     assert_eq!(revue["counts"]["proposals"], 0, "{revue}");
     assert_eq!(
@@ -1085,6 +1115,294 @@ async fn partielle_dont_un_seul_solde_est_importe(pool: MySqlPool) {
         avant + 1,
         "une seule écriture"
     );
+}
+
+/// Revue P2, M1 : le relevé CHF importé **d'abord**, sa ligne `CARD-` est
+/// passée seule par la règle (une écriture) ; le relevé USD arrivé ensuite, la
+/// part USD du même paiement n'est ni proposée ni acceptée
+/// (`card_group_partly_reconciled`, mêmes détails des deux côtés) — jamais une
+/// seconde écriture du même paiement.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn partielle_chf_d_abord_deja_rapprochee(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let (chf, usd) = releves_partielle();
+    let (s, b) = ctx.importer(&[("chf.csv", &chf)]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let regle = regle_boutique(&ctx).await;
+    let ligne_chf = ctx.tx("CARD-90000020", ctx.chf).await;
+    let revue = ctx.revue().await;
+    let p = proposition(&revue, ligne_chf);
+    assert_eq!(p["type"], "rule", "{revue}");
+    let (s, b) = ctx.accepter(vec![p]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    let ecriture = b["accepted"][0]["journalEntryIds"][0].as_i64().unwrap();
+    let avant = ctx.count("SELECT COUNT(*) FROM journal_entries").await;
+
+    let (s, b) = ctx.importer(&[("usd.csv", &usd)]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["proposals"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    let examen = de_groupe(&revue["toReview"]);
+    assert_eq!(examen.len(), 1, "{revue}");
+    assert_eq!(examen[0]["code"], "card_group_partly_reconciled", "{revue}");
+    assert_eq!(examen[0]["transaction"]["transactionId"], "CARD-90000020");
+    let attendus = json!({
+        "reconciledBankTransactionIds": [ligne_chf],
+        "journalEntryIds": [ecriture],
+    });
+    for champ in ["reconciledBankTransactionIds", "journalEntryIds"] {
+        assert_eq!(examen[0]["details"][champ], attendus[champ], "{revue}");
+    }
+    // Forgée, la proposition est refusée, avec le même motif et les mêmes
+    // détails ; rien d'écrit.
+    let mut ids = [
+        ctx.tx("CARD-90000020", ctx.usd).await,
+        ctx.tx("FEE-CARD-90000020", ctx.usd).await,
+    ];
+    ids.sort_unstable();
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!(s, 200, "{b}");
+    let refus = &b["failed"][0];
+    assert_eq!(refus["errorCode"], "PROVIDER_PROPOSAL_STALE", "{b}");
+    assert_eq!(refus["details"]["reason"], "card_group_partly_reconciled");
+    for champ in ["reconciledBankTransactionIds", "journalEntryIds"] {
+        assert_eq!(refus["details"][champ], attendus[champ], "{b}");
+    }
+    assert_eq!(
+        ctx.count("SELECT COUNT(*) FROM journal_entries").await,
+        avant,
+        "aucune seconde écriture"
+    );
+    for id in ids {
+        assert_eq!(ctx.etat(id).await, ("pending".into(), None));
+    }
+}
+
+/// Revue P2, M2 : une conversion **totale** (aucune ligne CHF) datée après la
+/// dernière ligne du relevé CHF n'est couverte par aucun relevé — « à
+/// examiner » ; le relevé CHF suivant importé, dont le solde d'ouverture
+/// prolonge la clôture du premier, atteste qu'aucune ligne CHF n'a été
+/// sautée : la conversion est proposée, et acceptée en une écriture.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn totale_apres_la_derniere_ligne_chf(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let premier = releve_virements(
+        "CHF",
+        &[("TRANSFER-70000001", "10-03-2020", "50.00", "50.00")],
+    );
+    let usd = releve_usd_carte("20-03-2020");
+    let (s, b) = ctx
+        .importer(&[("chf.csv", &premier), ("usd.csv", &usd)])
+        .await;
+    assert_eq!(s, 201, "import : {b}");
+    let regle = regle_boutique(&ctx).await;
+    let ba_chf = ctx.tx("TRANSFER-70000001", ctx.chf).await;
+    let ba_chf: i64 =
+        sqlx::query_scalar("SELECT bank_account_id FROM bank_transactions WHERE id = ?")
+            .bind(ba_chf)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+    let revue = ctx.revue().await;
+    let examen = de_groupe(&revue["toReview"]);
+    assert_eq!(examen.len(), 1, "{revue}");
+    assert_eq!(
+        examen[0]["code"], "card_group_statements_missing",
+        "{revue}"
+    );
+    assert_eq!(
+        examen[0]["details"]["missingBankAccountIds"],
+        json!([ba_chf])
+    );
+
+    let suivant = releve_virements(
+        "CHF",
+        &[("TRANSFER-70000002", "05-04-2020", "10.00", "60.00")],
+    );
+    let (s, b) = ctx.importer(&[("chf.csv", &suivant)]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["toReview"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    let groupes = de_groupe(&revue["proposals"]);
+    assert_eq!(groupes.len(), 1, "{revue}");
+    let ids: Vec<i64> = serde_json::from_value(groupes[0]["bankTransactionIds"].clone()).unwrap();
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    let ecriture = b["accepted"][0]["journalEntryIds"][0].as_i64().unwrap();
+    assert_eq!(
+        ctx.lignes(ecriture).await,
+        vec![
+            (ctx.charge, dec!(11.35), dec!(0), None, None),
+            (
+                ctx.usd,
+                dec!(0),
+                dec!(12.50),
+                Some(dec!(13.89)),
+                Some(dec!(0.90))
+            ),
+            (ctx.perte, dec!(1.15), dec!(0), None, None),
+        ]
+    );
+}
+
+/// Revue P2, M2 : le relevé CHF suivant ne prolonge **pas** le premier (son
+/// solde d'ouverture, 60.00, n'est pas la clôture du premier, 50.00) : une
+/// ligne CHF a pu être sautée, celle du paiement comprise — la conversion
+/// reste « à examiner », et l'acceptation forgée est refusée.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn totale_releve_chf_suivant_discontinu(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let premier = releve_virements(
+        "CHF",
+        &[("TRANSFER-70000001", "10-03-2020", "50.00", "50.00")],
+    );
+    let suivant = releve_virements(
+        "CHF",
+        &[("TRANSFER-70000002", "05-04-2020", "10.00", "70.00")],
+    );
+    let usd = releve_usd_carte("20-03-2020");
+    for f in [&premier, &suivant, &usd] {
+        let (s, b) = ctx.importer(&[("releve.csv", f)]).await;
+        assert_eq!(s, 201, "import : {b}");
+    }
+    let regle = regle_boutique(&ctx).await;
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["proposals"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    let examen = de_groupe(&revue["toReview"]);
+    assert_eq!(examen.len(), 1, "{revue}");
+    assert_eq!(
+        examen[0]["code"], "card_group_statements_missing",
+        "{revue}"
+    );
+    let mut ids = [
+        ctx.tx("CARD-90000020", ctx.usd).await,
+        ctx.tx("FEE-CARD-90000020", ctx.usd).await,
+    ];
+    ids.sort_unstable();
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!(s, 200, "{b}");
+    assert_eq!(
+        b["failed"][0]["details"]["reason"], "card_group_statements_missing",
+        "{b}"
+    );
+    assert_eq!(
+        b["failed"][0]["details"]["missingBankAccountIds"],
+        examen[0]["details"]["missingBankAccountIds"]
+    );
+}
+
+/// Revue P2 (écart déclaré) : une partielle sur **deux soldes en devise**.
+/// Le relevé CHF couvre la date sans ligne du paiement ; la part USD est
+/// importée ; le solde EUR n'a qu'un relevé antérieur à la date — rien ne
+/// l'atteint : limite écrite, la part USD se propose seule. Le relevé EUR
+/// suivant importé, qui ne prolonge pas le précédent, encadre la date sans
+/// l'attester : le paiement passe « à examiner » (`missingBankAccountIds` :
+/// le solde EUR).
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn partielle_deux_devises_dont_une_absente(pool: MySqlPool) {
+    let ctx = monter_sans_import(&pool).await;
+    let chf = releve_virements(
+        "CHF",
+        &[
+            ("TRANSFER-70000011", "05-03-2020", "40.00", "40.00"),
+            ("TRANSFER-70000012", "15-03-2020", "10.00", "50.00"),
+        ],
+    );
+    let eur = releve_virements(
+        "EUR",
+        &[("TRANSFER-70000021", "01-02-2020", "20.00", "20.00")],
+    );
+    let usd = releve_usd_carte("10-03-2020");
+    let (s, b) = ctx
+        .importer(&[("chf.csv", &chf), ("eur.csv", &eur), ("usd.csv", &usd)])
+        .await;
+    assert_eq!(s, 201, "import : {b}");
+    regle_boutique(&ctx).await;
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["toReview"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    assert_eq!(de_groupe(&revue["proposals"]).len(), 1, "limite : {revue}");
+
+    let eur_suivant = releve_virements(
+        "EUR",
+        &[("TRANSFER-70000022", "01-04-2020", "5.00", "30.00")],
+    );
+    let (s, b) = ctx.importer(&[("eur.csv", &eur_suivant)]).await;
+    assert_eq!(s, 201, "import : {b}");
+    let ba_eur: i64 = sqlx::query_scalar(
+        "SELECT bank_account_id FROM bank_transactions WHERE transaction_id = 'TRANSFER-70000022'",
+    )
+    .fetch_one(&ctx.pool)
+    .await
+    .unwrap();
+    let revue = ctx.revue().await;
+    assert_eq!(
+        de_groupe(&revue["proposals"]),
+        Vec::<Value>::new(),
+        "{revue}"
+    );
+    let examen = de_groupe(&revue["toReview"]);
+    assert_eq!(examen.len(), 1, "{revue}");
+    assert_eq!(
+        examen[0]["code"], "card_group_statements_missing",
+        "{revue}"
+    );
+    assert_eq!(
+        examen[0]["details"]["missingBankAccountIds"],
+        json!([ba_eur])
+    );
+}
+
+/// Revue P2, L-d : le prédicat du rang 3 (`settlement_entry_cancel_blocker`)
+/// n'exempte une autre ligne du paiement groupé que **rapprochée** : forgée en
+/// attente sans perdre son écriture (état qu'aucun chemin ne produit), elle
+/// bloque l'annulation (`MATCHED_BANK_TRANSACTION`), à la vue comme au geste.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn annulation_bloquee_par_une_ligne_liee_non_rapprochee(pool: MySqlPool) {
+    let (ctx, regle, ids) = monter_partielle(&pool).await;
+    let (s, b) = ctx.accepter(vec![groupe(&ids, regle, ctx.charge)]).await;
+    assert_eq!((s, b["failed"].clone()), (200, json!([])), "{b}");
+    let ecriture = b["accepted"][0]["journalEntryIds"][0].as_i64().unwrap();
+    sqlx::query("UPDATE bank_transactions SET status = 'pending' WHERE id = ?")
+        .bind(ids[0])
+        .execute(&ctx.pool)
+        .await
+        .unwrap();
+    let frais = ctx.tx("FEE-CARD-90000020", ctx.usd).await;
+    let (s, vue) = ctx
+        .req(
+            reqwest::Method::GET,
+            &format!("/api/v1/reconciliation/transactions/{frais}"),
+            None,
+            &ctx.jwt,
+        )
+        .await;
+    assert_eq!(s, 200, "{vue}");
+    assert_eq!(vue["cancelBlockedBy"], "MATCHED_BANK_TRANSACTION", "{vue}");
+    assert_eq!(vue["cancelBlockedDocumentId"], ids[0], "{vue}");
+    let (s, b) = ctx
+        .post(
+            &format!("/api/v1/reconciliation/transactions/{frais}/cancel"),
+            json!({}),
+        )
+        .await;
+    assert_ne!(s, 200, "{b}");
+    assert_eq!(ctx.etat(frais).await, ("reconciled".into(), Some(ecriture)));
 }
 
 /// Revue L1 : le cours du mois fait gagner du change — 13.89 USD à 0.80 =

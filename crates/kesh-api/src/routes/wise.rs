@@ -18,7 +18,8 @@
 //!    A-1) : leurs lignes sortent du classement ligne à ligne ; une
 //!    proposition `card_group` par paiement (règle de contrepartie en CHF sur
 //!    la ligne principale), sinon « à examiner » (`card_group_no_rule`,
-//!    `card_group_unsupported`).
+//!    `card_group_unsupported`, `card_group_statements_missing`,
+//!    `card_group_partly_reconciled` : [`card_group_blocker`]).
 //! 2. **Autre côté déjà passé** (AC-4) — pour un versement Stripe et un
 //!    virement : `find_matched_elsewhere` (les écritures déjà rapprochées d'une
 //!    transaction d'un autre compte bancaire), filtrée à
@@ -49,6 +50,7 @@ use kesh_db::entities::{
 };
 use kesh_db::errors::{DbError, FxAccountField, FxAccountReason};
 use kesh_db::repositories::bank_accounts::BASE_CURRENCY;
+use kesh_db::repositories::bank_imports::DateCoverage;
 use kesh_db::repositories::reconciliation_link::{EntryCandidate, find_matched_elsewhere};
 use kesh_db::repositories::{
     bank_imports, fiscal_years, journal_entries, projects, provider_review as reads,
@@ -175,18 +177,18 @@ async fn build_wise_review(
                 let mut merchant = merchant_chf;
                 merchant.rescale(2);
                 details["merchantAmount"] = serde_json::json!(merchant.to_string());
-                let missing = missing_statement_balances(
+                let blocker = card_group_blocker(
                     &mut *tx,
                     company_id,
                     loaded.balances.iter().map(|b| (b.account.id, b.currency())),
-                    &g.lines,
+                    g,
                 )
                 .await?;
-                if !missing.is_empty() {
-                    details["missingBankAccountIds"] = serde_json::json!(missing);
+                if let Some((code, extra)) = blocker {
+                    merge(&mut details, extra);
                     review.push_to_review(ReviewFinding {
                         details: Some(details),
-                        ..ReviewFinding::on(wise::REVIEW_CARD_GROUP_STATEMENTS_MISSING, principal)
+                        ..ReviewFinding::on(code, principal)
                     });
                     continue;
                 }
@@ -316,35 +318,93 @@ async fn build_wise_review(
     Ok(review)
 }
 
-/// Les soldes **en CHF** du compte Wise qui n'ont aucune ligne dans le groupe
-/// et aucun relevé importé qui couvre la date du paiement (revue M1 de la
-/// 39-11c). Une conversion partielle débite d'abord le solde en CHF : sans sa
-/// ligne, elle ressemble à une conversion totale, et l'écrire seule donnerait
-/// deux écritures quand l'autre ligne arrive. Qu'un relevé couvre la date sans
-/// porter de ligne du paiement atteste qu'il n'y en a pas. ⚠️ Limite : un frais
-/// `FEE-CARD` importé plus tard par un second fichier du **même** solde que la
-/// carte n'est pas décelable (le relevé de ce solde couvre déjà la date).
-async fn missing_statement_balances<'b>(
+/// Ce qui empêche d'écrire un paiement par carte groupé, ou `None` : le
+/// motif (`code` de la revue, `details.reason` de l'acceptation) et ses
+/// détails, **les mêmes** des deux côtés — la revue et l'acceptation
+/// l'appellent toutes deux (revues de code P1 et P2 de la 39-11c).
+///
+/// 1. [`wise::REVIEW_CARD_GROUP_PARTLY_RECONCILED`] : une ligne du même
+///    paiement (`CARD-<id>`, `FEE-CARD-<id>`) est déjà rapprochée, sur un solde
+///    du compte Wise — une partielle dont une part, importée d'abord, a été
+///    passée seule ; écrire le groupe en ferait une seconde écriture
+///    (`details.reconciledBankTransactionIds`, `details.journalEntryIds`).
+/// 2. [`wise::REVIEW_CARD_GROUP_STATEMENTS_MISSING`] : un solde sans ligne dans
+///    le groupe peut en avoir une qui n'est pas encore importée
+///    (`details.missingBankAccountIds`) — une conversion partielle, sans sa
+///    ligne, ressemble à une conversion totale. Couverture jugée par
+///    [`bank_imports::date_coverage`] : un relevé couvre la date, ou la
+///    continuité des soldes l'atteste. Exigée du solde en CHF toujours (la
+///    partielle le débite d'abord) ; d'un solde en devise quand ses relevés
+///    encadrent la date sans se suivre (`DateCoverage::Gap`).
+///
+/// ⚠️ Limites : un solde en devise dont aucun relevé n'encadre la date (rien
+/// d'importé après elle, ou rien avant) n'est pas exigé — sinon un solde
+/// dormant, ou ouvert après la date, mettrait tout paiement « à examiner » ;
+/// une partielle sur deux soldes en devise dont l'une n'est pas encore
+/// importée se propose alors sans elle, et sa part arrivée ensuite formerait
+/// un second groupe, refusé par le motif 1 (une part rapprochée) ;
+/// un frais `FEE-CARD` importé plus tard par un second fichier du **même**
+/// solde que la carte n'est pas décelable (le relevé de ce solde couvre déjà
+/// la date).
+async fn card_group_blocker<'b>(
     conn: &mut sqlx::MySqlConnection,
     company_id: i64,
     balances: impl Iterator<Item = (i64, &'b str)>,
-    group: &[&BankTransaction],
-) -> Result<Vec<i64>, DbError> {
-    let date = payment_date(group[0]);
-    let present: HashSet<i64> = group.iter().map(|t| t.bank_account_id).collect();
+    group: &wise::CardGroup<'_>,
+) -> Result<Option<(&'static str, serde_json::Value)>, DbError> {
+    let balances: Vec<(i64, &str)> = balances.collect();
+    let own: Vec<i64> = balances.iter().map(|(id, _)| *id).collect();
+    let wanted = vec![
+        group.card_id.clone(),
+        format!("{}{}", wise::FEE_PREFIX, group.card_id),
+    ];
+    let done = reads::reconciled_by_transaction_ids(&mut *conn, company_id, &own, &wanted).await?;
+    if !done.is_empty() {
+        let mut entries: Vec<i64> = done.iter().filter_map(|t| t.matched_entry_id).collect();
+        entries.sort_unstable();
+        entries.dedup();
+        return Ok(Some((
+            wise::REVIEW_CARD_GROUP_PARTLY_RECONCILED,
+            serde_json::json!({
+                "reconciledBankTransactionIds": done.iter().map(|t| t.id).collect::<Vec<_>>(),
+                "journalEntryIds": entries,
+            }),
+        )));
+    }
+    let date = payment_date(group.principal());
+    let present: HashSet<i64> = group.lines.iter().map(|t| t.bank_account_id).collect();
     let mut missing = Vec::new();
     for (id, currency) in balances {
-        if currency != BASE_CURRENCY || present.contains(&id) {
+        if present.contains(&id) {
             continue;
         }
-        let covering =
-            bank_imports::overlapping_statements(&mut *conn, company_id, id, date, date).await?;
-        if covering.is_empty() {
+        let coverage = bank_imports::date_coverage(&mut *conn, company_id, id, date).await?;
+        let required = match coverage {
+            DateCoverage::Covered => false,
+            // Des relevés de part et d'autre de la date, qui ne se suivent pas.
+            DateCoverage::Gap => true,
+            // Le solde en CHF : rien n'atteste la date, il est exigé.
+            DateCoverage::NoPrevious | DateCoverage::NothingAfter => currency == BASE_CURRENCY,
+        };
+        if required {
             missing.push(id);
         }
     }
+    if missing.is_empty() {
+        return Ok(None);
+    }
     missing.sort_unstable();
-    Ok(missing)
+    Ok(Some((
+        wise::REVIEW_CARD_GROUP_STATEMENTS_MISSING,
+        serde_json::json!({ "missingBankAccountIds": missing }),
+    )))
+}
+
+/// Ajoute à l'objet `into` les champs de l'objet `extra`.
+fn merge(into: &mut serde_json::Value, extra: serde_json::Value) {
+    if let (Some(into), serde_json::Value::Object(extra)) = (into.as_object_mut(), extra) {
+        into.extend(extra);
+    }
 }
 
 /// Retire de la revue toute proposition, tout écart et toute ligne à examiner
@@ -555,24 +615,20 @@ async fn accept_card_group(
         return Err(stale(primary, "card_group_changed"));
     };
     let principal = group.principal();
-    // Chaque solde en CHF absent du groupe : un relevé qui couvre la date.
-    let missing = missing_statement_balances(
+    // Une part déjà rapprochée, une ligne peut-être pas encore importée : le
+    // même jugement que la revue.
+    let blocker = card_group_blocker(
         &mut *tx,
         ctx.company_id,
         ctx.balances.iter().map(|(id, b)| (*id, b.currency())),
-        &group.lines,
+        group,
     )
     .await
     .map_err(|e| db_refusal(primary, e))?;
-    if !missing.is_empty() {
-        return Err(failed(
-            primary,
-            PROVIDER_PROPOSAL_STALE,
-            serde_json::json!({
-                "reason": "card_group_statements_missing",
-                "missingBankAccountIds": missing,
-            }),
-        ));
+    if let Some((reason, extra)) = blocker {
+        let mut details = serde_json::json!({ "reason": reason });
+        merge(&mut details, extra);
+        return Err(failed(primary, PROVIDER_PROPOSAL_STALE, details));
     }
 
     // La règle, rejugée sur la ligne principale.

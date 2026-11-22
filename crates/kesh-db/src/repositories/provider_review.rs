@@ -395,12 +395,59 @@ pub async fn pending_by_transaction_ids<'e, E>(
 where
     E: sqlx::Executor<'e, Database = MySql>,
 {
+    select_by_transaction_ids(
+        executor,
+        company_id,
+        bank_account_ids,
+        transaction_ids,
+        "AND status = 'pending'",
+    )
+    .await
+}
+
+/// Les transactions **déjà rapprochées** des comptes bancaires
+/// `bank_account_ids` dont l'identifiant chez le prestataire est l'un de
+/// `transaction_ids`, triées par identifiant — la garde du paiement par carte
+/// groupé (Story 39-11c, revue de code P2, M1) : une ligne du même paiement
+/// déjà rapprochée seule. Lecture ordinaire.
+pub async fn reconciled_by_transaction_ids<'e, E>(
+    executor: E,
+    company_id: i64,
+    bank_account_ids: &[i64],
+    transaction_ids: &[String],
+) -> Result<Vec<BankTransaction>, DbError>
+where
+    E: sqlx::Executor<'e, Database = MySql>,
+{
+    select_by_transaction_ids(
+        executor,
+        company_id,
+        bank_account_ids,
+        transaction_ids,
+        "AND status <> 'pending'",
+    )
+    .await
+}
+
+/// La lecture commune de [`pending_by_transaction_ids`] et de
+/// [`reconciled_by_transaction_ids`] ; `status_clause` est un fragment SQL
+/// constant (jamais une entrée).
+async fn select_by_transaction_ids<'e, E>(
+    executor: E,
+    company_id: i64,
+    bank_account_ids: &[i64],
+    transaction_ids: &[String],
+    status_clause: &'static str,
+) -> Result<Vec<BankTransaction>, DbError>
+where
+    E: sqlx::Executor<'e, Database = MySql>,
+{
     if bank_account_ids.is_empty() || transaction_ids.is_empty() {
         return Ok(Vec::new());
     }
     let sql = format!(
         "SELECT {BANK_TX_COLUMNS} FROM bank_transactions \
-         WHERE company_id = ? AND status = 'pending' AND bank_account_id IN ({}) \
+         WHERE company_id = ? {status_clause} AND bank_account_id IN ({}) \
            AND transaction_id IN ({}) ORDER BY id",
         placeholders(bank_account_ids.len()),
         placeholders(transaction_ids.len())

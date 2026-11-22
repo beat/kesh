@@ -77,10 +77,18 @@ pub const REVIEW_STRIPE_PAYOUT_UNMATCHED: &str = "stripe_payout_unmatched";
 pub const REVIEW_CARD_GROUP_UNSUPPORTED: &str = "card_group_unsupported";
 /// À examiner : paiement par carte converti sans règle de contrepartie en CHF.
 pub const REVIEW_CARD_GROUP_NO_RULE: &str = "card_group_no_rule";
-/// À examiner : paiement par carte converti dont un solde en CHF du compte
-/// Wise n'a pas de ligne dans le groupe et pas de relevé importé qui couvre la
-/// date du paiement (l'autre moitié d'une conversion partielle peut manquer).
+/// À examiner : paiement par carte converti dont un solde du compte Wise,
+/// sans ligne dans le groupe, peut en avoir une qui n'est pas encore importée
+/// — le solde en CHF toujours, un solde en devise quand ses relevés encadrent
+/// la date sans se suivre — : aucun relevé ne couvre la date du paiement, ni
+/// ne l'atteste par la continuité des soldes (l'autre moitié d'une conversion
+/// partielle peut manquer).
 pub const REVIEW_CARD_GROUP_STATEMENTS_MISSING: &str = "card_group_statements_missing";
+/// À examiner : paiement par carte converti dont une ligne (`CARD-<id>` ou
+/// `FEE-CARD-<id>`, sur un solde du compte Wise) est **déjà rapprochée** —
+/// une partielle dont une part a été passée seule : l'écrire donnerait une
+/// seconde écriture du même paiement.
+pub const REVIEW_CARD_GROUP_PARTLY_RECONCILED: &str = "card_group_partly_reconciled";
 
 /// Écart maximal, en jours, entre la date de paiement d'une transaction et
 /// l'écriture déjà passée de l'autre côté (AC-4).
@@ -753,6 +761,50 @@ mod tests {
             card_groups(&p)[0].judgement,
             CardGroupJudgement::Unsupported("merchant_not_chf")
         );
+    }
+
+    /// Revue P2, L-b : un montant CHF au centime fractionnaire est refusé
+    /// (`merchant_scale`), sur la ligne en CHF comme dans le segment ; des
+    /// zéros de queue (une colonne relue à quatre décimales) ne le sont pas.
+    #[test]
+    fn montant_du_marchand_au_centime() {
+        let admis = |p: &[BankTransaction]| card_groups(p)[0].judgement.clone();
+        let mut p = partielle();
+        p[0].amount = Decimal::from_str("-86.6000").unwrap();
+        p[1].details = "Carte · CARD · USD→CHF 11.350 au cours 0.81950".into();
+        assert_eq!(
+            admis(&p),
+            CardGroupJudgement::Valid {
+                merchant_chf: Decimal::from_str("97.95").unwrap()
+            }
+        );
+        let mut p = partielle();
+        p[0].amount = Decimal::from_str("-86.605").unwrap();
+        assert_eq!(admis(&p), CardGroupJudgement::Unsupported("merchant_scale"));
+        let mut p = partielle();
+        p[1].details = "Carte · CARD · USD→CHF 11.355 au cours 0.81950".into();
+        assert_eq!(admis(&p), CardGroupJudgement::Unsupported("merchant_scale"));
+    }
+
+    /// Revue P2, L-c : c'est le **dernier** élément conforme qui compte — une
+    /// description conforme, placée avant le segment de l'import, ne l'emporte
+    /// pas ; une note conforme, placée après, l'emporte (limite écrite à
+    /// `exchange_of`).
+    #[test]
+    fn segment_le_dernier_element_conforme() {
+        let lu = exchange_of("EUR→CHF 1 · CARD · USD→CHF 11.35 au cours 0.81950").unwrap();
+        assert_eq!(
+            (lu.from.as_str(), lu.to_amount),
+            ("USD", Some(Decimal::from_str("11.35").unwrap()))
+        );
+        let note = exchange_of("Carte · CARD · USD→CHF 11.35 · EUR→CHF 2").unwrap();
+        assert_eq!(
+            (note.from.as_str(), note.to_amount),
+            ("EUR", Some(Decimal::from_str("2").unwrap()))
+        );
+        // Un élément non conforme après le segment ne le masque pas.
+        let apres = exchange_of("Carte · USD→CHF 11.35 · Aller → retour").unwrap();
+        assert_eq!(apres.from, "USD");
     }
 
     #[test]
