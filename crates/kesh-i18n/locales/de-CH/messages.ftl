@@ -1800,6 +1800,9 @@ error-provider-account-hidden-char = Der Name des Dienstleisterkontos darf weder
 error-paypal-csv-invalid = Diese Datei ist kein lesbarer PayPal-Auszug « Balance affecting transactions ». Nichts wurde importiert.
 error-provider-settings-both = Ein Bankkonto kann nur der Saldo eines einzigen Dienstleisters sein: PayPal- und Wise-Einstellungen zusammen abgelehnt.
 error-wise-csv-invalid = Die Datei « { $filename } » ist kein lesbarer CSV-Auszug von Wise. Nichts wurde importiert.
+error-wise-zip-no-csv = Das Archiv « { $filename } » enthält keinen CSV-Auszug: Exportieren Sie den Auszug aus Wise im CSV-Format. Nichts wurde importiert.
+error-wise-zip-invalid = Das Archiv « { $filename } » ist kein Zip mit Wise-Auszügen, das Kesh lesen kann. Nichts wurde importiert.
+error-wise-csv-fees-not-separated = Der Auszug « { $filename } » wurde ohne die Option exportiert, welche die Gebühren als eigene Transaktionen ausweist: Seine Beträge enthalten die Gebühren. Exportieren Sie ihn erneut aus Wise und aktivieren Sie diese Option. Nichts wurde importiert.
 error-wise-duplicate-currency-file = Mehrere Dateien enthalten den Auszug in { $currency }: nur eine Datei pro Währung. Nichts wurde importiert.
 # Story 38-12a — Download über die API eines Zahlungsdienstleisters (gemeinsamer Sockel)
 error-provider-period-invalid = Zeitraum abgelehnt: Der Beginn muss vor dem Ende liegen, darf nicht in der Zukunft liegen und muss weniger als drei Jahre zurückliegen.

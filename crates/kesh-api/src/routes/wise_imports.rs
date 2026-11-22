@@ -1,7 +1,11 @@
 //! Route `POST /api/v1/wise-imports` — Story 39-11b (Epic 39, phase 1).
 //!
 //! Importe d'un geste un ou plusieurs relevés CSV d'un **compte Wise**
-//! (multipart : un ou plusieurs `file`, `account` = le libellé). Wise exporte
+//! (multipart : un ou plusieurs `file`, `account` = le libellé). Un `file`
+//! peut être le **zip** que Wise fait télécharger (Story 39-11e) : reconnu à
+//! sa signature, quel que soit son nom, il est remplacé, à sa place, par ses
+//! CSV à la racine (par nom) — bornes et refus dans [`crate::zip_read`] —, et
+//! la suite est celle d'un fichier envoyé à part. Wise exporte
 //! un relevé **par solde** : chaque fichier porte une devise (lecteur de la
 //! Story 39-11a) et va au compte bancaire Kesh, solde de ce compte Wise dans
 //! cette devise (`bank_accounts.provider = 'wise'`, `provider_account` = le
@@ -13,7 +17,9 @@
 //!
 //! **Ordre des refus**, rien d'écrit à aucun : `400 VALIDATION_ERROR` (champ
 //! manquant, aucun fichier) → `404 PROVIDER_ACCOUNT_NOT_FOUND` → `422
-//! WISE_CSV_INVALID` (premier fichier refusé par le lecteur, nommé) → `422
+//! WISE_ZIP_INVALID` (première archive refusée, dans l'ordre du formulaire)
+//! → `422 WISE_CSV_INVALID` ou `422 WISE_CSV_FEES_NOT_SEPARATED` (premier
+//! fichier refusé par le lecteur, nommé, avec son archive) → `422
 //! WISE_DUPLICATE_CURRENCY_FILE` → `422 PROVIDER_CURRENCY_ACCOUNT_MISSING` →
 //! `409 PROVIDER_CURRENCY_DUPLICATE` → `409 BANK_ACCOUNT_CLOSED` → `422
 //! BANK_IMPORT_DUPLICATE_FILE` (jugé sous les verrous, dans la transaction
@@ -69,6 +75,7 @@ use crate::routes::paypal_imports::{
     ProviderWrite, TXID_COLUMN_MAX_CHARS, WriteFuture, file_currency_hash, insert_currency_import,
     resolve_currency_balances, run_provider_import, truncate_bytes, truncate_chars,
 };
+use crate::zip_read::{ZipRefusal, ZipRefusalReason, extract_csv_entries, looks_like_zip};
 
 /// Nom d'un fichier sans nom dans le formulaire.
 const DEFAULT_FILENAME: &str = "wise.csv";
@@ -80,6 +87,9 @@ const IBAN_MAX_CHARS: usize = 34;
 const DETAILS_SEPARATOR: &str = " · ";
 /// Code de l'avertissement de continuité.
 pub const WARNING_GAP: &str = "gap";
+/// Nombre maximal d'entrées d'un zip de relevés (Story 39-11e, D4) : trois
+/// aujourd'hui, une par solde ; la marge couvre un compte à nombreuses devises.
+pub const WISE_ZIP_MAX_ENTRIES: usize = 64;
 
 // ---------------------------------------------------------------------------
 // DTO
@@ -100,13 +110,19 @@ pub struct FileWarning {
 /// Compte rendu d'un fichier : son compte bancaire, l'entrée `bank_imports`
 /// créée (`null` si toutes ses lignes étaient des doublons), les nombres de
 /// transactions insérées et ignorées, ses soldes et ses avertissements.
+///
+/// Story 39-11e : `archive`, le zip d'où vient le fichier (`null` pour un
+/// fichier envoyé à part), et `rows`, les lignes lues (`inserted +
+/// duplicates`).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileReport {
     pub filename: String,
+    pub archive: Option<String>,
     pub currency: String,
     pub bank_account_id: i64,
     pub import_id: Option<i64>,
+    pub rows: usize,
     pub inserted: usize,
     pub duplicates: usize,
     pub opening_balance: Decimal,
@@ -114,12 +130,23 @@ pub struct FileReport {
     pub warnings: Vec<FileWarning>,
 }
 
-/// Réponse `201` de l'import (AC-5).
+/// Une entrée d'un zip que l'import n'a pas lue (Story 39-11e, D3) : un
+/// dossier, une entrée dans un dossier, une autre extension.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IgnoredEntry {
+    pub archive: String,
+    pub entry: String,
+}
+
+/// Réponse `201` de l'import (AC-5 ; `ignoredEntries`, toujours présent, vide
+/// sans zip : Story 39-11e).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WiseImportResponse {
     pub account: String,
     pub files: Vec<FileReport>,
+    pub ignored_entries: Vec<IgnoredEntry>,
 }
 
 // ---------------------------------------------------------------------------
@@ -240,9 +267,11 @@ pub fn transaction_of_row(
 // Multipart
 // ---------------------------------------------------------------------------
 
-/// Un fichier du formulaire.
+/// Un fichier du formulaire, ou un CSV extrait d'un zip du formulaire
+/// (`archive` = le nom du champ zip).
 struct UploadedFile {
     filename: String,
+    archive: Option<String>,
     bytes: axum::body::Bytes,
 }
 
@@ -273,6 +302,7 @@ async fn parse_form(mut multipart: Multipart) -> Result<WiseImportForm, AppError
                     } else {
                         filename
                     },
+                    archive: None,
                     bytes,
                 });
             }
@@ -300,8 +330,18 @@ async fn parse_form(mut multipart: Multipart) -> Result<WiseImportForm, AppError
 }
 
 /// Traduit le refus du lecteur (39-11a) en `422 WISE_CSV_INVALID`, le fichier
-/// nommé.
-fn csv_error(filename: &str, e: WiseCsvError) -> AppError {
+/// nommé — sauf le relevé exporté sans les frais séparés (Story 39-11e, D5),
+/// qui a son code propre, `422 WISE_CSV_FEES_NOT_SEPARATED`, avec l'archive
+/// d'où vient le fichier (`None` pour un fichier envoyé à part).
+fn csv_error(filename: &str, archive: Option<&str>, e: WiseCsvError) -> AppError {
+    if let WiseCsvError::FeesNotSeparated { lines, count } = e {
+        return AppError::WiseCsvFeesNotSeparated {
+            filename: filename.to_string(),
+            archive: archive.map(str::to_string),
+            lines,
+            count,
+        };
+    }
     let reason = e.code();
     let details = match &e {
         WiseCsvError::MissingColumns(columns) => serde_json::json!({ "columns": columns }),
@@ -317,13 +357,74 @@ fn csv_error(filename: &str, e: WiseCsvError) -> AppError {
             expected,
             found,
         } => serde_json::json!({ "line": line, "expected": expected, "found": found }),
-        WiseCsvError::Empty => serde_json::json!({}),
+        // `FeesNotSeparated` est rendu plus haut, par son propre code.
+        WiseCsvError::Empty | WiseCsvError::FeesNotSeparated { .. } => serde_json::json!({}),
     };
     AppError::WiseCsvInvalid {
         filename: filename.to_string(),
         reason,
         details,
     }
+}
+
+/// Le nom d'une entrée de zip, borné pour la réponse, la trace et
+/// `bank_imports.filename` (Story 39-11e, AC-1 et AC-3) : caractères de
+/// contrôle remplacés par `?`, rogné à [`FILENAME_MAX_BYTES`] à la frontière
+/// d'un caractère (un nom de zip peut faire 65 535 octets).
+fn entry_name(raw: &str) -> String {
+    let clean: String = raw
+        .chars()
+        .map(|c| if c.is_control() { '?' } else { c })
+        .collect();
+    truncate_bytes(&clean, FILENAME_MAX_BYTES)
+}
+
+/// Le refus d'une archive en `422 WISE_ZIP_INVALID` (Story 39-11e).
+fn zip_error(archive: &str, refusal: ZipRefusal, max_bytes: u64) -> AppError {
+    let extra = match refusal.reason {
+        ZipRefusalReason::TooManyEntries => serde_json::json!({ "max": WISE_ZIP_MAX_ENTRIES }),
+        ZipRefusalReason::TooLarge => serde_json::json!({ "maxBytes": max_bytes }),
+        _ => serde_json::json!({}),
+    };
+    AppError::WiseZipInvalid {
+        filename: archive.to_string(),
+        reason: refusal.reason.as_str(),
+        entry: refusal.entry.as_deref().map(entry_name),
+        extra,
+    }
+}
+
+/// Développe les zips du formulaire (Story 39-11e, D1 à D4) : chaque fichier
+/// à signature de zip est remplacé, **à sa place**, par ses CSV retenus (par
+/// nom, `archive` = son nom) ; les autres restent tels quels. La taille
+/// décompressée se cumule sur toutes les archives, bornée par `max_bytes`
+/// (la limite du corps de la route). Rend aussi les entrées ignorées.
+/// Synchrone : à exécuter en `spawn_blocking`.
+fn expand_archives(
+    files: Vec<UploadedFile>,
+    max_bytes: u64,
+) -> Result<(Vec<UploadedFile>, Vec<IgnoredEntry>), AppError> {
+    let mut budget = max_bytes;
+    let mut out = Vec::with_capacity(files.len());
+    let mut ignored = Vec::new();
+    for file in files {
+        if !looks_like_zip(&file.bytes) {
+            out.push(file);
+            continue;
+        }
+        let extracted = extract_csv_entries(&file.bytes, WISE_ZIP_MAX_ENTRIES, &mut budget)
+            .map_err(|r| zip_error(&file.filename, r, max_bytes))?;
+        ignored.extend(extracted.ignored.iter().map(|entry| IgnoredEntry {
+            archive: file.filename.clone(),
+            entry: entry_name(entry),
+        }));
+        out.extend(extracted.csvs.into_iter().map(|csv| UploadedFile {
+            filename: entry_name(&csv.name),
+            archive: Some(file.filename.clone()),
+            bytes: csv.bytes.into(),
+        }));
+    }
+    Ok((out, ignored))
 }
 
 /// Le premier couple de fichiers de même devise, dans l'ordre du formulaire
@@ -352,6 +453,7 @@ fn duplicate_currency(read: &[(String, WiseCsv)]) -> Option<AppError> {
 /// Un fichier lu et son compte bancaire.
 struct Target<'a> {
     filename: String,
+    archive: Option<String>,
     csv: WiseCsv,
     balance: &'a ProviderBalance,
     file_hash: String,
@@ -378,9 +480,16 @@ pub async fn create(
         });
     }
 
-    let mut read: Vec<(String, WiseCsv)> = Vec::with_capacity(form.files.len());
-    for file in &form.files {
-        let csv = parse_wise_csv(&file.bytes).map_err(|e| csv_error(&file.filename, e))?;
+    let max_bytes = u64::from(state.config.bank_import_max_mib) * 1024 * 1024;
+    let (files, ignored_entries) =
+        tokio::task::spawn_blocking(move || expand_archives(form.files, max_bytes))
+            .await
+            .map_err(|e| AppError::Internal(format!("lecture des archives Wise : {e}")))??;
+
+    let mut read: Vec<(String, WiseCsv)> = Vec::with_capacity(files.len());
+    for file in &files {
+        let csv = parse_wise_csv(&file.bytes)
+            .map_err(|e| csv_error(&file.filename, file.archive.as_deref(), e))?;
         read.push((file.filename.clone(), csv));
     }
     if let Some(refusal) = duplicate_currency(&read) {
@@ -391,10 +500,11 @@ pub async fn create(
     let resolved = resolve_currency_balances(&balances, &form.account, &currencies)?;
     let targets: Vec<Target<'_>> = read
         .into_iter()
-        .zip(&form.files)
+        .zip(&files)
         .zip(resolved)
         .map(|(((filename, csv), file), balance)| Target {
             file_hash: file_currency_hash(&file.bytes, &csv.currency),
+            archive: file.archive.clone(),
             filename,
             csv,
             balance,
@@ -418,6 +528,7 @@ pub async fn create(
         current_user: &current_user,
         account: &form.account,
         targets: &targets,
+        ignored_entries: &ignored_entries,
         audit_entity_id,
     };
     let files = run_provider_import(
@@ -436,6 +547,7 @@ pub async fn create(
         Json(WiseImportResponse {
             account: form.account,
             files,
+            ignored_entries,
         }),
     ))
 }
@@ -470,6 +582,7 @@ struct WiseWriter<'a> {
     current_user: &'a CurrentUser,
     account: &'a str,
     targets: &'a [Target<'a>],
+    ignored_entries: &'a [IgnoredEntry],
     audit_entity_id: i64,
 }
 
@@ -548,9 +661,11 @@ impl ProviderWrite for WiseWriter<'_> {
                 };
                 reports.push(FileReport {
                     filename: target.filename.clone(),
+                    archive: target.archive.clone(),
                     currency: csv.currency.clone(),
                     bank_account_id,
                     import_id,
+                    rows: csv.rows.len(),
                     inserted,
                     duplicates,
                     opening_balance: csv.opening_balance,
@@ -571,6 +686,7 @@ impl ProviderWrite for WiseWriter<'_> {
                         "provider": PROVIDER_WISE,
                         "provider_account": self.account,
                         "files": reports,
+                        "ignoredEntries": self.ignored_entries,
                     })),
                 ),
             )

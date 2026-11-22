@@ -17,7 +17,11 @@
 //!   puis au crédit est reçu (réserve de carte expirée puis recréditée,
 //!   vérification de carte débitée puis recréditée — Story 39-11a2) ;
 //! - le **solde courant se suit** : chaque `Running Balance` est le précédent
-//!   plus le montant de la ligne ([`WiseCsvError::RunningBalanceBreak`]).
+//!   plus le montant de la ligne ([`WiseCsvError::RunningBalanceBreak`]) ;
+//! - les **frais sont des lignes à part** (Story 39-11e, D5) : un relevé
+//!   exporté sans l'option « frais indiqués séparément » met ses montants frais
+//!   compris et n'a aucune ligne `FEE-` ; il est refusé
+//!   ([`WiseCsvError::FeesNotSeparated`], règle à [`check_fees_separated`]).
 //!
 //! L'horodatage est rendu tel quel, **sans conversion de fuseau**. Les colonnes
 //! de carte (`Card Last Four Digits`, `Card Holder Full Name`) et
@@ -25,7 +29,7 @@
 //!
 //! Fonction pure, sans I/O, sans dépendance interne au workspace.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{NaiveDate, NaiveDateTime};
 use rust_decimal::Decimal;
@@ -319,6 +323,19 @@ pub enum WiseCsvError {
     /// au plafond).
     #[error("{} ligne(s) Wise en erreur", .0.len())]
     Lines(Vec<WiseLineError>),
+    /// Le relevé a été exporté sans l'option « frais indiqués séparément » :
+    /// ses montants comprennent les frais (Story 39-11e, D5, règle à
+    /// [`check_fees_separated`]).
+    #[error(
+        "relevé Wise exporté sans les frais séparés ({count} ligne(s) à frais sans leur ligne FEE-)"
+    )]
+    FeesNotSeparated {
+        /// Les lignes à frais sans leur ligne `FEE-`, dans l'ordre du fichier,
+        /// au plus [`MAX_CSV_LINE_ERRORS`].
+        lines: Vec<usize>,
+        /// Leur nombre total.
+        count: usize,
+    },
 }
 
 impl WiseCsvError {
@@ -333,6 +350,7 @@ impl WiseCsvError {
             Self::DuplicateId { .. } => "WISE_CSV_DUPLICATE_ID",
             Self::RunningBalanceBreak { .. } => "WISE_CSV_RUNNING_BALANCE_BREAK",
             Self::Lines(_) => "WISE_CSV_LINES",
+            Self::FeesNotSeparated { .. } => "WISE_CSV_FEES_NOT_SEPARATED",
         }
     }
 }
@@ -492,6 +510,7 @@ pub fn parse_wise_csv(bytes: &[u8]) -> Result<WiseCsv, WiseCsvError> {
     check_unique_ids(&rows)?;
     let rows = chronological(rows);
     check_running_balance(&rows)?;
+    check_fees_separated(&rows)?;
 
     let (first, last) = (&rows[0], &rows[rows.len() - 1]);
     let opening_balance = first
@@ -592,6 +611,43 @@ fn check_running_balance(rows: &[WiseRow]) -> Result<(), WiseCsvError> {
         }
     }
     Ok(())
+}
+
+/// Les frais sont des lignes à part — Story 39-11e (D5).
+///
+/// Une ligne **à frais** est une ligne non `FEE-` dont `Total fees` est non nul
+/// (`0`, `0.00` et une cellule vide valent nul ; colonne absente : rien à
+/// juger). Elle **a sa `FEE-`** quand le fichier porte la ligne
+/// `FEE-<son identifiant>`. Le relevé est refusé :
+///
+/// - **(a)** s'il ne porte **aucune** ligne `FEE-` et au moins une ligne à
+///   frais — la forme de l'export « sans » (montants frais compris) ;
+/// - **(b)** si au moins **deux** lignes à frais n'ont pas leur `FEE-`, même
+///   avec d'autres lignes `FEE-`.
+///
+/// Une seule ligne à frais sans sa `FEE-`, dans un fichier qui en porte, est
+/// reçue : la ligne `FEE-` précède d'une milliseconde sa ligne d'origine, et la
+/// borne de la période exportée peut l'avoir laissée dehors — pour la seule
+/// première ligne. Limite assumée de (a) : un bon fichier dont l'**unique**
+/// ligne à frais est ainsi coupée est refusé (réexporter sur une période
+/// élargie) ; un refus se voit, un montant frais compris non.
+fn check_fees_separated(rows: &[WiseRow]) -> Result<(), WiseCsvError> {
+    let fee_origins: HashSet<&str> = rows.iter().filter_map(|r| r.fee_of.as_deref()).collect();
+    let missing: Vec<usize> = rows
+        .iter()
+        .filter(|r| !r.is_fee && r.total_fees.is_some_and(|f| !f.is_zero()))
+        .filter(|r| !fee_origins.contains(r.id.as_str()))
+        .map(|r| r.line)
+        .collect();
+    let refused = !missing.is_empty() && (fee_origins.is_empty() || missing.len() >= 2);
+    if !refused {
+        return Ok(());
+    }
+    let count = missing.len();
+    let mut lines = missing;
+    lines.sort_unstable();
+    lines.truncate(MAX_CSV_LINE_ERRORS);
+    Err(WiseCsvError::FeesNotSeparated { lines, count })
 }
 
 /// Lit et contrôle une ligne ; rend `None` (erreurs poussées) si elle est

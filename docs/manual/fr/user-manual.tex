@@ -3358,6 +3358,28 @@ fichier ne signale pas une période déjà saisie à la main.
           \textbf{avant} le premier jour de la nouvelle.
 \end{itemize}
 
+\subsection{Exporter les relevés de Wise}\label{sec:wise-export}
+
+Wise tient un \textbf{solde par devise}~; Kesh importe ses relevés au format \textbf{CSV}, un par solde, par la route d'import Wise de l'API (\texttt{POST /api/v1/wise-imports}, \texttt{docs/api-external.md}). Pour les obtenir, dans Wise~:
+
+\begin{enumerate}
+    \item ouvrez l'export des relevés, choisissez la \textbf{période} et le format \textbf{CSV}~;
+    \item \textbf{cochez} l'option «~Afficher les transactions dont les frais sont indiqués séparément~». Sans elle, Wise met dans le montant de chaque opération ses frais compris, et aucune ligne de frais à part~: Kesh ne pourrait ni passer ces frais en charge, ni retrouver le montant réel de l'opération. Un tel relevé est \textbf{refusé}, avec la consigne de l'exporter de nouveau en cochant l'option~;
+    \item téléchargez le fichier zip que Wise propose, et donnez-le à Kesh \textbf{tel quel}, sans le décompresser~: Kesh en lit les relevés CSV, un par solde, et chacun va au compte bancaire de sa devise. Vous pouvez aussi donner les fichiers CSV un à un.
+\end{enumerate}
+
+Ce qu'il faut savoir~:
+\begin{itemize}
+    \item Un relevé \textbf{sans aucun frais} sur la période est accepté, avec ou sans l'option~: les deux exports sont alors identiques.
+    \item Le contrôle des frais se fait \textbf{par fichier}. Une opération à frais dont la ligne de frais est restée hors de la période (elle la précède d'une milliseconde) est tolérée, une fois par fichier. Mais si c'est la \textbf{seule} opération à frais du relevé, le relevé est refusé alors même que l'option était cochée~: exportez-le de nouveau en élargissant la période d'un jour.
+    \item Dans le zip, Kesh ne lit que les fichiers \texttt{.csv} placés à la racine~; un dossier, un PDF, un fichier XML ou un zip imbriqué sont ignorés, et le compte rendu les nomme. Un zip sans aucun relevé CSV (un export CAMT ou PDF) est refusé~: exportez au format CSV.
+    \item Un zip démesuré (plus de 64~\textbf{entrées}, dossiers et fichiers ignorés compris, ou plus décompressé que la taille maximale d'un import bancaire), chiffré, ou dont un nom de fichier est un chemin (\texttt{..}, chemin absolu, barre oblique inverse, lettre de lecteur) est refusé.
+    \item Si deux entrées de l'archive portent le même nom, Kesh n'en lit qu'une, \textbf{sans le signaler}~; Wise n'en produit pas.
+    \item Une limite du contrôle des frais~: un relevé exporté \textbf{sans} l'option, mais qui contient une ligne de frais isolée (dont l'opération d'origine est hors période) et une seule opération à frais sans sa ligne de frais, est accepté, frais compris dans le montant. Wise n'a produit aucun tel relevé~; vérifiez que l'option était cochée.
+    \item \textbf{Un refus n'importe rien}~: ni le fichier en cause, ni les autres relevés du zip. Corrigez l'export, puis donnez de nouveau le zip entier.
+    \item Le compte rendu de l'import (fichier, zip d'origine, lignes lues, importées, ignorées comme doublons, soldes, entrées ignorées) n'est rendu qu'à l'envoi. Un relevé déjà importé, seul ou dans son zip, est refusé comme déjà importé.
+\end{itemize}
+
 \subsection{Détection des doublons}\label{sec:doublons-kesh}
 
 \keshscreenshot{import-doublons.png}{Avertissement de détection de doublons lors d'un ré-import de fichier bancaire.}  % TODO capture: ecran doublons

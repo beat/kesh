@@ -42,7 +42,8 @@ versement, aucune règle.
   n'est qu'une information (relevé sur les relevés 2024 de Beat : solde courant continu ligne à ligne, frais à part
   égaux au `Total fees` de leur ligne, sans exception ; notes sans donnée personnelle dans `kesh-gate-logs/`).
   Plusieurs fichiers dans une même requête (les trois devises d'un coup) ; le zip que propose Wise n'est **pas** lu
-  en phase 1 (Q-39-11).
+  en phase 1 (Q-39-11). *(Amendé le 2026-11-22 : le zip est lu tel que téléchargé, et un relevé exporté sans les
+  frais séparés est refusé — story 39-11e, Q-39-11 tranchée.)*
 - **G2 — Un compte bancaire Kesh par compte Wise et par devise** (Epic 37, devise du compte du plan), sans IBAN
   obligatoire, réglé comme un compte PayPal de 38-11b : **libellé du compte Wise** et **compte de frais**. Réutilise
   les colonnes `provider`, `provider_account`, `fee_account_id` de 38-11b, `provider = 'wise'` ; objet `wise` du
@@ -130,8 +131,10 @@ d'acceptation paramétré par le prestataire ; gardes qui lisent `provider IS NO
 | 39-11b | réglages du compte Wise et import ventilé par devise | `kesh-api`, `kesh-reconciliation` (appel), `kesh-import` (lecture), `kesh-i18n` | 39-11a, 38-11b | aucune |
 | 39-11c | rapprochement et propositions Wise, écarts | `kesh-reconciliation`, `kesh-api`, `kesh-db` (prédicat de l'autre côté, si 38-11c1 ne le porte pas), `kesh-i18n` | 39-11b, 38-11c1, 38-11c2 | aucune |
 | 39-11d | écrans, manuel, E2E | `frontend`, `kesh-i18n`, `docs/manual` (`.tex`), E2E | 39-11a à 39-11c, 38-11d | aucune |
+| 39-11e | zip de Wise tel que téléchargé, refus d'un relevé sans les frais séparés | `kesh-import`, `kesh-api`, `kesh-i18n`, docs (`api-external.md`, `.tex`) | 39-11a2, 39-11b | aucune |
 
-**Ordre** : 39-11a → 39-11b → 39-11c → 39-11d. 39-11a peut s'écrire dès que 38-11a est fixée.
+**Ordre** : 39-11a → 39-11b → 39-11c → 39-11d. 39-11a peut s'écrire dès que 38-11a est fixée. 39-11e (2026-11-22)
+se développe dès sa validation, avant 39-11d, qui branche le zip à l'écran.
 
 ## Téléchargement par l'API : sorti de l'epic le 22.11
 
@@ -222,6 +225,7 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 | `39-13-solde-dette`, `39-14-raccord-epic-38` | backlog | story de solde et raccord avec l'Epic 38 |
 | `39-12*` (téléchargement par l'API) | sorties | retirées de l'epic le 22.11 ; la 39-12a1 était `done` ; branche `futur/wise-api` |
 | `39-11a` à `39-11d` | ready-for-dev | fiches du 2026-11-20, phase 1 validée |
+| `39-11e-wise-zip-et-format-des-frais` | drafted | 2026-11-22, besoin du responsable de l'epic (comptes 2025) ; validation P1 à lancer |
 
 ## Questions ouvertes (2026-11-20)
 
@@ -230,7 +234,8 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
   conversion à une écriture, rattachement et moteur génériques. L'API porte un objet `wise` de même forme que `paypal`
   (plus simple qu'un objet `provider` générique, PayPal inchangé).
 - **Q-39-11 — Zip** : lire aussi le zip des trois relevés qu'exporte Wise ? (non en phase 1 ; trois fichiers d'un
-  coup suffisent.)
+  coup suffisent.) **Tranchée le 2026-11-22** par le responsable de l'epic : oui, tel que téléchargé, par la route
+  et l'écran — story 39-11e (API), 39-11d (écran).
 - **Q-39-12 — CHF d'une conversion EUR↔USD** : **tranchée** (décision (1)) — CHF = côté source au cours habituel de
   Kesh (cours mensuel retenu de la société), même CHF aux deux écritures.
 - **Q-39-13 — CSV de l'API** : **sans objet** (2026-11-20) — le relevé de l'API n'est pas servi (H5) ; les lignes viennent des activités (H2).
@@ -242,6 +247,11 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 - **Q-39-17 — Recette sur 2024 (orchestrateur, 2026-11-20 ; elle n'attend pas Beat)** : avant toute ligne de la phase 2, comparer 2024 de l'API (≈ 45 appels, réponses brutes sauvées hors du dépôt) au CSV 2024 du site, en local, et trancher l'horodatage de la date, l'identifiant d'une conversion automatique, le champ de solde (`amount` ou `cashAmount`), la règle du sens, le type de détail par type d'activité, la `reference` des transferts et le devis d'un virement sans frais (39-12a1 AC-0 a) ; puis, après 39-12a2, rejouer la conversion de Kesh sur 2024 comme au 2024-12-31, ligne à ligne, solde courant compris (AC-0 b). **Un mois 2025** se compare plus tard, quand Beat aura son CSV 2025, avec les soldes réels (AC-0 c) : non bloquant. Constats (métadonnées) à écrire ici. **Close (2026-11-20)** : AC-0 (a) faite, décisions au paragraphe « Décisions de la recette réelle AC-0 (a) » ; restent AC-0 (b), AC-0 (c) (2025), les activités non terminées sur `amount` et le décalage UTC+1 à revérifier avec un CSV 2025.
 
 ## Change Log (refonte)
+
+- 2026-11-22 — **Fiche 39-11e** (besoin du responsable de l'epic pour les comptes 2025) : le zip de Wise s'importe
+  tel quel par `POST /api/v1/wise-imports` (entrées `.csv` à la racine, bornes, tout ou rien), et un relevé exporté
+  sans « frais indiqués séparément » est refusé (`WISE_CSV_FEES_NOT_SEPARATED`, critère par fichier mesuré sur les
+  relevés réels) ; G1 amendé, Q-39-11 tranchée ; 39-11d amendée (bouton et manuel). `drafted`, validation P1 à lancer.
 
 - 2026-11-22 — **Téléchargement par l'API sorti de l'epic** (décision du responsable de l'epic) : code de la 39-12a1 retiré par un `revert` de sa fusion, fiches 39-12* retirées, tout conservé sur la branche locale `futur/wise-api` ; l'epic garde 39-0, 39-11a, 39-11a2, 39-11b, 39-11c, 39-11d, 39-13, 39-14.
 
