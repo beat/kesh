@@ -3925,22 +3925,29 @@ au journal d'audit (\S\ref{sec:tracabilite}), avec son auteur.
 \keshscreenshot{rapport-bilan.png}{Bilan : actifs, passifs et capitaux propres à une date donnée.}  % TODO capture: rapport bilan
 
 \emph{Mensuel} → \emph{Rapports} → \emph{Bilan}. Affiche, à une date donnée, les comptes
-d'actif et de passif à solde non nul, \textbf{triés par numéro de compte}, avec les totaux
-Actifs, Passifs et Capitaux propres.
+d'actif et de passif à solde non nul, avec les totaux Actifs, Passifs et Capitaux propres.
+Par défaut, les comptes de chaque section se présentent \textbf{dans la hiérarchie de votre
+plan comptable}, groupes ouverts, chaque groupe avec son sous-total
+(\S\ref{sec:rapports-groupes})~; case \emph{Hiérarchie des groupes} décochée, le bilan est
+la liste à plat, \textbf{triée par numéro de compte}, des versions précédentes.
 
 \begin{keshwarning}[title=\faExclamationTriangle\ Le bilan n'est pas encore structuré selon l'art.~959a CO]
-Kesh ne regroupe pas les comptes en \textbf{actif circulant} et \textbf{actif immobilisé}, ni
-les dettes en \textbf{capitaux étrangers à court terme} et \textbf{à long terme}. Le plan
-comptable porte bien une hiérarchie de comptes, mais les rapports ne l'utilisent pas encore.
+Les groupes affichés sont ceux de \textbf{votre} plan comptable~: Kesh ne contrôle pas qu'ils
+suivent les rubriques de l'art.~959a CO (\textbf{actif circulant}, \textbf{actif immobilisé},
+\textbf{capitaux étrangers à court terme} et \textbf{à long terme}). Les sections légales du
+bilan restent, elles, toujours affichées~: Actifs, Passifs (les dettes), Capitaux propres. Un
+affichage replié --- au niveau~1 en particulier --- est un \textbf{affichage de travail}, non
+des comptes annuels.
 
 \medskip
-\noindent Seule la partition \textbf{capitaux propres / dettes} est faite, et elle l'est
+\noindent La partition \textbf{capitaux propres / dettes} est faite, et elle l'est
 correctement (voir ci-dessous). Pour des comptes annuels à remettre à un tiers --- fiduciaire,
-organe de révision, banque ---, la mise en forme normée reste donc à produire hors de Kesh, à
-partir des chiffres qu'il fournit.
+organe de révision, banque ---, la mise en forme normée reste donc à vérifier, et au besoin à
+produire hors de Kesh, à partir des chiffres qu'il fournit.
 \end{keshwarning}
 
-La section \emph{Capitaux propres} est présentée \textbf{séparément des dettes} et \textbf{regroupée par rôle} de compte (capital, autres fonds propres, bénéfice / perte reporté), dans l'ordre légal de l'Art. 959a CO. Kesh distingue nettement deux grandeurs qu'il ne faut jamais confondre :
+La section \emph{Capitaux propres} est présentée \textbf{séparément des dettes} et, dans
+l'affichage à plat, \textbf{regroupée par rôle} de compte (capital, autres fonds propres, bénéfice / perte reporté), dans l'ordre légal de l'Art. 959a CO. Kesh distingue nettement deux grandeurs qu'il ne faut jamais confondre :
 
 \begin{itemize}
     \item le \textbf{report d'ouverture physique} que vous avez saisi sur un compte (typiquement lors d'une reprise de comptabilité depuis un autre logiciel) — il apparaît sous son propre numéro de compte ;
@@ -3956,7 +3963,9 @@ Filtres : date de référence (par défaut fin d'exercice en cours), exercice à
 \keshscreenshot{rapport-resultat.png}{Compte de résultat : produits, charges et résultat de la période.}  % TODO capture: rapport compte de resultat
 
 \emph{Mensuel} → \emph{Rapports} → \emph{Compte de résultat}. Liste les comptes de produits
-et les comptes de charges à solde non nul, et le résultat de la période.
+et les comptes de charges à solde non nul, et le résultat de la période~; comme au bilan, par
+défaut dans la hiérarchie de votre plan (\S\ref{sec:rapports-groupes}), ou à plat, case
+\emph{Hiérarchie des groupes} décochée.
 
 \begin{keshwarning}[title=\faExclamationTriangle\ Le compte de résultat n'est pas encore structuré selon l'art.~959b CO]
 Kesh ne propose \textbf{pas} les présentations \emph{par nature} et \emph{par fonction}, et ne
@@ -3968,6 +3977,52 @@ net.
 \noindent Pour des comptes annuels destinés à un tiers, la mise en forme normée reste à
 produire hors de Kesh, à partir de ces chiffres.
 \end{keshwarning}
+
+\subsection{Bilan et compte de résultat par groupes}\label{sec:rapports-groupes}
+
+\keshscreenshot{rapport-bilan-groupes.png}{Bilan par groupes : niveau de détail, groupes ouverts et fermés, sous-totaux.}  % TODO capture: bilan par groupes
+
+Au-dessus du bilan et du compte de résultat, une barre règle leur présentation~:
+
+\begin{itemize}
+    \item \textbf{Hiérarchie des groupes} --- cochée (par défaut), chaque compte s'affiche sous son
+          compte de groupe, en retrait, et chaque groupe porte le \textbf{sous-total} de ses comptes~;
+          décochée, la liste à plat, sous-titres de rôle des capitaux propres compris. Vos autres
+          choix sont gardés pendant que la hiérarchie est masquée.
+    \item \textbf{Niveau de détail} --- \emph{Niveau~1}, \emph{Niveau~2}\ldots{} jusqu'à
+          \emph{Tous les comptes}~: au niveau~1, seuls les groupes de premier rang sont montrés,
+          fermés sur leur sous-total~; au niveau~2, ils s'ouvrent sur leurs groupes de second rang,
+          et ainsi de suite. Le sélecteur ne propose que les niveaux que votre plan contient, et il
+          est inactif pour un plan sans groupe ou un rapport vide. Son info-bulle le rappelle~: un
+          affichage replié est un affichage de travail, non des comptes annuels.
+    \item \textbf{Tout ouvrir}, \textbf{Tout fermer} --- reviennent à \emph{Tous les comptes} et au
+          niveau~1.
+    \item \textbf{Sous-totaux} --- \emph{sur le titre}~: le sous-total sur la ligne du groupe (par
+          défaut)~; \emph{en pied}~: une ligne «~Total \emph{nom du groupe}~» sous ses comptes. Un
+          groupe fermé porte toujours son sous-total sur sa ligne.
+\end{itemize}
+
+Chaque groupe s'ouvre et se ferme d'un clic sur sa flèche (ou au clavier, touche Entrée)~; le
+clic l'emporte sur le niveau, jusqu'au prochain changement de niveau, qui l'efface. Un compte de
+groupe qui porte lui-même des écritures montre son \textbf{solde propre} en première ligne du
+groupe, «~\emph{nom} (solde propre)~». Un groupe dont tous les comptes sont dans une même devise
+étrangère montre aussi son sous-total dans cette devise~; sinon, son sous-total est en CHF seul.
+Un groupe fermé par le niveau dont le sous-total est nul n'est pas montré --- son zéro reste
+dans le groupe au-dessus. Un groupe dont les comptes tombent dans deux sections (au bilan, un
+groupe \emph{Passifs} qui porte à la fois des dettes et des capitaux propres~; au compte de
+résultat, un groupe qui mêle produits et charges) n'est montré dans aucune~: ses sous-groupes
+remontent d'un rang dans chaque section. Les totaux des sections, les lignes calculées du bilan
+et le résultat ne changent pas avec la présentation.
+
+Chaque changement redemande le rapport au serveur, et chaque demande est inscrite au journal
+d'audit, comme un changement de période. Le navigateur \textbf{retient votre présentation}, pour
+chaque société et chaque rapport~: en revenant sur la page, vous retrouvez la hiérarchie, le
+niveau, la place des sous-totaux et les groupes ouverts ou fermés à la main --- dans la mesure où
+le navigateur le permet (en navigation privée, ou si le stockage du site est refusé, la
+présentation par défaut revient, sans erreur). Un groupe disparu du plan depuis est oublié.
+
+Les boutons d'export PDF et CSV reprennent la présentation affichée
+(\S\ref{sec:rapports-exports}).
 
 \subsection{Balance des comptes}
 
