@@ -186,13 +186,18 @@ rendu, AC-2 ; T4), `tests/audit_label_registry.rs` (inventaire), `tests/audit_ro
 
 **`epic/40-stripe`** (`73fa1573`, validation P2, M2) change aussi `provider_imports.rs` ; qui fusionne en second :
 (1) `AUDIT_ACTIONS` et l'entrée `SITES_INDIRECTS` : garder `stripe_import.created` **et** `wise_import.created` ;
-(2) `ProviderLine` : l'union des champs (`value_date` de Stripe, `counterparty_iban` et `direction` d'ici) — littéraux
-de Wise à compléter de `value_date: None` (sa valeur d'avant), ceux de Stripe de `counterparty_iban: None, direction:
-None`, et `into_new_bank_transaction` recopie les trois ; (3) `dedupe_groups` garde sa signature (D3) : les tests de
-`stripe_imports.rs` compilent ; (4) Stripe déplace les bornes et `truncate_*` en `pub` dans `provider_imports.rs` :
-une seule définition après la fusion (celles de `paypal_imports.rs` retirées, les `use` de Wise **et** les usages
-propres de PayPal repointés ; Stripe y ajoute aussi `FEE_SUFFIX`, `bounded`, `parse_form`, `ProviderImportForm`, sans
-conflit).
+(2) `ProviderLine` : l'union des champs (`value_date` de Stripe, `counterparty_iban` et `direction` d'ici) — **quatre
+sites de conflit de texte** : les champs du type, le littéral du test `line()` de `provider_imports.rs`, et le
+littéral de `provider_lines_of_row` dans `paypal_imports.rs` (~l. 309 ; non annoncé jusqu'à la revue P1, M1) ; ceux
+de Wise sont à compléter de `value_date: None` (sa valeur d'avant), ceux de Stripe et de PayPal de
+`counterparty_iban: None, direction: None`, et `into_new_bank_transaction` recopie les trois ; (3) `dedupe_groups`
+garde sa signature (D3) : les tests de `stripe_imports.rs` compilent ; (4) Stripe **copie** les bornes (`DETAILS_MAX_CHARS`…),
+`FEE_SUFFIX`, `bounded` et `truncate_*` en `pub` dans `provider_imports.rs` sans retirer celles de `paypal_imports.rs`
+(commentaire de Stripe : « à replier à l'intégration ») : rien ne casse à la fusion, mais **deux définitions
+restent**, à unifier par celui qui fusionne en second (celles de `paypal_imports.rs` retirées, les `use` de Wise
+**et** les usages propres de PayPal repointés) ; `parse_form` et `ProviderImportForm` s'ajoutent sans conflit.
+Les autres conflits d'une fusion à blanc (`errors.rs`, `lib.rs`, `bank_accounts.rs`, registres, catalogues i18n,
+`sprint-status.yaml`, documents) ne viennent pas de cette story.
 
 ## Note de version
 
@@ -271,14 +276,30 @@ station) ; les quatre autres une à une, chacune dans son appel de `heavy.sh`, `
 ### Fichiers communs et points relevés
 
 - Avec `story/39-11c` : `tests/audit_route_registry.rs` (commentaire du point (vi) seul) et `sprint-status.yaml`.
-- Avec `epic/40-stripe` : `provider_imports.rs` (quatre points, § *Fichiers communs*).
+- Avec `epic/40-stripe` : `provider_imports.rs` (quatre points, dont `paypal_imports.rs` ; § *Fichiers communs*).
 - **À tracer en issue par l'orchestrateur** (cette story n'ouvre pas d'issue) : point 10 de la 39-11b
   (`json.paypal.or(json.wise)`, `bank_account.rs:215`, et `served()` pour l'Epic 40) ; commentaires
   d'`existing_transaction_ids` et d'`existing_transactions_by_ids` (`kesh-db`) devenus inexacts, la première sans
   appelant dans `kesh-api`.
 
+### Remédiation de la revue de code P1 (`revue-p1-rapport.md`)
+
+- M1 : § *Fichiers communs* corrigée (quatre sites de conflit de texte dont `paypal_imports.rs` ; bornes et `truncate_*`
+  **copiés** par `epic/40-stripe`, deux définitions à unifier), fusion à blanc rejouée dans un clone hors dépôt
+  (supprimé) : les conflits de cette story sont bien ceux-là, les autres (`errors.rs`, `lib.rs`, `bank_accounts.rs`,
+  registres, i18n, documents) viennent d'autres stories.
+- L3 : doc-comments d'`ImportRequest::source`, `ImportRequest::audit_details` et `CurrencyReport` à jour.
+- L4 : le test AC-5 tient aussi `entity_id` de la trace `wise_import.created` (plus petit des trois comptes).
+- L1 (`dedupe_groups` sans appelant de production, gardée pour Stripe, D3) et L2 (ré-export `WARNING_GAP`/`FileWarning`
+  de `wise_imports.rs`, reliquat D4) : **non traités**, à voir à la fusion avec `epic/40-stripe` (retirer ce que
+  Stripe n'utilise pas).
+
 ## Change Log
 
+- 2026-11-22 — Revue de code P1 (Claude Sonnet 5.5, `revue-p1-rapport.md`) : 0 C, 0 H, 1 M, 4 L ; aucune différence de
+  comportement trouvée. M1 (fiche : quatre sites, copie des bornes par Stripe), L3, L4 remédiés ; L1, L2 notés au
+  Dev Agent Record. Remédiation : fiche, commentaires, une assertion de test ; aucune ligne de production. Passe P2
+  ciblée : `revue-p2-prompt.md`.
 - 2026-11-22 — Développement (`35e69ea6`) : raccord fait ; gates fmt, clippy, nextest complet 6504/17 verts ; six
   sondes tuées ; story en `review`, prompt de revue P1 `kesh-gate-logs/s39-14/revue-p1-prompt.md`.
 - 2026-11-22 — Validation P3 (Claude Sonnet 5.5, ciblée sur la remédiation `41cb5018`, `validation-p3-rapport.md`) :

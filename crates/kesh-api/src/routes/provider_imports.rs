@@ -196,7 +196,8 @@ pub struct ImportWarning {
 /// **transactions** insérées et ignorées comme doublons. `warnings` : les
 /// avertissements de continuité d'un relevé ([`ImportSource::Statements`],
 /// éventuellement vide) ; **omis** pour les autres sources (la réponse PayPal
-/// ne change pas).
+/// ne change pas). Pour un relevé, la trace `*_import.created` fusionne ce
+/// compte rendu à [`CurrencyStatement::trace`] (`files`).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CurrencyReport {
@@ -252,13 +253,14 @@ pub struct ImportRequest<'a> {
     pub account: &'a str,
     /// Nom de l'import (`bank_imports.filename`), borné par l'appelant.
     pub filename: &'a str,
-    /// Fichier ou téléchargement.
+    /// Fichier, téléchargement ou relevés par devise ([`ImportSource`]).
     pub source: ImportSource<'a>,
     /// Nom de l'opération du rejeu sur interblocage (journal et tests).
     pub retry_operation: &'static str,
     /// Action de la trace de la source (`paypal_import.created`…).
     pub audit_action: &'static str,
-    /// `details` de cette trace, sans `currencies` (que le cœur ajoute).
+    /// `details` de cette trace, sans `currencies` (que le cœur ajoute pour un
+    /// fichier ou un téléchargement) ni `files` (qu'il ajoute pour des relevés).
     pub audit_details: serde_json::Map<String, serde_json::Value>,
     /// Les groupes (une ligne de la source chacun), ventilés par devise,
     /// dans l'ordre de la source.

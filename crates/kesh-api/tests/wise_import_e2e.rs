@@ -897,6 +897,14 @@ async fn import_raccord_reponses_traces_et_ordre_inchanges(pool: MySqlPool) {
         ["files", "ignoredEntries", "provider", "provider_account"]
     );
     assert_eq!(trace["files"], b["files"], "la trace porte le compte rendu");
+    // L'entité de la trace : le plus petit des comptes du prestataire.
+    let entites: Vec<Option<i64>> = sqlx::query_scalar(
+        "SELECT entity_id FROM audit_log WHERE action = 'wise_import.created' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(entites[1], Some(c.min(e).min(u)), "entity_id de la trace");
     assert_eq!(trace["provider"], "wise");
     let modif: Value = sqlx::query_scalar(
         "SELECT details_json FROM audit_log WHERE action = 'bank_import.created' AND entity_id = ?",
