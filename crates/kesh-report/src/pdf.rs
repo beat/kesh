@@ -4170,7 +4170,8 @@ mod tests {
     // ------------------------------------------------------------------
 
     use crate::essai_groupes::{
-        ab, arbre_resultat, bilan, bilan_essai_groupe, entre, noeud, options, resultat_essai, usd,
+        ab, arbre as arbre_essai, arbre_resultat, bilan, bilan_essai_groupe, entre, noeud, options,
+        resultat_essai, usd,
     };
     use crate::groupes::{ArbreComptes, NoeudCompte};
 
@@ -4294,13 +4295,13 @@ mod tests {
     #[test]
     fn bilan_groupe_devise_de_groupe() {
         let arbre = ArbreComptes::depuis_noeuds(vec![
-            noeud(102, "Banques USD", None),
-            noeud(1025, "Banque USD", Some(102)),
-            noeud(1026, "Banque USD 2", Some(102)),
+            noeud(102, "Comptes en dollars", None),
+            noeud(1025, "Dollars A", Some(102)),
+            noeud(1026, "Dollars B", Some(102)),
         ]);
         let bs = bilan(vec![
-            usd(1025, "Banque USD", dec!(90), dec!(100)),
-            usd(1026, "Banque USD 2", dec!(9.005), dec!(10.005)),
+            usd(1025, "Dollars A", dec!(90), dec!(100)),
+            usd(1026, "Dollars B", dec!(9.005), dec!(10.005)),
         ]);
         let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
         let env = AvecGroupes::bilan(bs, &arbre, &o);
@@ -4310,9 +4311,9 @@ mod tests {
         assert_eq!(
             entre(&l, "Actifs", "Total actifs"),
             vec![
-                "102 Banques USD USD 110.01 99.01",
-                "1025 Banque USD USD 100.00 90.00",
-                "1026 Banque USD 2 USD 10.01 9.01",
+                "102 Comptes en dollars USD 110.01 99.01",
+                "1025 Dollars A USD 100.00 90.00",
+                "1026 Dollars B USD 10.01 9.01",
             ]
         );
     }
@@ -4417,6 +4418,33 @@ mod tests {
         );
         assert_eq!(format_swiss_amount_arrondi(dec!(-0.004)), "0.00");
         assert_eq!(format_swiss_amount(dec!(10.005)), "10.00");
+    }
+
+    /// AC-6 — les totaux de section, les lignes calculées et l'équation d'un
+    /// rendu groupé s'arrondissent aussi (10.005 → 10.01), là où le rendu à plat
+    /// tronque encore (10.00, #1245, corrigé par la 48-11).
+    #[test]
+    fn bilan_groupe_totaux_arrondis_au_centime() {
+        let mut bs = bilan(vec![ab(1000, "Caisse", dec!(10.005), AccountType::Asset)]);
+        bs.equity_result = dec!(0.005);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let env = AvecGroupes::bilan(bs.clone(), &arbre_essai(), &o);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let l = crate::texte_pdf::lignes(&render_grouped_balance_sheet_pdf(&env, &ctx).unwrap());
+        for attendu in [
+            "Total actifs 10.01",
+            "Total passifs 10.01",
+            "Résultat de l'exercice 0.01",
+            "Total capitaux propres 0.01",
+            "Total passifs + Capitaux propres 10.01",
+        ] {
+            assert!(
+                l.contains(&attendu.to_string()),
+                "« {attendu} » absent de {l:?}"
+            );
+        }
+        let plat = crate::texte_pdf::lignes(&render_balance_sheet_pdf(&bs, &ctx).unwrap());
+        assert!(plat.contains(&"Total actifs 10.00".to_string()), "{plat:?}");
     }
 
     /// AC-3 — compte de résultat groupé : même rendu de lignes.

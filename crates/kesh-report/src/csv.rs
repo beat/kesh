@@ -2404,6 +2404,38 @@ mod tests {
         assert!(l.contains(&"Total passifs + capitaux propres;;;;;316.01".to_string()));
     }
 
+    /// AC-6 — au CSV groupé, totaux et lignes calculées arrondis au centime
+    /// (10.005 → 10.01) ; le CSV à plat, inchangé, tronque encore (#1245).
+    #[test]
+    fn bilan_csv_groupe_totaux_arrondis_au_centime() {
+        let mut bs = bilan(vec![crate::essai_groupes::ab(
+            1000,
+            "Caisse",
+            dec!(10.005),
+            AccountType::Asset,
+        )]);
+        bs.equity_result = dec!(0.005);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Titre, &[], &[]);
+        let env = AvecGroupes::bilan(bs.clone(), &crate::essai_groupes::arbre(), &o);
+        let mut buf = Vec::new();
+        render_grouped_balance_sheet_csv(&env, &mut buf).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+        for attendu in [
+            "\r\nTotal actifs;;;;;10.01\r\n",
+            "\r\nCapitauxPropres;;;;Résultat de l'exercice;0.01\r\n",
+            "\r\nTotal passifs + capitaux propres;;;;;10.01\r\n",
+        ] {
+            assert!(s.contains(attendu), "{attendu:?} absent de {s:?}");
+        }
+        let mut plat = Vec::new();
+        render_balance_sheet_csv(&bs, &mut plat).unwrap();
+        assert!(
+            String::from_utf8(plat)
+                .unwrap()
+                .contains("\r\nTotal actifs;;;10.00\r\n")
+        );
+    }
+
     /// AC-5 — en `footer` : titre d'un groupe ouvert sans montant, sa ligne
     /// `soustotal` après sa descendance ; un groupe fermé à la main porte son
     /// montant et n'a pas de comptes.
