@@ -1,6 +1,6 @@
 # Story 39-14 : l'import Wise branché sur le cœur commun des prestataires
 
-Status: in-progress
+Status: review
 
 *Fiche rédigée le 2026-11-22 au gabarit de `bmad-create-story`, branche `story/39-14` partie d'`epic/39-wise`
 (`1f03f180`, qui porte la 39-11e et `epic/38-paypal` à `8b8cd338`, fusionnée par `aaaf7875`). Epic 39. **Dépend
@@ -200,10 +200,87 @@ Aucune ligne au CHANGELOG : réorganisation interne, sans effet visible (journal
 
 ## Dev Agent Record
 
-*(à remplir)*
+### Étape 0 — mise en place et recontrôle
+
+- Fusion **non squash** d'`epic/38-paypal` (`8b8cd338`) dans `story/39-14` : « Already up to date » — sa tête était
+  déjà fusionnée dans `epic/39-wise` par `aaaf7875` ; rien de neuf, aucun conflit, aucun compteur à recompter.
+- Recontrôle du MEDIUM de la P3 (grep de l'AC-1), au code final : `grep -rn
+  "run_provider_import\|insert_currency_import\|ProviderWrite\|LockedTarget\|resolve_currency_balances\|file_currency_hash\|WriteFuture\|CurrencyImport\b\|WiseWriter\|fn existing_keys(" crates/`
+  ne rend qu'une ligne, `tests/audit_route_registry.rs:367`, mention historique (« avant, la copie de la 39-11b,
+  `paypal_imports::run_provider_import` »).
+
+### Ce qui est livré (`35e69ea6`)
+
+- `routes/provider_imports.rs` : `LineDirection` ; `ProviderLine.counterparty_iban` et `.direction` ;
+  `ExistingKeys` (`of`, `from_ids`, `contains`) ; `dedupe_by_keys` (le cœur), `dedupe_groups` gardé (délègue) ;
+  `ImportWarning`, `WARNING_GAP`, `CurrencyReport.warnings` (omis si `None`) ; `CurrencyStatement`,
+  `ImportSource::Statements` ; `currency_order` (ordre des relevés, garde `Internal`) ; `file_hash(Option<&[u8]>, …)` ;
+  refus d'empreinte pour fichier et relevés ; continuité par relevé avant le saut « tout en doublons » ; période et
+  soldes du relevé ; trace `files` (relevé + compte rendu) au lieu de `currencies` ; lecture des existants par
+  `existing_transactions_by_ids` ; `wise_import.created` à `AUDIT_ACTIONS`.
+- `routes/wise_imports.rs` : `line_of_row` (et `transaction_of_row` par elle) ; `create` par `load_balances` +
+  `import_lines` ; `FilePart` (partie fichier du compte rendu, et sa trace) ; retirés `Target`, `existing_keys`,
+  `WiseWriter`, `FileWarning` local (ré-exporté depuis le cœur, comme `WARNING_GAP`).
+- `routes/paypal_imports.rs` : la version d'`epic/38-paypal` (`8b8cd338`), plus les bornes et `truncate_*` en
+  `pub(crate)` (Wise s'en sert) et les deux champs neufs au littéral `ProviderLine` : le cœur 39-11b (onze éléments,
+  374 lignes) disparaît.
+- Tests : `audit_label_registry.rs` (`SITES_INDIRECTS`), `audit_route_registry.rs` (commentaire (vi)),
+  `paypal_import_e2e.rs` et `paypal_download_e2e.rs` (clés exactes du compte rendu, réponse et trace).
+- **Réponses de l'API** : inchangées (AC-2, tenu par les suites inchangées et le test AC-5) ; seuls les textes du
+  journal serveur de D7 changent.
+
+### Tests (recomptés, `#[test]` + `#[sqlx::test]`, de `1f03f180` à `35e69ea6`)
+
+`provider_imports.rs` 3 → 7 (+4 : `les_cles_existantes_lisent_le_sens_au_signe`, reprise du test d'`existing_keys` de
+Wise, et trois neufs : `dans_la_source_le_doublon_tient_compte_du_sens`, `l_empreinte_d_un_releve_est_celle_de_ses_octets`,
+`l_ordre_des_releves_et_leur_couverture`) ; `wise_imports.rs` 11 → 10 (le test d'`existing_keys`, passé au cœur) ;
+`paypal_imports.rs` 10 → 10 ; `wise_import_e2e.rs` 14 → 15 (`import_raccord_reponses_traces_et_ordre_inchanges`).
+Soit **4 tests neufs, 1 déplacé**, et des assertions ajoutées à deux tests existants (PayPal fichier et téléchargement).
+
+Le test AC-5 a été joué **vert sur le code d'avant** (`36b8a23b` = `1f03f180` + le test,
+`kesh-gate-logs/s39-14/ac5-avant.log`, 1 passé), puis vert après.
+
+### Gates (au dernier commit de code `35e69ea6`)
+
+- `cargo fmt --check` vert ; `cargo clippy --workspace --all-targets -D warnings` vert (`clippy.log`).
+- Gate ciblé (wise, paypal fichier et téléchargement, deux registres, tests unitaires des trois routes) : 92 passés
+  (`cible-3.log` ; `cible-2.log` arrêté par l'orchestrateur, mémoire de la station, rejoué).
+- **nextest complet** (`--workspace --profile ci`, base `kesh_wt39n` remise à zéro, migrée, seedée par
+  `s39-14/run.sh`) : **6504 passés, 17 ignorés** (`gate-complet.log`).
+- Frontend non touché : non joué. **E2E partiel : aucun** (aucune spec ajoutée, règle de la nuit du 22.11) ; E2E
+  complet et `gate-ci.sh` à la fin de l'epic.
+
+### Sondes par mutation (hors dépôt, `kesh-gate-logs/s39-14/mutations.py`, copie `git archive` de `35e69ea6`, cible distincte `kesh-targets/kesh-wt39n-mut`, supprimée)
+
+Filtre : `wise_import_e2e`, `paypal_import_e2e`, `paypal_download_e2e` (39 tests). Témoin non muté vert (39/39).
+« Tuée » = un test nommé en échec sur une assertion (`panicked at`), relevé à chaque journal `mut-<nom>.log` :
+
+| Mutation | Tuée par |
+|---|---|
+| ordre alphabétique rétabli pour les relevés | `import_raccord_reponses_traces_et_ordre_inchanges` |
+| période des lignes gardées au lieu du relevé | `import_raccord_reponses_traces_et_ordre_inchanges` |
+| sens ignoré (`ExistingKeys::contains` par identifiant seul) | `import_meme_identifiant_au_debit_puis_au_credit`, `import_raccord_…` |
+| `warnings` omis du compte rendu Wise | `import_continuite_et_doublons_de_lignes`, `import_raccord_…` |
+| continuité sautée pour un relevé tout en doublons | `import_raccord_reponses_traces_et_ordre_inchanges` |
+| `warnings` sérialisé pour PayPal (`skip_serializing_if` retiré) | `paypal_download_e2e::quatre_mois_ventiles_par_devise`, `paypal_import_e2e::import_ventile_par_devise_puis_doublons` |
+
+Les deux premières jouées dans un même lancement (`mutations-1.log`), arrêté par l'orchestrateur (mémoire de la
+station) ; les quatre autres une à une, chacune dans son appel de `heavy.sh`, `CARGO_BUILD_JOBS=4`
+(`mutations-<nom>.run.log`). Synthèse : `mutations-synthese.log`.
+
+### Fichiers communs et points relevés
+
+- Avec `story/39-11c` : `tests/audit_route_registry.rs` (commentaire du point (vi) seul) et `sprint-status.yaml`.
+- Avec `epic/40-stripe` : `provider_imports.rs` (quatre points, § *Fichiers communs*).
+- **À tracer en issue par l'orchestrateur** (cette story n'ouvre pas d'issue) : point 10 de la 39-11b
+  (`json.paypal.or(json.wise)`, `bank_account.rs:215`, et `served()` pour l'Epic 40) ; commentaires
+  d'`existing_transaction_ids` et d'`existing_transactions_by_ids` (`kesh-db`) devenus inexacts, la première sans
+  appelant dans `kesh-api`.
 
 ## Change Log
 
+- 2026-11-22 — Développement (`35e69ea6`) : raccord fait ; gates fmt, clippy, nextest complet 6504/17 verts ; six
+  sondes tuées ; story en `review`, prompt de revue P1 `kesh-gate-logs/s39-14/revue-p1-prompt.md`.
 - 2026-11-22 — Validation P3 (Claude Sonnet 5.5, ciblée sur la remédiation `41cb5018`, `validation-p3-rapport.md`) :
   0 C, 0 H, 1 M, 3 L. M-A (grep de l'AC-1 insatisfiable : `fn existing_keys` rendait `existing_keys_with_texts`) :
   motif corrigé en `fn existing_keys(`. L-A : le test nommé existe dans le développement (le relecteur lisait
