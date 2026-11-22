@@ -163,11 +163,139 @@ reçoivent les mêmes réglages que l'écran.
 
 ### Agent Model Used
 
+Claude Opus 5.5 (développement), contexte de la story seul.
+
 ### Debug Log References
+
+Journaux hors dépôt, `kesh-gate-logs/s46-2/` : `gate-backend.log` (gate final), `gate-backend-1.log` (premier gate,
+rouge sur la garde allemande, voir plus bas), `gate-backend-2-bus.log` (refus de la session systemd utilisateur),
+`front-*.log` (gate frontend final), `front-*-1.log` (premier passage, gardes i18n), `vitest-cible-1.log`,
+`vitest-gardes-2.log`, `cible-i18n.log`, `mutations-1.log`, `mutations-2.log`, `e2e.log`, `e2e-backend.log`.
 
 ### Completion Notes List
 
+**T0 — prémisses relevées au code (branche `epic/46-rapports-groupes`, `92434d16`).** Contrat de la 46-1 tel que
+fusionné : `crates/kesh-report/src/groupes.rs` — `LigneRapport` (`kind` `group`/`account`/`own`/`subtotal`,
+`depth`, `accountId`, `accountNumber`, `accountName`, `balance`, `currency?`, `balanceCurrency?`, `open?`, `active?`,
+`role?`), `Grouping` (`detailLevel` entier ou `"all"`, `subtotalPosition`, `maxDepth`, `open`, `closed`),
+`AvecGroupes` (`#[serde(flatten)]`, `grouping` et `groupedRows` absents sans `detailLevel`) ; refus d'une liste
+vide (`services/rapports.rs:337-351`, « » n'est pas un entier) — d'où l'omission des listes vides côté client. La
+46-3 n'est **pas** fusionnée (branche `story/46-3`, `fc538d4a`, en cours) : l'export groupé est branché sur les
+paramètres que sa fiche fixe (AC-1 : mêmes noms et formes qu'aux routes JSON, `groupes_de(&paires)`), testés par
+leurs URL (`reports.api.groupes.test.ts`, E2E étape 5) ; **il sera exercé de bout en bout (fichier rendu groupé)
+après la fusion de la 46-3** — jusque-là, l'export reçoit les paramètres et rend le fichier à plat, ce que
+`ExportQuery` ignore sans erreur. La 47-3 (miroirs) n'est pas dans la branche : aucune ligne propre au miroir à
+l'écran (rien à faire, la 46-1 range le miroir comme un compte).
+
+**T1 — maquette (AC-8)** : `kesh-gate-logs/epic-46/maquette-46-2.html` (contrôles, sous-totaux sur le titre et en
+pied, groupe fermé par le niveau puis ouvert à la main). Elle n'a **pas** pu être montrée au responsable de l'epic
+avant le développement des vues (travail de nuit, sans canal) : à lui montrer avec les captures ; écart à l'AC-8
+déclaré.
+
+**Réalisé.**
+- `reports.types.ts` : `DetailLevel`, `SubtotalPosition`, `GroupingParams`, `GroupingEcho`, `GroupedRow`,
+  `BalanceSheetGroupedRows`, `IncomeStatementGroupedRows`, champs facultatifs `grouping` / `groupedRows` des DTO.
+- `reports.api.ts` : `groupingQueryParams` (une seule traduction vue → paramètres, listes vides omises),
+  `getBalanceSheet` / `getIncomeStatement` / `getReportExportUrl` / `downloadReport` avec un argument facultatif de
+  groupement (ignoré par l'URL d'export des autres rapports).
+- `reports-grouping.ts` (neuf) : l'état de la vue, ses transitions (`toggleGroup`, `withDetailLevel`, `openAll`,
+  `closeAll`, `withEcho`, `detailLevelOptions`) et la mémoire `localStorage` (clé
+  `kesh-report-grouping:<société>:<rapport>`, lecture et écriture sous `try`/`catch`, relecture champ par champ,
+  listes de plus de 500 ou en conflit ignorées). **Aucune règle d'ouverture** n'y est calculée (C-46-2-1).
+- `GroupedReportRows.svelte` (neuf, T3) : lignes groupées paramétrées par un descripteur de colonnes
+  (`GroupedAmountColumn`), règle de rendu de la 46-1 (`showsAmount`), retrait par profondeur borné à dix rangs
+  (`indentOf`), sur le numéro **et** le libellé (un pied de groupe se lit à son rang), accordéon (`aria-expanded`,
+  libellé « Ouvrir / Fermer le groupe <n> <nom> »), solde propre, devise d'un groupe là où son montant est rendu
+  (`AccountCurrencyBalance` généralisé, `testIdPrefix`), lien vers le grand livre sur `account` et `own`, montants
+  par `formatCurrencyFigure` (arrondi `roundToCents`, sans « -0.00 »).
+- `GroupingControls.svelte` (neuf) : hiérarchie montrée/masquée (case), niveau (désactivé hiérarchie masquée, avant
+  toute réponse groupée et pour `maxDepth` ≤ 1), « Tout ouvrir », « Tout fermer », sous-totaux ; info-bulle de
+  l'AC-7 (`title` et description pour lecteur d'écran).
+- `BalanceSheetView.svelte`, `IncomeStatementView.svelte` : branche groupée si la réponse porte `groupedRows`,
+  branche à plat inchangée (sous-titres de rôle compris) ; totaux, lignes calculées, équation à leur place.
+- `+page.ts` : renvoie `companyId` (`fetchCompanyCurrent`) ; `null` si la société n'est pas lue (vue non mémorisée).
+- `+page.svelte` : vues relues **avant la première requête** ; `changeGrouping` mémorise et redemande (seulement si
+  un rapport est affiché) ; `generate({ keepDisplay })` garde l'affichage pendant la redemande (`refreshing`,
+  `aria-busy` sur le panneau, export désactivé), même garde de course `genSeq` ; à chaque réponse acceptée,
+  `displayedGrouping` (paramètres de l'export, AC-6) et l'écho repris en mémoire (AC-10).
+- i18n : bloc `reports-groups-*`, quinze clés, quatre locales.
+- Manuel utilisateur FR (`.tex` seul) : § *Bilan* (encart art. 959a CO récrit : les groupes affichés sont ceux du
+  plan, affichage replié = affichage de travail), § *Compte de résultat*, § neuf *Bilan et compte de résultat par
+  groupes* (`sec:rapports-groupes`) ; capture `screenshots/rapport-bilan-groupes.png` ajoutée.
+
+**Écarts et choix.**
+- AC-7 : l'info-bulle et le manuel nomment les sections **comme l'écran** (Actifs, Passifs, Capitaux propres), non
+  « Dettes, Fonds propres » de la fiche : un rappel doit parler la langue de l'écran qu'il commente.
+- AC-4, lien vers le grand livre : la vue à plat du compte de résultat n'en a pas ; la vue groupée en porte sur les
+  lignes `account` et `own`, comme l'AC le demande pour les deux rapports.
+- « Tout ouvrir », « Tout fermer » et le sélecteur de sous-totaux sont désactivés hiérarchie masquée, comme le niveau
+  (ils n'y auraient aucun effet visible ; les choix restent gardés).
+- Allemand : « aufklappen / zuklappen » — « schliessen » nu est réservé aux panneaux
+  (`la_cloture_d_exercice_ne_parle_pas_comme_un_panneau`, rouge au premier gate).
+- E2E existants (AC-1) : `reports.spec.ts` (tests axe compris), `reports-currency.spec.ts`,
+  `reports-export-pdf.spec.ts` n'ont pas été modifiés — relus, leurs sélecteurs tiennent sur l'écran groupé par
+  défaut (`account-fx-<n>` porté par la ligne de compte groupée, « Total actifs », « Aucune écriture », boutons
+  d'export ; le preset `with-company` n'a pas de groupe). **Non rejoués** (règle de la nuit du 22.11 : seule la spec
+  ajoutée) ; à rejouer à l'E2E complet de la branche d'intégration.
+
+**Tests ajoutés** (de `92434d16` à `HEAD`, recomptés par `grep -cE "^\s*it\("` / `^test(`) : Vitest **61** —
+`reports-grouping.test.ts` 22, `GroupedReportRows.test.ts` 12, `reports-page-groupes.test.ts` 11,
+`reports.api.groupes.test.ts` 9, `views-groupes.test.ts` 7 ; E2E **1** (`reports-groupes.spec.ts`, huit étapes).
+Gardes mises à jour par leur relevé : `sitesTotal` 3499 → 3515, candidates de `i18n-libelle-en-dur` 130 → 131
+(`conforme` 109 → 110).
+
+**Mutations** (copie hors dépôt, `node_modules` réel copié, « tuée » seulement sur une assertion nommée,
+`mutations.sh`) : 13 mutations, 13 tuées. Premier passage (`mutations-1.log`) : 11 tuées, M7 (affichage effacé
+pendant la redemande) et M12 (exception du stockage non rattrapée) faisaient échouer des tests **sans** assertion
+(élément introuvable, exception) : non comptées ; tests renforcés (`48b25a28`), rejouées (`mutations-2.log`) :
+tuées. Une mutation équivalente retirée avant passage (liste vide envoyée : `buildQuery` omet déjà la chaîne
+vide).
+
+**Gates.** Backend (fmt, clippy `-D warnings`, nextest complet, base `kesh_s462` remise à zéro) au commit
+`4654bdb2`, le dernier qui touche autre chose que le frontend étant `4a2f4537` (catalogue allemand) : **6196
+exécutés, 6196 passés, 14 ignorés** (`gate-backend.log`). Lancé avec `KESH_NO_MEMGUARD=1` : la session systemd
+utilisateur de la station refusait les connexions (« Failed to connect to user scope bus », `gate-backend-2-bus.log`) ;
+`heavy.sh` gardait son plancher mémoire. Premier gate (`gate-backend-1.log`) : 1 échec, la garde allemande
+ci-dessus, et un test instable passé au second essai (`recette_montee_refuse_ce_qui_sort_de_son_perimetre…`).
+Frontend au commit `48b25a28` (dernier commit de code ; les suivants ne portent que la capture du manuel, le
+`.tex` et des comptes rendus) : `npm run check` 0 erreur, 29 avertissements (aucun dans un fichier touché par la
+story hors deux, préexistants, de `+page.svelte` : `data.fiscalYears[0]` et `lastFyId`, présents à `92434d16`) ;
+`lint-i18n-ownership` vert ; Vitest **4688 passés, 283 fichiers** ; `npm run build` vert. Premier passage
+(`front-*-1.log`) : trois gardes rouges, attendues — `sitesTotal`, `i18n-libelle-en-dur` (compteurs relevés,
+ci-dessus) et `i18n-entrees-a-variables` (arguments de l'accordéon passés par une variable, que la garde ne lit
+pas : écrits en ligne, `60739b7b`).
+E2E **partiel** (règle de la nuit du 22.11 : seulement la spec ajoutée), au même commit, frontend construit et
+binaire `kesh-api` de ce worktree, base `kesh_e2e_s462` neuve : `reports-groupes.spec.ts` **1 passé**
+(`e2e.log`). E2E complet et `gate-ci.sh` : à la fin de l'epic, sur la branche d'intégration.
+`gate-ci.sh` : non joué (fin d'epic, branche d'intégration).
+
+**Captures** (thème clair, `kesh-gate-logs/s46-2/captures/`, prises par la spec E2E) : défaut tous les comptes,
+sous-totaux en pied, niveau 1, groupe ouvert à la main, vue retrouvée au retour, hiérarchie masquée, compte de
+résultat.
+
 ### File List
+
+- `frontend/src/lib/features/reports/reports-grouping.ts` (neuf)
+- `frontend/src/lib/features/reports/GroupedReportRows.svelte` (neuf)
+- `frontend/src/lib/features/reports/GroupingControls.svelte` (neuf)
+- `frontend/src/lib/features/reports/AccountCurrencyBalance.svelte`
+- `frontend/src/lib/features/reports/BalanceSheetView.svelte`
+- `frontend/src/lib/features/reports/IncomeStatementView.svelte`
+- `frontend/src/lib/features/reports/reports.api.ts`
+- `frontend/src/lib/features/reports/reports.types.ts`
+- `frontend/src/routes/(app)/reports/+page.svelte`
+- `frontend/src/routes/(app)/reports/+page.ts`
+- `frontend/src/lib/features/reports/reports-grouping.test.ts` (neuf)
+- `frontend/src/lib/features/reports/GroupedReportRows.test.ts` (neuf)
+- `frontend/src/lib/features/reports/views-groupes.test.ts` (neuf)
+- `frontend/src/lib/features/reports/reports.api.groupes.test.ts` (neuf)
+- `frontend/src/routes/(app)/reports/reports-page-groupes.test.ts` (neuf)
+- `frontend/src/lib/shared/i18n-keys.test.ts` (compteur)
+- `frontend/src/lib/shared/i18n-libelle-en-dur.test.ts` (compteurs)
+- `frontend/tests/e2e/reports-groupes.spec.ts` (neuf)
+- `crates/kesh-i18n/locales/{fr-CH,de-CH,it-CH,en-CH}/messages.ftl`
+- `docs/manual/fr/user-manual.tex`, `docs/manual/fr/screenshots/rapport-bilan-groupes.png` (neuf)
+- `_bmad-output/implementation-artifacts/46-2-groupes-ecrans.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
@@ -197,3 +325,7 @@ reçoivent les mêmes réglages que l'écran.
   réalignés ; convention réutilisée : `mode.svelte.ts`.
 - 2026-11-20 — Validation P-ciblée des décisions de Beat (Claude Haiku 5.5, contexte frais, lentille sur le seul commit `644b9e55` ; au code de `origin/main`) : 0 C / 0 H / 1 M / 3 L, remédiés. M : AC-10 se contredisait — « restaurée avant la première requête » et « groupes disparus ignorés, non transmis » ne tiennent pas ensemble, le client ne connaissant pas le plan avant la première réponse ; remédié : les identifiants sont transmis, l'API les ignore et les retire de l'écho (46-1 § *Le contrat*), la mémoire reprend l'écho. L : « même utilisateur » promis sans que la clé porte l'utilisateur (clé par navigateur, comme `kesh-mode`) ; identifiant de société non chargé par `+page.ts` (`company.id` de `fetchCompanyCurrent`) ; tests de l'AC-10 n'écrivant pas position ni montrée/masquée, pourtant retenues (AC-5). Non remédié, à trancher par Beat : AC-3 dit le rechargement accepté « à condition que la vue soit mémorisée », condition sans objet si le stockage est refusé (la vue n'est alors pas retenue, le rechargement reste). Boucle non close (un M remédié). Rapport : `kesh-gate-logs/epic-46/validation/46-2-decisions-ciblee.md`.
 - 2026-11-20 — Validation P-ciblée n°2 (Claude Sonnet 5.5, contexte frais, lentille sur le seul commit `935be28e`, au code de `origin/main`) : 0 C / 0 H / 0 M / 1 L, remédié. Décision de l'orchestrateur appliquée : AC-3 et AC-10 acceptent le rechargement et la trace **quel que soit l'état du stockage**, la vue étant mémorisée dans la mesure où le navigateur le permet (stockage refusé ou vide : vue par défaut, sans erreur) ; la condition « à condition que la vue soit mémorisée » est retirée des AC vivants (les entrées datées ci-dessus restent un relevé). L : une liste mémorisée de plus de 500 identifiants aurait fait répondre `400` (46-1) ; ignorée à la lecture (AC-10). Vérifié : contrat 46-1 (inconnus ignorés et retirés de l'écho, `400` au-delà de 500, `open`/`closed` sans `detailLevel` refusés), `+page.ts` ne renvoie que `companyName` et `company.id` vient de `fetchCompanyCurrent` (`settings.types.ts:10`, `:127`), cohérence AC-2, AC-5, AC-9, T4 et 46-3 (PDF de la requête affichée). Rapport : `kesh-gate-logs/epic-46/validation/46-2-decisions-ciblee-2.md`.
+- 2026-11-22 — Développement (Claude Opus 5.5) : T0 à T6 ; export groupé branché sur les paramètres de la fiche
+  46-3 (non fusionnée), à exercer de bout en bout après sa fusion ; maquette non montrée avant les vues (écart à
+  l'AC-8) ; gates de la nuit (fmt, clippy, nextest complet, frontend complet, E2E de la seule spec ajoutée).
+  `review`.
