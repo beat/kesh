@@ -294,7 +294,7 @@
 
 	function onToggleGroup(row: GroupedRowBase): void {
 		if (!activeGroupingView) return;
-		changeGrouping(toggleGroup(activeGroupingView, row.accountId, row.open === true));
+		changeGrouping(toggleGroup(activeGroupingView, row.accountId, row.open === true, row.depth));
 	}
 
 	/**

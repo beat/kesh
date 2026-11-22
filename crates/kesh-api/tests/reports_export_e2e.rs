@@ -1420,6 +1420,22 @@ fn tronque(texte: &str, max: usize) -> String {
     }
 }
 
+/// Une ligne « solde propre » telle que le PDF l'abrège (Story 46-7) : le nom
+/// seul, le suffixe « (solde propre) » restant entier — écrit ici
+/// indépendamment du rendu.
+fn tronque_propre(nom: &str, max: usize) -> String {
+    let suffixe = " (solde propre)";
+    let complet = format!("{nom}{suffixe}");
+    let place = max.saturating_sub(suffixe.chars().count());
+    if complet.chars().count() <= max {
+        complet
+    } else if place == 0 {
+        tronque(&complet, max)
+    } else {
+        format!("{}{suffixe}", tronque(nom, place))
+    }
+}
+
 /// Story 46-6b, AC-2 — l'export de la balance est **fidèle à l'écran** : avec
 /// les mêmes paramètres (niveau 2, un groupe ouvert et un fermé à la main,
 /// sous-totaux en pied), la suite des lignes du PDF entre l'en-tête des
@@ -1503,10 +1519,12 @@ async fn export_balance_groupee_fidele_au_json(pool: MySqlPool) {
             if kind != "subtotal" {
                 morceaux.push(numero.to_string());
             }
-            morceaux.push(tronque(
-                &libelle,
-                kesh_report::pdf::limite_nom_groupe_balance(depth, kind != "subtotal"),
-            ));
+            let limite = kesh_report::pdf::limite_nom_groupe_balance(depth, kind != "subtotal");
+            morceaux.push(if kind == "own" {
+                tronque_propre(nom, limite)
+            } else {
+                tronque(&libelle, limite)
+            });
             if montant {
                 morceaux.extend(cles.map(|c| montant_suisse(l[c].as_str().unwrap())));
             }

@@ -4316,15 +4316,16 @@ résultat~», «~Décompte TVA~»).
 compte de résultat et de la balance \textbf{suit l'écran}~: même niveau de détail, mêmes groupes ouverts ou fermés, mêmes
 sous-totaux, sur la ligne du titre ou en pied. Exporté sans niveau --- à l'écran, case \textbf{Hiérarchie des groupes} décochée --- il reste à
 plat, tel qu'avant. Depuis l'écran, l'export suit la hiérarchie affichée, avec les colonnes
-\texttt{Niveau} et \texttt{TypeLigne} et les sous-totaux. Le CSV groupé (bilan, compte de résultat ou balance) ne s'additionne pas tel quel~: le titre et le sous-total d'un groupe répètent les montants de ses comptes, et un groupe fermé n'y porte que son sous-total. Chaque section du bilan et du compte de résultat porte sa ligne de total, la balance sa ligne \texttt{Total}~; pour additionner les montants dans un tableur, décochez «~Hiérarchie des groupes~» pour l'export à plat d'avant, qui porte lui aussi ses lignes de total (à filtrer par \texttt{Section} au bilan et au compte de résultat, à écarter à la balance~: ligne \texttt{Total}) et n'a pas de colonne \texttt{TypeLigne}. Les montants groupés sont arrondis au centime.
+\texttt{Niveau} et \texttt{TypeLigne} et les sous-totaux. Le CSV groupé (bilan, compte de résultat ou balance) ne s'additionne pas tel quel~: le titre d'un groupe (en pied, sa ligne de sous-total) répète les montants de ses comptes, et un groupe fermé n'y porte que son sous-total. Chaque section du bilan et du compte de résultat porte sa ligne de total, la balance sa ligne \texttt{Total}~; pour additionner les montants dans un tableur, décochez «~Hiérarchie des groupes~» pour l'export à plat d'avant, qui porte lui aussi ses lignes de total (à filtrer par \texttt{Section} au bilan et au compte de résultat, à écarter à la balance~: ligne \texttt{Total}) et n'a pas de colonne \texttt{TypeLigne}. Les montants groupés sont arrondis au centime.
 \begin{itemize}
     \item \textbf{PDF} --- sous la période, une ligne dit le niveau imprimé («~Niveau~2~», ou
           «~Tous les comptes~»), suivie de «~, détail ajusté à la main~» si vous avez ouvert ou
-          fermé des groupes vous-même~; les groupes ouverts ou fermés se voient dans le corps, où
+          fermé des groupes vous-même (un groupe que vous ramenez à l'état que lui donne le niveau ne
+          compte plus)~; les groupes ouverts ou fermés se voient dans le corps, où
           un groupe fermé porte sa somme sans ses comptes. Chaque ligne est décalée selon sa
           profondeur dans le plan~; un groupe et sa ligne de sous-total («~Total Liquidités~») sont
           en gras~; un compte de groupe qui porte lui-même des écritures a sa ligne
-          «~(solde propre)~». Le titre d'un groupe ouvert ne reste pas seul en bas de page. Les
+          «~(solde propre)~», suffixe qui reste entier quand le nom est abrégé (sauf à partir de la profondeur~6 de la balance, dont la colonne est alors plus étroite que lui). Le titre d'un groupe ouvert ne reste pas seul en bas de page. Les
           sous-titres de rôle des capitaux propres (\emph{Capital}, \emph{Autres fonds
           propres}\ldots) ne s'impriment qu'à plat~: par groupes, les fonds propres suivent le plan.
           Les totaux de section, les lignes calculées et l'équation du bilan ne changent pas.

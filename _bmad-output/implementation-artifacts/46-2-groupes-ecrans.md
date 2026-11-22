@@ -51,6 +51,7 @@ inconnus, il ne les refuse pas en `400` — et rendrait le PDF à plat d'un écr
    réponse de la dernière demande s'affiche ; pendant le chargement, l'écran garde l'affichage précédent (sans
    clignotement, `aria-busy`). Chaque redemande écrit une trace `report.generated` au journal d'audit, comme un
    changement de période aujourd'hui (46-1 AC-11) : assumé (C-46-2-1), **quel que soit l'état du stockage** du navigateur ; la vue est mémorisée dans la mesure où le navigateur le permet (AC-10).
+   *Note du 2026-11-22 (Story 46-7, LOW-1) : depuis la 46-7, un clic qui rend au groupe l'état que lui donne le niveau le retire des deux listes au lieu de l'y inscrire ; `openByLevel` (`reports-grouping.ts`) reprend pour cela la règle `est_ouvert` de la 46-1, gardée par une table de cas partagée avec le Rust. Ce n'est qu'une mémoire de clic minimale : l'état affiché reste celui que l'API rend, et C-46-2-1 (« aucun repli calculé dans le navigateur ») vaut pour l'affichage.*
 4. **AC-4 — Rendu (D5, Q2, Q3).** Lignes rendues dans l'ordre de `groupedRows` : retrait par `depth` ; `group` en gras,
    son montant **selon la règle de rendu de la 46-1** (sur le titre en `header` ou si fermé ; sinon sur la ligne
    `subtotal`, en gras, libellé « Total <nom du groupe> ») ; `own` libellée « <numéro> <nom> (solde propre) » ; solde en
@@ -161,7 +162,7 @@ reçoivent les mêmes réglages que l'écran.
 
 **Changed** — L'export CSV ou PDF du bilan et du compte de résultat lancé depuis l'écran suit la hiérarchie affichée
 (par défaut, tous les comptes) : le CSV porte les colonnes `Niveau;TypeLigne` et les sous-totaux de groupe (sur la ligne du titre par défaut, en lignes `soustotal` en pied). Mais
-le CSV groupé (bilan, compte de résultat ou balance) ne s'additionne pas tel quel : le titre et le sous-total d'un groupe répètent les montants de ses comptes, et un groupe fermé n'y porte que son sous-total. Chaque section du bilan et du compte de résultat porte sa ligne de total, la balance sa ligne `Total` ; pour additionner les montants dans un tableur, décocher « Hiérarchie des groupes » pour l'export à plat d'avant, qui porte lui aussi ses lignes de total (à filtrer par `Section` au bilan et au compte de résultat, à écarter à la balance : ligne `Total`) et n'a pas de colonne `TypeLigne` ; les montants groupés sont arrondis au centime.
+le CSV groupé (bilan, compte de résultat ou balance) ne s'additionne pas tel quel : le titre d'un groupe (en pied, sa ligne de sous-total) répète les montants de ses comptes, et un groupe fermé n'y porte que son sous-total. Chaque section du bilan et du compte de résultat porte sa ligne de total, la balance sa ligne `Total` ; pour additionner les montants dans un tableur, décocher « Hiérarchie des groupes » pour l'export à plat d'avant, qui porte lui aussi ses lignes de total (à filtrer par `Section` au bilan et au compte de résultat, à écarter à la balance : ligne `Total`) et n'a pas de colonne `TypeLigne` ; les montants groupés sont arrondis au centime.
 
 ## Dev Agent Record
 

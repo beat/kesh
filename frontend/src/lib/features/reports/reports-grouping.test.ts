@@ -1,5 +1,7 @@
 // Story 46-2 — état, transitions et mémoire de la vue groupée (AC-2, AC-3, AC-5, AC-10).
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	closeAll,
@@ -66,11 +68,39 @@ describe('paramètres égaux (revue P1 M2)', () => {
 });
 
 describe('règle des clics (AC-3)', () => {
-	it('ouvrir un groupe fermé : ajouté à open, retiré de closed', () => {
-		expect(toggleGroup(vue({ closed: [7, 8] }), 7, false)).toMatchObject({ open: [7], closed: [8] });
+	it('ouvrir un groupe fermé par le niveau : ajouté à open, retiré de closed', () => {
+		expect(toggleGroup(vue({ detailLevel: 2, closed: [7, 8] }), 7, false, 2)).toMatchObject({
+			open: [7],
+			closed: [8],
+		});
 	});
-	it('fermer un groupe ouvert : ajouté à closed, retiré de open', () => {
-		expect(toggleGroup(vue({ open: [7, 3] }), 7, true)).toMatchObject({ open: [3], closed: [7] });
+	it('fermer un groupe ouvert par le niveau : ajouté à closed, retiré de open', () => {
+		expect(toggleGroup(vue({ open: [7, 3] }), 7, true, 1)).toMatchObject({ open: [3], closed: [7] });
+	});
+	// Story 46-7 (revue d'intégration de l'Epic 46, L3) : un clic qui rend au
+	// groupe l'état du niveau vide sa place dans les listes, sans quoi le PDF dit
+	// « détail ajusté à la main » alors que l'écran montre l'état du niveau.
+	it('fermer puis rouvrir un groupe ouvert par le niveau : listes vides', () => {
+		const fermee = toggleGroup(vue({ detailLevel: 2 }), 7, true, 1);
+		expect(fermee).toMatchObject({ open: [], closed: [7] });
+		expect(toggleGroup(fermee, 7, false, 1)).toMatchObject({ open: [], closed: [] });
+	});
+	it('ouvrir puis refermer un groupe fermé par le niveau : listes vides', () => {
+		const ouverte = toggleGroup(vue({ detailLevel: 2 }), 9, false, 2);
+		expect(ouverte).toMatchObject({ open: [9], closed: [] });
+		expect(toggleGroup(ouverte, 9, true, 2)).toMatchObject({ open: [], closed: [] });
+	});
+	it('« Tous les comptes » : rouvrir un groupe fermé à la main le retire de closed', () => {
+		expect(toggleGroup(vue({ closed: [7, 8] }), 7, false, 5)).toMatchObject({
+			open: [],
+			closed: [8],
+		});
+	});
+	it('une entrée redondante (open d\'un groupe déjà ouvert par le niveau) se ferme quand même', () => {
+		expect(toggleGroup(vue({ detailLevel: 3, open: [4] }), 4, true, 1)).toMatchObject({
+			open: [],
+			closed: [4],
+		});
 	});
 	it('changer de niveau vide les deux listes', () => {
 		expect(withDetailLevel(vue({ open: [1], closed: [2] }), 3)).toMatchObject({
@@ -184,4 +214,31 @@ describe('mémoire du navigateur (AC-10)', () => {
 		expect(set).not.toHaveBeenCalled();
 		expect(readGroupingView(null, 'balance-sheet')).toEqual(defaultGroupingView());
 	});
+});
+
+describe("règle d'ouverture par le niveau, table partagée avec le Rust (46-7, LOW-2)", () => {
+	// Le même fichier est lu par `groupes::tests::est_ouvert_suit_la_table_partagee_avec_le_frontend` :
+	// `openByLevel` n'est pas exporté, on l'éprouve par `toggleGroup` (listes vides au départ).
+	const table = JSON.parse(
+		readFileSync(
+			resolve(process.cwd(), '../crates/kesh-report/tests/fixtures/ouverture_par_niveau.json'),
+			'utf8',
+		),
+	) as { cas: { niveau: number | 'all'; profondeur: number; ouvert: boolean }[] };
+
+	it('la table est lue en entier', () => {
+		expect(table.cas.length).toBeGreaterThan(10);
+	});
+
+	for (const c of table.cas) {
+		it(`niveau ${c.niveau}, profondeur ${c.profondeur} : ${c.ouvert ? 'ouvert' : 'fermé'}`, () => {
+			const v = vue({ detailLevel: c.niveau });
+			// Cliquer vers l'état que le niveau donne déjà ne s'inscrit dans aucune liste ;
+			// cliquer vers l'autre l'inscrit dans l'une des deux.
+			const verslEtatDuNiveau = toggleGroup(v, 5, !c.ouvert, c.profondeur);
+			expect(verslEtatDuNiveau).toMatchObject({ open: [], closed: [] });
+			const contre = toggleGroup(v, 5, c.ouvert, c.profondeur);
+			expect(c.ouvert ? contre.closed : contre.open).toEqual([5]);
+		});
+	}
 });

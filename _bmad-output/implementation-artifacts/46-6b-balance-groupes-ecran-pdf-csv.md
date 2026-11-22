@@ -144,7 +144,7 @@ Fiches 46-1, 46-2, 46-3, 46-6a.
 - **Changed** — La balance s'affiche désormais groupée par défaut (tous les comptes), et l'export PDF ou CSV lancé
   depuis l'écran suit la vue affichée : le CSV de la balance change de forme sans geste de l'utilisateur, avec les
   colonnes `Niveau;TypeLigne` en tête et les sous-totaux. Le CSV groupé de la balance ne s'additionne pas tel quel :
-  le titre et le sous-total d'un groupe répètent les montants de ses comptes, et un groupe fermé n'y porte que son
+  le titre d'un groupe (en pied, sa ligne de sous-total) répète les montants de ses comptes, et un groupe fermé n'y porte que son
   sous-total ; la balance porte sa ligne `Total` ; pour additionner les montants dans un tableur, décocher
   « Hiérarchie des groupes » pour l'export à plat d'avant, qui porte lui aussi sa ligne de total (à écarter).
 - **Changed (API)** — `GET /reports/trial-balance/export` lit `detailLevel`, `subtotalPosition`, `open` et

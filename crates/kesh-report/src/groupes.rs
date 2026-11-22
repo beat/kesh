@@ -1252,6 +1252,35 @@ mod tests {
     use super::*;
     use rust_decimal_macros::dec;
 
+    /// Table partagée avec le test Vitest de `openByLevel` (Story 46-7, LOW-2) :
+    /// la règle d'ouverture à listes vides, lue des deux côtés.
+    #[test]
+    fn est_ouvert_suit_la_table_partagee_avec_le_frontend() {
+        let table: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/ouverture_par_niveau.json"))
+                .unwrap();
+        let cas = table["cas"].as_array().unwrap();
+        assert!(cas.len() > 10, "table vide ou tronquée");
+        for c in cas {
+            let niveau = match &c["niveau"] {
+                serde_json::Value::String(s) if s == "all" => NiveauDetail::Tous,
+                v => NiveauDetail::Niveau(v.as_u64().unwrap() as u8),
+            };
+            let options = OptionsGroupes {
+                niveau,
+                position: PositionSousTotal::Titre,
+                ouverts: BTreeSet::new(),
+                fermes: BTreeSet::new(),
+            };
+            let p = c["profondeur"].as_u64().unwrap() as u32;
+            assert_eq!(
+                options.est_ouvert(1, p),
+                c["ouvert"].as_bool().unwrap(),
+                "{c}"
+            );
+        }
+    }
+
     // ---- Montage -------------------------------------------------------
 
     /// Ligne d'entrée de test : deux colonnes pour le test de propriété, une

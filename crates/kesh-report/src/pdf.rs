@@ -450,6 +450,26 @@ fn truncate_with_ellipsis(s: &str, max: usize) -> String {
     out
 }
 
+/// « <texte> <suffixe> » en `max` caractères au plus, le **suffixe gardé
+/// entier** : seul `texte` est abrégé d'un « … ». Sert à la ligne « solde
+/// propre » d'un rapport groupé (Story 46-7, relevé de la revue P2 de la
+/// 46-3) : tronquée comme un tout, elle perdait son suffixe dès un nom long et
+/// ne se distinguait plus d'une ligne de compte. Le nom peut se réduire à
+/// « … » (le numéro, imprimé à part, nomme encore le compte) ; si `max` ne
+/// laisse pas même ce caractère à côté du suffixe, le tout est tronqué comme un
+/// libellé ordinaire ([`truncate_with_ellipsis`]).
+fn truncate_keeping_suffix(texte: &str, suffixe: &str, max: usize) -> String {
+    let complet = format!("{texte} {suffixe}");
+    if complet.chars().count() <= max {
+        return complet;
+    }
+    let place = max.saturating_sub(suffixe.chars().count() + 1);
+    if place == 0 {
+        return truncate_with_ellipsis(&complet, max);
+    }
+    format!("{} {suffixe}", truncate_with_ellipsis(texte, place))
+}
+
 // ============================================================================
 // Structure de rendu — wrapper sur PdfDocument avec curseur Y + pagination
 // ============================================================================
@@ -1343,7 +1363,8 @@ impl LibelleGroupe {
     /// - `Groupe` en gras, montant sur le titre si les sous-totaux sont sur le
     ///   titre (`header`) ou si le groupe est fermé, sinon sur son sous-total ;
     /// - `SousTotal` « Total <nom> », en gras, sans numéro ;
-    /// - `Propre` « <nom> (solde propre) » ;
+    /// - `Propre` « <nom> (solde propre) », le nom seul abrégé s'il le faut
+    ///   ([`truncate_keeping_suffix`]) ;
     /// - `Compte` comme un compte du rendu à plat.
     ///
     /// Le texte est tronqué à la limite du `gabarit` ([`Gabarit::limite`]) ;
@@ -1356,25 +1377,31 @@ impl LibelleGroupe {
         labels: &SectionLabels,
     ) -> Self {
         let (numero, nom, depth) = (l.numero(), l.nom(), l.profondeur());
-        let (numero, texte, gras) = match l.genre() {
-            GenreLigne::Groupe => (Some(numero), nom.to_string(), true),
+        let (numero, texte, suffixe, gras) = match l.genre() {
+            GenreLigne::Groupe => (Some(numero), nom.to_string(), None, true),
             GenreLigne::SousTotal => (
                 None,
                 format!("{} {nom}", labels.grouped_subtotal_prefix),
+                None,
                 true,
             ),
             GenreLigne::Propre => (
                 Some(numero),
-                format!("{nom} {}", labels.grouped_own_suffix),
+                nom.to_string(),
+                Some(labels.grouped_own_suffix.as_str()),
                 false,
             ),
-            GenreLigne::Compte => (Some(numero), nom.to_string(), false),
+            GenreLigne::Compte => (Some(numero), nom.to_string(), None, false),
         };
         let numero = numero.filter(|n| !n.is_empty());
         let avec_numero = numero.is_some();
+        let limite = gabarit.limite(depth, avec_numero);
         Self {
             numero: numero.map(String::from),
-            texte: truncate_with_ellipsis(&texte, gabarit.limite(depth, avec_numero)),
+            texte: match suffixe {
+                Some(suffixe) => truncate_keeping_suffix(&texte, suffixe, limite),
+                None => truncate_with_ellipsis(&texte, limite),
+            },
             gras,
             montant: l.porte_montant(position),
             retrait_mm: retrait_groupe_mm(depth),
@@ -3319,6 +3346,89 @@ mod tests {
         let truncated = truncate_with_ellipsis(long, 30);
         assert_eq!(truncated.chars().count(), 30);
         assert!(truncated.ends_with('…'));
+    }
+
+    /// Story 46-7 — le suffixe d'une ligne « solde propre » reste entier : seul
+    /// le nom est abrégé, et le tout tient dans la limite.
+    #[test]
+    fn truncate_keeping_suffix_garde_le_suffixe() {
+        let nom = "Actifs circulants et placements à court terme divers"; // 52 caractères
+        let t = truncate_keeping_suffix(nom, "(solde propre)", 48);
+        assert_eq!(t, "Actifs circulants et placements … (solde propre)");
+        assert_eq!(t.chars().count(), 48, "{t}");
+        // Court : inchangé.
+        assert_eq!(
+            truncate_keeping_suffix("Liquidités", "(solde propre)", 48),
+            "Liquidités (solde propre)"
+        );
+        // Juste la place du suffixe et d'un caractère : le nom devient « … ».
+        assert_eq!(
+            truncate_keeping_suffix("Liquidités", "(solde propre)", 16),
+            "… (solde propre)"
+        );
+        // Plus étroite que le suffixe et son espace : tronqué comme un tout.
+        assert_eq!(
+            truncate_keeping_suffix("Liquidités", "(solde propre)", 15),
+            truncate_with_ellipsis("Liquidités (solde propre)", 15)
+        );
+    }
+
+    /// Story 46-7 — au rendu, une ligne « solde propre » à nom long garde son
+    /// suffixe entier, au bilan comme à la balance, à tout retrait, dans la
+    /// limite du gabarit ; une ligne de compte au même nom reste tronquée comme
+    /// un tout.
+    #[test]
+    fn ligne_solde_propre_a_nom_long_garde_son_suffixe() {
+        use crate::groupes::{GenreLigne, LigneRapport, PositionSousTotal};
+        let labels = SectionLabels::fr_ch_defaults();
+        let nom = "Créances résultant de livraisons et prestations envers des tiers"; // 64
+        let ligne = |kind, depth| LigneRapport {
+            kind,
+            depth,
+            account_id: 1,
+            account_number: "110".into(),
+            account_name: nom.into(),
+            balance: rust_decimal::Decimal::ONE,
+            currency: None,
+            balance_currency: None,
+            open: None,
+            active: Some(true),
+            role: None,
+        };
+        for gabarit in [
+            Gabarit::bilan(false),
+            Gabarit::bilan(true),
+            Gabarit::BALANCE,
+        ] {
+            for depth in 1..=6 {
+                let limite = gabarit.limite(depth, true);
+                let propre = LibelleGroupe::de(
+                    &ligne(GenreLigne::Propre, depth),
+                    PositionSousTotal::Titre,
+                    gabarit,
+                    &labels,
+                );
+                assert_eq!(propre.texte.chars().count(), limite, "{}", propre.texte);
+                if limite > "(solde propre)".len() + 1 {
+                    assert!(
+                        propre.texte.ends_with("… (solde propre)"),
+                        "profondeur {depth} : {}",
+                        propre.texte
+                    );
+                } else {
+                    // Colonne plus étroite que le suffixe (balance, retrait maximal).
+                    let complet = format!("{nom} (solde propre)");
+                    assert_eq!(propre.texte, truncate_with_ellipsis(&complet, limite));
+                }
+                let compte = LibelleGroupe::de(
+                    &ligne(GenreLigne::Compte, depth),
+                    PositionSousTotal::Titre,
+                    gabarit,
+                    &labels,
+                );
+                assert_eq!(compte.texte, truncate_with_ellipsis(nom, limite));
+            }
+        }
     }
 
     // --- Pass 1 code-review H8 (AA1-H1) : AC #9 SLA assertion fast path ---
