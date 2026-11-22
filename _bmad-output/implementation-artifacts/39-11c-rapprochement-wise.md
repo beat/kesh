@@ -1,6 +1,6 @@
 # Story 39-11c : rapprochement des lignes Wise — frais, conversions, autre côté déjà passé (virements, versements Stripe), règles, écarts
 
-Status: ready-for-dev
+Status: review
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, numéros de ligne relevés au code de `origin/main` (`fd04099f`),
 revérifiés à la validation P1. Epic 39, **phase 1 KISS** (G5 à G10, § *Ce que la phase 1 attend de l'Epic 38*).
@@ -289,3 +289,109 @@ depuis votre banque, versement Stripe), le reste par vos règles ; ce qui ne se 
   `payout_without_receipt`) → la 39-11c seule propose le rattachement de la réception Wise à l'écriture du versement.
 - 2026-11-20 — Validation P5 ciblée (Claude Sonnet 5.5, passe ciblée, contexte frais, rapport `kesh-gate-logs/epic-39-40-kiss/validation/39-11-P5-ciblee.md`) : 0 C/H/M, 2 LOW remédiés — G4, 39-11b AC-5 et 39-11c AC-6 disent la même chose (l'import juge à son instant, la revue relit la même règle sur l'état présent) ; 39-11c AC-3 : 40-7c n'écrit le texte qu'en dernier recours.
 - 2026-11-20 — alignement sur la phase 1 de l'Epic 38 (Claude Sonnet 5.5, contexte frais ; fiches 38-11c1, 38-11c2, 38-11d et rapport de validation P3 de `28623871` lus) : `PROVIDER_PROPOSAL_STALE` et `provider.proposal_accepted` servis (replis `WISE_PROPOSAL_STALE` et `wise.proposal_accepted` retirés) ; `link_sale` → `link_entry` (38-11c2) ; moteur servi générique par 38-11c2 (plus de généralisation G10 par défaut) ; rattachement en devise = 38-11c1 AC-1, prédicat de l'autre côté = 38-11c1 AC-1b (repli seulement si l'Epic 38 arrive après). Rapport `kesh-gate-logs/epic-39-40-kiss/validation/alignement-38-P3.md`.
+- 2026-11-22 — développement (Claude Opus 5.5), branche `story/39-11c` partie d'`epic/39-wise` (`3a9861f0`) ;
+  amendement du 21.11 écrit avant le code (`07f04c4e`). Voir le Dev Agent Record.
+
+## Dev Agent Record
+
+### T0 — ce que 38-11c2 livre et ce que la story réutilise
+
+Moteur commun servi tel quel (aucune généralisation G10) : `load_review_in_tx`, `prepare_accept`, `accept_once`,
+`PreparedAccept::finish`, `accept_common` (`fee`, `rule`, `link_entry`, `conversion`), `rejudge`, `check_counterparty`,
+`month_rate`, `mark_reconciled`, `entry_refusal`, `db_refusal`, `stale` (`crates/kesh-api/src/routes/provider_accept.rs`) ;
+`ProviderSpec` (`linkable`, `ruleable`, `conversion_unpaired` en `Placement::Gap`), `ProviderKind::Specific`,
+`Review::map_proposals`, `matching_rule` (`crates/kesh-reconciliation/src/provider_review.rs`). Le plan et le
+constructeur de conversion (`plan_conversion`, `create_provider_conversion_in_tx`) et le prédicat de l'autre côté à deux
+branches (`other_side_predicate`, 38-11c1 AC-1b) **y sont** : cette story ne les touche pas (T2 réduit à la paire par
+le même identifiant, `wise::conversion_match`). Deux retouches du moteur : `record_rule_applied` extrait d'`accept_rule`
+(compteur et trace `reconciliation_rule.applied`, appelé aussi par le paiement groupé, DRY) et `failed` rendu public.
+Champ `known_chf` de `ProviderEntry` : non employé (le paiement groupé écrit sa propre écriture à plusieurs lignes).
+
+### Ce qui a été écrit
+
+- `crates/kesh-reconciliation/src/wise.rs` (neuf, pur) : `classify` (ordre de l'amendement A-5), `exchange_of`
+  (segment de conversion de 39-11b, forme exacte seulement), `SPEC`, `WiseProposal` (`card_group` + genres communs,
+  désérialisation `untagged`), `card_groups` / `judge_card_group` / `shares_by_account` (A-1), `fees_without_origin`,
+  `chf_rule_accounts`.
+- `crates/kesh-api/src/routes/wise.rs` (neuf) : `GET /api/v1/wise/review` (revue commune, puis paiements groupés,
+  autre côté déjà passé filtré à 5 jours en Rust, règles des virements, écarts `fee_without_origin` et `balance_gap`
+  par `bank_imports::continuity_gap`) ; `POST /api/v1/wise/accept` (`accept_proposals`, enveloppe
+  `retry_app_on_deadlock("wise::accept")`, jamais `retry_with`, nom ≠ `post_accept`) ; `impl EngineProposal for
+  WiseProposal` ; `accept_card_group` (rejugement de l'ensemble des lignes, de la règle, contrepartie CHF, écriture
+  charge / parts / différence de change, `FX_ACCOUNT_INVALID` sans compte de différence).
+- `crates/kesh-db/src/repositories/provider_review.rs` : `pending_by_transaction_ids`, `opening_statements_in_period`,
+  `fx_difference_accounts`.
+- `crates/kesh-db/src/repositories/reconciliation_cancel.rs` + `settlement_cancellation.rs` (A-2) : prédicat unique
+  `PROVIDER_GROUP_SIBLING` (même `provider` et `provider_account`) ; à l'annulation d'une écriture contre-passée, les
+  autres lignes du même paiement de prestataire redeviennent en attente (étape 5 bis, comptes ouverts contrôlés, une
+  trace `reconciliation.cancelled` chacune, `groupedWith`) ; le rang 3 de la vue et du geste ne les compte plus
+  comme blocage. Toute autre transaction rattachée reste refusée `MATCHED_BANK_TRANSACTION` (test existant
+  `another_transaction_on_the_same_entry_still_refuses` vert sans changement — il avait rougi sur une première forme
+  qui remettait en attente **toute** autre transaction : corrigée avant commit).
+- Routes (`lib.rs`), registre (`audit_route_registry.rs` : `wise::accept_proposals` `Traced, Rejouee` ; totaux 153→154
+  tracées, 161→162 routes, 31→32 rejouées, 165→166), inventaire des comptes clos (`bank_account_closed_inventory.rs` :
+  44→45 sites, raison de `cancel_in_tx` complétée), manuel d'administration (« 154 des 162 routes », « 154 + 4 + 4 =
+  162 », `.tex` seul), `docs/api-external.md` (section « Le rapprochement d'un compte Wise »).
+- **AC-8 i18n** : aucun code d'erreur HTTP neuf (les refus réutilisent `PROVIDER_PROPOSAL_STALE`, `FX_ACCOUNT_INVALID`,
+  `COUNTERPARTY_CURRENCY_MISMATCH`…) ; les motifs de la revue ne sont traduits nulle part (aucun écran, comme ceux de
+  PayPal) : aucune clé ajoutée. Aucune migration.
+
+### Tests (recomptés à `c07265c1`, périmètre `3a9861f0..HEAD`)
+
+- 13 tests purs neufs (`#[test]` de `crates/kesh-reconciliation/src/wise.rs`).
+- 9 tests HTTP neufs (`#[sqlx::test]` de `crates/kesh-api/tests/wise_reconciliation_e2e.rs`) : revue et acceptation
+  du tout (12 propositions, soldes EUR 160.00 et USD 317.01 égaux à la variation Wise) ; conversion à une écriture,
+  annulation d'un côté puis rattachement à nouveau ; paiement partiel groupé (écriture 97.95 / 86.60 / 13.89 USD à
+  0.90 = 12.50 / perte 1.15), annulation d'une ligne (les trois en attente, vue non bloquée), proposition reparue ;
+  traitement à la main par l'API (décision (c)) ; péremption, contrepartie, `FX_ACCOUNT_INVALID`,
+  `card_group_no_rule` ; écarts (`conversion_half_missing` ×2, `fee_without_origin`, un `balance_gap` malgré un relevé
+  postérieur chevauchant la fin, aucun pour le chevauchant) ; droits (clé `read` 403) et refus globaux ; interblocage
+  injecté dans un paiement groupé rejoué (`wise::accept`), rien dans `failed[]` ; coût.
+- **Mesure (AC-4)** : 300 virements en attente, 20 000 écritures sur le compte du plan du solde CHF, une lecture
+  `find_matched_elsewhere` par virement : test en **3,86 s** au gate complet (3,91 s au ciblé), montage compris ;
+  pas de lecture par page.
+- Assertions existantes inchangées (PayPal 38-11c2, annulation 34-11b, `reconciliation_e2e`) ; seuls les compteurs des
+  registres ont bougé.
+- **Sondes par mutation** (`kesh-gate-logs/s39-11c/mutation.sh`, worktree restauré, `git status` vide après) : M1
+  (étape 5 bis inerte) → `partielle_en_une_ecriture_puis_annulation` rouge ; M2 (lignes groupées laissées dans la
+  revue commune) → même test rouge ; M3 (seuil des 5 jours à 100) → `revue_puis_acceptation_du_tout` rouge ; M4
+  (ensemble relu non comparé) → **vert à la première sonde** : le test proposait le groupe sans la ligne de carte USD,
+  que le jugement refusait déjà ; renforcé (`c07265c1`, groupe sans sa ligne de frais), M4 rouge, vert sans mutation
+  (`mutation-m4.log`) ; M5 (conversion sans segment) → `chaque_genre_et_sa_preseance` rouge ; M6 (différence de change
+  nulle) → `partielle_en_une_ecriture_puis_annulation` rouge. Une première passe des sondes (`mutation-invalide.log`)
+  ne valait rien : deux fichiers `wise.rs` copiés sous le même nom, restauration croisée (fichier remis par
+  `git checkout`, script corrigé).
+
+### Gates (journaux `kesh-gate-logs/s39-11c/`)
+
+- Ciblé `cible-1.sh` (filtre : kesh-reconciliation, libs kesh-api et kesh-db, binaires Wise, PayPal, registres,
+  annulation, rattachement, règlements groupés) : 1900 / 1900 à `2870da3b` (`nextest-cible-2.log` → `cible-1.log`) ;
+  deux passages précédents rouges, corrigés (compteurs des registres, nom de colonne `details_json`, ordre des
+  identifiants du test, forme de l'étape 5 bis).
+- **Backend complet** au dernier commit de code `c07265c1` : `scripts/test-fast.sh --ci` (fmt, clippy workspace
+  `-D warnings`, nextest) **6488 exécutés, 6488 passés, 16 ignorés** (`gate-backend.log`).
+- **Frontend** (aucun fichier du frontend touché) : `npm run check` 0 erreur (29 avertissements préexistants),
+  `lint-i18n-ownership` vert, Vitest **4829 tests, 280 fichiers**, `build` vert, à `2870da3b` (les commits suivants ne
+  touchent qu'un test Rust).
+- **E2E** : aucun — la story n'ajoute aucune spec (décision du responsable pour cette nuit) ; **E2E complet et
+  `gate-ci.sh` à la fin de l'epic**.
+
+### Points relevés hors périmètre
+
+- `docs/api-external.md` ne décrivait pas la revue et l'acceptation **PayPal** (38-11c2) : la section Wise les
+  rappelle sans les documenter ; à reprendre par 38-11d ou à la fin de l'epic.
+- La vue d'annulation (`GET /reconciliation/transactions/{id}`) ne dit pas que les autres lignes d'un paiement groupé
+  reviendront en attente : l'écran le dira avec 39-11d.
+- Un paiement partiel dont un seul relevé est importé (la ligne CHF sans la ligne convertie) passe par une règle au
+  montant de la ligne : la somme reste juste quand l'autre relevé arrive (le groupe de la ligne convertie seule porte le
+  reste du montant du marchand), mais en deux écritures.
+- Fusion avec l'Epic 40 : `ProviderSpec` inchangé ; aucun conflit attendu hors des compteurs des registres (à
+  recompter).
+
+### Notes de version
+
+*Ajouté* — Les lignes d'un relevé Wise se rapprochent sur proposition (`GET /api/v1/wise/review`,
+`POST /api/v1/wise/accept`) : frais au compte de frais, conversions au cours de Wise, rattachement à l'écriture déjà
+passée de l'autre côté (virement, versement Stripe), le reste par vos règles ; un paiement par carte converti, pris sur
+plusieurs soldes, devient une seule écriture au montant du marchand ; ce qui ne se rapproche pas est listé avec son
+motif.
