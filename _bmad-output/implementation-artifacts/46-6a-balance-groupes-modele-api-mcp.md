@@ -140,7 +140,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    `numero`, `nom`, les cinq montants `ouverture`, `debit`, `credit`, `solde`, `cloture` et les cinq `…Devise`,
    `devise`, `ouvert`) ; le champ plat existant `lignes` (au niveau supérieur, lu par `mcp_outils_e2e.rs:753`) est
    alors vide ; la **tranche** (`limit`, `offset`,
-   défaut 23, maximum 42) porte sur les **lignes groupées**, `total` en compte le nombre ; totaux du rapport entier
+   défaut 20, maximum 37 avec `detailLevel` ; 23 et 42 à plat, inchangés) porte sur les **lignes groupées**, `total` en compte le nombre ; totaux du rapport entier
    inchangés. *Pourquoi la tranche et non le niveau seul (contraire du bilan, 46-4 C-46-4-3)* : une ligne de balance
    pèse ≈ 540 o (dix montants), et le plan PME rend, en `footer`, **42 lignes groupées au niveau 2 et 97 à `all`**
    (calcul du 2026-11-20 sur `pme.json`, tous les comptes actifs, lignes propres nulles des groupes exclues, AC-3 (d))
@@ -150,7 +150,7 @@ fichier d'epic le porte (« Dépend de : 46-1, 46-4 »).
    de `regrouper` sur `pme.json`, comptes de groupe sans solde propre, script
    `kesh-gate-logs/s46-specs/sim-balance-pme.py`) : 42 au niveau 2 et 97 à `all` quand des comptes des deux natures
    portent un montant dans `6` à `8` (ces groupes dissous) ; **au plus 43 au niveau 2 et 107 à `all`** quand aucun
-   groupe n'est dissous (p. ex. balance entièrement nulle à `all`). La conclusion ne change pas. Bornes : le schéma est **unique** (`limit` maximum 42, défaut 23) pour les deux modes ; la
+   groupe n'est dissous (p. ex. balance entièrement nulle à `all`). La conclusion ne change pas. Bornes : le schéma JSON est statique (`limit` maximum 42, défaut 23, ceux du mode plat) et la **description** dit les bornes du mode groupé (37 au plus, 20 par défaut), le code les appliquant selon `detailLevel` ; la
    ligne groupée est mesurée (`tailles_mesurees_en_devise` étendu, groupe et pied compris) ; si elle dépasse la plate,
    les **deux** bornes baissent ensemble, avec `LIMITE_DEFAUT_BALANCE` / `LIMITE_MAX_MCP_BALANCE`
    (`rapports.rs:25-29`), `bornes_attendues` et la table `mesurees` de `bornes_des_schemas`
@@ -277,9 +277,9 @@ P2 L-6) ; fiche 47-3 (AC-1, § *Recâblage*) et fichier de l'Epic 47 (D7 ; § *D
 `subtotalPosition`, `open`, `closed` ; outil MCP `kesh_balance`), avec les sous-totaux d'ouverture, de mouvements et de
 clôture de chaque groupe ; un groupe qui mêle comptes débiteurs et créditeurs à montant non nul est dissous. Sans
 paramètre, l'API ne change pas ; au MCP, la sortie de `kesh_balance` gagne seulement `groupes: null`.
-**Changed** — ⚠️ MCP : `kesh_balance` sert au plus **37** lignes par tranche (au lieu de 42), **20** par défaut (au
-lieu de 23), re-mesurés avec les lignes groupées en devise ; un `limit` de 38 à 42 est désormais refusé (« Arguments
-invalides. »).
+**Changed** — MCP : `kesh_balance` avec `detailLevel` sert au plus **37** lignes par tranche, **20** par défaut,
+re-mesurés avec les lignes groupées en devise ; à plat, les bornes restent 42 et 23 (aucun changement pour un appel
+existant). Un `limit` de 38 à 42 avec `detailLevel` est refusé (« Arguments invalides. »).
 
 ## Dev Agent Record
 
@@ -318,10 +318,12 @@ Journaux hors dépôt, `kesh-gate-logs/s46-6a/` : `t0-capture*.log` (fixtures du
 - **Bornes re-mesurées** (AC-6) : la ligne groupée en devise pèse plus que la plate (élément **613 o**, socle
   **756 o**, contre 542 et 595 ; `tailles_mesurees_en_devise` étendu : 56 comptes USD sous un groupe au nom de 34
   caractères, `all`, `footer`). À 42 lignes, la réponse groupée était **refusée** (premier passage, `c1.log`) : les
-  deux bornes baissent ensemble, **42 / 23 → 37 / 20** (`LIMITE_MAX_MCP_BALANCE`, `LIMITE_DEFAUT_BALANCE`, schéma,
-  `bornes_des_schemas`, `TEMOINS`, `rapports_en_devise_par_le_mcp`), chiffres datés dans la doc du module.
-  **Conséquence sur le littéral du T0** : écrit à la limite par défaut d'alors (23), il reste inchangé ; le test le
-  compare à l'appel `limit: 23` (même sortie, à l'octet), déclaré au Change Log.
+  bornes du **mode groupé** baissent, **42 / 23 → 37 / 20** (`LIMITE_MAX_MCP_BALANCE_GROUPEE`,
+  `LIMITE_DEFAUT_BALANCE_GROUPEE`), celles du mode plat restent 42 / 23 (revue de code P1, MEDIUM-1 : un défaut
+  abaissé pour tous aurait fait sauter des lignes, en silence, à un client qui pagine à plat par pas de 23) ; le
+  schéma JSON, statique, garde 42 / 23 et la description dit les bornes groupées ; test `balance_bornes_selon_le_mode`.
+  **Sur le littéral du T0** : il est comparé à l'appel **sans** `limit` (défaut à plat 23, sortie identique à
+  l'octet, `groupes: null` près).
 - **Tests ajoutés** (recomptés de `92434d16` à `HEAD`, `#[test]`/`#[sqlx::test]`) : 10 — sept unitaires dans
   `groupes.rs` (14 → 21 : `balance_cinq_montants_dans_l_ordre`, `balance_nature_et_lignes_nulles` (miroir de passif à
   zéro puis mouvementé, état forgé), `balance_comptes_a_zero_ouverts_et_fermes`, `balance_ligne_propre_des_groupes`,
@@ -427,10 +429,31 @@ Journaux hors dépôt, `kesh-gate-logs/s46-6a/` : `t0-capture*.log` (fixtures du
 - 2026-11-22 — **Développement, T1 à T5** (`29ec2b7b`) : modèle, service, route, MCP, tests, documentation (Dev
   Agent Record). Écarts déclarés : (1) **bornes MCP de la balance abaissées, 42 / 23 → 37 / 20** — la ligne groupée
   en devise mesurée à 613 o (socle 756 o) contre 542 o à plat ; à 42 lignes groupées la réponse était refusée ;
-  schéma unique, comme l'AC-6 le prévoit ; (2) le témoin sans argument du T0, écrit à la limite par défaut d'alors,
-  est comparé à l'appel `limit: 23` (sortie identique à l'octet), le littéral restant tel qu'écrit ; (3) la macro
+  bornes propres au mode groupé depuis la revue P1 (le mode plat garde 42 / 23) ; (2) le témoin sans argument du T0
+  est comparé à l'appel sans `limit` (sortie identique à l'octet), le littéral restant tel qu'écrit ; (3) la macro
   `sortie_groupes!` écrit une fois les six champs d'écho et leur conversion, et sert aussi le bilan et le compte de
   résultat de la 46-4 (la structure `Echo` disparaît) ; (4) `groupes_parametre_repete` adapté : la balance refuse
   désormais un paramètre répété, la TVA et l'export de la balance l'ignorent toujours. Sondes : six mutations, toutes
   rouges. Gates : fmt, clippy, nextest complet, frontend ; E2E : aucune spec (aucune ajoutée, aucun écran touché) ;
   `gate-ci.sh` et E2E complet à la fin de l'epic. `review`.
+- 2026-11-22 — **Remédiation de la revue de code P1** (rapport `s46-6a/revue-p1-rapport.md` : 0 C / 0 H / 1 M / 6 L).
+  **MEDIUM-1** : `kesh_balance` garde ses bornes **à plat** (défaut 23, maximum 42, schéma JSON inchangé) et n'applique
+  (20, 37) qu'avec `detailLevel` (`LIMITE_*_BALANCE_GROUPEE`, choix avant l'appel à `limite`) ; la description de l'outil
+  dit les bornes du mode groupé ; le témoin T0 se rejoue **sans** `limit` ; test `balance_bornes_selon_le_mode` (à plat :
+  défaut 23, 42 accepté ; groupé : défaut 20, 37 accepté, 38 refusé) ; deux sondes par mutation (borne unique pour les
+  deux modes, copie hors dépôt, `mutations.log` du scratchpad), tuées chacune par une assertion nommée (résultat au
+  Dev Agent Record). **LOW-1** commentaire de test corrigé ; **LOW-2** tombe (aucun client existant ne voit de
+  changement ; la note de version dit le seul refus du mode groupé) ; **LOW-3** AC-6 de la fiche alignée ; **LOW-4** la
+  mesure groupée ajoute un appel avec écho `ouverts` non vide et un sous-total en pied (≤ 23 552 o) ; **LOW-5** test
+  `balance_groupe_a_lignes_toutes_nulles_sans_devise` (groupe dont tous les comptes sont à zéro en USD : ni devise ni
+  colonnes en devise, le compte garde la sienne) ; **LOW-6** non testable : `LIVRES` exige le rôle `Consultation`, que
+  tout utilisateur authentifié possède, si bien qu'aucun appel HTTP ne distingue l'ordre `exiger` puis `groupes_de` —
+  l'ordre reste écrit dans la doc de la route, sans test (angle mort assumé, le même que pour le bilan). `review`.
+  *Sondes du MEDIUM-1* (copie hors dépôt, base verte d'abord : 2 tests) : borne groupée pour les deux modes (M7) tuée
+  par `balance_bornes_selon_le_mode` (défaut à plat 23) et `sans_groupes_sortie_du_commit_de_base` (`left: 20, right: 23`) ;
+  borne plate pour les deux modes (M8) tuée par `balance_bornes_selon_le_mode` (mode groupé : défaut 20 ou refus de 38,
+  `mcp_outils_e2e.rs:3200`). *Gates au dernier commit de code* : fmt et clippy workspace (par `test-fast.sh`), ciblé
+  (`mcp_outils_e2e`, `reports_e2e`, `textes_coherents`, `kesh-report` lib : 282 passés), nextest complet **6208 passés,
+  14 ignorés** (journal `kesh-gate-logs/s46-6a/gate-backend.log`) ; pas d'E2E ni de `gate-ci.sh`. Prompt de la passe
+  ciblée P2 : `kesh-gate-logs/s46-6a/revue-p2-prompt.md`.
+

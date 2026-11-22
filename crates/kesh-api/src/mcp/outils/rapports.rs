@@ -2,13 +2,14 @@
 //! période d'un exercice (Story 32-9a, AC-a10) ; chaque consultation s'inscrit
 //! au journal d'audit (`ContexteMcp::afficher`). Portée `books:read`.
 //!
-//! La balance rend tout compte actif : l'outil la **tranche** (défaut 20,
-//! maximum 37 lignes, re-mesurés avec les colonnes en devise à la Story 37-4
-//! puis avec les lignes groupées à la Story 46-6a)
+//! La balance rend tout compte actif : l'outil la **tranche** (à plat : défaut 23,
+//! maximum 42 lignes, re-mesurés avec les colonnes en devise à la Story 37-4 ;
+//! avec `detailLevel` : défaut 20, maximum 37, re-mesurés avec les lignes
+//! groupées à la Story 46-6a)
 //! et rend les totaux du rapport entier. **Par groupes** (Story 46-6a), elle
 //! accepte les mêmes arguments que le bilan ; la tranche porte alors sur les
 //! lignes groupées (`groupes.lignes`, `total` les compte) et la liste plate est
-//! vide — une ligne groupée pèse autant qu'une ligne plate, et le plan PME en
+//! vide — une ligne groupée pèse plus qu'une ligne plate, et le plan PME en
 //! rend une centaine à `all` : au-delà du plafond sans tranche (C-46-6a-2). Le bilan et le
 //! compte de résultat ne sont pas paginés : au-delà d'environ 60 comptes à
 //! solde non nul, la réponse est refusée pour sa taille (C-32-9-8). Re-mesuré
@@ -52,15 +53,19 @@ use crate::mcp::textes::depuis_app_error;
 use crate::services::acces::Portee;
 use crate::services::rapports::{self, Affichage, DemandeGroupes, DemandePeriode, NiveauDemande};
 
-/// Lignes de balance par défaut. Story 37-4 : re-mesurée avec les colonnes en
-/// devise remplies (élément de 542 o, `tailles_mesurees_en_devise`), 30 → 23.
-/// Story 46-6a : la ligne **groupée** en devise pèse plus (élément de 613 o,
-/// socle de 756 o, mesurés le 2026-11-22), et le schéma est unique pour les
-/// deux modes : 23 → 20.
-pub const LIMITE_DEFAUT_BALANCE: i64 = 20;
-/// Lignes de balance au plus (aucun plafond de service). Story 37-4 : 55 → 42 ;
-/// Story 46-6a (lignes groupées, même mesure) : 42 → 37.
-pub const LIMITE_MAX_MCP_BALANCE: i64 = 37;
+/// Lignes de balance par défaut, **à plat**. Story 37-4 : re-mesurée avec les
+/// colonnes en devise remplies (élément de 542 o, `tailles_mesurees_en_devise`),
+/// 30 → 23. Story 46-6a : inchangée pour la sortie à plat.
+pub const LIMITE_DEFAUT_BALANCE: i64 = 23;
+/// Lignes de balance au plus, à plat (aucun plafond de service). Story 37-4 :
+/// 55 → 42. Story 46-6a : inchangée pour la sortie à plat.
+pub const LIMITE_MAX_MCP_BALANCE: i64 = 42;
+/// Lignes de balance par défaut avec `detailLevel`. Story 46-6a : la ligne
+/// **groupée** en devise pèse plus (élément de 613 o, socle de 756 o, mesurés
+/// le 2026-11-22) : 23 → 20.
+pub const LIMITE_DEFAUT_BALANCE_GROUPEE: i64 = 20;
+/// Lignes de balance au plus avec `detailLevel`. Story 46-6a : 42 → 37.
+pub const LIMITE_MAX_MCP_BALANCE_GROUPEE: i64 = 37;
 
 /// Lignes groupées (toutes sections) au-delà desquelles le bilan ou le compte
 /// de résultat par groupes est refusé pour sa taille — borne basse mesurée
@@ -89,7 +94,7 @@ macro_rules! description_groupes {
     ($plates:literal) => {
         concat!(
             regles_groupes!(),
-            "Avec detailLevel, groupes porte l'écho des \
+            "Avec detailLevel, limit vaut 20 par défaut et 37 au plus (23 et 42 à plat) ; groupes porte l'écho des \
              choix retenus et les lignes groupées de chaque section (genre group, account, own \
              ou subtotal ; un identifiant inconnu est ignoré) et les listes plates (",
             $plates,
@@ -558,7 +563,7 @@ impl McpTool for KeshBalance {
          (devise, code ISO 4217) porte aussi ses colonnes dans sa devise (champs suffixés \
          « devise », null sur un compte en CHF) ; les totaux restent en CHF. ",
             regles_groupes!(),
-            "Avec detailLevel, groupes porte l'écho des choix retenus et, dans groupes.lignes, \
+            "Avec detailLevel, limit vaut 20 par défaut et 37 au plus (23 et 42 à plat) ; groupes porte l'écho des choix retenus et, dans groupes.lignes, \
              les lignes groupées (genre group, account, own ou subtotal ; un identifiant inconnu \
              est ignoré) ; la liste plate lignes est vide, et la tranche (limit, offset) porte \
              sur les lignes groupées, que total compte : un groupe et son sous-total en pied \
@@ -569,7 +574,7 @@ impl McpTool for KeshBalance {
     }
 
     fn schema_entree(&self) -> &'static str {
-        r#"{"type":"object","properties":{"fiscalYearId":{"type":"integer","minimum":1},"periodStart":{"type":"string","format":"date"},"periodEnd":{"type":"string","format":"date"},"limit":{"type":"integer","minimum":1,"maximum":37,"default":20},"offset":{"type":"integer","minimum":0},"detailLevel":{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]},"subtotalPosition":{"type":"string","enum":["header","footer"]},"open":{"type":"array","items":{"type":"integer"},"maxItems":500},"closed":{"type":"array","items":{"type":"integer"},"maxItems":500}},"required":["fiscalYearId"],"additionalProperties":false}"#
+        r#"{"type":"object","properties":{"fiscalYearId":{"type":"integer","minimum":1},"periodStart":{"type":"string","format":"date"},"periodEnd":{"type":"string","format":"date"},"limit":{"type":"integer","minimum":1,"maximum":42,"default":23},"offset":{"type":"integer","minimum":0},"detailLevel":{"oneOf":[{"type":"integer","minimum":1,"maximum":20},{"type":"string","enum":["all"]}]},"subtotalPosition":{"type":"string","enum":["header","footer"]},"open":{"type":"array","items":{"type":"integer"},"maxItems":500},"closed":{"type":"array","items":{"type":"integer"},"maxItems":500}},"required":["fiscalYearId"],"additionalProperties":false}"#
     }
 
     fn portee(&self) -> Portee {
@@ -583,7 +588,15 @@ impl McpTool for KeshBalance {
     ) -> FuturOutil<'a> {
         Box::pin(async move {
             let b: ArgumentsBalance = arguments(valeur)?;
-            let limit = limite(b.limit, LIMITE_DEFAUT_BALANCE, LIMITE_MAX_MCP_BALANCE)?;
+            let (defaut, maximum) = if b.detail_level.is_some() {
+                (
+                    LIMITE_DEFAUT_BALANCE_GROUPEE,
+                    LIMITE_MAX_MCP_BALANCE_GROUPEE,
+                )
+            } else {
+                (LIMITE_DEFAUT_BALANCE, LIMITE_MAX_MCP_BALANCE)
+            };
+            let limit = limite(b.limit, defaut, maximum)?;
             let offset = decalage(b.offset)?;
             let a = ArgumentsPeriode {
                 fiscal_year_id: b.fiscal_year_id,

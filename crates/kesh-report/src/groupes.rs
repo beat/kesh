@@ -2314,6 +2314,43 @@ mod tests {
         );
     }
 
+    /// Un groupe dont tous les comptes sont à zéro, fût-ce en USD, n'a ni
+    /// devise ni colonnes en devise : le compte nul ne compte pas dans la
+    /// devise du groupe (lignes `account` à zéro, groupe sans `currency`).
+    #[test]
+    fn balance_groupe_a_lignes_toutes_nulles_sans_devise() {
+        let p = plan(&[
+            ("1", None),
+            ("10", Some("1")),
+            ("1020", Some("10")),
+            ("1021", Some("10")),
+            ("14", Some("1")),
+            ("1500", Some("14")),
+        ]);
+        let rows = vec![
+            tb_devise("1020", Type::Asset, dec!(0), dec!(0), "USD"),
+            tb_devise("1021", Type::Asset, dec!(0), dec!(0), "USD"),
+            tb("1500", Type::Asset, dec!(5), dec!(0)),
+        ];
+        let g = grouper(rows, &p, &opts(NiveauDetail::Tous));
+        let dix = g
+            .iter()
+            .find(|l| l.account_id == ident("10"))
+            .expect("groupe 10");
+        assert_eq!(dix.currency, None, "groupe 10 sans devise");
+        assert_eq!(dix.opening_currency, None);
+        assert_eq!(dix.closing_currency, None);
+        let compte = g
+            .iter()
+            .find(|l| l.account_id == ident("1020"))
+            .expect("compte 1020");
+        assert_eq!(
+            compte.currency.as_deref(),
+            Some("USD"),
+            "le compte garde la sienne"
+        );
+    }
+
     /// Les lignes de balance du plan PME : chaque compte, groupes compris
     /// (la balance rend tout compte actif), à zéro, sauf les feuilles de
     /// `montant` (indice + 1 en ouverture et en débit).
