@@ -375,34 +375,72 @@ async fn build_wise_review(
     }
 
     review.sort();
-    Ok(review.map_proposals(|p| to_review_proposal(p, &shown)))
+    // `map_proposals` ne sait pas échouer : la première erreur est gardée
+    // à part, la revue construite avec elle est jetée.
+    let failure = std::cell::RefCell::new(None);
+    let mapped = review.map_proposals(|p| {
+        let (proposal, error) = to_review_proposal(p, &shown);
+        if let Some(e) = error {
+            failure.borrow_mut().get_or_insert(e);
+        }
+        proposal
+    });
+    match failure.into_inner() {
+        Some(e) => Err(e),
+        None => Ok(mapped),
+    }
+}
+
+/// Ce que `shown` tient pour la ligne principale d'un groupe : ses lignes et
+/// le montant du marchand. Un groupe sans entrée est un défaut de
+/// construction de [`build_wise_review`] (inatteignable : chaque groupe
+/// y est inséré avant d'être proposé) : erreur interne tracée, jamais une
+/// valeur vide que l'écran montrerait comme un montant absent.
+fn card_group_display(
+    bank_transaction_ids: &[i64],
+    shown: &HashMap<i64, (Vec<TransactionSummary>, String)>,
+) -> Result<(Vec<TransactionSummary>, String), AppError> {
+    bank_transaction_ids
+        .first()
+        .and_then(|id| shown.get(id))
+        .cloned()
+        .ok_or_else(|| {
+            tracing::error!(
+                ?bank_transaction_ids,
+                "revue Wise : groupe de carte sans lignes d'affichage"
+            );
+            AppError::Internal("revue Wise : groupe de carte sans lignes d'affichage".into())
+        })
 }
 
 /// Le type de revue d'une proposition : une proposition commune telle
 /// quelle ; un `card_group`, avec ce que `shown` tient pour sa ligne
 /// principale (lignes et montant du marchand, posés pendant la boucle des
-/// groupes de [`build_wise_review`]).
+/// groupes de [`build_wise_review`]). Rend aussi l'erreur interne d'un groupe
+/// sans lignes d'affichage : la proposition vide rendue avec elle ne sert
+/// qu'à finir l'itération, la revue est alors jetée.
 fn to_review_proposal(
     p: WiseProposal,
     shown: &HashMap<i64, (Vec<TransactionSummary>, String)>,
-) -> WiseReviewProposal {
+) -> (WiseReviewProposal, Option<AppError>) {
     match p {
-        WiseProposal::Common(c) => WiseReviewProposal::Common(c),
+        WiseProposal::Common(c) => (WiseReviewProposal::Common(c), None),
         WiseProposal::CardGroup(g) => {
             let CardGroupProposal::CardGroup {
                 bank_transaction_ids,
                 ..
             } = &g;
-            let (lines, merchant_amount) = bank_transaction_ids
-                .first()
-                .and_then(|id| shown.get(id))
-                .cloned()
-                .unwrap_or_default();
-            WiseReviewProposal::CardGroup(CardGroupReview {
+            let (shown_of, failed) = match card_group_display(bank_transaction_ids, shown) {
+                Ok(v) => (v, None),
+                Err(e) => ((Vec::new(), String::new()), Some(e)),
+            };
+            let (lines, merchant_amount) = shown_of;
+            let review = WiseReviewProposal::CardGroup(CardGroupReview {
                 proposal: g,
                 lines,
                 merchant_amount,
-            })
+            });
+            (review, failed)
         }
     }
 }
@@ -925,4 +963,34 @@ async fn accept_card_group(
         journal_entry_ids: vec![entry_id],
         rule_id: Some(rule_id),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Un groupe sans entrée dans `shown` (ou sans identifiant) est une
+    /// erreur interne, non des lignes vides.
+    #[test]
+    fn groupe_sans_lignes_d_affichage_est_une_erreur_interne() {
+        let shown = HashMap::new();
+        assert!(matches!(
+            card_group_display(&[7, 8], &shown),
+            Err(AppError::Internal(_))
+        ));
+        assert!(matches!(
+            card_group_display(&[], &shown),
+            Err(AppError::Internal(_))
+        ));
+    }
+
+    /// Le groupe connu rend ses lignes et son montant.
+    #[test]
+    fn groupe_connu_rend_ses_lignes() {
+        let mut shown = HashMap::new();
+        shown.insert(7, (Vec::new(), "12.50".to_string()));
+        let (lines, amount) = card_group_display(&[7, 8], &shown).expect("connu");
+        assert!(lines.is_empty());
+        assert_eq!(amount, "12.50");
+    }
 }

@@ -51,6 +51,7 @@ vi.mock('$lib/features/reconciliation/rules/rules.api', () => ({
 }));
 
 import Page from './+page.svelte';
+import { getEntryCandidates } from '$lib/features/reconciliation/reconciliation.api';
 
 function wiseAccount(id: number, account: string, journalAccountId = 31): BankAccountSummary {
 	return {
@@ -331,6 +332,19 @@ describe('page Wise — la revue (Story 39-11d2)', () => {
 		const part = r.getByTestId('wise-to-review-40');
 		expect(part.textContent).toContain('Une part de ce paiement est déjà rapprochée');
 		expect(r.getByTestId('wise-to-review-entry-77').getAttribute('href')).toBe('/journal-entries/77');
+	});
+
+	it('« Rattacher » d\u2019une sous-ligne ouvre la modale sur SA transaction (31), non sur la ligne principale (30)', async () => {
+		const r = await (async () => {
+			const x = render(Page);
+			await x.findByTestId('wise-to-review-30');
+			return x;
+		})();
+		vi.mocked(getEntryCandidates).mockClear();
+		await fireEvent.click(r.getByTestId('wise-link-line-31'));
+		await waitFor(() => expect(getEntryCandidates).toHaveBeenCalled());
+		expect(getEntryCandidates).toHaveBeenLastCalledWith(31);
+		expect(getEntryCandidates).not.toHaveBeenCalledWith(30);
 	});
 
 	it('avec un compte Stripe, le versement sans son écriture mène à la page Stripe', async () => {

@@ -44,4 +44,3 @@ export function findingDate(f: ProviderFinding): string {
 	const d = f.transaction?.date ?? f.entries?.[0]?.entryDate ?? fromDetails;
 	return d ? formatSwissDate(d) : '';
 }
-

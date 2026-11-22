@@ -403,3 +403,13 @@ paypal/+page.svelte}`, `frontend/src/lib/shared/{i18n-keys.test.ts, i18n-libelle
   11 LOW → P3 1 MEDIUM, 8 LOW → P4 0 au-dessus de LOW (3 LOW). Modèles : Opus (P1, P3), Sonnet (P2, P4 ciblée). Les LOW
   de la P4 ne sont relus par aucune passe : à recontrôler à l'étape 0 du développement.
 - 2026-11-22 — développée (étape 0, T0 à T5) ; gates au Dev Agent Record ; passée en `review`.
+- 2026-11-22 — revue de code P1 (Sonnet, contexte frais, lecture seule ; rapport `kesh-gate-logs/s39-11d2/revue-p1-rapport.md`) :
+  0 CRITICAL, 0 HIGH, 1 MEDIUM, 3 LOW, remédiés (commit de remédiation P1). MEDIUM-1 : le bouton « Rattacher » d'une sous-ligne
+  « à examiner » n'était testé nulle part sur SA transaction (mutation `openLink(line)` → `openLink(tx)` survivante) : test
+  Vitest `wise-page.test.ts` qui clique `wise-link-line-31` et exige `getEntryCandidates(31)`, jamais 30 ; mutation rejouée sur
+  une copie hors dépôt (`s39-11d2/mut-openlink-src`), témoin vert 13/13, mutation tuée sur l'assertion nommée « expected last
+  `vi.fn()` call to have been called with [ 31 ] » (journal `p1fix-mut-openLink.log`). LOW-1 : `docs/api-external.md` § *L'écran Wise*
+  dit que les corps d'acceptation ne portent que les champs du corps. LOW-2 : `to_review_proposal` ne replie plus en silence
+  (`unwrap_or_default`) : `card_group_display` rend une erreur interne tracée (`tracing::error!`, `AppError::Internal`),
+  propagée par `build_wise_review` (tests `groupe_sans_lignes_d_affichage_est_une_erreur_interne`, `groupe_connu_rend_ses_lignes`).
+  LOW-3 : ligne vide finale de `provider-review.ts` retirée. Passe P2 ciblée sur ce commit : prompt `revue-p2-prompt.md`.
