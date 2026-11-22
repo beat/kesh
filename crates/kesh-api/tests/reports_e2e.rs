@@ -2629,7 +2629,11 @@ async fn groupes_parametre_repete(pool: MySqlPool) {
         "&format=csv&open=1&open=2&detailLevel=x&detailLevel=y",
     )
     .await;
-    assert_eq!(resp.status(), 400, "l'export de la balance lit les groupes (46-6b)");
+    assert_eq!(
+        resp.status(),
+        400,
+        "l'export de la balance lit les groupes (46-6b)"
+    );
     for route in ["vat"] {
         let resp = get_pme(
             &app,

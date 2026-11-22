@@ -134,7 +134,14 @@ Fiches 46-1, 46-2, 46-3, 46-6a.
 
 ## Note de version
 
-*(à écrire au développement)* — La balance des comptes s'affiche, s'imprime et s'exporte par groupes, comme le bilan.
+- **Added** — La balance des comptes s'affiche, s'imprime et s'exporte **par groupes de comptes**, comme le bilan :
+  même barre de présentation (hiérarchie, niveau de détail, tout ouvrir, tout fermer, sous-totaux sur le titre ou
+  en pied, groupes ouverts ou fermés d'un clic), avec sa propre mémoire ; chaque groupe totalise ouverture, débit,
+  crédit et clôture de ses comptes, et un groupe en devise unique a sa seconde ligne en devise. Les exports PDF et
+  CSV reprennent la présentation affichée (CSV : colonnes `Niveau;TypeLigne` en tête) ; sans présentation par
+  groupes, ils restent ceux d'avant.
+- **Changed (API)** — `GET /reports/trial-balance/export` lit `detailLevel`, `subtotalPosition`, `open` et
+  `closed` : un de ces paramètres répété, ignoré jusqu'ici, est refusé (`400 VALIDATION_ERROR`).
 
 ## Dev Agent Record
 
