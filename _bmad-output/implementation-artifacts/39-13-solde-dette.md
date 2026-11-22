@@ -79,8 +79,10 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
   qu'**aucune ligne seedée ne porte** (`company_id` = id du compte visé, `bank_account_id` = id de la société visée) —
   des identifiants seulement distincts ne suffisent pas (contre-exemple de la validation P2). Le test le garantit par
   une **assertion de montage** : `existing_transactions_by_ids(conn, account, company, &ids)` (arguments permutés à
-  dessein) rend un résultat vide, alors que l'appel juste rend `CARD-1`. Le test porte lui-même ses assertions de
-  compte et de société.
+  dessein) rend un résultat vide. Ordre de création qui la satisfait : société A (id 1), son autre compte (id 1) puis le
+  compte visé (id 2), puis la société B (id 2) et son compte (id 3). C'est l'assertion principale
+  (`existing_transaction_ids(conn, company, account, &ids)` contient `CARD-1`) qui tue la permutation ; le montage
+  garantit qu'elle le peut. Le test porte lui-même ses assertions de compte et de société.
 - **AC-5** — Les commentaires des deux fonctions décrivent leurs appelants réels (D3) ; aucun renvoi à 39-12a3 ni à
   « l'import PayPal » comme seul appelant.
 - **AC-6** — Liste des issues à ouvrir (hors dépôt) : les deux entrées soldées barrées, avec le commit.
@@ -148,6 +150,9 @@ Aucune ligne de CHANGELOG : rien de visible ne change (dette interne).
   condition « identifiants distincts » d'AC-4 ne tuait pas la permutation (contre-exemple) : remplacée par la condition
   exacte et une assertion de montage aux arguments permutés ; L1 : ordre gardé par un `Vec` poussé à l'insertion, mutation
   (f) ; L2 : trois `set` (lignes 1 à 3) ; L3 : citation `wise.rs:686-691`. Passe P3 à lancer.
+- 2026-11-22 — Validation P3 ciblée sur `a14cf4c5a` (Sonnet, `kesh-gate-logs/s39-13/validation-p3-rapport.md`) :
+  0 C, 0 H, 0 M, 2 L, appliqués (ordre de création d'AC-4, assertion qui tue (e)). **Validation close** : trend
+  0/0/2/4 → 0/0/1/3 → 0/0/0/2, modèles Sonnet, Opus, Sonnet.
 - 2026-11-22 — Hors plafond, documentation seule (demande de l'orchestrateur, LOW-4 de la revue d'intégration
   d'`epic/39-wise`, `kesh-gate-logs/integration/epic-39-fusion-11d2-40-revue.md`) : la ligne `PROVIDER_ACCOUNT_NOT_FOUND`
   de `docs/api-external.md` nomme aussi `GET /wise/review` et `POST /wise/accept` (`10d38b1c4`), relu au code
