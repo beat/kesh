@@ -3971,11 +3971,21 @@ mod tests {
         let debut = |t: &str, size: f32, bord: f32| right_aligned_x(t, size, true, bord);
         // Balance : l'intitulé (55 mm depuis 35 mm), puis quatre colonnes.
         let mut fin = MARGIN_LEFT_MM + TB_COL_X[1] + 55.0;
-        // Par groupes, une ligne sans numéro part de la colonne du numéro et
-        // finit, à 2,5 mm le caractère, au même bord que l'intitulé (46-6b).
-        assert!(
-            MARGIN_LEFT_MM + TB_COL_X[0] + 2.5 * TB_NAME_MAX_CHARS_SANS_NUMERO as f32 <= fin + 1e-4
-        );
+        // Par groupes (46-6b), à chaque niveau, avec ou sans numéro : le plus
+        // long libellé admis, en capitales larges grasses, mesuré depuis son
+        // départ retrait compris, finit avant le plus long montant de la
+        // colonne d'ouverture.
+        for avec_numero in [true, false] {
+            for depth in 1..=8 {
+                let libelle = "E".repeat(limite_nom_groupe_balance(depth, avec_numero));
+                let x = MARGIN_LEFT_MM + Gabarit::BALANCE.x(avec_numero) + retrait_groupe_mm(depth);
+                assert!(
+                    x + largeur_mm(&libelle, FONT_SIZE_PT, true)
+                        < debut(long, FONT_SIZE_PT, TB_AMOUNT_RIGHT_MM[0]),
+                    "balance groupée, niveau {depth}, avec numéro : {avec_numero}"
+                );
+            }
+        }
         for bord in TB_AMOUNT_RIGHT_MM {
             assert!(
                 debut(long, FONT_SIZE_PT, bord) > fin,
@@ -4784,6 +4794,47 @@ mod tests {
                 format!("1111 {} 5.00", tronque(&noms[3], 44)),
             ]
         );
+    }
+
+    /// AC-3 (revue P2 de la 46-6b, LOW-1) — le sous-total du bilan garde le
+    /// départ (25 mm de la marge, plus le retrait) et la longueur (48
+    /// caractères au retrait nul, un de moins par 2,5 mm de retrait) de ses
+    /// voisins : les champs « sans numéro » du gabarit n'y changent rien.
+    #[test]
+    fn bilan_groupe_sous_total_garde_depart_et_longueur_du_bilan() {
+        let noms: Vec<String> = (1..=4).map(|d| nom_long(&format!("Niveau{d} "))).collect();
+        let arbre = ArbreComptes::depuis_noeuds(vec![
+            noeud(1, &noms[0], None),
+            noeud(11, &noms[1], Some(1)),
+            noeud(111, &noms[2], Some(11)),
+            noeud(1111, &noms[3], Some(111)),
+        ]);
+        let bs = bilan(vec![ab(1111, &noms[3], dec!(5), AccountType::Asset)]);
+        let o = options(NiveauDetail::Tous, PositionSousTotal::Pied, &[], &[]);
+        let env = AvecGroupes::bilan(bs, &arbre, &o);
+        let ctx = PdfContext::fr_ch_default("Test SA");
+        let bytes = render_grouped_balance_sheet_pdf(&env, &ctx).unwrap();
+        let poses = pdf_poses(&bytes);
+        let l = crate::texte_pdf::lignes(&bytes);
+        let totaux: Vec<&String> = l.iter().filter(|t| t.starts_with("Total Niveau")).collect();
+        assert_eq!(totaux.len(), 3, "{l:?}");
+        // Les sous-totaux se ferment du plus profond au moins profond.
+        for (rang, (depth, attendu)) in [(3u32, 45usize), (2, 47), (1, 48)].into_iter().enumerate()
+        {
+            let ligne = totaux[rang].strip_suffix(" 5.00").expect("montant");
+            assert_eq!(ligne.chars().count(), attendu, "longueur, niveau {depth}");
+            assert!(ligne.ends_with('…'), "niveau {depth} : {ligne}");
+            let pose = poses
+                .iter()
+                .find(|p| p.text.starts_with(&format!("Total Niveau{depth} ")))
+                .unwrap_or_else(|| panic!("pose du sous-total, niveau {depth}"));
+            let x = MARGIN_LEFT_MM + 25.0 + retrait_groupe_mm(depth);
+            assert!(
+                (pose.x_mm - x).abs() < 0.01,
+                "abscisse, niveau {depth} : {} au lieu de {x}",
+                pose.x_mm
+            );
+        }
     }
 
     /// AC-3 — une ligne groupée en devise a moins de place : son libellé finit
