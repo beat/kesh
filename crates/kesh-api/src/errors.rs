@@ -1025,6 +1025,20 @@ pub enum AppError {
         count: usize,
     },
 
+    /// Import Wise : un zip du formulaire est refusé (Story 39-11e, D3 et D4)
+    /// → `422 WISE_ZIP_INVALID`, `details: { filename, reason, entry? }` et,
+    /// selon la raison, `max` (`TOO_MANY_ENTRIES`) ou `maxBytes`
+    /// (`TOO_LARGE`) ; `reason` ∈ `UNREADABLE`, `TOO_MANY_ENTRIES`,
+    /// `TOO_LARGE`, `UNSAFE_PATH`, `ENCRYPTED`, `UNSUPPORTED_COMPRESSION`,
+    /// `NO_CSV`. Rien n'est importé.
+    #[error("Archive Wise {filename} refusée : {reason}")]
+    WiseZipInvalid {
+        filename: String,
+        reason: &'static str,
+        entry: Option<String>,
+        extra: serde_json::Value,
+    },
+
     /// Import Wise : deux fichiers portent la même devise → `422
     /// WISE_DUPLICATE_CURRENCY_FILE`, `details: { currency, filenames }`.
     #[error("Deux fichiers Wise en {currency}")]
@@ -3815,6 +3829,49 @@ impl IntoResponse for AppError {
                     "error": {
                         "code": "WISE_CSV_INVALID",
                         "message": t_args("error-wise-csv-invalid", &fallback, &args),
+                        "details": details,
+                    }
+                });
+                (StatusCode::UNPROCESSABLE_ENTITY, Json(body)).into_response()
+            }
+            AppError::WiseZipInvalid {
+                filename,
+                reason,
+                entry,
+                extra,
+            } => {
+                let mut details = serde_json::json!({ "filename": filename, "reason": reason });
+                if let serde_json::Value::Object(map) = &mut details {
+                    if let Some(entry) = entry {
+                        map.insert("entry".into(), serde_json::json!(entry));
+                    }
+                    if let serde_json::Value::Object(more) = extra {
+                        map.extend(more.clone());
+                    }
+                }
+                let mut args = FluentArgs::new();
+                args.set("filename", filename.clone());
+                let message = if reason == "NO_CSV" {
+                    t_args(
+                        "error-wise-zip-no-csv",
+                        &format!(
+                            "L'archive « {filename} » ne contient aucun relevé CSV : exportez de Wise le relevé au format CSV. Rien n'a été importé."
+                        ),
+                        &args,
+                    )
+                } else {
+                    t_args(
+                        "error-wise-zip-invalid",
+                        &format!(
+                            "L'archive « {filename} » n'est pas un zip de relevés Wise que Kesh peut lire. Rien n'a été importé."
+                        ),
+                        &args,
+                    )
+                };
+                let body = serde_json::json!({
+                    "error": {
+                        "code": "WISE_ZIP_INVALID",
+                        "message": message,
                         "details": details,
                     }
                 });

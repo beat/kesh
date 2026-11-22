@@ -1378,3 +1378,310 @@ async fn import_refuse_un_releve_exporte_sans_les_frais_separes(pool: MySqlPool)
     let (s, b) = ctx.importer(&[("chf.csv", CHF)]).await;
     assert_eq!(s, 201, "{b}");
 }
+
+// ============================================================
+// Story 39-11e — le zip de Wise tel que téléchargé
+// ============================================================
+
+/// Un zip fabriqué dans le test (aucun zip binaire commité) : (nom, octets),
+/// compressés.
+fn zip_de(entrees: &[(&str, &[u8])]) -> Vec<u8> {
+    use std::io::Write;
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (nom, octets) in entrees {
+        if nom.ends_with('/') {
+            w.add_directory(*nom, options).unwrap();
+        } else {
+            w.start_file(*nom, options).unwrap();
+            w.write_all(octets).unwrap();
+        }
+    }
+    w.finish().unwrap().into_inner()
+}
+
+/// Les noms d'entrées au gabarit de Wise, au numéro de solde inventé.
+const Z_CHF: &str = "statement_1234_CHF_2020-01-01_2020-12-31.csv";
+const Z_EUR: &str = "statement_1234_EUR_2020-01-01_2020-12-31.csv";
+const Z_USD: &str = "statement_1234_USD_2020-01-01_2020-12-31.csv";
+
+/// AC-1, AC-3 — le zip des trois relevés donne le même compte rendu que les
+/// trois fichiers à part, aux champs neufs près (`archive`, noms d'entrées) ;
+/// entrées ignorées nommées, à la réponse et à la trace ; `rows`.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn import_du_zip_de_wise_tel_quel(pool: MySqlPool) {
+    let ctx = monter(&pool).await;
+    let (c, e, u) = ctx.trois_soldes().await;
+    // Ordre du répertoire quelconque, dossier et PDF ajoutés.
+    let zip = zip_de(&[
+        (Z_USD, USD),
+        ("__MACOSX/", b""),
+        ("__MACOSX/._statement.csv", b"x"),
+        (Z_CHF, CHF),
+        ("releve.pdf", b"%PDF"),
+        (Z_EUR, EUR),
+    ]);
+    let (s, b) = ctx.importer(&[("wise.zip", &zip)]).await;
+    assert_eq!(s, 201, "{b}");
+    let files = b["files"].as_array().unwrap();
+    let noms: Vec<&str> = files
+        .iter()
+        .map(|f| f["filename"].as_str().unwrap())
+        .collect();
+    assert_eq!(noms, [Z_CHF, Z_EUR, Z_USD], "par nom");
+    for (nom, id, n) in [(Z_CHF, c, 10), (Z_EUR, e, 5), (Z_USD, u, 3)] {
+        let f = par_fichier(&b, nom);
+        assert_eq!(f["archive"], "wise.zip", "{nom}");
+        assert_eq!(f["bankAccountId"], id, "{nom}");
+        assert_eq!(
+            (f["rows"].clone(), f["inserted"].clone()),
+            (json!(n), json!(n))
+        );
+        assert_eq!(f["duplicates"], 0);
+    }
+    assert_eq!(
+        b["ignoredEntries"],
+        json!([
+            { "archive": "wise.zip", "entry": "__MACOSX/" },
+            { "archive": "wise.zip", "entry": "__MACOSX/._statement.csv" },
+            { "archive": "wise.zip", "entry": "releve.pdf" },
+        ])
+    );
+    assert_eq!(ctx.ecrit().await, (3, 18, 4));
+    let trace: Value = sqlx::query_scalar(
+        "SELECT details_json FROM audit_log WHERE action = 'wise_import.created'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(trace["ignoredEntries"], b["ignoredEntries"]);
+    assert_eq!(trace["files"][0]["archive"], "wise.zip");
+    assert_eq!(trace["files"][0]["rows"], 10);
+    let nom: String =
+        sqlx::query_scalar("SELECT filename FROM bank_imports WHERE bank_account_id = ?")
+            .bind(c)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(nom, Z_CHF, "l'entrée nomme l'import");
+
+    // Le même relevé, envoyé à part : déjà importé (empreinte des octets CSV).
+    let (s, b) = ctx.importer(&[("chf.csv", CHF)]).await;
+    assert_eq!((s, code(&b)), (422, "BANK_IMPORT_DUPLICATE_FILE"), "{b}");
+    assert_eq!(ctx.ecrit().await, (3, 18, 4));
+}
+
+/// AC-1, AC-3 — même compte rendu qu'à part : un import à plat d'abord, puis
+/// le zip est refusé comme doublon ; sans zip, `archive` nul et
+/// `ignoredEntries` vide.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn import_a_part_puis_zip_et_meme_devise_deux_fois(pool: MySqlPool) {
+    let ctx = monter(&pool).await;
+    ctx.trois_soldes().await;
+    let zip = zip_de(&[(Z_CHF, CHF), (Z_EUR, EUR), (Z_USD, USD)]);
+
+    // Zip + CSV de même devise : refus existant, les deux noms.
+    let (s, b) = ctx.importer(&[("chf.csv", CHF), ("wise.zip", &zip)]).await;
+    assert_eq!((s, code(&b)), (422, "WISE_DUPLICATE_CURRENCY_FILE"), "{b}");
+    assert_eq!(
+        b["error"]["details"],
+        json!({ "currency": "CHF", "filenames": ["chf.csv", Z_CHF] })
+    );
+    assert_eq!(ctx.ecrit().await, (0, 0, 0));
+
+    let (s, b) = ctx
+        .importer(&[("chf.csv", CHF), ("eur.csv", EUR), ("usd.csv", USD)])
+        .await;
+    assert_eq!(s, 201, "{b}");
+    assert_eq!(b["ignoredEntries"], json!([]));
+    for f in b["files"].as_array().unwrap() {
+        assert_eq!(f["archive"], Value::Null);
+        assert_eq!(f["rows"], f["inserted"]);
+    }
+    let (s, b) = ctx.importer(&[("wise.zip", &zip)]).await;
+    assert_eq!((s, code(&b)), (422, "BANK_IMPORT_DUPLICATE_FILE"), "{b}");
+    assert_eq!(ctx.ecrit().await, (3, 18, 4));
+}
+
+/// AC-2, AC-4 — refus : zip sans CSV (`NO_CSV`, son message), zip illisible,
+/// zip à un relevé sans les frais séparés (`archive` nommée), ordre des refus
+/// (`404` avant une archive illisible, archive illisible avant un CSV
+/// illisible), rien d'écrit ; clé `read` refusée, clé `read-write` admise.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn import_zip_refus_et_cles(pool: MySqlPool) {
+    let ctx = monter(&pool).await;
+    ctx.trois_soldes().await;
+    let illisible: &[u8] = b"PK\x03\x04pas une archive";
+    let csv_illisible: &[u8] = b"Date,Amount\n01-01-2020,1.00\n";
+
+    let (s, b) = ctx
+        .importer_avec(&ctx.jwt, &[("x.zip", illisible)], Some("Wise inconnu"))
+        .await;
+    assert_eq!((s, code(&b)), (404, "PROVIDER_ACCOUNT_NOT_FOUND"), "{b}");
+
+    let (s, b) = ctx
+        .importer(&[("mauvais.csv", csv_illisible), ("x.zip", illisible)])
+        .await;
+    assert_eq!((s, code(&b)), (422, "WISE_ZIP_INVALID"), "{b}");
+    assert_eq!(
+        b["error"]["details"],
+        json!({ "filename": "x.zip", "reason": "UNREADABLE" })
+    );
+
+    let pdf = zip_de(&[("statement.pdf", b"%PDF"), ("statement.xml", b"<x/>")]);
+    // Le nom du champ ne compte pas : la signature fait le zip.
+    let (s, b) = ctx.importer(&[("releves.csv", &pdf)]).await;
+    assert_eq!((s, code(&b)), (422, "WISE_ZIP_INVALID"), "{b}");
+    assert_eq!(b["error"]["details"]["reason"], "NO_CSV");
+    assert!(
+        b["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("au format CSV"),
+        "{b}"
+    );
+
+    let sans = zip_de(&[(Z_EUR, EUR), (Z_CHF, &chf_sans_frais())]);
+    let (s, b) = ctx.importer(&[("wise.zip", &sans)]).await;
+    assert_eq!((s, code(&b)), (422, "WISE_CSV_FEES_NOT_SEPARATED"), "{b}");
+    assert_eq!(b["error"]["details"]["filename"], Z_CHF);
+    assert_eq!(b["error"]["details"]["archive"], "wise.zip");
+
+    let lourd = zip_de(&[("../evasion.csv", CHF)]);
+    let (s, b) = ctx.importer(&[("wise.zip", &lourd)]).await;
+    assert_eq!((s, code(&b)), (422, "WISE_ZIP_INVALID"), "{b}");
+    assert_eq!(
+        b["error"]["details"],
+        json!({ "filename": "wise.zip", "reason": "UNSAFE_PATH", "entry": "../evasion.csv" })
+    );
+    assert_eq!(ctx.ecrit().await, (0, 0, 0));
+
+    let zip = zip_de(&[(Z_CHF, CHF)]);
+    let (_, lecture) =
+        common::create_key_via_http(&ctx.app.client, &ctx.app.base_url, &ctx.jwt, "ro", "read")
+            .await;
+    let (s, _) = ctx
+        .importer_avec(&lecture, &[("wise.zip", &zip)], Some(WISE))
+        .await;
+    assert_eq!(s, 403);
+    let (_, ecriture) = common::create_key_via_http(
+        &ctx.app.client,
+        &ctx.app.base_url,
+        &ctx.jwt,
+        "rw",
+        "read-write",
+    )
+    .await;
+    let (s, b) = ctx
+        .importer_avec(&ecriture, &[("wise.zip", &zip)], Some(WISE))
+        .await;
+    assert_eq!(s, 201, "{b}");
+}
+
+/// AC-3 — un nom d'entrée ignorée démesuré est rogné à 255 octets, ses
+/// caractères de contrôle remplacés, dans la réponse comme dans la trace.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn import_zip_noms_bornes(pool: MySqlPool) {
+    let ctx = monter(&pool).await;
+    ctx.trois_soldes().await;
+    let long = format!("{}\u{7}.pdf", "é".repeat(400));
+    let zip = zip_de(&[(Z_CHF, CHF), (&long, b"x")]);
+    let (s, b) = ctx.importer(&[("wise.zip", &zip)]).await;
+    assert_eq!(s, 201, "{b}");
+    let entree = b["ignoredEntries"][0]["entry"].as_str().unwrap();
+    assert!(
+        entree.len() <= 255 && entree.len() >= 250,
+        "{}",
+        entree.len()
+    );
+    assert!(entree.chars().all(|c| c == 'é'), "rogné avant le contrôle");
+    let long = format!("a\u{1}b{}.pdf", "x".repeat(10));
+    let zip = zip_de(&[(Z_EUR, EUR), (&long, b"x")]);
+    let (s, b) = ctx.importer(&[("wise.zip", &zip)]).await;
+    assert_eq!(s, 201, "{b}");
+    assert_eq!(b["ignoredEntries"][0]["entry"], "a?bxxxxxxxxxx.pdf");
+    let trace: Vec<Value> = sqlx::query_scalar(
+        "SELECT details_json FROM audit_log WHERE action = 'wise_import.created' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(trace[1]["ignoredEntries"][0]["entry"], "a?bxxxxxxxxxx.pdf");
+}
+
+/// Vérification locale sur les vrais zips de Wise (ignorée par défaut ; aucun
+/// chemin ni donnée dans le dépôt, rien recopié) : listes de chemins séparés
+/// par `:` dans `KESH_WISE_REAL_ZIPS_ACCEPTED` (zips CSV exportés avec les
+/// frais séparés : chaque relevé se lit), `KESH_WISE_REAL_ZIPS_FEES_NOT_SEPARATED`
+/// (exportés sans : au moins un relevé refusé par le code neuf, aucun par un
+/// autre motif) et `KESH_WISE_REAL_ZIPS_NO_CSV` (exports CAMT ou PDF). Seuls
+/// des comptes et des codes s'impriment.
+#[test]
+#[ignore = "lit des zips réels hors dépôt (KESH_WISE_REAL_ZIPS_*)"]
+fn real_zips_are_read() {
+    use kesh_api::zip_read::{ZipRefusalReason, extract_csv_entries};
+    use kesh_import::wise::parse_wise_csv;
+    let liste = |var: &str| -> Vec<String> {
+        std::env::var(var)
+            .map(|v| {
+                v.split(':')
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let lire = |chemin: &str| {
+        let octets = std::fs::read(chemin).unwrap();
+        let mut budget = 10 * 1024 * 1024;
+        extract_csv_entries(&octets, 64, &mut budget)
+    };
+    let (acceptes, sans, sans_csv) = (
+        liste("KESH_WISE_REAL_ZIPS_ACCEPTED"),
+        liste("KESH_WISE_REAL_ZIPS_FEES_NOT_SEPARATED"),
+        liste("KESH_WISE_REAL_ZIPS_NO_CSV"),
+    );
+    assert!(
+        !acceptes.is_empty() && !sans.is_empty(),
+        "KESH_WISE_REAL_ZIPS_ACCEPTED et KESH_WISE_REAL_ZIPS_FEES_NOT_SEPARATED requis"
+    );
+    for (i, chemin) in acceptes.iter().enumerate() {
+        let r = lire(chemin);
+        let x = r.unwrap_or_else(|e| panic!("zip accepté n° {i} refusé : {}", e.reason.as_str()));
+        for csv in &x.csvs {
+            let s = parse_wise_csv(&csv.bytes)
+                .unwrap_or_else(|e| panic!("zip n° {i} : relevé refusé : {}", e.code()));
+            println!("accepté n° {i} : {} {} lignes", s.currency, s.rows.len());
+        }
+        println!(
+            "accepté n° {i} : {} relevé(s), {} ignorée(s)",
+            x.csvs.len(),
+            x.ignored.len()
+        );
+        assert!(!x.csvs.is_empty());
+    }
+    for (i, chemin) in sans.iter().enumerate() {
+        let r = lire(chemin);
+        let x = r.unwrap_or_else(|e| panic!("zip « sans » n° {i} refusé : {}", e.reason.as_str()));
+        let codes: Vec<&str> = x
+            .csvs
+            .iter()
+            .filter_map(|c| parse_wise_csv(&c.bytes).err().map(|e| e.code()))
+            .collect();
+        println!(
+            "« sans » n° {i} : {} relevé(s), refus {codes:?}",
+            x.csvs.len()
+        );
+        assert!(!codes.is_empty(), "au moins un relevé refusé");
+        assert!(
+            codes.iter().all(|c| *c == "WISE_CSV_FEES_NOT_SEPARATED"),
+            "{codes:?}"
+        );
+    }
+    for (i, chemin) in sans_csv.iter().enumerate() {
+        let r = lire(chemin);
+        assert_eq!(r.unwrap_err().reason, ZipRefusalReason::NoCsv, "n° {i}");
+        println!("sans CSV n° {i} : NO_CSV");
+    }
+}

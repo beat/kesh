@@ -1798,6 +1798,8 @@ error-provider-account-hidden-char = Il nome del conto del prestatore non può c
 error-paypal-csv-invalid = Questo file non è un estratto PayPal « Balance affecting transactions » leggibile. Nulla è stato importato.
 error-provider-settings-both = Un conto bancario può essere il saldo di un solo prestatore: impostazioni PayPal e Wise insieme rifiutate.
 error-wise-csv-invalid = Il file « { $filename } » non è un estratto CSV di Wise leggibile. Nulla è stato importato.
+error-wise-zip-no-csv = L'archivio « { $filename } » non contiene alcun estratto CSV: esportate da Wise l'estratto in formato CSV. Nulla è stato importato.
+error-wise-zip-invalid = L'archivio « { $filename } » non è uno zip di estratti Wise che Kesh può leggere. Nulla è stato importato.
 error-wise-csv-fees-not-separated = L'estratto « { $filename } » è stato esportato senza l'opzione che mostra le commissioni come transazioni separate: i suoi importi comprendono le commissioni. Esportatelo di nuovo da Wise attivando questa opzione. Nulla è stato importato.
 error-wise-duplicate-currency-file = Più file contengono l'estratto in { $currency }: un solo file per valuta. Nulla è stato importato.
 # Story 38-12a — scaricamento tramite l'API di un prestatore (base comune)
