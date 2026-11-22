@@ -28,7 +28,9 @@ disparaisse.
   `WiseWriter` (doublons par (identifiant, sens), continuité, entrée par fichier, trace `wise_import.created` avec
   `files` et `ignoredEntries`).
 - `provider_imports::AUDIT_ACTIONS` ne porte pas `wise_import.created` (point 6) : `import_lines` le refuserait en
-  500. `audit_labels::ACTIONS`, les quatre `.ftl` et `SITES_INDIRECTS` le portent déjà (39-11b).
+  500. `audit_labels::ACTIONS` et les quatre `.ftl` le portent déjà (39-11b) ; **`SITES_INDIRECTS`
+  d'`audit_label_registry.rs` non** (son entrée `provider_imports.rs` ne liste que les deux codes PayPal) : une fois le
+  littéral retiré de `wise_imports.rs`, trois tests de ce registre rougiraient (validation P1, H1).
 
 ## Ce que le cœur ne sait pas faire, et que Wise exige
 
@@ -57,7 +59,10 @@ disparaisse.
   continuité et rend `warnings` ; écrit à la trace de la source `files` (pour chaque devise, `trace` du relevé complété
   du compte rendu de la devise) au lieu de `currencies`. `ImportRequest` ne change pas de forme (pas de champ neuf :
   les constructions de PayPal et de Stripe, epic/40, restent valides) ; son `filename` est ignoré pour cette source.
-  Les devises de `by_currency` et celles des relevés doivent coïncider : sinon `AppError::Internal` (faute de Kesh).
+  Les devises de `by_currency` et celles des relevés doivent coïncider, une fois chacune : sinon `AppError::Internal`
+  (faute de Kesh), testé. **Ordre dans l'écriture, par devise** (celui de l'ancien `WiseWriter`) : lecture des
+  transactions existantes, doublons, **continuité jugée pour tout relevé, avant de savoir s'il reste une ligne** (un
+  relevé tout en doublons rend aussi ses avertissements), puis l'entrée s'il reste une ligne.
 - **D2 — `ProviderLine` gagne deux champs** : `counterparty_iban: Option<String>` et `direction:
   Option<LineDirection>` (`Debit`/`Credit`). `None` (PayPal, Stripe) : doublon par identifiant, comme aujourd'hui.
   `Some` : doublon par (identifiant, sens) — une transaction en base vaut débit si son montant est ≤ 0, crédit s'il est
@@ -66,7 +71,11 @@ disparaisse.
   fusion — correction mécanique, `counterparty_iban: None, direction: None` (à noter au registre des choix).
 - **D3 — Doublons** : `dedupe_groups(groups, &ExistingKeys)` ; `ExistingKeys::of(&[ExistingTransaction])`, lue par
   `bank_transactions::existing_transactions_by_ids` (même filtre SQL que `existing_transaction_ids`, montant en plus)
-  pour tous les prestataires. Nombre de doublons inchangé pour PayPal (identifiant seul).
+  pour tous les prestataires. Une ligne **sans** sens est présente si une transaction de même identifiant existe, quel
+  que soit son montant (ensemble des identifiants, distinct des deux ensembles par sens) : doublons inchangés pour
+  PayPal. Les deux tests de `paypal_imports.rs` et celui de `provider_imports.rs` qui appellent `dedupe_groups` passent
+  à `ExistingKeys::from_ids` (tests seuls). `existing_transaction_ids` (`kesh-db`) perd son dernier appelant de
+  `kesh-api` ; il reste (fonction publique du dépôt, lue par d'autres branches d'epic), noté pour la story de solde.
 - **D4 — `CurrencyReport.warnings: Option<Vec<ImportWarning>>`**, omis quand `None` : la réponse PayPal reste octet
   pour octet ; `Some` (éventuellement vide) pour `Statements`. `ImportWarning` = l'ancien `FileWarning` de Wise
   (`code`, `expected`, `found`, `previousImportId`), déplacé au cœur avec `WARNING_GAP` ; `wise_imports` les
@@ -100,17 +109,37 @@ disparaisse.
   contrepartie ; doublons par (identifiant, sens) ; traces `bank_import.created` (mêmes `details`) et
   `wise_import.created` (`provider`, `provider_account`, `files`, `ignoredEntries`, sans `currencies`) ; identifiants
   des entrées croissants dans l'ordre du formulaire ; rejeu sur interblocage sous l'opération `wise_imports::create`.
-- **AC-4 — Registre des actions** : `AUDIT_ACTIONS` porte `wise_import.created` ; le test du cœur le vérifie.
+- **AC-4 — Registre des actions** : `AUDIT_ACTIONS` porte `wise_import.created`, et l'entrée `provider_imports.rs` de
+  `SITES_INDIRECTS` (`tests/audit_label_registry.rs`) aussi ; verts : `action_de_trace_inscrite_ou_refusee` (cœur),
+  `les_actions_de_la_liste_sont_exactement_celles_que_le_code_ecrit`,
+  `les_actions_du_coeur_d_import_sont_inventoriees_et_libellees`,
+  `les_codes_de_l_inventaire_sont_verifies_dans_le_fichier_de_leur_site`.
 - **AC-5 — Test de non-régression neuf** (`wise_import_e2e`) : deux relevés envoyés dans l'ordre USD puis CHF, le
   second à doublons partiels et à écart de continuité : corps entier comparé à une valeur attendue écrite en dur,
   `files` de la trace égal à `files` de la réponse, lignes `bank_imports` (nom, période, ouverture, clôture) du fichier
   entier, identifiant de l'entrée USD inférieur à celui de CHF ; et deux comptes clos, envoyés USD puis EUR : le refus
-  nomme le compte USD. **Vert avant le raccord** (joué sur `1f03f180`) **et après** ; sondes par mutation hors dépôt
+  nomme le compte USD ; un relevé CHF **tout en doublons** à écart de continuité : `importId` nul, avertissement rendu
+  et tracé, aucune entrée. **Vert avant le raccord** (joué sur `1f03f180`) **et après** ; sondes par mutation hors dépôt
   (ordre alphabétique rétabli, période des lignes gardées, `direction` ignorée, `warnings` omis) tuées par une
   assertion nommée.
 - **AC-6 — Doc** : en-têtes de `wise_imports.rs` et `provider_imports.rs` à jour ; `audit_route_registry.rs` point
   (vi) : l'enveloppe de rejeu de Wise vit dans `provider_imports::import_lines` (comptes de routes inchangés — aucune
   route ajoutée ; recompte déclaré) ; `docs/api-external.md` inchangé (aucun contrat ne bouge).
+
+## Liste « À raccorder » de la 39-11b
+
+| Point | Sort |
+|---|---|
+| 1 | T3 (cœur 39-11b retiré de `paypal_imports.rs` ; PayPal y était déjà branché à la fusion `aaaf7875` et avant) |
+| 2a–2d | D1, D2, D4 |
+| 2e | écarté, D6 (39-12a3 sortie de l'epic) |
+| 3 | D5, T2 |
+| 4 | AC-6 (commentaire du point (vi)) ; comptes de routes et phrase du manuel **déjà recomptés** à la fusion d'`epic/38` (gate vert de la 39-11e à `ac3e1fe4`) — rien à recompter, aucune route ajoutée |
+| 5, 9 | résolus aux fusions précédentes d'`epic/38` dans `epic/39` (blocs i18n et conflits de texte présents des deux côtés) ; rien ici |
+| 6 | AC-4 |
+| 7 | D1, D5 : `files` gardé, sans `currencies` |
+| 8 | D1 (période et soldes du relevé entier), AC-5 |
+| 10 | hors périmètre (Epic 40 : `served()`, et `json.paypal.or(json.wise)`, `kesh-db/src/entities/bank_account.rs:215`) : **à tracer en issue** par l'orchestrateur (cette story n'a pas le droit d'ouvrir d'issue) |
 
 ## Tâches
 
@@ -133,8 +162,9 @@ unitaires du cœur. Gates : fmt, clippy workspace, nextest complet ; aucun écra
 ## Modules touchés (1)
 
 `kesh-api` : `routes/provider_imports.rs`, `routes/wise_imports.rs`, `routes/paypal_imports.rs`,
-`routes/paypal_downloads.rs` (littéraux éventuels), `tests/wise_import_e2e.rs`, `tests/audit_route_registry.rs`
-(commentaire).
+`tests/wise_import_e2e.rs`, `tests/audit_label_registry.rs` (inventaire), `tests/audit_route_registry.rs`
+(commentaire). E2E partiel : aucun — aucune spec neuve, aucun écran (règle de la nuit du 22.11) ; selon la règle du
+22.11 00:30, les specs des écrans d'import Wise et PayPal auraient été retenues.
 
 ## Fichiers communs (39-11c en remédiation sur `story/39-11c`)
 
@@ -151,5 +181,10 @@ Aucune ligne au CHANGELOG : réorganisation interne, sans effet visible (journal
 
 ## Change Log
 
+- 2026-11-22 — Validation P1 (Claude Sonnet 5.5, contexte séparé, lecture seule, `kesh-gate-logs/s39-14/validation-p1-rapport.md`) :
+  0 C, 1 H, 3 M, 7 L. H1 (`SITES_INDIRECTS`) : prémisse corrigée, AC-4 ; M1 : tableau des points 1 à 10 ; M2 : D3
+  précisé ; M3 : ordre de la continuité en D1, cas « tout en doublons » ajouté à AC-5. LOW : `flatten` écarté (D5
+  construit `FileReport` champ à champ, ordre des clés gardé), cas `Internal` testé, E2E dit ; les autres sans suite
+  (clone des groupes, grep de l'AC-1 qui vise l'état final).
 - 2026-11-22 — Fiche rédigée (raccord, liste « À raccorder » de la 39-11b, points 1 à 10 ; points 4 et 6 relevés au
   code ; doublon par sens ajouté).
