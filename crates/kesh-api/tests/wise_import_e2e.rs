@@ -830,6 +830,190 @@ async fn import_refus_dans_l_ordre_roles_et_cles(pool: MySqlPool) {
     );
 }
 
+/// Story 39-14 (AC-5) — le raccord au cœur commun ne change rien : deux
+/// relevés envoyés USD puis CHF (hors de l'ordre alphabétique), le second à
+/// doublon partiel, à recrédit au même identifiant et à écart de continuité.
+/// Corps entier attendu, `files` de la trace = `files` de la réponse, entrées
+/// `bank_imports` du **fichier entier** (période, soldes, nom), créées dans
+/// l'ordre du formulaire ; deux comptes clos, envoyés USD puis EUR : le refus
+/// nomme le premier du formulaire. Joué vert avant le raccord et après.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn import_raccord_reponses_traces_et_ordre_inchanges(pool: MySqlPool) {
+    let ctx = monter(&pool).await;
+    let (c, e, u) = ctx.trois_soldes().await;
+    let (s, b) = ctx.importer(&[("chf.csv", CHF)]).await;
+    assert_eq!(s, 201, "{b}");
+    let premier = par_fichier(&b, "chf.csv")["importId"].as_i64().unwrap();
+
+    // Du 01-04 au 10-04 : ouverture 2600 pour une clôture précédente de
+    // 2433.55 ; CARD-90000007 au débit est déjà en base (doublon), au crédit
+    // non (inséré).
+    let chf_b = releve(&[
+        ligne("CARD-90000060", "10-04-2020", "-10.00", "CHF", "2590.00"),
+        ligne("CARD-90000007", "05-04-2020", "19.00", "CHF", "2600.00"),
+        ligne("CARD-90000007", "01-04-2020", "-19.00", "CHF", "2581.00"),
+    ]);
+    let (s, b) = ctx
+        .importer(&[("usd.csv", USD), ("b.csv", chf_b.as_slice())])
+        .await;
+    assert_eq!(s, 201, "{b}");
+    let id_usd = b["files"][0]["importId"].as_i64().unwrap();
+    let id_chf = b["files"][1]["importId"].as_i64().unwrap();
+    assert!(id_usd < id_chf, "entrées créées dans l'ordre du formulaire");
+    assert_eq!(
+        b,
+        json!({
+            "account": WISE,
+            "files": [
+                {
+                    "filename": "usd.csv", "archive": null, "currency": "USD",
+                    "bankAccountId": u, "importId": id_usd, "rows": 3, "inserted": 3,
+                    "duplicates": 0, "openingBalance": "0.00", "closingBalance": "317.01",
+                    "warnings": [],
+                },
+                {
+                    "filename": "b.csv", "archive": null, "currency": "CHF",
+                    "bankAccountId": c, "importId": id_chf, "rows": 3, "inserted": 2,
+                    "duplicates": 1, "openingBalance": "2600.00", "closingBalance": "2590.00",
+                    "warnings": [{
+                        "code": "gap", "expected": "2433.55", "found": "2600.00",
+                        "previousImportId": premier,
+                    }],
+                },
+            ],
+            "ignoredEntries": [],
+        })
+    );
+
+    let traces: Vec<Value> = sqlx::query_scalar(
+        "SELECT details_json FROM audit_log WHERE action = 'wise_import.created' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let trace = &traces[1];
+    assert_eq!(
+        trace.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["files", "ignoredEntries", "provider", "provider_account"]
+    );
+    assert_eq!(trace["files"], b["files"], "la trace porte le compte rendu");
+    assert_eq!(trace["provider"], "wise");
+    let modif: Value = sqlx::query_scalar(
+        "SELECT details_json FROM audit_log WHERE action = 'bank_import.created' AND entity_id = ?",
+    )
+    .bind(id_chf)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (
+            modif["provider"].clone(),
+            modif["provider_account"].clone(),
+            modif["currency"].clone(),
+            modif["duplicates_skipped"].clone()
+        ),
+        (json!("wise"), json!(WISE), json!("CHF"), json!(1))
+    );
+
+    type Entree = (
+        String,
+        NaiveDate,
+        NaiveDate,
+        Option<Decimal>,
+        Option<Decimal>,
+        i32,
+    );
+    let entree = |id: i64| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_as::<_, Entree>(
+                "SELECT filename, period_from, period_to, opening_balance, closing_balance, \
+                 transaction_count FROM bank_imports WHERE id = ?",
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+        }
+    };
+    let d = |s: &str| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    assert_eq!(
+        entree(id_chf).await,
+        (
+            "b.csv".into(),
+            d("2020-04-01"),
+            d("2020-04-10"),
+            Some(dec!(2600.00)),
+            Some(dec!(2590.00)),
+            2
+        ),
+        "période et soldes du fichier entier, doublon compris"
+    );
+    assert_eq!(
+        entree(id_usd).await,
+        (
+            "usd.csv".into(),
+            d("2020-02-10"),
+            d("2020-03-25"),
+            Some(dec!(0.00)),
+            Some(dec!(317.01)),
+            3
+        )
+    );
+
+    // Tout en doublons, à écart de continuité (premier jour non couvert,
+    // ouverture 3010 pour une clôture précédente de 2590) : pas d'entrée,
+    // mais l'avertissement est rendu et tracé (validation P1, M3).
+    let chf_c = releve(&[ligne(
+        "CARD-90000060",
+        "20-04-2020",
+        "-10.00",
+        "CHF",
+        "3000.00",
+    )]);
+    let avant = ctx.ecrit().await;
+    let (s, b) = ctx.importer(&[("c.csv", chf_c.as_slice())]).await;
+    assert_eq!(s, 201, "{b}");
+    assert_eq!(
+        b["files"],
+        json!([{
+            "filename": "c.csv", "archive": null, "currency": "CHF",
+            "bankAccountId": c, "importId": null, "rows": 1, "inserted": 0,
+            "duplicates": 1, "openingBalance": "3010.00", "closingBalance": "3000.00",
+            "warnings": [{
+                "code": "gap", "expected": "2590.00", "found": "3010.00",
+                "previousImportId": id_chf,
+            }],
+        }])
+    );
+    assert_eq!(ctx.ecrit().await, (avant.0, avant.1, avant.2 + 1));
+    let traces: Vec<Value> = sqlx::query_scalar(
+        "SELECT details_json FROM audit_log WHERE action = 'wise_import.created' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(traces[2]["files"], b["files"]);
+
+    // Relu tel quel : l'empreinte (octets ‖ devise) le reconnaît.
+    let (s, b) = ctx.importer(&[("b.csv", chf_b.as_slice())]).await;
+    assert_eq!((s, code(&b)), (422, "BANK_IMPORT_DUPLICATE_FILE"), "{b}");
+    assert_eq!(b["error"]["details"]["existingImportId"], id_chf, "{b}");
+
+    // Deux comptes clos : le refus nomme le premier du formulaire (USD).
+    sqlx::query("UPDATE bank_accounts SET closed_on = '2026-01-31' WHERE id IN (?, ?)")
+        .bind(u)
+        .bind(e)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let avant = ctx.ecrit().await;
+    let (s, b) = ctx.importer(&[("usd.csv", USD), ("eur.csv", EUR)]).await;
+    assert_eq!((s, code(&b)), (409, "BANK_ACCOUNT_CLOSED"), "{b}");
+    assert_eq!(b["error"]["details"]["bankAccountId"], u, "{b}");
+    assert_eq!(ctx.ecrit().await, avant);
+}
+
 /// Story 38-11c1, étendue à Wise — **l'import, victime d'un interblocage avec
 /// un geste de compte bancaire, est rejoué** par le cœur commun (même montage
 /// que `import_rejoue_un_interblocage_avec_un_geste_de_compte` de PayPal).
