@@ -993,4 +993,37 @@ mod tests {
         assert!(lines.is_empty());
         assert_eq!(amount, "12.50");
     }
+
+    /// Un groupe absent de `shown` rend l'erreur interne avec la proposition
+    /// de repli (revue P2 de la 39-11d2, LOW-A) : c'est elle que
+    /// [`build_wise_review`] garde pour jeter la revue ; l'ignorer rendrait
+    /// visible une proposition sans lignes ni montant.
+    #[test]
+    fn groupe_absent_de_shown_rend_l_erreur_interne() {
+        let shown = HashMap::new();
+        let p = WiseProposal::CardGroup(CardGroupProposal::CardGroup {
+            bank_transaction_ids: vec![7, 8],
+            rule_id: 3,
+            counterparty_account_id: 4,
+        });
+        let (review, error) = to_review_proposal(p, &shown);
+        assert!(
+            matches!(error, Some(AppError::Internal(_))),
+            "erreur interne attendue, obtenu {error:?}"
+        );
+        assert!(matches!(
+            review,
+            WiseReviewProposal::CardGroup(CardGroupReview { ref lines, ref merchant_amount, .. })
+                if lines.is_empty() && merchant_amount.is_empty()
+        ));
+
+        // Une proposition commune n'a pas besoin de `shown` : aucune erreur.
+        let common = WiseProposal::Common(Proposal::Rule {
+            bank_transaction_id: 9,
+            rule_id: 3,
+            counterparty_account_id: 4,
+        });
+        let (_, error) = to_review_proposal(common, &shown);
+        assert!(error.is_none(), "aucune erreur attendue, obtenu {error:?}");
+    }
 }
