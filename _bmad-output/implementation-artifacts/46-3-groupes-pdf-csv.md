@@ -1,6 +1,6 @@
 # Story 46-3 : PDF et CSV du bilan et du compte de résultat par groupes
 
-Status: ready-for-dev
+Status: in-progress
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D8, D9 (étendue), Q2, Q3 ; FR-46-3, FR-46-8,
 FR-46-9, FR-46-11 ; NFR-46-1, NFR-46-2. Release visée **0.21.0** (prévision). Approuvée par Beat et par Guy (revue 1,
@@ -9,6 +9,39 @@ dans `main`** (arrondi au centime, Epic 48, release 0.20.0) — la PR #1327 (PDF
 migration. **Corrigée le 2026-11-21, avant développement**, sur l'API réelle de la 46-1 (relevée sur `story/46-1` à
 `de0a582f` : § *L'API de la 46-1*, Dev Notes) et sur la présentation miroir de la 47-3 (`story/47-3` à `b4d17d70`) ;
 validation close le 2026-11-21 (P1 Sonnet, P2 Opus ; Change Log).
+
+## Amendement du 22.11 : remplaçant de la 48-11
+
+**Décision du responsable de l'epic (2026-11-22)** : la 46-3 n'attend plus la 48-11 (Epic 50, `backlog`, sans fiche au
+2026-11-22 ; issue #1245). Elle pose un **remplaçant minimal et provisoire** de la fonction commune « arrondir au centime
+puis formater », conçu pour que la 48-11 le remplace sans douleur :
+
+- **une seule fonction**, dans `kesh-core` : `kesh_core::types::format_two_decimals(amount: Decimal) -> String`, dans
+  `crates/kesh-core/src/types/money.rs` (le module qui porte `Money::round_to_centimes`, place que le fichier de
+  l'Epic 48, § *48-11*, dit « naturelle »). Nom : celui que le fichier de l'Epic 46 annonce pour la 48-11
+  (`format_two_decimals`, l. 144 et 176) ; signature : un `Decimal` exact en entrée, sa chaîne ISO à deux décimales en
+  sortie (« arrondir au centime puis formater », ligne `48-11` de `sprint-status.yaml` et #1245). `round_for_display`,
+  l'autre nom annoncé, n'est **pas** déplacé : il reste où il est (`pdf.rs`), la 48-11 le déplacera ;
+- **arrondi explicite** : `round_dp_with_strategy(2, MidpointAwayFromZero)` — l'équidistant loin de zéro, comme le code
+  existant de Kesh pour l'argent (`Money::round_to_centimes`, `amount_due_to_centime`, `round_for_display`) ; un zéro
+  négatif (`-0.004`) sort `0.00`, sans signe, comme `round_for_display`. Formatage sans `{:.2}` (`rescale(2)` puis
+  `to_string`) ;
+- **utilisée par les seuls rendus touchés par la 46-3** : les rendus **groupés** du bilan et du compte de résultat,
+  PDF (par un formateur suisse qui y ajoute les apostrophes des milliers) et CSV — corps, totaux de section, lignes
+  calculées et équation de ces rendus. Les rendus **à plat** gardent leurs formateurs (`format_swiss_amount`,
+  `format_amount_iso`) et leur `{:.2}`, inchangés (AC-2 : CSV identique à l'octet, PDF aux mêmes lignes) : c'est la
+  48-11 qui les corrigera ;
+- **aucun `{:.2}` neuf** : le séparateur des milliers est extrait de `format_swiss_amount` en une fonction partagée,
+  que le formateur à plat et le formateur arrondi appellent ;
+- doc-comment et note au fichier de l'epic : « **provisoire, à remplacer par la 48-11 à l'intégration** ». À
+  l'intégration, la 48-11 garde sa propre fonction et rebranche dessus les deux formateurs groupés
+  (`format_swiss_amount_arrondi` au PDF, l'appel direct au CSV), puis retire celle-ci ; ou, si elle retient le même nom
+  et la même signature, il ne reste qu'un conflit de texte à résoudre en gardant la sienne.
+
+Ce que cela change aux critères : l'AC-6 se lit sur cette fonction au lieu de celles de la 48-11 ; la garde de la 48-11
+n'existe pas encore dans la branche (rien à garder vert), le contrôle « aucun `{:.2}` neuf » se fait par
+`git diff | grep ':\.2}'` au Dev Agent Record. T0 : la condition « 48-11 dans `main`, sinon arrêt » est levée par cette
+décision.
 
 ## Story
 

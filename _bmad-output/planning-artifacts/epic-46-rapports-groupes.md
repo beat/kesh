@@ -175,6 +175,10 @@ avant elle, `ExportQuery` ignorerait les paramètres et rendrait un PDF à plat 
 - **`fix/pdf-montants-alignes`** : **fusionné** (#1327, `0867f1fb`).
 - **48-11 (arrondi au centime, Epic 48, release 0.20.0)** : déplace `round_for_display` et `format_two_decimals` dans
   `kesh-core`, interdit tout `{:.2}` neuf dans `kesh-report`. **46-3 et 46-6b ne commencent qu'après sa fusion.**
+  *(Amendé le 2026-11-22, décision du responsable de l'epic : la 46-3 n'attend plus. Elle pose dans `kesh-core` un
+  remplaçant minimal, `kesh_core::types::format_two_decimals` — arrondi au centime, l'équidistant loin de zéro, puis
+  formatage —, employé par ses seuls rendus groupés ; **provisoire, à remplacer par la 48-11 à l'intégration**.
+  Fiche 46-3, § « Amendement du 22.11 : remplaçant de la 48-11 ».)*
 - **Epic 47 (comptes miroirs)**, 47-3 (`story/47-3`) : présentation miroir dans le service, générateurs bruts ;
   **miroir puis groupes** (décision de Guy) ; 46 et 47 se croisent dans `services/rapports.rs` et
   `reports_e2e.rs`.
