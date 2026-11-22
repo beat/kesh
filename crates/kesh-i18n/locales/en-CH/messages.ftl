@@ -1200,6 +1200,7 @@ error-account-is-mirror-postable = This account is the mirror account of { $sour
 error-account-is-mirror-account-type = This account is the mirror account of { $sources }: its type does not change while the link remains.
 error-account-is-mirror-role = This account is the mirror account of { $sources }: it receives no role while the link remains.
 error-account-is-mirror-reactivate-first = { $archived } is archived: reactivate it first, then remove its mirror account.
+error-account-is-mirror-reactivate-first-many = { $archived } are archived: reactivate them first, then remove their mirror account.
 # Story 37-3a — foreign-currency entries.
 error-multi-currency-disabled-fiscal-year = This fiscal year is single-currency: this foreign-currency operation is not possible in it.
 error-fx-multiple-currencies = An entry carries a single foreign currency (here: { $currencies }). Book a conversion between currencies through the conversion account, in two entries.
@@ -2038,6 +2039,10 @@ reports-retained-earnings-loss = Accumulated loss
 # Alerts + badges UI (2 — code review Pass 1 i18n leaks)
 reports-equation-warning = ⚠️ Balance sheet equation unbalanced (verify source data).
 reports-archived-label = archived
+
+# Story 47-4 — under the line of a mirror account.
+reports-mirror-of-one = Balance of { $sources }
+reports-mirror-of-other = Balances of { $sources }
 
 # Reports page — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Accounting Reports
@@ -3403,9 +3408,6 @@ reports-fx-line = { $amount } × { $rate }
 reports-fx-totals = debit { $debit } · credit { $credit }
 reports-fx-trial-balance = opening { $opening } · debit { $debit } · credit { $credit } · closing { $closing }
 reports-ledger-include-zero = Include accounts with no movement
-# Story 47-4 — under the line of a mirror account.
-reports-mirror-of-one = Balance of { $sources }
-reports-mirror-of-other = Balances of { $sources }
 reports-ledger-instruction = Pick a period, then click Generate. The account is optional.
 
 # --- Journal d'audit — route, vocabulaire et export (Story 25-1c-a) ---

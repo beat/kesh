@@ -10,7 +10,7 @@ import {
 	createAndValidateInvoiceViaApi,
 	ensurePrimaryBankAccountViaApi,
 } from './helpers/api-fixtures';
-import { contenuDuPdf, hexWinAnsi } from './helpers/pdf';
+import { contenuDuPdf, tjDe } from './helpers/pdf';
 
 /**
  * Tests E2E — une QR-facture dont le débiteur porte « & » (Story 33-12a, #941).
@@ -52,9 +52,9 @@ test('un débiteur au nom portant « & » reçoit sa QR-facture', async ({ page 
 		// la localité aussi. Au reçu, ce nom long se coupe. La fixture crée une personne
 		// de prénom « Pia » : Kesh compose son nom affiché avec.
 		const contenu = contenuDuPdf(octets);
-		const affiche = `<${hexWinAnsi(`Pia ${nom}`)}> tj`;
+		const affiche = tjDe(`Pia ${nom}`);
 		expect(contenu.split(affiche).length - 1).toBe(2);
-		expect(contenu).toContain(`<${hexWinAnsi('9400 Rorschach')}> tj`);
+		expect(contenu).toContain(tjDe('9400 Rorschach'));
 	} finally {
 		await disposeContextSafe(ctx);
 	}

@@ -2064,10 +2064,26 @@ pub(crate) fn account_is_mirror_message(
     }
 }
 
-/// Repli de `error-account-is-mirror-reactivate-first` : la phrase ajoutée quand
-/// une source est archivée (Story 47-1, AC-5, AC-9).
-fn account_is_mirror_reactivate_fallback(archived: &str) -> String {
-    format!("{archived} est archivé : réactivez-le d’abord, puis retirez son compte miroir.")
+/// Clé i18n et repli de la phrase ajoutée quand une ou plusieurs sources sont
+/// archivées (Story 47-1, AC-5, AC-9) : une clé pour une source, une pour
+/// plusieurs (Story 47-5, accord au pluriel). `archived` : les sources archivées,
+/// « numéro nom », séparées par des virgules ; `count` : leur nombre.
+fn account_is_mirror_reactivate_message(archived: &str, count: usize) -> (&'static str, String) {
+    if count > 1 {
+        (
+            "error-account-is-mirror-reactivate-first-many",
+            format!(
+                "{archived} sont archivés : réactivez-les d’abord, puis retirez leur compte miroir."
+            ),
+        )
+    } else {
+        (
+            "error-account-is-mirror-reactivate-first",
+            format!(
+                "{archived} est archivé : réactivez-le d’abord, puis retirez son compte miroir."
+            ),
+        )
+    }
 }
 
 /// Corps `409 ACCOUNT_IS_MIRROR` (Story 47-1, AC-5, AC-9) : `details`
@@ -2087,17 +2103,14 @@ fn account_is_mirror_response(
     let mut args = FluentArgs::new();
     args.set("sources", all);
     let mut message = t_args(key, &fallback, &args);
-    let archived = nommer(&mut sources.iter().filter(|s| !s.active));
-    if !archived.is_empty() {
-        let fallback = account_is_mirror_reactivate_fallback(&archived);
+    let count = sources.iter().filter(|s| !s.active).count();
+    if count > 0 {
+        let archived = nommer(&mut sources.iter().filter(|s| !s.active));
+        let (key, fallback) = account_is_mirror_reactivate_message(&archived, count);
         let mut args = FluentArgs::new();
         args.set("archived", archived);
         message.push(' ');
-        message.push_str(&t_args(
-            "error-account-is-mirror-reactivate-first",
-            &fallback,
-            &args,
-        ));
+        message.push_str(&t_args(key, &fallback, &args));
     }
     coded_response(
         StatusCode::CONFLICT,
@@ -6679,9 +6692,8 @@ mod tests {
     }
 
     /// Story 47-1 (AC-9) — chaque raison des deux refus du compte miroir a sa
-    /// clé dans les **quatre** catalogues, et un repli égal à la valeur fr-CH
-    /// (variables substituées) ; la liste close est parcourue, aucune raison
-    /// sans clé.
+    /// clé dans les **quatre** catalogues ; la liste close est parcourue, aucune
+    /// raison sans clé. (L'égalité des replis à la valeur fr-CH : garde G9.)
     #[test]
     fn mirror_refusals_have_a_key_per_reason_in_the_four_catalogs() {
         let catalogue = |locale: &str| -> String {
@@ -6706,11 +6718,15 @@ mod tests {
             let (cle, repli) = account_is_mirror_message(reason, "{ $sources }");
             cles.push((cle, repli));
         }
-        cles.push((
-            "error-account-is-mirror-reactivate-first",
-            account_is_mirror_reactivate_fallback("{ $archived }"),
-        ));
-        assert_eq!(cles.len(), 12, "sept raisons, quatre gestes, une phrase");
+        for count in [1, 2] {
+            let (cle, repli) = account_is_mirror_reactivate_message("{ $archived }", count);
+            cles.push((cle, repli));
+        }
+        assert_eq!(
+            cles.len(),
+            13,
+            "sept raisons, quatre gestes, une phrase au singulier et au pluriel"
+        );
         let fr = catalogue("fr-CH");
         for locale in ["fr-CH", "de-CH", "it-CH", "en-CH"] {
             let texte = catalogue(locale);
@@ -6718,9 +6734,8 @@ mod tests {
                 assert!(valeur(&texte, cle).is_some(), "{cle} absente de {locale}");
             }
         }
-        for (cle, repli) in &cles {
-            assert_eq!(valeur(&fr, cle).as_deref(), Some(repli.as_str()), "{cle}");
-        }
+        // L'égalité de chaque repli à la valeur fr-CH est tenue par la garde commune
+        // G9 (`tests/textes_coherents.rs`), qui porte ces treize clés depuis la 47-5.
         // Aucun numéro de compte en dur (G4-bis) : variables Fluent.
         for (cle, _) in &cles {
             let v = valeur(&fr, cle).unwrap();
@@ -6799,6 +6814,30 @@ mod tests {
         assert!(message.contains("réactivez"), "{message}");
         assert!(
             message.ends_with("2260 Source AVS est archivé : réactivez-le d’abord, puis retirez son compte miroir."),
+            "{message}"
+        );
+
+        // Story 47-5 — deux sources archivées : la phrase passe au pluriel.
+        let archivee = |id: i64, number: &str, name: &str| MirrorSourceAccount {
+            id,
+            number: number.into(),
+            name: name.into(),
+            active: false,
+        };
+        let (_, body) = response_body(
+            AppError::Database(DbError::AccountIsMirror {
+                reason: AccountIsMirrorReason::Archive,
+                sources: vec![
+                    archivee(3, "2260", "Source AVS"),
+                    archivee(4, "2270", "Source LPP"),
+                ],
+            })
+            .into_response(),
+        )
+        .await;
+        let message = body["error"]["message"].as_str().unwrap();
+        assert!(
+            message.ends_with("2260 Source AVS, 2270 Source LPP sont archivés : réactivez-les d’abord, puis retirez leur compte miroir."),
             "{message}"
         );
     }

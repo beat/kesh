@@ -599,8 +599,13 @@ pub async fn archive_account(
     // opération `accounts::archive`) : l'archivage de T prend sa ligne `FOR
     // UPDATE`, puis lit « qui désigne T » sous verrou, pendant qu'une pose de
     // miroir A → T tient A puis verrouille T. Lue au code, cette paire attend
-    // sans cycle (l'archivage ne prend jamais la ligne de A) : **aucun
-    // interblocage n'est établi ni provoqué par un test**. Un cycle reste
+    // sans cycle : la pose verrouille T (`guard_mirror_update`, puis
+    // `guard_mirror_set_in_tx`) **avant** d'écrire le lien de A, si bien que
+    // l'archivage, qui tient T, ne lit jamais un lien de A en cours
+    // d'écriture ; quand A désigne déjà T, l'archivage prend bien la ligne de A
+    // en partage, mais aucun geste qui tient A n'attend alors T (un miroir gardé
+    // ou reposé tel quel ne verrouille pas sa cible ; revue P2 de la 47-2,
+    // P2-L1). **Aucun interblocage n'est établi ni provoqué par un test**. Un cycle reste
     // possible par d'autres verrous (société, réglages) ; le rejeu est sans
     // risque — le dépôt ouvre et conclut sa propre transaction à chaque
     // tentative et refait tous ses contrôles — et rend alors le refus métier

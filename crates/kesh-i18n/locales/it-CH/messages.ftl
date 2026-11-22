@@ -1200,6 +1200,7 @@ error-account-is-mirror-postable = Questo conto è il conto specchio di { $sourc
 error-account-is-mirror-account-type = Questo conto è il conto specchio di { $sources }: non cambia tipo finché il collegamento rimane.
 error-account-is-mirror-role = Questo conto è il conto specchio di { $sources }: non riceve un ruolo finché il collegamento rimane.
 error-account-is-mirror-reactivate-first = { $archived } è archiviato: riattivatelo prima, poi rimuovete il suo conto specchio.
+error-account-is-mirror-reactivate-first-many = { $archived } sono archiviati: riattivateli prima, poi rimuovete il loro conto specchio.
 # Story 37-3a — registrazioni in valuta.
 error-multi-currency-disabled-fiscal-year = Questo esercizio è monovaluta: questa operazione in valuta non vi è possibile.
 error-fx-multiple-currencies = Una registrazione porta una sola valuta estera (qui: { $currencies }). Registri un cambio tra valute tramite il conto di conversione, in due registrazioni.
@@ -2038,6 +2039,10 @@ reports-retained-earnings-loss = Perdita riportata
 # Alerts + badges UI (2 — code review Pass 1 i18n leaks)
 reports-equation-warning = ⚠️ Equazione di bilancio non bilanciata (verificare i dati sorgente).
 reports-archived-label = archiviato
+
+# Story 47-4 — sotto la riga di un conto specchio.
+reports-mirror-of-one = Saldo di { $sources }
+reports-mirror-of-other = Saldi di { $sources }
 
 # Pagina rapporti — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Rapporti contabili
@@ -3398,9 +3403,6 @@ reports-fx-line = { $amount } × { $rate }
 reports-fx-totals = dare { $debit } · avere { $credit }
 reports-fx-trial-balance = apertura { $opening } · dare { $debit } · avere { $credit } · chiusura { $closing }
 reports-ledger-include-zero = Includere i conti senza movimenti
-# Story 47-4 — sotto la riga di un conto specchio.
-reports-mirror-of-one = Saldo di { $sources }
-reports-mirror-of-other = Saldi di { $sources }
 reports-ledger-instruction = Scegliete un periodo, poi cliccate su Genera. Il conto è facoltativo.
 
 # --- Journal d'audit — route, vocabulaire et export (Story 25-1c-a) ---

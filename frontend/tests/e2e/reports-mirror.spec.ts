@@ -19,7 +19,8 @@
  *   `1'200.00`, apostrophe ASCII ; CSV `1200.00`), et ni 1020 ni 2270, cherchés
  *   comme jetons entiers.
  *
- * Aucun libellé de compte du seed n'est asserté. La spec reseede `with-company`
+ * Aucun libellé de compte du seed n'est asserté (1000, 2000, 1100, 3000 et 4000
+ * prennent leur nom du plan PME, pour les figures du manuel). La spec reseede `with-company`
  * à la fin (les miroirs ne doivent pas fuir dans les specs suivantes).
  */
 
@@ -159,10 +160,18 @@ test('l’exemple chiffré : miroirs posés à l’écran, bilan et compte de r�
 		}
 		ids['1000'] = await accountId(ctx, '1000');
 		ids['2000'] = await accountId(ctx, '2000');
-		// Les deux comptes du seed prennent le nom de l'exemple, pour les figures du manuel
-		// (aucune assertion ne porte sur eux).
-		await renommer(ctx, ids['1000'], 'Caisse');
-		await renommer(ctx, ids['2000'], 'Créanciers');
+		// Les comptes du seed prennent leur nom du plan PME, pour les figures du manuel
+		// (« une société tient le plan PME livré » ; aucune assertion ne porte sur eux) :
+		// 1000 et 2000 de l'exemple, et 1100, 3000, 4000, que la balance montre à zéro.
+		for (const [numero, nom] of [
+			['1000', 'Caisse'],
+			['2000', 'Créanciers'],
+			['1100', 'Débiteurs'],
+			['3000', 'Ventes de marchandises'],
+			['4000', 'Achats de marchandises'],
+		] as const) {
+			await renommer(ctx, await accountId(ctx, numero), nom);
+		}
 
 		// Écritures, chacune contre 2800 (débit + / crédit −).
 		const ecritures: [string, string, string][] = [

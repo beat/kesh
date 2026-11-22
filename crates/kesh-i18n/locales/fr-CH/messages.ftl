@@ -1269,6 +1269,7 @@ error-account-is-mirror-postable = Ce compte est le compte miroir de { $sources 
 error-account-is-mirror-account-type = Ce compte est le compte miroir de { $sources } : il ne change pas de type tant que le lien demeure.
 error-account-is-mirror-role = Ce compte est le compte miroir de { $sources } : il ne reçoit pas de rôle tant que le lien demeure.
 error-account-is-mirror-reactivate-first = { $archived } est archivé : réactivez-le d’abord, puis retirez son compte miroir.
+error-account-is-mirror-reactivate-first-many = { $archived } sont archivés : réactivez-les d’abord, puis retirez leur compte miroir.
 # Story 37-3a — écritures en devise.
 error-multi-currency-disabled-fiscal-year = Cet exercice est mono-devise : cette opération en devise n’y est pas possible.
 error-fx-multiple-currencies = Une écriture ne porte qu’une devise étrangère (ici : { $currencies }). Passez une conversion entre devises par le compte de conversion, en deux écritures.
@@ -2128,6 +2129,10 @@ reports-retained-earnings-loss = Perte reportée
 # Alertes + badges UI (2 — code review Pass 1 i18n leaks)
 reports-equation-warning = ⚠️ Équation bilan déséquilibrée (vérifier données source).
 reports-archived-label = archivé
+
+# Story 47-4 — sous la ligne d’un compte miroir (bilan, compte de résultat) : le ou les comptes dont le solde y est présenté ; numéros et noms déjà joints.
+reports-mirror-of-one = Solde de { $sources }
+reports-mirror-of-other = Soldes de { $sources }
 
 # Page rapports — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Rapports comptables
@@ -3475,9 +3480,6 @@ reports-fx-line = { $amount } × { $rate }
 reports-fx-totals = débit { $debit } · crédit { $credit }
 reports-fx-trial-balance = ouverture { $opening } · débit { $debit } · crédit { $credit } · clôture { $closing }
 reports-ledger-include-zero = Inclure les comptes sans mouvement
-# Story 47-4 — sous la ligne d’un compte miroir (bilan, compte de résultat) : le ou les comptes dont le solde y est présenté ; numéros et noms déjà joints.
-reports-mirror-of-one = Solde de { $sources }
-reports-mirror-of-other = Soldes de { $sources }
 reports-ledger-instruction = Choisissez une période, puis cliquez sur Générer. Le compte est facultatif.
 
 # --- Journal d'audit — route, vocabulaire et export (Story 25-1c-a) ---

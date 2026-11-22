@@ -183,12 +183,16 @@ fn effective_postable(role: Option<AccountRole>, requested: bool, has_children: 
 /// de différence de change : il ne reçoit pas de sous-compte) →
 /// `ACCOUNT_IN_FOREIGN_CURRENCY` (rôle posé avec une devise) →
 /// `FX_ACCOUNT_INVALID` des comptes propres (`unexpected` sans devise, puis
-/// gain, puis perte) → refus existants (rôle singleton).
+/// gain, puis perte) → refus existants (rôle singleton). Un **compte miroir**
+/// posé dès la création (Story 47-1) se juge juste après
+/// `MULTI_CURRENCY_DISABLED`, **avant** tout refus du parent :
+/// `MIRROR_ACCOUNT_INVALID` ([`guard_mirror_set_in_tx`]).
 ///
 /// **Verrous** : `companies` en partage — en `FOR UPDATE`, **premier** verrou,
 /// quand le geste porte des comptes propres —, les réglages de facturation en
-/// partage, puis le parent `FOR UPDATE` (il passera non imputable), puis les
-/// désignations propres et les comptes propres en lecture verrouillante.
+/// partage, la cible du miroir `FOR UPDATE` s'il y en a un, puis le parent
+/// `FOR UPDATE` (il passera non imputable), puis les désignations propres et
+/// les comptes propres en lecture verrouillante.
 pub async fn create(pool: &MySqlPool, user_id: i64, new: NewAccount) -> Result<Account, DbError> {
     check_role_account_type(new.role, new.account_type)?;
 
@@ -880,6 +884,13 @@ async fn guard_currency_update(
 ///    seulement si le type ou le rôle change ; le type de la cible se lit sans
 ///    verrou — figé par l'AC-5 tant que ce compte la désigne. Une cible
 ///    introuvable (état forgé) n'empêche rien. `Clear` lève ces refus.
+///    ⚠️ Un lien **forgé** (import, SQL) vers une cible devenue invalide
+///    (archivée, imputable, chaîne) n'est donc **pas revalidé** par un `PUT`
+///    qui le repose tel quel : il le garde. Sans effet comptable : le lien
+///    n'écrit rien, le lecteur des liens ([`retain_valid_links`]) écarte une
+///    cible absente, du mauvais côté ou en chaîne, et une cible archivée ou
+///    imputable laisse intacts les invariants de la présentation (47-3).
+///    Retirer le lien (`Clear`) ou en poser un autre le juge.
 async fn guard_mirror_update(
     conn: &mut sqlx::MySqlConnection,
     before: &Account,
@@ -1164,8 +1175,10 @@ async fn guard_parent_change_in_tx(
 /// → `ACCOUNT_CURRENCY_IN_USE` (devise posée sur un compte qui garde son rôle,
 /// ou désigné par un site de configuration) → `ACCOUNT_IN_FOREIGN_CURRENCY`
 /// (rôle posé sur un compte qui sera en devise) → `FX_ACCOUNT_INVALID` des
-/// comptes propres → refus existants (rôle singleton, compte bancaire lié,
-/// écritures).
+/// comptes propres → compte miroir (`ACCOUNT_IS_MIRROR`, puis
+/// `MIRROR_ACCOUNT_INVALID`, [`guard_mirror_update`], Story 47-1) → parent
+/// ([`guard_parent_change_in_tx`]) → refus existants (rôle singleton, compte
+/// bancaire lié, écritures).
 ///
 /// **Verrous** : `company_id` (immuable) lu **sur le pool**, avant `begin()` —
 /// jamais `LOCK IN SHARE MODE` sur la ligne du compte, qui se promouvrait en
@@ -1173,8 +1186,9 @@ async fn guard_parent_change_in_tx(
 /// verrou, quand le geste porte des comptes propres), les réglages de
 /// facturation en partage, le compte `FOR UPDATE` (son `company_id` relu est
 /// comparé à la lecture hors transaction : écart → `NotFound`), puis, sous ce
-/// verrou, les désignations, la ligne d'écriture et les liens en lecture
-/// verrouillante.
+/// verrou, la cible du miroir `FOR UPDATE` (avant le parent), les comptes qui
+/// désignent celui-ci comme cible en lecture verrouillante, les désignations,
+/// la ligne d'écriture et les liens en lecture verrouillante.
 pub async fn update(
     pool: &MySqlPool,
     id: i64,
@@ -1482,7 +1496,8 @@ pub async fn archive(
 /// qui nomme les réglages et ne consomme pas la version. Confirmé, le réglage reste
 /// tel quel, et l'audit nomme ce qui le désignait.
 ///
-/// **Ordre des refus (C-e334-29)** : sous-comptes actifs, désignation, version. La
+/// **Ordre des refus (C-e334-29)** : sous-comptes actifs, comptes de différence de
+/// change, compte miroir, désignation, version (détail plus bas). La
 /// désignation se lit sur l'état courant, juste avant l'`UPDATE` qui contrôle la
 /// version : un écran périmé non confirmé reçoit donc d'abord le refus de désignation,
 /// puis, s'il confirme, le conflit de version.
@@ -1502,12 +1517,14 @@ pub async fn archive(
 /// compte propre d'un compte en devise, archivé compris — ne s'archive pas :
 /// `ACCOUNT_IS_FX_DIFFERENCE_ACCOUNT`, **sans recours** (`confirm_designated`
 /// ne le lève pas). Ordre des refus : sous-comptes actifs → gain / perte /
-/// conversion → désignation de facturation → version.
+/// conversion → compte miroir d'au moins un compte (`ACCOUNT_IS_MIRROR`, sans
+/// recours non plus, Story 47-1) → désignation de facturation → version.
 ///
 /// **Verrous** : `company_id` lu sur le pool avant `begin()` (immuable ; voir
 /// [`update`]), puis `companies` en partage, les réglages de facturation en
 /// partage, le compte `FOR UPDATE` (`company_id` relu comparé), puis les
-/// désignations propres en lecture verrouillante par index : deux archivages
+/// désignations propres et les sources du miroir (`LOCK IN SHARE MODE`) en
+/// lecture verrouillante par index : deux archivages
 /// concurrents de comptes différents ne se verrouillent pas mutuellement.
 pub async fn archive_guarded(
     pool: &MySqlPool,
