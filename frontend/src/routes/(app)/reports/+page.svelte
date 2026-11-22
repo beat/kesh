@@ -266,15 +266,13 @@
 		dto: BalanceSheetDto | IncomeStatementDto,
 	): void {
 		displayedGrouping[report] = params;
-		// Revue P1 M2 — l'écho n'est repris que s'il répond à la vue en cours ;
-		// une réponse partie avec une autre vue s'affiche (c'est la dernière),
-		// mais la vue reste celle de l'utilisateur, et le rapport est redemandé.
-		if (!displayedMatchesView(report)) {
-			// Sur un autre onglet, rien n'est redemandé ici : le retour sur
-			// celui-ci le fera (`selectTab`).
-			if (activeTab === report) void generate({ keepDisplay: true });
-			return;
-		}
+		// Revue P1 M2 — l'écho n'est repris que s'il répond à la vue en cours :
+		// il ne doit jamais remplacer un choix fait après le départ de la demande.
+		// ⚠️ Garde défensive, inatteignable aujourd'hui : tout changement de vue
+		// redemande le rapport (`changeGrouping`), ce qui périme la réponse
+		// partie avec l'ancienne ; et le retour sur l'onglet remet l'écran
+		// d'accord avec ses contrôles (`selectTab`).
+		if (!displayedMatchesView(report)) return;
 		if (params && dto.grouping) {
 			const view = withEcho(groupingViews[report], dto.grouping);
 			setGroupingView(report, view);
