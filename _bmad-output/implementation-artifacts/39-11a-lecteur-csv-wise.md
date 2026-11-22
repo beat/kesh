@@ -4,7 +4,7 @@ Status: done
 
 *Fiche rédigée le 2026-11-20, branche `epic/39-wise`, numéros de ligne relevés au code de `origin/main` (`fd04099f`,
 fusionné dans `epic/39-wise` au commit `9c8bc452`), revérifiés à la validation P1. Epic 39, **phase 1 KISS**
-(décision de Beat du 2026-11-20, § *Phase 1 KISS* du fichier d'epic, G1, G3, G4, G10). **Dépend de** : 38-11a
+(décision du responsable de l'epic du 2026-11-20, § *Phase 1 KISS* du fichier d'epic, G1, G3, G4, G10). **Dépend de** : 38-11a
 (lecteur PayPal, validée P1 : en-tête par noms et forme fermée des montants, que cette fiche partage). **Suivie
 par** : 39-11b (import), 39-11c (rapprochement).*
 
@@ -132,7 +132,7 @@ nommant les colonnes qui manquent, et un relevé dont le solde courant ne se sui
 
 ## Notes de développement
 
-- Format relevé sur les relevés 2024 de Beat (notes sans donnée personnelle, `kesh-gate-logs/epic-39-40-kiss/`) :
+- Format relevé sur les relevés 2024 du responsable de l'epic (notes sans donnée personnelle, `kesh-gate-logs/epic-39-40-kiss/`) :
   aucune rupture du solde courant (ni dans l'ordre des horodatages, ni dans l'ordre inverse du fichier), frais
   toujours à part, dans la devise source pour une conversion, et égaux au `Total fees` de leur ligne ; `Total fees`
   n'est donc jamais compté (39-11b). Aucun montant à séparateur de milliers relevé.
@@ -185,7 +185,7 @@ nommant les colonnes qui manquent, et un relevé dont le solde courant ne se sui
 - Tests ajoutés, de `303bbc2c` à `HEAD` (recomptés par `grep -c '#\[test\]'`) : `tests/wise_csv.rs` 28 (dont 1 `#[ignore]`,
   lecture des relevés réels), `csv/by_name.rs` +2 ; ciblé `cargo test -p kesh-import` sur la cible propre : 138 + 28 passés
   (27 + 1 ignoré pour `wise_csv`), 0 échec.
-- Relevés réels 2024 de Beat lus en local (`KESH_WISE_REAL_DIR`, test ignoré) : trois fichiers lus entièrement
+- Relevés réels 2024 du responsable de l'epic lus en local (`KESH_WISE_REAL_DIR`, test ignoré) : trois fichiers lus entièrement
   (64 + 68 + 129 lignes, nombre de lignes lues = nombre de lignes de données), solde courant continu ; aucune valeur copiée.
 - Sondes négatives (mutations temporaires, `git checkout` après) : continuité du solde, signe d'un crédit, tri, une seule
   devise, identifiant unique : chacune rougit un test (journal `kesh-gate-logs/s39-11a/gate-1.console`/`gate.console`).
@@ -238,7 +238,7 @@ nommant les colonnes qui manquent, et un relevé dont le solde courant ne se sui
 
 ### Dette (Change Log)
 
-- `check_single_currency` quadratique en nombre de devises distinctes (`wise.rs`) : `technical-debt`, P4, propriétaire Beat ;
+- `check_single_currency` quadratique en nombre de devises distinctes (`wise.rs`) : `technical-debt`, P4, propriétaire : le responsable de l'epic ;
   remédiation par la story de solde de l'Epic 39, `39-13-solde-dette` (`backlog` au registre, sur le modèle de `40-9-solde-dette`).
   Entrée au registre des issues à ouvrir : `kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md`.
 - Restent en issue (même fichier) : L2 de la P1 (numéro de ligne après une ligne vide, no 12) et L8 de la P1 (plafond de

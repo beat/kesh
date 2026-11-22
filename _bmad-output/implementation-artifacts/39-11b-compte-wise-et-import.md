@@ -316,7 +316,7 @@ premier jour → chevauchement sur 60 jours (`import_continuite_et_doublons_de_l
 qui retire tout prestataire (`modifier_un_solde_wise`) ; changement de prestataire ignoré par la garde 5
 (`modifier_un_solde_wise`).
 
-### Gates (cible `/home/beat/claude/kesh-targets/kesh-wt3911b`, `CARGO_INCREMENTAL=0`, file `heavy.sh`)
+### Gates (cible `<cibles>/kesh-wt3911b`, `CARGO_INCREMENTAL=0`, file `heavy.sh`)
 
 Tous au **dernier commit de code `385adfaf`** (remédiation du LOW L1 de la revue P2), journaux `kesh-gate-logs/s39-11b/` ;
 Claude Sonnet 5.5, 2026-11-21. Les gates joués à `368369e3` (avant les remédiations P1 et P2) sont remplacés.

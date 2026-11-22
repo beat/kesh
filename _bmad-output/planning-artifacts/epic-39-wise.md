@@ -1,6 +1,6 @@
 # Epic 39 — Compte Wise : import des relevés CSV (le téléchargement par l'API est sorti de l'epic le 22.11)
 
-**Refonte du 2026-11-20** (décision de Beat, sur le modèle de l'Epic 38 PayPal, page approuvée « Epic 38 PayPal,
+**Refonte du 2026-11-20** (décision du responsable de l'epic, sur le modèle de l'Epic 38 PayPal, page approuvée « Epic 38 PayPal,
 version minimale ») : l'epic se fait en **deux phases**. La **phase 1 KISS** importe à la demande le relevé CSV que
 l'on exporte de Wise, par un bouton et une route d'API, sans aucun automatisme. La phase 2 (téléchargement par l'API de Wise) **est sortie de l'epic le 2026-11-22** (§ *Téléchargement par l'API : sorti de l'epic*, branche `futur/wise-api`). L'automatisme (téléchargement périodique) vient plus tard encore, hors de cet epic. Le
 cadrage du 2026-11-15 (connexions, coffre des secrets, SCA par clé RSA, relevé JSON, relevé PDF) reste plus bas comme
@@ -39,7 +39,7 @@ versement, aucune règle.
   Type`, `Transaction Details Type`) ; une seule devise par fichier ; lignes de la plus récente à la plus ancienne ;
   dates `JJ-MM-AAAA` ; montants signés à point décimal ; **les frais sont des lignes à part** (identifiant `FEE-`
   suivi de celui de la ligne d'origine), si bien que `Amount` d'une ligne n'inclut pas ses frais et que `Total fees`
-  n'est qu'une information (relevé sur les relevés 2024 de Beat : solde courant continu ligne à ligne, frais à part
+  n'est qu'une information (relevé sur les relevés 2024 du responsable de l'epic : solde courant continu ligne à ligne, frais à part
   égaux au `Total fees` de leur ligne, sans exception ; notes sans donnée personnelle dans `kesh-gate-logs/`).
   Plusieurs fichiers dans une même requête (les trois devises d'un coup) ; le zip que propose Wise n'est **pas** lu
   en phase 1 (Q-39-11). *(Amendé le 2026-11-22 : le zip est lu tel que téléchargé, et un relevé exporté sans les
@@ -244,7 +244,7 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
   numéros de compte non IBAN) : faut-il un réglage « numéros de mes comptes » ou une règle suffit-elle ? **Tranchée
   par G7** : une règle d'affectation vers le compte du plan de la banque ; l'autre côté s'y rattache à son import.
 - **Q-39-16 — Délai du rejeu SCA** : **close** (2026-11-20) — sans objet, plus aucun rejeu signé (H5). (Le délai de 120 s du rejeu dans `appel-reel.sh` reste sans emploi pour Wise.)
-- **Q-39-17 — Recette sur 2024 (orchestrateur, 2026-11-20 ; elle n'attend pas Beat)** : avant toute ligne de la phase 2, comparer 2024 de l'API (≈ 45 appels, réponses brutes sauvées hors du dépôt) au CSV 2024 du site, en local, et trancher l'horodatage de la date, l'identifiant d'une conversion automatique, le champ de solde (`amount` ou `cashAmount`), la règle du sens, le type de détail par type d'activité, la `reference` des transferts et le devis d'un virement sans frais (39-12a1 AC-0 a) ; puis, après 39-12a2, rejouer la conversion de Kesh sur 2024 comme au 2024-12-31, ligne à ligne, solde courant compris (AC-0 b). **Un mois 2025** se compare plus tard, quand Beat aura son CSV 2025, avec les soldes réels (AC-0 c) : non bloquant. Constats (métadonnées) à écrire ici. **Close (2026-11-20)** : AC-0 (a) faite, décisions au paragraphe « Décisions de la recette réelle AC-0 (a) » ; restent AC-0 (b), AC-0 (c) (2025), les activités non terminées sur `amount` et le décalage UTC+1 à revérifier avec un CSV 2025.
+- **Q-39-17 — Recette sur 2024 (orchestrateur, 2026-11-20 ; elle n'attend pas le responsable de l'epic)** : avant toute ligne de la phase 2, comparer 2024 de l'API (≈ 45 appels, réponses brutes sauvées hors du dépôt) au CSV 2024 du site, en local, et trancher l'horodatage de la date, l'identifiant d'une conversion automatique, le champ de solde (`amount` ou `cashAmount`), la règle du sens, le type de détail par type d'activité, la `reference` des transferts et le devis d'un virement sans frais (39-12a1 AC-0 a) ; puis, après 39-12a2, rejouer la conversion de Kesh sur 2024 comme au 2024-12-31, ligne à ligne, solde courant compris (AC-0 b). **Un mois 2025** se compare plus tard, quand le responsable de l'epic aura son CSV 2025, avec les soldes réels (AC-0 c) : non bloquant. Constats (métadonnées) à écrire ici. **Close (2026-11-20)** : AC-0 (a) faite, décisions au paragraphe « Décisions de la recette réelle AC-0 (a) » ; restent AC-0 (b), AC-0 (c) (2025), les activités non terminées sur `amount` et le décalage UTC+1 à revérifier avec un CSV 2025.
 
 ## Change Log (refonte)
 
@@ -275,7 +275,7 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
   39-12a1 (renommée), 39-12a2 (neuve), 39-12a3 (ex-39-12a2), 39-12b `drafted` ; socle S1, S2 (`max_days` Wise = 366 : aucune
   borne de période documentée pour les activités), S9 amendés à l'identique dans `epic-40-stripe.md`.
 
-- 2026-11-20 — Refonte en phase 1 KISS et phase 2 (décision de Beat du 2026-11-20) : six fiches `drafted` (39-11a à
+- 2026-11-20 — Refonte en phase 1 KISS et phase 2 (décision du responsable de l'epic du 2026-11-20) : six fiches `drafted` (39-11a à
   39-11d, 39-12a, 39-12b) ; anciennes clés 39-1, 39-3, 39-4, 39-6 `superseded`, 39-2 et 39-5 `deferred` ; fusion de
   `origin/main` (arbre de `main` repris, fiches et blocs des Epics 38 et 39 gardés). Cadrage du 2026-11-15 conservé
   ci-dessous, remplacé.
@@ -305,11 +305,11 @@ en propre : sa conversion, son jeu d'étapes, ses codes `<PRESTATAIRE>_*` propre
 
 *Tout ce qui suit est caduc, sauf ce que les sections ci-dessus citent. Titres abaissés d'un niveau, texte inchangé.*
 
-⏸ **Les fiches de l'Epic 39 attendent le test de Beat sur l'API des relevés Wise (Q-39-1, recette de 39-0)** : aucune
+⏸ **Les fiches de l'Epic 39 attendent le test du responsable de l'epic sur l'API des relevés Wise (Q-39-1, recette de 39-0)** : aucune
 fiche ne s'écrit ni ne se développe avant ce constat ; les règles de travail à plusieurs (§ *Alignement*, plus bas)
 s'appliqueront alors à chaque fiche.
 
-**Cadrage : 2026-11-15** (branche `epic/39-wise`). Demande de Beat (contributeur), décisions B1–B28 de
+**Cadrage : 2026-11-15** (branche `epic/39-wise`). Demande du responsable de l'epic (contributeur), décisions B1–B28 de
 `epics-38-40-cadrage.md`, qui **priment** sur ce fichier ; pour Wise : B1, B3, B4, B9, **B10** (relevé PDF par l'API,
 SCA), B12, B14. Socle : l'**Epic 38** (`epic-38-paypal.md`, validé, seize fiches `ready-for-dev`), dont les décisions
 E*, O*, D-P1-*, D-P2-* valent ici sans être répétées. Kickoff (décomptes, validation de ce fichier, **recette de
@@ -321,8 +321,8 @@ décodage tolérant (E4) — `provider` au format seul, `source_format = 'PROVID
 story (F15) ; une fiche qui découvre un besoin de DDL s'arrête et le dit (C-39-0).
 
 **Numéro : 39** (35 et 36 réservés ailleurs ; 40 Stripe, provisoire, B25). Une branche par story, fusionnée
-localement dans `epic/39-wise`, puis **une PR** vers le dépôt de Guy (remote `beat`), **après celles des Epics 37 et
-38**. Pas d'issue GitHub à ce stade (Beat n'a qu'un accès en lecture) ; issues et PR à la fin.
+localement dans `epic/39-wise`, puis **une PR** vers le dépôt de Guy (remote du contributeur), **après celles des Epics 37 et
+38**. Pas d'issue GitHub à ce stade (le responsable de l'epic n'a qu'un accès en lecture) ; issues et PR à la fin.
 
 **Release : un epic = une release ; 7 stories** (39-0 à 39-6, kickoff et story de solde comprises). ⚠️ **Cela dépasse la
 borne de six** des epics de correction ou d'amélioration ; l'Epic 39 ajoute une **fonctionnalité nouvelle** (un
@@ -337,12 +337,12 @@ d'office.
 
 ⛔ **Faisabilité non établie** : la documentation Wise consultée restreint les **jetons personnels** — les relevés de
 solde ne seraient pas servis par l'API hors des comptes établis aux États-Unis, au Canada, en Australie, en
-Nouvelle-Zélande, à Singapour et en Malaisie (§ *Sources*, Q-39-1). Le compte de Beat est suisse. **Aucune fiche ne se
-développe avant que la recette de 39-0 l'ait tranché** sur le compte réel de Beat.
+Nouvelle-Zélande, à Singapour et en Malaisie (§ *Sources*, Q-39-1). Le compte du responsable de l'epic est suisse. **Aucune fiche ne se
+développe avant que la recette de 39-0 l'ait tranché** sur le compte réel du responsable de l'epic.
 
 ### Intention
 
-Le compte Wise de Beat (B1 : **un** compte, **trois soldes** CHF, EUR, USD, et ses **cartes**, qui débitent ces
+Le compte Wise du responsable de l'epic (B1 : **un** compte, **trois soldes** CHF, EUR, USD, et ses **cartes**, qui débitent ces
 soldes) se tient dans Kesh **sans saisie**, comme les deux comptes PayPal de l'Epic 38 : Kesh télécharge chaque jour
 (ou à la demande, B9) les mouvements de chaque solde — achats par carte, frais, conversions, virements envoyés et
 reçus, dépôts, retraits —, les classe, et les **propose** à l'imputation par les règles d'affectation (frais au
@@ -470,7 +470,7 @@ l'Epic 38 a promis (§ *Ce que réutiliseront les Epics 39 et 40*).
   muette**. Le suffixe du sens (`DEBIT` → `D`, `CREDIT` → `C`) les distingue ; `related_provider_tx_id` d'un `C` de
   carte = le `D` de même référence quand il existe. Deux lignes de même référence et même sens dans une page →
   `InvalidResponse` (refus bruyant, `validate_page`). ≤ 64 caractères ASCII (38-3a). À constater sur les réponses de
-  Beat (39-4).
+  le responsable de l'epic (39-4).
 - **F8 — `event_code` court.** La colonne est `VARCHAR(16)` (38-3a) et quatre types Wise la dépassent
   (`INCOMING_CROSS_BALANCE`, 22). Une **table constante** de codes courts (≤ 16, majuscules, p. ex. `CARD`,
   `CONVERSION`, `TRANSFER`, `DEPOSIT`, `MONEY_ADDED`, `DIRECT_DEBIT`, `INTEREST`, `ADJUSTMENT`, `IN_CROSS_BAL`,
@@ -494,7 +494,7 @@ l'Epic 38 a promis (§ *Ce que réutiliseront les Epics 39 et 40*).
 
   `other` → `review_reason = unknown_event` (file « à examiner », B7) ; **aucun type inconnu ne devient une vente**
   (patron NFR-38-8-1). Surcharges `eventKindOverrides` (patron 38-8 AC-7) sur les seuls codes classés `other` sans
-  condition, clé = code court de F8. La table se confirme à la fiche, type par type, sur les réponses de Beat.
+  condition, clé = code court de F8. La table se confirme à la fiche, type par type, sur les réponses du responsable de l'epic.
 - **F10 — Montants** (E7, `net = gross + fee`) : `net = amount.value` (signé) ; `fee = −totalFees.value` (≤ 0 ;
   `totalFees.currency` ≠ devise → `InvalidResponse`) ; `gross = net − fee`. Le coût de conversion porté par
   `totalFees` de la moitié qui paie va au compte de frais de sa devise (B4, B27 : jamais dans la différence de change).
@@ -571,7 +571,7 @@ l'Epic 38 a promis (§ *Ce que réutiliseront les Epics 39 et 40*).
 
 | Story | Objet | Modules (≤ 5) | Dépend de | Migration |
 |---|---|---|---|---|
-| 39-0 | kickoff : décomptes, validation de ce fichier, **recette de faisabilité** sur le compte réel de Beat (Q-39-1, Q-39-2) | — | — | — |
+| 39-0 | kickoff : décomptes, validation de ce fichier, **recette de faisabilité** sur le compte réel du responsable de l'epic (Q-39-1, Q-39-2) | — | — | — |
 | 39-1 | client Wise : réglages, jeton personnel, profils, soldes, « Tester la connexion », branchement, amendements du socle (C-39-2) | `kesh-providers` (wise), `kesh-core` (réglages), `kesh-api` (secrets, fabrique, test, transport), `kesh-i18n` | Epic 38, 39-0 | aucune |
 | 39-2 | authentification forte : clé RSA générée ou déposée, signature du défi, rejeu, erreurs SCA | `kesh-providers` (wise::sca), `kesh-api` (route `sca-key`, secrets), `kesh-core` (champs posés par le serveur), `kesh-i18n` | 39-1 | aucune |
 | 39-3 | relevé JSON → mouvements et soldes : `movements`, `balances(as_of)`, fenêtres, validation et continuité | `kesh-providers` (wise::statement) | 39-1, 39-2 | aucune |
@@ -586,8 +586,8 @@ l'Epic 38 a promis (§ *Ce que réutiliseront les Epics 39 et 40*).
 #### 39-0 — Kickoff et recette de faisabilité
 
 - *Intention* : ouvrir l'epic sur des décomptes mesurés, un fichier validé, et la preuve que l'API sert ce que l'epic
-  suppose sur le compte suisse de Beat.
-- *Périmètre* : décomptes (§ *Priorités des défauts*) ; validation en boucle ; **recette par Beat, hors de Kesh et hors
+  suppose sur le compte suisse du responsable de l'epic.
+- *Périmètre* : décomptes (§ *Priorités des défauts*) ; validation en boucle ; **recette par le responsable de l'epic, hors de Kesh et hors
   du dépôt**, avec son jeton (lecture seule si Wise en propose) : `GET /profiles`, liste des soldes, `statement.json`
   d'un mois avec le défi SCA signé par sa clé, `statement.pdf` ; réponses **anonymisées** remises pour les fixtures
   (F16) ; constats écrits ici (Q-39-1, Q-39-2, Q-39-7, F7, F10, F11).
@@ -597,7 +597,7 @@ l'Epic 38 a promis (§ *Ce que réutiliseront les Epics 39 et 40*).
 - **FR**
   1. `FR-39-0-1` — Compter issues et bugs, écrire au fichier le compte du tag précédent et l'objectif du tag.
   2. `FR-39-0-2` — Valider ce fichier en boucle jusqu'à une passe sans finding au-dessus de LOW.
-  3. `FR-39-0-3` — Consigner la recette de faisabilité de Beat (jeton, profils, soldes, relevé JSON avec SCA, PDF) et
+  3. `FR-39-0-3` — Consigner la recette de faisabilité du responsable de l'epic (jeton, profils, soldes, relevé JSON avec SCA, PDF) et
      ses constats ; aucune fiche ne se développe sans elle.
 - **NFR**
   1. `NFR-39-0-1` — Décomptes recomptés à la source, commande et périmètre écrits avec le nombre.
@@ -695,7 +695,7 @@ l'Epic 38 a promis (§ *Ce que réutiliseront les Epics 39 et 40*).
   6. `FR-39-4-6` — Un réglage de connexion peut classer un code que la table met en `other`.
 - **NFR**
   1. `NFR-39-4-1` — Classement pur, sans base, réseau ni horloge.
-  2. `NFR-39-4-2` — Un test par type relevé sur les réponses de Beat ; aucun type inconnu ne devient une vente.
+  2. `NFR-39-4-2` — Un test par type relevé sur les réponses du responsable de l'epic ; aucun type inconnu ne devient une vente.
   3. `NFR-39-4-3` — Somme des nets d'un relevé = variation de `runningBalance` (test).
 
 #### 39-5 — Relevé PDF par l'API
@@ -784,26 +784,26 @@ version des fiches).
 
 ### Questions ouvertes
 
-- **Q-39-1 — Relevés au jeton personnel (Beat, bloquant)** : la doc dit les relevés de solde **non servis** par l'API
-  au jeton personnel hors US, CA, AU, NZ, SG, MY. Le jeton de Beat les obtient-il (avec SCA) sur son compte suisse ?
+- **Q-39-1 — Relevés au jeton personnel (responsable, bloquant)** : la doc dit les relevés de solde **non servis** par l'API
+  au jeton personnel hors US, CA, AU, NZ, SG, MY. Le jeton du responsable de l'epic les obtient-il (avec SCA) sur son compte suisse ?
   Sinon : accord de partenaire (OAuth), ou relevé CAMT.053 / CSV téléchargé à la main et importé — ce qui demande de
   lever le refus des imports de fichier sur un compte prestataire (38-3a, O9) et redécoupe l'epic.
-- **Q-39-2 — Mécanisme de signature (Beat, recette)** : B10 décrit un défi signé par une clé privée dont la clé
+- **Q-39-2 — Mécanisme de signature (responsable, recette)** : B10 décrit un défi signé par une clé privée dont la clé
   publique est déposée chez Wise ; aucune page consultée ne le documente (en-tête `X-Signature`, algorithme, format et
   taille de clé, nombre de clés déposables, expiration). À constater en 39-0 ; F3 et F4 en dépendent.
-- **Q-39-3 — Dépréciation des jetons personnels (Beat, Guy)** : annoncée « d'ici la fin de l'an prochain » pour les
+- **Q-39-3 — Dépréciation des jetons personnels (responsable de l'epic, Guy)** : annoncée « d'ici la fin de l'an prochain » pour les
   comptes partenaires « first party » ; les PME sont-elles visées ? Si oui, l'epic a une durée de vie bornée
   (C-39-7).
-- **Q-39-4 — Virement sortant vers son propre compte (Beat)** : le relevé ne donne pas le compte destinataire d'un
+- **Q-39-4 — Virement sortant vers son propre compte (responsable)** : le relevé ne donne pas le compte destinataire d'un
   `TRANSFER` débit (champs lus) ; défaut `purchase` imputé par une règle (p. ex. `counterparty_contains` sur le nom),
   ou reconnaissance par un réglage (noms ou références de ses comptes) en `withdrawal` rattachable (34-11b) ?
-- **Q-39-5 — Relevé PDF (Beat)** : mensuel automatique par défaut ou à la demande seulement ? `FLAT` ou `COMPACT` ?
+- **Q-39-5 — Relevé PDF (responsable)** : mensuel automatique par défaut ou à la demande seulement ? `FLAT` ou `COMPACT` ?
   Langue ?
-- **Q-39-6 — Jars, intérêts, cashback (Beat)** : utilise-t-il des soldes `SAVINGS`, des intérêts ou du cashback ?
+- **Q-39-6 — Jars, intérêts, cashback (responsable)** : utilise-t-il des soldes `SAVINGS`, des intérêts ou du cashback ?
   (classés `other` aujourd'hui, F9).
 - **Q-39-7 — Historique (recette)** : jusqu'où Wise sert-il les relevés (`history_start`) ? Les livres 2024 se
   rattachent en lot (B17) si 2024 est servi.
-- **Q-39-8 — IBAN des soldes Wise (Beat)** : les soldes CHF/EUR ont des coordonnées bancaires ; les garder sur le
+- **Q-39-8 — IBAN des soldes Wise (responsable)** : les soldes CHF/EUR ont des coordonnées bancaires ; les garder sur le
   compte bancaire Kesh (facultatif, 38-2) sert-il (virements reçus à rapprocher) ?
 - **Q-39-9 — Release (Guy)** : sans migration, l'Epic 39 peut partir avec la release de l'Epic 38 ou après ; numéro à
   Guy. Confirmation du numéro 39 (et 40 pour Stripe, Q9 de l'Epic 38).
@@ -812,7 +812,7 @@ version des fiches).
 
 - Méthode du dépôt (`CLAUDE.md`) : fiche → validation en boucle → développement → revue en boucle, gate local complet
   avant la PR ; splitting préventif (≤ 5 modules par story).
-- **Production** : l'instance de Beat n'est jamais écrite par le travail de cet epic ; la recette sur son compte Wise
+- **Production** : l'instance du responsable de l'epic n'est jamais écrite par le travail de cet epic ; la recette sur son compte Wise
   réel se fait sur une **instance jetable** ou hors de Kesh (39-0), avec un jeton qu'il peut révoquer.
 - Aucun appel réseau en CI ni par un agent ; aucune réponse réelle non anonymisée, aucun jeton, aucune clé privée
   réelle dans le dépôt.
@@ -826,7 +826,7 @@ version des fiches).
 #### Alignement 2026-11-16
 
 Alignement sur les règles de travail à plusieurs (Sonnet), fichier d'epic seul — les fiches n'existent pas encore et
-attendent le test de Beat sur l'API des relevés Wise (Q-39-1) :
+attendent le test du responsable de l'epic sur l'API des relevés Wise (Q-39-1) :
 
 - **PDF des manuels** : NFR-39-6-2 passe à « `.tex` seulement, PDF régénéré à la release » (1 remplacement).
 - **CHANGELOG** : aucune ligne n'y était prévue ; règle « Note de version » des fiches ajoutée (§ *Règles de cet epic*,
