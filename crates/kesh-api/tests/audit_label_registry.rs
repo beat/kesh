@@ -97,8 +97,12 @@ const TYPE_DU_HELPER_EXERCICES: &str = "fiscal_year";
 const SITES_INDIRECTS: &[(&str, &str, &[&str])] = &[
     (
         "crates/kesh-api/src/routes/provider_imports.rs",
-        "le cœur commun d'import écrit la trace de sa SOURCE, que l'appelant nomme (Story 38-12a) : fichier CSV ou téléchargement par l'API",
-        &["paypal_download.created", "paypal_import.created"],
+        "le cœur commun d'import écrit la trace de sa SOURCE, que l'appelant nomme (Story 38-12a) : fichier CSV ou téléchargement par l'API ; relevés Wise depuis la Story 39-14",
+        &[
+            "paypal_download.created",
+            "paypal_import.created",
+            "wise_import.created",
+        ],
     ),
     (
         "crates/kesh-api/src/routes/users.rs",
