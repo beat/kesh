@@ -1,6 +1,6 @@
 # Story 46-6b : balance par groupes — écran, PDF et CSV
 
-Status: in-progress
+Status: review
 
 Epic : `_bmad-output/planning-artifacts/epic-46-rapports-groupes.md` — D11 modifiée (Q6), D9 étendue (Q10) ; FR-46-6,
 FR-46-9, FR-46-10 ; NFR-46-1, NFR-46-5. Release visée **0.21.0** (prévision). Fiche écrite le 2026-11-20 (remarque 2
@@ -117,9 +117,10 @@ La fiche est relue contre le code réel avant le développement ; sept écarts, 
 
 ## Tâches / sous-tâches
 
-- [ ] **T0** — Reprise de la branche d'epic (46-2, 46-3, 46-6a fusionnées ; 48-11 dans `main`).
-- [ ] **T1** — fixtures sans paramètre (AC-3) ; **T2** — route et deux rendus neufs PDF/CSV (AC 2, 4) ; **T3** — écran (AC 1, 5) ;
-      **T4** — i18n, tests, captures, manuel (AC 6) ; **T5** — gates complets, E2E complet au dernier commit de code.
+- [x] **T0** — Reprise de la branche d'epic (46-1, 46-2, 46-3, 46-4, 46-6a fusionnées ; la 48-11 n'est pas dans
+      `main` : remplaçant de la 46-3, amendement point 1).
+- [x] **T1** — fixtures sans paramètre (AC-3) ; [x] **T2** — route et deux rendus neufs PDF/CSV (AC 2, 4) ; [x] **T3** — écran (AC 1, 5) ;
+      [x] **T4** — i18n, tests, captures, manuel (AC 6) ; [x] **T5** — gates de la nuit du 22.11 (amendement point 7).
 
 ## Dev Notes
 
@@ -147,11 +148,89 @@ Fiches 46-1, 46-2, 46-3, 46-6a.
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`bmad-dev-story`), 2026-11-22.
+
 ### Debug Log References
+
+Journaux et captures : `kesh-gate-logs/s46-6b/` (hors dépôt).
+
+- T1 : `t1-ecrire.log`, `t1-relire.log` (fixtures écrites puis relues, 2/2, au commit `4fa332461`, avant tout changement de rendu).
+- Gate ciblé : `cible-a.log` (403/405 : deux tests à basculer ou à corriger, repris ci-dessous).
+- Gate backend complet (`scripts/test-fast.sh --ci`, base remise à zéro) au dernier commit de code `b9f722845` :
+  `gate-backend-final3.log` — fmt et clippy verts, **nextest 6256 exécutés, 6256 passés, 14 ignorés**. Deux runs
+  précédents rouges, corrigés : `gate-backend-final.log` (fmt d'un test), `gate-backend-final2.log` (garde
+  `textes_coherents::la_forme_libre_nnnn_nom_est_juste_partout` : « 1025 Banque USD » d'un test, numéro absent des
+  plans livrés — jeu d'essai renuméroté 1000/1020).
+- Frontend complet à `b9f722845` (`front-final.console.log`) : `npm run check` 0 erreur (29 avertissements, 5 fichiers,
+  aucun dans le code touché hormis deux `state_referenced_locally` d'avant dans `+page.svelte`),
+  `lint-i18n-ownership` vert, **Vitest 4719/4719 (283 fichiers)**, `npm run build` vert.
+- **E2E partiel (1 spec)** : `reports-balance-groupes.spec.ts`, la seule spec ajoutée (règle de la nuit du 22.11),
+  1/1 vert (`e2e.log`), binaire construit à `f09b8a6b6` (les commits suivants ne touchent que des tests Rust et la
+  fiche). E2E complet et `gate-ci.sh` à la branche d'intégration. Les specs `reports.spec.ts` et
+  `reports-currency.spec.ts` ne sont pas jouées (amendement point 4 : aucun de leurs identifiants n'a changé).
+- Mutations (`mut/*.log`, copie hors dépôt, cible propre supprimée, témoin vert d'abord, tuée seulement sur assertion
+  nommée) : **5/5 tuées** — M1 `porte_montant` sans la condition de pied (tuée par
+  `pdf::tests::balance_groupee_footer_et_groupe_ferme`) ; M2 CSV groupé sans arrondi (`format_amount_iso`, tuée par
+  `csv::tests::balance_csv_groupee_header`) ; M3 seconde ligne en devise retirée des groupes (tuée par
+  `balance_groupee_groupe_en_devise_unique`) ; M4 gabarit de la balance à 48 caractères (tuée par
+  `balance_groupee_libelle_tronque_a_sa_colonne`) ; M5 (Vitest, copie avec son propre `node_modules`) vue groupée
+  désactivée dans `TrialBalanceView.svelte` (six tests de « vue groupée » en `AssertionError`). Non muté : la route
+  (sa bascule est couverte par `export_balance_lit_les_parametres_de_groupes` et la fidélité JSON ↔ PDF/CSV).
+- Manuel : `user-manual.tex` compilé dans une copie (`latexmk -xelatex`, rc 0), PDF aplati et grepé : les cinq phrases
+  neuves présentes (`manuel.txt`) ; copie supprimée, aucun PDF commité.
 
 ### Completion Notes List
 
+- **Écran** : la balance a la barre de la 46-2 (sa propre mémoire `kesh-report-grouping:<société>:trial-balance`,
+  défaut hiérarchie montrée, `all`, `header`) et le composant `GroupedReportRows.svelte`, rendu générique
+  (`GroupedRowBase`), à quatre colonnes (`TRIAL_BALANCE_COLUMNS`) ; seconde ligne en devise d'un compte et d'un groupe
+  en devise unique (`currencyRow`) ; badge « archivé » ; résultat reporté après les groupes ; en-tête, totaux et
+  contrôles inchangés ; info-bulle du niveau propre à la balance. Page : `trial-balance` entre dans les mécanismes de
+  la 46-2 (`isGroupedReport`, `displayedReport`, `acceptGrouped`, export aux paramètres affichés).
+- **Export** : `GET /reports/trial-balance/export` lit les quatre paramètres (`groupes_de`, `ExportQuery` inchangé,
+  ordre format → accès → groupes, `balance_par_groupes`) ; `render_grouped_trial_balance_pdf` et `_csv`, neufs,
+  rendent `groupedRows` ; les rendus à plat sont inchangés (fixtures de T1). Le libellé des lignes groupées
+  (`LibelleGroupe`, PDF) et les cellules (`cellules_groupees`, CSV) sont **partagés** avec le bilan par le trait
+  `LigneGroupeeAffichee` (`groupes.rs`) : la règle de rendu de la 46-1 n'est plus écrite qu'une fois
+  (`porte_montant`). Arrondi : remplaçant de la 46-3 ; aucun `{:.2}` neuf.
+- **Bascule déclarée** : `reports_e2e::groupes_parametre_repete` et le test de la 46-3
+  `export_balance_ignore_les_parametres_de_groupes` (remplacé par `export_balance_lit_les_parametres_de_groupes`)
+  affirmaient que l'export de la balance **ignore** un paramètre répété : il le **refuse** désormais (`400
+  VALIDATION_ERROR`) ; la balance entre dans `export_groupes_refus_du_contrat`.
+- **Limite constatée, assumée** : au PDF, la colonne de l'intitulé de la balance (22 caractères, comme à plat) abrège
+  souvent les libellés « Total <nom> » des sous-totaux en pied et les noms en retrait (« Total Actifs circulan… ») ;
+  le manuel le dit. L'élargir déplacerait les colonnes de montant du rendu à plat (AC-3).
+- **Tests ajoutés** (recomptés de `416547b14` à `b9f722845`, `#[test]`/`#[sqlx::test]` et `it(`) : `pdf.rs` 72 → 78
+  (+6), `csv.rs` 36 → 42 (+6), `reports_export_e2e.rs` 24 → 26 (+3 neufs, −1 remplacé ; le test de fixtures de la
+  46-3 factorisé avec le neuf), `reports_e2e.rs` 47 → 47 (un test basculé) ; Vitest `TrialBalanceView.test.ts` 9 → 15
+  (+6), `reports-page-groupes.test.ts` 24 → 28 (+4), `reports.api.groupes.test.ts` 9 → 11 (+2) ; E2E : une spec neuve
+  (un test, contrôle axe compris). Compteurs des gardes relevés : `sitesTotal` 3515 → 3517,
+  `CANDIDATES_ATTENDUES` 131 → 132.
+- **Captures** (thème clair, `kesh-gate-logs/s46-6b/captures/`) : `46-6b-1-defaut-tous-les-comptes.png`,
+  `-2-sous-totaux-en-pied.png`, `-3-niveau-1.png`, `-4-groupe-ouvert-a-la-main.png`, `-7-hierarchie-masquee.png`, et
+  les exports au niveau 1 avec un groupe ouvert à la main : `-5-export-niveau-1-ouvert.csv`,
+  `-6-export-niveau-1-ouvert.pdf` (rendu `-6-export-pdf-1.png`).
+
 ### File List
+
+- `crates/kesh-report/src/groupes.rs` — trait `LigneGroupeeAffichee`, implémenté par `LigneRapport` et `LigneBalanceGroupee`.
+- `crates/kesh-report/src/pdf.rs` — `Gabarit`, `LibelleGroupe` sur le trait, `limite_nom_groupe_balance`,
+  `render_grouped_trial_balance_pdf`, `rendre_balance_pdf`, `draw_tb_amounts`, `tb_fx_text`, `draw_tb_flat_rows`,
+  `draw_tb_grouped_rows` ; tests.
+- `crates/kesh-report/src/csv.rs` — `cellules_groupees`, `render_grouped_trial_balance_csv`, `rendre_balance_csv`,
+  `write_tb_record` ; tests.
+- `crates/kesh-report/src/essai_groupes.rs`, `crates/kesh-report/src/lib.rs`.
+- `crates/kesh-api/src/routes/reports.rs` — `export_trial_balance`.
+- `crates/kesh-api/tests/reports_export_e2e.rs`, `crates/kesh-api/tests/reports_e2e.rs`,
+  `crates/kesh-api/tests/fixtures/rapports-groupes/export-balance-{2025,2026}.{csv,pdf.txt}` (neufs).
+- `crates/kesh-i18n/locales/{fr,de,it,en}-CH/messages.ftl` — `reports-groups-level-hint-trial-balance`.
+- `frontend/src/lib/features/reports/{GroupedReportRows,GroupingControls,TrialBalanceView}.svelte`,
+  `reports.types.ts`, `reports.api.ts`, `reports-grouping.ts`, `TrialBalanceView.test.ts`,
+  `reports.api.groupes.test.ts` ; `frontend/src/routes/(app)/reports/+page.svelte`, `reports-page-groupes.test.ts` ;
+  `frontend/src/lib/shared/{i18n-keys,i18n-libelle-en-dur}.test.ts` ;
+  `frontend/tests/e2e/reports-balance-groupes.spec.ts` (neuf).
+- `docs/manual/fr/user-manual.tex`, `docs/api-external.md`.
+- `_bmad-output/implementation-artifacts/46-6b-balance-groupes-ecran-pdf-csv.md`, `sprint-status.yaml`.
 
 ## Change Log
 
@@ -177,3 +256,9 @@ Fiches 46-1, 46-2, 46-3, 46-6a.
   `groupes_de` et second extracteur, `ExportQuery` inchangé, paramètre répété refusé, ordre des contrôles, appel de
   `balance_par_groupes`, bascule du test « paramètre répété ignoré par l'export de la balance »).
 - 2026-11-21 — Redevient `ready-for-dev` : la boucle de la 46-6a est close (P1 Sonnet, P2 Opus, 0/0/0/10), C-46-6a-3 confirmé ; ses lignes touchées ont été relues à la P2.
+- 2026-11-22 — Développement (`bmad-dev-story`) : amendement daté (sept écarts au code réel), T1 à T5. Fixtures au
+  commit de base (`4fa332461`), rendu (`f09b8a6b6`), corrections de tests (`1539e1e5d`, `b9f722845`). Gates au dernier
+  commit de code `b9f722845` : nextest 6256/6256, Vitest 4719/4719, check, lint, build verts ; E2E partiel (1 spec)
+  vert ; 5 mutations tuées. Bascule déclarée : l'export de la balance refuse un paramètre de groupes répété, qu'il
+  ignorait (tests `reports_e2e::groupes_parametre_repete` et `reports_export_e2e`). Story en `review` ; prompt de la
+  revue P1 : `kesh-gate-logs/s46-6b/revue-p1-prompt.md`.
