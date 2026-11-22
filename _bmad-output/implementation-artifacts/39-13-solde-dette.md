@@ -1,6 +1,6 @@
 # Story 39-13 : solde de la dette de l'Epic 39 (Wise)
 
-Status: ready-for-dev
+Status: review
 
 *Fiche rédigée le 2026-11-22 au gabarit de `bmad-create-story`, branche `story/39-13` partie d'`epic/39-wise`
 (`0a414376f`). Epic 39. Story de solde (`CLAUDE.md` § *Priorités des défauts*, « une story de solde à la fin de chaque
@@ -89,13 +89,13 @@ l'autre —, afin que le code de l'epic parte en PR sans ces restes.
 
 ## Tâches
 
-- [ ] T1 (AC-1, AC-2, AC-3) — `check_single_currency` réécrite (D1), test neuf d'ordre et d'unicité.
-- [ ] T2 (AC-4, AC-5) — `existing_transaction_ids` sur `existing_transactions_by_ids` (D2), commentaires (D3), test
+- [x] T1 (AC-1, AC-2, AC-3) — `check_single_currency` réécrite (D1), test neuf d'ordre et d'unicité.
+- [x] T2 (AC-4, AC-5) — `existing_transaction_ids` sur `existing_transactions_by_ids` (D2), commentaires (D3), test
   neuf.
-- [ ] T3 — Sondes par mutation hors dépôt, une à la fois, tuées sur assertion nommée.
-- [ ] T4 — Gates : `cargo fmt --check`, clippy workspace `-D warnings`, nextest complet ; frontend non touché ; aucune
+- [x] T3 — Sondes par mutation hors dépôt, une à la fois, tuées sur assertion nommée.
+- [x] T4 — Gates : `cargo fmt --check`, clippy workspace `-D warnings`, nextest complet ; frontend non touché ; aucune
   spec E2E ajoutée (règle de la nuit du 22.11 : E2E limité aux specs neuves de la story).
-- [ ] T5 (AC-6) — Barrer les entrées soldées ; registre `39-13-solde-dette: review` ; prompt de revue P1.
+- [x] T5 (AC-6) — Barrer les entrées soldées ; registre `39-13-solde-dette: review` ; prompt de revue P1.
 
 ## Stratégie de tests
 
@@ -134,9 +134,63 @@ Aucune ligne de CHANGELOG : rien de visible ne change (dette interne).
 
 ### Agent Model Used
 
-### Completion Notes List
+Claude Opus 5.5 (fiche, développement) ; validations : Sonnet (P1, P3 ciblée), Opus (P2).
+
+### Ce qui est livré
+
+- `b10ecf71e` — `check_single_currency` (`crates/kesh-import/src/wise.rs`) : chaque ligne comparée à la devise de la
+  première (aucune liste construite pour un fichier à une devise) ; à la première différence, liste du refus en un
+  passage (`filter` sur `HashSet::insert`, ordre de première apparition). Sortie inchangée. Test neuf
+  `mixed_currencies_are_listed_once_in_file_order` (CHF, USD, EUR, USD, CHF → `[CHF, USD, EUR]`).
+- `06001b9f6` — `existing_transaction_ids` (`crates/kesh-db/src/repositories/bank_transactions.rs`) sans requête
+  propre : projection des identifiants d'`existing_transactions_by_ids` ; contrat (verrous, index, collation, valeurs
+  stockées, paquets de 500) décrit une fois, dans `existing_transactions_by_ids`, qui nomme le cœur commun (39-14) ;
+  renvoi circulaire et renvoi à 39-12a3 retirés. Test neuf
+  `existing_transaction_ids_returns_each_id_once_within_company_and_account`. Écart assumé à la lettre d'AC-4 : le
+  même identifiant sur l'autre compte et dans l'autre société serait **invisible** dans un ensemble qui contient déjà
+  `CARD-1` ; le test leur donne des identifiants propres (`CARD-3`, `CARD-4`), rendus par leurs propres comptes et
+  absents du compte visé — c'est ce qui fait rougir la mutation (d).
+- `10d38b1c4` — hors plafond, documentation : `docs/api-external.md`, ligne `PROVIDER_ACCOUNT_NOT_FOUND`.
+
+### Tests (recomptés, `#[test]` + `#[sqlx::test]`, de `0a414376f` à `06001b9f6`)
+
+`crates/kesh-import/tests/wise_csv.rs` 42 → 43 ; `crates/kesh-db/tests/bank_transactions_repository.rs` 6 → 7 : **deux
+tests neufs**, tous deux de caractérisation (l'ancien code les passe).
+
+### Gates (au dernier commit de code `06001b9f6`)
+
+Journal `kesh-gate-logs/s39-13/gate-complet.log` (place 1, `kesh-mariadb-dev2`, base `kesh_wt39s` remise à zéro,
+migrée, seedée) : `cargo fmt --check` vert ; clippy workspace `--all-targets -D warnings` vert ; **nextest complet
+(profil `ci`) : 6667 tests exécutés, 6667 passés, 17 ignorés**. Frontend non touché : non joué. Aucune spec E2E
+ajoutée : aucun E2E (règle de la nuit du 22.11). Pas de `gate-ci.sh` (fin d'epic).
+
+### Sondes par mutation (hors dépôt, `kesh-gate-logs/s39-13/mut.sh` et `mut.py`, copie `git archive` de `06001b9f6`, cible distincte `kesh-targets/kesh-wt39s-mut`, supprimée ; une à la fois, tuée = test nommé `FAILED` sur `panicked at`)
+
+| Mutation | Résultat |
+|---|---|
+| témoins non mutés (`kesh-import`, `kesh-db`) | verts |
+| (a) pas de dédoublonnage | tuée — `left: ["CHF","USD","EUR","USD"]` |
+| (b) liste triée | tuée — `left: ["CHF","EUR","USD"]` |
+| (f) itération du `HashSet` | tuée 6 fois sur 6 jouées (ordre aléatoire : rouge par intermittence en principe) |
+| (c) ensemble vide | tuée — `bank_transactions_repository.rs:483` |
+| (d) filtre de compte retiré de la requête | tuée — assertion de montage `:475` |
+| (e) arguments permutés à la délégation | tuée — `:483` |
+
+### Fichiers communs et points relevés
+
+Aucun fichier commun touché hors `sprint-status.yaml` (ligne 39-13). Liste des issues à ouvrir (hors dépôt) : les
+deux entrées soldées barrées avec leur commit. L'en-tête du module de test `bank_transactions_repository.rs` annonce
+encore « 4 tests » (périmé avant la story) : laissé, hors périmètre.
 
 ### File List
+
+- `crates/kesh-import/src/wise.rs`
+- `crates/kesh-import/tests/wise_csv.rs`
+- `crates/kesh-db/src/repositories/bank_transactions.rs`
+- `crates/kesh-db/tests/bank_transactions_repository.rs`
+- `docs/api-external.md`
+- `_bmad-output/implementation-artifacts/39-13-solde-dette.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
@@ -157,3 +211,5 @@ Aucune ligne de CHANGELOG : rien de visible ne change (dette interne).
   d'`epic/39-wise`, `kesh-gate-logs/integration/epic-39-fusion-11d2-40-revue.md`) : la ligne `PROVIDER_ACCOUNT_NOT_FOUND`
   de `docs/api-external.md` nomme aussi `GET /wise/review` et `POST /wise/accept` (`10d38b1c4`), relu au code
   (`provider_accept.rs:272` et `:672`, appelés par `routes/wise.rs:193` et `:609`).
+- 2026-11-22 — Développée (`b10ecf71e`, `06001b9f6`), gates et sondes ci-dessus ; statut `review`, revue P1 à lancer
+  (`kesh-gate-logs/s39-13/revue-p1-prompt.md`).
