@@ -1,10 +1,48 @@
 # Story 46-7 : solde de la dette de l'epic
 
-Status: ready-for-dev
+Status: in-progress
 
 *Esquisse du 2026-11-18 (renumérotée 46-7 le 2026-11-19 : la balance prend le 46-6). Revue de Beat : approuvée. Story de solde (`CLAUDE.md` § *Priorités des défauts*, « Tarir la source, puis solder »).
 Plafond : **2 issues**, fixé au fichier d'epic (§ *Stories*). **Dernière story de l'epic**, après 46-1 à 46-6b (et
 46-5 si décidée), avant le tag de la release (0.21.0, prévision).*
+
+## Amendement du 2026-11-22 (au développement) — la dette réelle de l'epic
+
+La fiche date d'avant les stories 46-2 à 46-6b. Aucune issue de l'epic n'est encore **ouverte** sur GitHub : les
+revues ont versé leur dette à la liste des issues à ouvrir de l'epic (`kesh-gate-logs/epic-38-kiss/issues-a-ouvrir.md`,
+hors dépôt), où elle attend l'accord du responsable de l'epic. C'est donc cette liste, recoupée avec les Change Logs
+des fiches 46-1 à 46-6b (AC-1), qui fait l'inventaire. La 46-5 est hors périmètre (décision en attente).
+
+**Inventaire (dix points, ligne lue entre parenthèses)**
+
+| # | Origine | Point | Label, priorité | Suite |
+|---|---|---|---|---|
+| D1 | 46-1 P1 (fiche 46-1, « Interaction avec la 47-3 », n° 20 de la liste) | un miroir de passif rangé sous un groupe d'actif dissout ce groupe à l'affichage groupé | enhancement ou documentation, P3 | **reste à ouvrir** : décision d'interface du responsable de l'epic, non un correctif |
+| D2 | 46-2 P3 L2 (Change Log 46-2, « amélioration tracée ») | changer la vue du bilan pendant le chargement d'un autre rapport l'interrompt | enhancement, P4 | reste à ouvrir (enchaînement des chargements, risque de régression de l'écran) |
+| D3 | 46-2 P3 L3 (Change Log 46-2, « L3 : noté, **non remédié** ») | la redemande du bilan efface l'erreur de l'autre onglet | enhancement, P4 | **n'était pas tracé** : versé à la liste par cette story (« on trace toujours ») ; reste à ouvrir |
+| D4 | 46-3 P2 L3 (Change Log 46-3, « L3 (suffixe « (solde propre) » tronqué, production) ») | PDF groupé : la troncature d'une ligne « solde propre » coupe son suffixe | bug, P4 | **retenu, corrigé** |
+| D5 | 46-3 P1 L2 (même entrée) | PDF groupé : limites en caractères, non en largeur réelle | bug, P4 | reste à ouvrir (toucherait les limites de tous les rapports groupés) |
+| D6 | 46-3 P1 L4 (même entrée) | `texte_pdf::lignes` sans notion de page | technical-debt, P4 | reste à ouvrir |
+| D7 | 46-3 P1 L5 (même entrée) | fidélité JSON/PDF de l'export groupé : un seul jeu de paramètres | technical-debt, P4 | reste à ouvrir |
+| D8 | 46-4 P2 F2 (Change Log 46-4, « tracé dans `issues-a-ouvrir.md` ») | MCP : le test de fidélité saute les lignes de groupe | technical-debt, P4 | reste à ouvrir |
+| D9 | 46-6b P2 LOW-3 (Change Log 46-6b, « LOW-3 … à ouvrir en issue ») | balance groupée en PDF : le premier compte d'un groupe peut passer seul en haut de page | bug, P4 | reste à ouvrir (plafond atteint) |
+| D10 | revue d'intégration de l'Epic 46, L3 (liste, « Relevé par la revue d'intégration de l'Epic 46 (L3) ») | fermer puis rouvrir un groupe laisse « détail ajusté à la main » au PDF | bug, P4 | **retenu, corrigé** |
+
+**Choix dans le plafond (2), AC-1.** Tous les points sont P4 sauf D1 (P3, mais une décision, non un correctif). Par
+effet visible : les quatre `bug` (D4, D5, D9, D10). D10 met au PDF remis à une fiduciaire une mention fausse ; D4 rend
+une ligne « solde propre » indiscernable d'une ligne de compte ; D9 n'est qu'une coupure de page, D5 demanderait de
+recalculer les limites de tous les libellés groupés (risque de régression sur les trois rapports). Retenus : **D10 et
+D4**, les plus visibles et les plus sûrs (un module chacun, AC-4).
+
+**Hors plafond : LOW de revue jamais ouverts** (AC-4 : ils n'ont pas été ouverts ; ce sont des rédactions et des
+commentaires, sans production) :
+- revue P2 de la fusion de la 46-6b (`kesh-gate-logs/integration/epic-46-fusion-46-6b-p2.md`) : LOW-1 (« le titre et
+  le sous-total d'un groupe répètent » : un seul des deux porte les montants dans un export donné), LOW-2 (redite et
+  parenthèse mal placée de `docs/api-external.md`), LOW-3 (commentaires de l'E2E d'avant l'extraction de l'aide) —
+  **corrigés** ;
+- revue P4 d'intégration (`epic-46-revue-p4.md`), P4-1 et P4-2 : **déjà corrigés** par la reprise de la phrase à la
+  fusion de la 46-6b (le texte actuel des quatre sites dit que titres et sous-totaux répètent les montants, et que
+  l'export à plat porte lui aussi ses lignes de total, à filtrer par `Section`) ; constaté, rien à faire.
 
 ## Story
 
