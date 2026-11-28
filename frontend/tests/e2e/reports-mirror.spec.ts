@@ -222,8 +222,8 @@ test('l’exemple chiffré : miroirs posés à l’écran, bilan et compte de r�
 	// Bilan présenté.
 	await page.goto('/reports');
 	await page.waitForLoadState('networkidle');
+	// Story 55-1a (D16) — plus de *Générer* : le bilan se charge à l'ouverture de la page, l'onglet le recharge.
 	await page.locator('#reports-tab-balance-sheet').click();
-	await page.getByRole('button', { name: /générer/i }).click();
 	await expect(ligne(page, '1040.1')).toBeVisible({ timeout: 5000 });
 	await aucunMontantNegatif(page);
 	await expect(montant(page, '1040.1')).toHaveText('1’200.00');
@@ -285,8 +285,8 @@ test('l’exemple chiffré : miroirs posés à l’écran, bilan et compte de r�
 	await expect(ligne(page, '1040.1')).toBeVisible({ timeout: 5000 });
 
 	// Compte de résultat présenté.
+	// Story 55-1a (D16) — le clic sur l'onglet charge le compte de résultat, sans *Générer*.
 	await page.locator('#reports-tab-income-statement').click();
-	await page.getByRole('button', { name: /générer/i }).click();
 	await expect(ligne(page, '6900.1')).toBeVisible({ timeout: 5000 });
 	await aucunMontantNegatif(page);
 	await expect(montant(page, '6900.1')).toHaveText('250.00');
@@ -301,8 +301,8 @@ test('l’exemple chiffré : miroirs posés à l’écran, bilan et compte de r�
 	await page.screenshot({ path: `${captures}/mi-resultat.png`, fullPage: true });
 
 	// Balance de vérification : les soldes réels.
+	// Story 55-1a (D16) — le clic sur l'onglet charge la balance, sans *Générer*.
 	await page.locator('#reports-tab-trial-balance').click();
-	await page.getByRole('button', { name: /générer/i }).click();
 	// Vue groupée : la dernière colonne est la clôture ; aucune mention de miroir.
 	await expect(ligne(page, '1020')).toBeVisible({ timeout: 5000 });
 	await expect(montant(page, '1020')).toHaveText('-800.00');
