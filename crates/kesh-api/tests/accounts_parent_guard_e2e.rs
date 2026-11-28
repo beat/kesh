@@ -714,6 +714,7 @@ async fn route_groupee_compte_designe_refuse_en_groupe_accepte_en_membre(pool: M
     let creance = compte(&pool, &c, "1100", AccountType::Asset, None).await;
     designer_creance(&pool, &c, creance).await;
     let autre = compte(&pool, &c, "1110", AccountType::Asset, None).await;
+    let avant = etat(&pool, creance).await;
     let v = |id| {
         let pool = pool.clone();
         async move { etat(&pool, id).await.1 }
@@ -740,9 +741,10 @@ async fn route_groupee_compte_designe_refuse_en_groupe_accepte_en_membre(pool: M
         e["details"]["groupStep"],
         json!({ "groupIndex": 0, "accountId": autre })
     );
-    assert!(
-        etat(&pool, creance).await.0,
-        "le compte désigné reste imputable"
+    assert_eq!(
+        etat(&pool, creance).await,
+        avant,
+        "postable et version inchangés"
     );
 
     let membre = json!({ "groups": [ {
@@ -763,5 +765,144 @@ async fn route_groupee_compte_designe_refuse_en_groupe_accepte_en_membre(pool: M
     assert!(
         etat(&pool, creance).await.0,
         "rangé comme membre, il reste imputable"
+    );
+}
+
+/// Ordre des refus (contrat) : un parent à la fois désigné dans les réglages et
+/// mouvementé rend `ACCOUNT_PARENT_DESIGNATED` (désignation jugée avant les
+/// écritures) ; lié de plus à un compte bancaire, `ACCOUNT_PARENT_BANK_LINKED`
+/// (lien jugé avant la désignation).
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn ordre_des_refus_lien_bancaire_puis_designation_puis_ecritures(pool: MySqlPool) {
+    let c = setup(&pool).await;
+    let app = spawn_app(pool.clone()).await;
+    let parent = compte(&pool, &c, "1100", AccountType::Asset, None).await;
+    let contre = compte(&pool, &c, "2000", AccountType::Liability, None).await;
+    ecriture(&pool, &c, parent, contre).await;
+    designer_creance(&pool, &c, parent).await;
+
+    let (status, json) = creer_sous_compte(&app, &c, "1101", "Asset", parent).await;
+    assert_eq!(status, 409, "{json}");
+    assert_eq!(json["error"]["code"], "ACCOUNT_PARENT_DESIGNATED");
+
+    sqlx::query(
+        "INSERT INTO bank_accounts (company_id, bank_name, description, iban, journal_account_id) \
+         VALUES (?, 'Banque Test', 'Courant', 'CH9300762011623852957', ?)",
+    )
+    .bind(c.company_id)
+    .bind(parent)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (status, json) = creer_sous_compte(&app, &c, "1101", "Asset", parent).await;
+    assert_eq!(status, 409, "{json}");
+    assert_eq!(json["error"]["code"], "ACCOUNT_PARENT_BANK_LINKED");
+}
+
+/// Choix C-1431-5 : la garde vaut aussi pour un parent **déjà compte de
+/// groupe** (non imputable, un sous-compte actif) qui porte des écritures ou une
+/// désignation — la règle que le changement de parent et le rattachement d'un
+/// groupe appliquaient déjà. Rien n'est créé.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn groupe_existant_mouvemente_ou_designe_ne_recoit_pas_de_sous_compte(pool: MySqlPool) {
+    let c = setup(&pool).await;
+    let app = spawn_app(pool.clone()).await;
+    // Un groupe mouvementé (l'état que laissait l'écart #1431), posé en SQL :
+    // écriture passée quand il était imputable, puis un sous-compte.
+    let groupe = compte(&pool, &c, "1000", AccountType::Asset, None).await;
+    let contre = compte(&pool, &c, "2000", AccountType::Liability, None).await;
+    ecriture(&pool, &c, groupe, contre).await;
+    let premier = compte(&pool, &c, "1001", AccountType::Asset, None).await;
+    sqlx::query("UPDATE accounts SET parent_id = ? WHERE id = ?")
+        .bind(groupe)
+        .bind(premier)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE accounts SET postable = FALSE WHERE id = ?")
+        .bind(groupe)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let n = nombre_de_comptes(&pool, c.company_id).await;
+    let (status, json) = creer_sous_compte(&app, &c, "1002", "Asset", groupe).await;
+    assert_eq!(status, 409, "{json}");
+    assert_eq!(json["error"]["code"], "ACCOUNT_PARENT_HAS_ENTRIES");
+    assert_eq!(nombre_de_comptes(&pool, c.company_id).await, n);
+}
+
+/// `POST /accounts/groups` : un groupe **rattaché** désigné par un article, et un
+/// groupe **créé** sous un parent désigné dans les réglages → `409
+/// ACCOUNT_PARENT_DESIGNATED` avec `groupStep` ; ni `postable` ni `version` des
+/// comptes désignés ne bougent, aucun compte n'est créé.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn route_groupee_rattachement_et_parent_de_creation_designes_refuses(pool: MySqlPool) {
+    let c = setup(&pool).await;
+    let app = spawn_app(pool.clone()).await;
+    // Groupe 32 (un sous-compte actif), désigné par un article, puis un compte à y rattacher.
+    let groupe = compte(&pool, &c, "32", AccountType::Revenue, None).await;
+    let _sous = compte(&pool, &c, "3201", AccountType::Revenue, Some(groupe)).await;
+    let produit = article(&pool, &c, "Conseil", groupe, true).await;
+    let libre = compte(&pool, &c, "3202", AccountType::Revenue, None).await;
+    // Parent désigné dans les réglages, pour un groupe à créer.
+    let creance = compte(&pool, &c, "11", AccountType::Asset, None).await;
+    designer_creance(&pool, &c, creance).await;
+    let a1 = compte(&pool, &c, "1101", AccountType::Asset, None).await;
+
+    let post = |body: Value| {
+        let app = &app;
+        let jwt = c.jwt.clone();
+        async move {
+            let resp = app
+                .client
+                .post(app.url("/api/v1/accounts/groups"))
+                .bearer_auth(jwt)
+                .json(&body)
+                .send()
+                .await
+                .unwrap();
+            let status = resp.status().as_u16();
+            (status, resp.json::<Value>().await.unwrap_or(Value::Null))
+        }
+    };
+
+    let avant_groupe = etat(&pool, groupe).await;
+    let (status, json) = post(json!({ "groups": [ {
+        "kind": "attach", "accountId": groupe,
+        "accounts": [ { "id": libre, "version": etat(&pool, libre).await.1 } ],
+    } ] }))
+    .await;
+    assert_eq!(status, 409, "{json}");
+    let e = &json["error"];
+    assert_eq!(e["code"], "ACCOUNT_PARENT_DESIGNATED");
+    assert_eq!(e["details"]["designation"], "product");
+    assert_eq!(e["details"]["productId"], produit);
+    assert_eq!(
+        e["details"]["groupStep"],
+        json!({ "groupIndex": 0, "accountId": libre })
+    );
+    assert_eq!(etat(&pool, groupe).await, avant_groupe);
+
+    let avant_creance = etat(&pool, creance).await;
+    let n = nombre_de_comptes(&pool, c.company_id).await;
+    let (status, json) = post(json!({ "groups": [ {
+        "kind": "create", "number": "110", "name": "Créances", "parentId": creance,
+        "accounts": [ { "id": a1, "version": etat(&pool, a1).await.1 } ],
+    } ] }))
+    .await;
+    assert_eq!(status, 409, "{json}");
+    let e = &json["error"];
+    assert_eq!(e["code"], "ACCOUNT_PARENT_DESIGNATED");
+    assert_eq!(e["details"]["setting"], "receivable");
+    assert_eq!(e["details"]["groupStep"], json!({ "groupIndex": 0 }));
+    assert_eq!(
+        etat(&pool, creance).await,
+        avant_creance,
+        "postable et version inchangés"
+    );
+    assert_eq!(
+        nombre_de_comptes(&pool, c.company_id).await,
+        n,
+        "aucun groupe créé"
     );
 }

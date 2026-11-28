@@ -1178,9 +1178,8 @@ async fn reactivation_sous_un_compte_lie_refusee(pool: MySqlPool) {
 }
 
 /// `POST /accounts` (création d'un sous-compte) : un compte désigné par un compte
-/// bancaire ne reçoit pas de sous-compte — même refus ; la règle des parents
-/// mouvementés de la création, elle, ne change pas (#1431 : un parent
-/// mouvementé non lié reste accepté à la création).
+/// bancaire ne reçoit pas de sous-compte — même refus ; un parent mouvementé non
+/// lié est refusé lui aussi depuis #1431 (`ACCOUNT_PARENT_HAS_ENTRIES`).
 #[sqlx::test(migrations = "./test-schema")]
 async fn creation_d_un_sous_compte_sous_un_compte_lie_refusee(pool: MySqlPool) {
     let s = seed_accounting_company(&pool).await.unwrap();

@@ -61,9 +61,21 @@ lien bancaire, devise, écritures — aucune lecture des réglages de facturatio
   lit les comptes). Les articles se lisent en `LOCK IN SHARE MODE` par l'index `idx_products_default_revenue_account`,
   après le parent : une modification d'article prend le compte en partage avant sa ligne d'article, pas de cycle. La
   réactivation n'est pas rejouée sur interblocage (inchangé, documenté sur `refuse_bank_linked_parent_in_tx`).
-- **C-1431-4 — Rôles et règles de rapprochement hors périmètre.** Un compte qui porte un rôle (`DefaultRevenue`,
-  `Receivable`…) ou qui sert de contrepartie à une règle de rapprochement n'est pas refusé comme parent : le brief borne le
-  correctif aux réglages de facturation et aux articles. Une issue est demandée à l'orchestrateur (rapport final).
+- **C-1431-4 — Rôles, règles de rapprochement et brouillons hors périmètre.** Un compte qui porte un rôle
+  (`DefaultRevenue`, `Receivable`…), qui sert de contrepartie à une règle de rapprochement, ou qu'emploie une ligne d'un
+  brouillon (facture, avoir, facture fournisseur, compte de règlement d'une facture fournisseur) n'est pas refusé comme
+  parent : le brief borne le correctif aux réglages de facturation et aux articles, désignations durables ; un brouillon se
+  corrige à sa validation, qui nomme le compte. Une issue est demandée à l'orchestrateur (rapport final).
+- **C-1431-5 — Un parent déjà compte de groupe reste soumis à la garde** (revue P1, M-1). Un groupe qui porte déjà des
+  écritures ou une désignation (l'état que laissait l'écart #1431) ne reçoit plus de sous-compte, par création ni par
+  réactivation, bien que le geste ne change pas son imputabilité. Retenu : la règle que `PUT /accounts/{id}` (`parentId`,
+  depuis la v0.19.1) et le rattachement d'un groupe (`POST /accounts/groups`, `attach`, depuis la v0.20.0) appliquaient
+  déjà à un groupe existant ; une garde unique, sans exception ; un tel groupe est une anomalie à corriger (déplacer ses
+  écritures, désigner un autre compte), non un état à étendre. Écarté : sauter les deux refus quand le parent est déjà
+  non imputable — plus permissif, mais il ferait diverger la création du `PUT` et du rattachement, et changerait la
+  règle de ces deux routes. Les messages ne disent plus « redevenu compte de groupe », vrai seulement pour un parent sans
+  autre sous-compte. **À confirmer par le mainteneur** (contrat sur des livres tenus). Réversible : une condition sur
+  `postable` dans `refuse_unfit_parent_in_tx`.
 
 ## Tests
 
@@ -81,15 +93,16 @@ Mutations : voir le Dev Agent Record.
 
 *À reprendre au CHANGELOG de la v0.21.0, section « Changed » (changements de contrat de l'API).*
 
-- **Un compte qui porte des écritures, ou que la facturation emploie, ne devient plus compte de groupe par la création ou
-  la réactivation d'un sous-compte** ([#1431](https://github.com/guycorbaz/kesh/issues/1431)). Créer un sous-compte sous un
+- **Un compte qui porte des écritures, désigné dans les réglages de facturation ou compte de produit d'un article, ne
+  reçoit plus de sous-compte par la création ou la réactivation d'un sous-compte** ([#1431](https://github.com/guycorbaz/kesh/issues/1431)). Créer un sous-compte sous un
   compte mouvementé, ou réactiver un sous-compte archivé dont le parent a reçu des écritures, est refusé comme l'était
   déjà le changement de parent : `409 ACCOUNT_PARENT_HAS_ENTRIES`. Un compte désigné dans *Administration → Facturation*
   (créance, produit, TVA, créanciers, arrondi, escompte, frais bancaires, pertes) ou compte de produit d'un article ne
   reçoit plus de sous-compte, par aucun chemin — création, réactivation, *Modifier le compte*, *Créer des groupes* :
   `409 ACCOUNT_PARENT_DESIGNATED`, code neuf, dont le message nomme le réglage ou l'article. Jusqu'ici, le compte passait
   non imputable, et la validation suivante d'une facture ou d'un règlement qui l'employait était refusée sans
-  avertissement. Aucune écriture n'était faussée.
+  avertissement. Aucune écriture n'était faussée. La règle vaut aussi pour un compte déjà compte de groupe, comme au
+  changement de parent.
 - ⚠️ **Changement de contrat de l'API** : `POST /accounts` (`parentId`) et `PUT /accounts/{id}/reactivate` peuvent
   répondre `409 ACCOUNT_PARENT_HAS_ENTRIES` ou `409 ACCOUNT_PARENT_DESIGNATED` là où ils répondaient `201`/`200` ;
   `PUT /accounts/{id}` (`parentId`) et `POST /accounts/groups` peuvent répondre `409 ACCOUNT_PARENT_DESIGNATED`. Détails

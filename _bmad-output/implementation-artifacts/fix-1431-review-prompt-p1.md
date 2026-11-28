@@ -4,14 +4,14 @@ Tu relis le correctif **#1431** de Kesh (comptabilité suisse ; Rust/Axum, Maria
 **v0.21.0**. Kesh tient des livres réels : un défaut qui écrit faux ou qui bloque une facture se paie cher. **Aucune
 migration.** Contexte frais, première passe complète, rapport en français.
 
-Worktree : `/home/beat/claude/kesh/.claude/worktrees/kesh-1431`, branche `fix/1431-parent-creation-reactivation`. Diff à
+Worktree : `<worktree>` (le worktree du correctif ; `<journaux>`, le répertoire de ses journaux hors dépôt, sont donnés par l’orchestrateur), branche `fix/1431-parent-creation-reactivation`. Diff à
 relire, **aplati** : `git -C <worktree> diff origin/main..HEAD` (le dernier commit de code est indiqué au Change Log de la
 fiche ; les commits suivants ne portent que la fiche et ce prompt — vérifie-le par `git -C <worktree> log --stat
 origin/main..HEAD`).
 
 Lis d'abord la fiche `_bmad-output/implementation-artifacts/fix-1431-parent-creation-reactivation.md` (Intention, Contrat
 retenu, choix C-1431-1 à 4, Tests, Notes de version, Dev Agent Record), puis le code. Ne prends pas le Dev Agent Record
-pour argent comptant : recoupe-le avec les journaux (lecture seule) sous `/home/beat/claude/kesh-gate-logs/s1431/`
+pour argent comptant : recoupe-le avec les journaux (lecture seule) sous `<journaux>/`
 (`t1-new-tests.log`, `t2-affected.log`, `t3-fixed.log`, `mutations.log`, `mut/*.log`, `mutations.py`, le texte aplati du
 PDF du manuel compilé sur une copie : `user-manual.txt`, journal `manual-make.log`).
 
@@ -46,7 +46,7 @@ Un « 0 finding » sans liste des axes exercés ne compte pas.
 ## Interdits absolus
 
 - **Lecture seule.** N'écris, ne modifie, ne crée aucun fichier, hormis ton rapport
-  `/home/beat/claude/kesh-gate-logs/s1431/review-p1.md`. Aucun fichier temporaire ; aucune redirection (`>`, `>>`, `tee`,
+  `<journaux>/review-p1.md`. Aucun fichier temporaire ; aucune redirection (`>`, `>>`, `tee`,
   `2>`, `&>`). Un fichier créé par erreur se déclare au rapport, il ne se supprime pas.
 - Aucun `rm`, `pkill`, `killall`, `kill`.
 - Aucun `git` qui écrit (`checkout`, `switch`, `restore`, `stash`, `commit`, `reset`, `merge`, `rebase`, `push`) ; aucun
@@ -55,4 +55,4 @@ Un « 0 finding » sans liste des axes exercés ne compte pas.
   `cargo`, `make`, `latexmk`, `docker`, `mariadb`, `sqlx`, `curl`, `sed -i` ; ni **`scripts/prepare-release.sh`**,
   `scripts/test-fast.sh`, `scripts/gate-ci.sh`, `scripts/mem-guard.sh`, ni aucun script du dépôt ou de `kesh-gate-logs`
   (ils se lisent).
-- Ne lis rien hors du worktree et de `/home/beat/claude/kesh-gate-logs/s1431/`. Aucune donnée réelle.
+- Ne lis rien hors du worktree et de `<journaux>/`. Aucune donnée réelle.

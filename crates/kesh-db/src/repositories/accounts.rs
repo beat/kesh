@@ -1540,8 +1540,9 @@ pub fn check_groups_shape(groups: &[GroupProposal]) -> Result<(), DbError> {
 ///    création passe d'abord le contrôle du parent du **changement de parent**
 ///    ([`guard_parent_change_in_tx`], sans compte déplacé : parent de la
 ///    société, actif, ni compte de différence de change, **ni mouvementé** —
-///    `ACCOUNT_PARENT_HAS_ENTRIES`, plus strict que [`create`], écart A-1 de
-///    `fix-api-parent-compte`), puis [`create_in_tx`] (type des membres, devise
+///    `ACCOUNT_PARENT_HAS_ENTRIES` —, ni désigné par un compte bancaire ou par
+///    la facturation : les refus de [`refuse_unfit_parent_in_tx`], que
+///    [`create_in_tx`] refait ensuite, sans effet), puis [`create_in_tx`] (type des membres, devise
 ///    principale, aucun rôle, non imputable) ; puis chaque membre, par `id`
 ///    croissant, passe par [`update_in_tx`], ligne verrouillée inchangée hors
 ///    du parent (`ParentChange::Under`, `confirm_retype = false`) — un compte
@@ -3243,19 +3244,12 @@ async fn refuse_designated_parent_in_tx(
     .next()
     {
         Some(setting) => Some(ParentDesignation::InvoiceSettings(setting)),
-        None => sqlx::query_as::<_, (i64, String)>(
-            "SELECT id, name FROM products WHERE default_revenue_account_id = ? \
-             AND company_id = ? ORDER BY id LIMIT 1 LOCK IN SHARE MODE",
-        )
-        .bind(parent_id)
-        .bind(company_id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(map_db_error)?
-        .map(|(product_id, product_name)| ParentDesignation::Product {
-            product_id,
-            product_name,
-        }),
+        None => first_product_designating_in_tx(&mut *conn, company_id, parent_id)
+            .await?
+            .map(|(product_id, product_name)| ParentDesignation::Product {
+                product_id,
+                product_name,
+            }),
     };
     match designation {
         Some(designation) => Err(DbError::AccountParentDesignated {
@@ -3266,6 +3260,27 @@ async fn refuse_designated_parent_in_tx(
         }),
         None => Ok(()),
     }
+}
+
+/// Le premier article (par identifiant, actif ou archivé) dont `account_id` est
+/// le compte de produit par défaut — `(id, nom)` —, en lecture verrouillante
+/// par l'index `idx_products_default_revenue_account`. Partagé par la garde des
+/// parents ([`refuse_designated_parent_in_tx`], #1431) et celle de la devise
+/// ([`currency_use_site_in_tx`]).
+async fn first_product_designating_in_tx(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    account_id: i64,
+) -> Result<Option<(i64, String)>, DbError> {
+    sqlx::query_as::<_, (i64, String)>(
+        "SELECT id, name FROM products WHERE default_revenue_account_id = ? \
+         AND company_id = ? ORDER BY id LIMIT 1 LOCK IN SHARE MODE",
+    )
+    .bind(account_id)
+    .bind(company_id)
+    .fetch_optional(conn)
+    .await
+    .map_err(map_db_error)
 }
 
 /// Les refus d'un compte qui **deviendrait parent** — et donc non imputable —,
@@ -3283,6 +3298,14 @@ async fn refuse_designated_parent_in_tx(
 ///    [`DbError::AccountForeignParentHasEntries`] (garde son code propre) ;
 /// 4. mouvementé, en toute devise → [`DbError::AccountParentHasEntries`] : il
 ///    passerait non imputable avec un solde qu'aucune saisie ne corrigerait.
+///
+/// Les refus valent **même si le parent est déjà un compte de groupe** (non
+/// imputable, avec d'autres sous-comptes actifs) : c'est la règle que le
+/// changement de parent et la route groupée (groupe rattaché) appliquaient déjà
+/// depuis la v0.19.1 et la v0.20.0, et elle est gardée sur les trois chemins
+/// (choix C-1431-5) — un groupe qui porte des écritures ou une désignation est
+/// une anomalie à corriger (déplacer ses écritures, désigner un autre compte),
+/// non un état à étendre.
 ///
 /// Les désignations de change, qui excluent au changement de parent celles du
 /// compte déplacé, restent jugées avant, par chaque appelant. Le parent est
@@ -3413,16 +3436,9 @@ async fn currency_use_site_in_tx(
     if let Some(id) = bank {
         return Ok(Some(CurrencyUseSite::BankAccount(id)));
     }
-    let product: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM products WHERE default_revenue_account_id = ? AND company_id = ? \
-         ORDER BY id LIMIT 1 LOCK IN SHARE MODE",
-    )
-    .bind(account_id)
-    .bind(company_id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(map_db_error)?;
-    if let Some(id) = product {
+    if let Some((id, _)) =
+        first_product_designating_in_tx(&mut *conn, company_id, account_id).await?
+    {
         return Ok(Some(CurrencyUseSite::Product(id)));
     }
     let rule: Option<i64> = sqlx::query_scalar(

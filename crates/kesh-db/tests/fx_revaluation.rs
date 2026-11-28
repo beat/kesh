@@ -2301,9 +2301,10 @@ async fn sous_compte_sous_un_compte_de_bilan_en_devise(pool: MySqlPool) {
     assert_eq!(k9(&pool, &dec).await.status, CheckStatus::Ok);
 
     // Un compte CHF mouvementé (la caisse, contrepartie de toutes les
-    // écritures) ne reçoit plus de sous-compte depuis #1431 : refusé par la
-    // désignation de facturation que le montage lui donne, sinon par ses
-    // écritures — jamais par le refus propre aux comptes en devise.
+    // écritures) ne reçoit plus de sous-compte depuis #1431. Le montage la
+    // désigne aussi dans les réglages de facturation (impôt préalable) : la
+    // désignation est jugée avant les écritures, et c'est elle qui refuse —
+    // jamais le refus propre aux comptes en devise.
     let err = accounts::create(
         &pool,
         admin,
@@ -2320,7 +2321,7 @@ async fn sous_compte_sous_un_compte_de_bilan_en_devise(pool: MySqlPool) {
     assert!(
         matches!(
             err,
-            DbError::AccountParentDesignated { .. } | DbError::AccountParentHasEntries { .. }
+            DbError::AccountParentDesignated { parent_account_id, .. } if parent_account_id == dec.caisse
         ),
         "{err:?}"
     );
