@@ -800,11 +800,12 @@ async fn ordre_des_refus_lien_bancaire_puis_designation_puis_ecritures(pool: MyS
 }
 
 /// Choix C-1431-5 : la garde vaut aussi pour un parent **déjà compte de
-/// groupe** (non imputable, un sous-compte actif) qui porte des écritures ou une
-/// désignation — la règle que le changement de parent et le rattachement d'un
-/// groupe appliquaient déjà. Rien n'est créé.
+/// groupe** (non imputable, un sous-compte actif) — ici mouvementé ; la
+/// désignation suit le même chemin (`refuse_unfit_parent_in_tx`, sans condition
+/// sur `postable`) —, la règle que le changement de parent et le rattachement
+/// d'un groupe appliquaient déjà. Rien n'est créé.
 #[sqlx::test(migrations = "../kesh-db/test-schema")]
-async fn groupe_existant_mouvemente_ou_designe_ne_recoit_pas_de_sous_compte(pool: MySqlPool) {
+async fn groupe_existant_mouvemente_ne_recoit_pas_de_sous_compte(pool: MySqlPool) {
     let c = setup(&pool).await;
     let app = spawn_app(pool.clone()).await;
     // Un groupe mouvementé (l'état que laissait l'écart #1431), posé en SQL :
