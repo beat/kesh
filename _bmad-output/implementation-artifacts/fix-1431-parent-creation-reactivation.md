@@ -157,6 +157,18 @@ pas par un test déterministe ; il est établi à la lecture de l'ordre des verr
   préexistants), `lint-i18n-ownership` vert, `test:unit` 5765 tests / 329 fichiers verts.
 - Manuel utilisateur : `make user` sur une copie, vert (3 passes) ; PDF aplati relu.
 - `gate-ci` et E2E complet : **non exécutés** (réservés à l'orchestrateur avant la PR).
+- Ajout du manuel et des renvois (commits `6faee0819`, `49b22c4a7`, `9bddb1293`) :
+  - `scripts/test-fast.sh --ci` (fmt, clippy `-D warnings`, nextest complet) au commit `6faee0819` : 7019 exécutés,
+    **7018 passés, 1 rouge**, 19 ignorés — `textes_coherents::les_comptes_cites_en_exemple_existent_dans_les_plans_livres`,
+    l'exemple du manuel citant 6501 et 6502, absents des plans livrés ; corrigé en `9bddb1293` (650.1, 650.2), puis
+    `textes_coherents` rejoué seul au commit `9bddb1293` : **35 passés sur 35**. Les deux commits suivants ne touchent que
+    le `.tex` et la fiche.
+  - Frontend au commit `6faee0819` : `npm run check` 0 erreur (30 avertissements préexistants), `lint-i18n-ownership`
+    vert, `test:unit` **5888 tests / 333 fichiers** verts.
+  - Manuel utilisateur : `make user` sur une copie au commit `9bddb1293`, 211 pages, stable en 3 passes, aucune référence
+    indéfinie ; section 6.5 « Réorganiser le plan comptable », p. 26, relue dans le PDF aplati, renvois §6.5 résolus.
+  - E2E des 65 specs qui citent `accounts` (`grep -l accounts frontend/tests/e2e/*.spec.ts`), au commit `6faee0819` :
+    **318 passés, 0 échec, 11 ignorés**.
 
 ## Change Log
 
