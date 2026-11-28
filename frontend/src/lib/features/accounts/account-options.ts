@@ -123,8 +123,9 @@ export function bankAccountsNotLinkedTo<T extends { journalAccountId: number | n
 /**
  * Les comptes proposés comme **parent** (correctif `fix-api-parent-compte`).
  *
- * - À la **création** (`account` à `null`) : tous les comptes actifs — le
- *   comportement d'avant, inchangé.
+ * - À la **création** (`account` à `null`) : les comptes actifs, **sauf** ceux
+ *   qui portent des écritures (`currencyLocked`) — le serveur les refuse aussi
+ *   à la création depuis #1431 (409 `ACCOUNT_PARENT_HAS_ENTRIES`).
  * - À la **modification** : les comptes actifs, **sauf** le compte lui-même et
  *   ses sous-comptes à tous les niveaux (le serveur refuserait le cycle, 409
  *   `ACCOUNT_PARENT_CYCLE`), et **sauf** les comptes qui portent des écritures
@@ -133,13 +134,15 @@ export function bankAccountsNotLinkedTo<T extends { journalAccountId: number | n
  *   proposé même s'il porte des écritures, pour que le champ l'affiche.
  *
  * Le serveur reste le juge (parent archivé ou mouvementé entre-temps, compte de
- * change) : ce filtre n'écarte que ce qui ne peut pas passer.
+ * change, compte désigné par un compte bancaire ou par la facturation — 409
+ * `ACCOUNT_PARENT_DESIGNATED`, #1431 —, que la liste des comptes ne dit pas) :
+ * ce filtre n'écarte que ce qui ne peut pas passer.
  */
 export function parentCandidates(
 	accounts: AccountResponse[],
 	account: Pick<AccountResponse, 'id' | 'parentId'> | null,
 ): AccountResponse[] {
-	if (account === null) return accounts.filter((a) => a.active);
+	if (account === null) return accounts.filter((a) => a.active && a.currencyLocked !== true);
 	const exclus = new Set<number>([account.id]);
 	// Point fixe : un compte est exclu dès que son parent l'est. Borné par le
 	// nombre de comptes, même si la liste reçue portait un cycle.

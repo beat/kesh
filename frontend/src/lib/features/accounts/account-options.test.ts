@@ -166,8 +166,8 @@ describe('parentCandidates', () => {
 	const M = acc({ id: 6, number: '1020', name: 'Mouvementé', currencyLocked: true });
 	const PLAN = [PE, V, AR, E, G, M];
 
-	it('à la création, tous les comptes actifs, mouvementés compris', () => {
-		expect(parentCandidates(PLAN, null).map((a) => a.id)).toEqual([3, 4, 2, 1, 6]);
+	it('à la création, les comptes actifs, sans ceux qui portent des écritures (#1431)', () => {
+		expect(parentCandidates(PLAN, null).map((a) => a.id)).toEqual([3, 4, 2, 1]);
 	});
 
 	it('à la modification, ni le compte ni ses sous-comptes à tous les niveaux', () => {

@@ -21,7 +21,7 @@ use crate::entities::account::{
 use crate::entities::audit_log::NewAuditLogEntry;
 use crate::errors::{
     AccountGroupReason, CurrencyUseSite, DbError, FxAccountField, FxAccountReason, FxDesignation,
-    GroupStepError, map_db_error,
+    GroupStepError, ParentDesignation, map_db_error,
 };
 use crate::repositories::{audit_log, company_invoice_settings};
 
@@ -181,7 +181,11 @@ fn effective_postable(role: Option<AccountRole>, requested: bool, has_children: 
 /// mono-devise) → `ACCOUNT_IS_FX_DIFFERENCE_ACCOUNT` (le parent est un compte
 /// de différence de change : il ne reçoit pas de sous-compte) →
 /// `ACCOUNT_PARENT_BANK_LINKED` (le parent est désigné par un compte bancaire,
-/// Epic 46) → `ACCOUNT_FOREIGN_PARENT_HAS_ENTRIES` →
+/// Epic 46) → `ACCOUNT_PARENT_DESIGNATED` (désigné dans les réglages de
+/// facturation ou comme compte de produit d'un article, #1431) →
+/// `ACCOUNT_FOREIGN_PARENT_HAS_ENTRIES` → `ACCOUNT_PARENT_HAS_ENTRIES` (le
+/// parent porte des écritures, en CHF compris, #1431 — la règle du `PUT`) —
+/// ces quatre-là par [`refuse_unfit_parent_in_tx`] →
 /// `ACCOUNT_IN_FOREIGN_CURRENCY` (rôle posé avec une devise) →
 /// `FX_ACCOUNT_INVALID` des comptes propres (`unexpected` sans devise, puis
 /// gain, puis perte) → refus existants (rôle singleton).
@@ -240,12 +244,10 @@ pub async fn create_in_tx(
         if let Some(parent_number) = parent {
             let hits = fx_designations_of_in_tx(tx, new.company_id, &state, parent_id).await?;
             refuse_designated(hits, |_| true)?;
-            // Garde de la 46-5 (Epic 46, décision du mainteneur du 2026-11-26),
-            // étendue à la création : un compte désigné par un compte bancaire
-            // ne reçoit pas de sous-compte. La règle des parents mouvementés,
-            // elle, ne change pas ici (création plus large que le `PUT`, #1431).
-            refuse_bank_linked_parent_in_tx(tx, new.company_id, parent_id, &parent_number).await?;
-            refuse_foreign_parent_with_entries_in_tx(tx, parent_id).await?;
+            // Les refus d'un parent qui passe non imputable, communs aux trois
+            // chemins (#1431) : lien bancaire, désignation de facturation,
+            // écritures en devise, puis écritures en toute devise.
+            refuse_unfit_parent_in_tx(tx, new.company_id, parent_id, &parent_number).await?;
         }
     }
 
@@ -966,14 +968,17 @@ where
 /// 4. un compte de différence de change de la société, ou désigné compte
 ///    propre par un **autre** compte → `ACCOUNT_IS_FX_DIFFERENCE_ACCOUNT` ; un
 ///    compte d'actif ou de passif en devise mouvementé →
-///    `ACCOUNT_FOREIGN_PARENT_HAS_ENTRIES` (comme [`create`]) ; tout autre compte
-///    qui porte une ligne d'écriture → [`DbError::AccountParentHasEntries`]
-///    (`ACCOUNT_PARENT_HAS_ENTRIES`, revue P1-2 — **plus strict que
-///    [`create`]**, qui l'accepte) ;
+///    `ACCOUNT_FOREIGN_PARENT_HAS_ENTRIES` ; tout autre compte qui porte une
+///    ligne d'écriture → [`DbError::AccountParentHasEntries`]
+///    (`ACCOUNT_PARENT_HAS_ENTRIES`, revue P1-2) ;
 ///    — et, avant ces deux derniers, un compte du plan désigné par un compte
 ///    bancaire (son compte du plan ou son compte de frais de prestataire) →
 ///    [`DbError::AccountParentBankLinked`] (`ACCOUNT_PARENT_BANK_LINKED`, Epic
-///    46, décision du mainteneur du 2026-11-26) ;
+///    46, décision du mainteneur du 2026-11-26), puis un compte désigné dans
+///    les réglages de facturation ou comme compte de produit d'un article →
+///    [`DbError::AccountParentDesignated`] (`ACCOUNT_PARENT_DESIGNATED`,
+///    #1431). Ces quatre refus sont ceux de [`refuse_unfit_parent_in_tx`],
+///    communs à [`create`] et à [`reactivate`] depuis #1431 ;
 /// 5. l'un des comptes propres **résultants** du compte → `FX_ACCOUNT_INVALID`
 ///    `notPostable` (il deviendrait non imputable — revue de code P2 de la
 ///    37-1, 37-1-CR-P2-8, appliquée à la création).
@@ -1049,19 +1054,7 @@ async fn guard_parent_change_in_tx(
         fx_designations_excluding_in_tx(tx, company_id, state, new_parent_id, exclude_holder)
             .await?;
     refuse_designated(hits, |_| true)?;
-    refuse_bank_linked_parent_in_tx(tx, company_id, new_parent_id, &parent_number).await?;
-    refuse_foreign_parent_with_entries_in_tx(tx, new_parent_id).await?;
-    // Revue P1-2 (décision du responsable de l'epic) : un parent qui porte des
-    // écritures, en quelque devise, passerait non imputable avec son solde, que
-    // plus aucune saisie ne corrigerait — refusé. Après le refus propre à la
-    // devise, qui garde son code. ⚠️ La création ne le refuse pas (écart
-    // tracé) ; la route groupée, si (Story 46-5a).
-    if has_journal_line_locked(tx, new_parent_id).await? {
-        return Err(DbError::AccountParentHasEntries {
-            parent_account_id: new_parent_id,
-            parent_number,
-        });
-    }
+    refuse_unfit_parent_in_tx(tx, company_id, new_parent_id, &parent_number).await?;
 
     if let Some(own) = own_fx {
         for (field, id) in [
@@ -2043,24 +2036,25 @@ fn role_conflict(role: AccountRole, holder: Account) -> DbError {
 ///   sans bump de version ni audit (cohérent avec le court-circuit KF-004 d'[`update`]).
 /// - **Parent repassé non imputable** (revue d'intégration de la PR de l'Epic
 ///   46, H1) : il retrouve un sous-compte actif, comme à [`create`] ; sans hausse
-///   de `version`. Un parent mouvementé n'est pas refusé (même écart que la
-///   création, #1431).
-/// - **Parent désigné par un compte bancaire** — son compte du plan ou son
-///   compte de frais de prestataire, compte bancaire clos ou archivé compris
-///   (revue d'intégration de la PR de l'Epic 46, H1) →
-///   [`DbError::AccountParentBankLinked`], `reactivated_number` renseigné :
-///   la garde de [`guard_parent_change_in_tx`], que la réactivation ne
-///   traverse pas. Jugé après les désignations de change.
-/// - **Parent de bilan en devise mouvementé** →
-///   [`DbError::AccountForeignParentHasEntries`], après le lien bancaire, comme
-///   à [`create`] : il passerait non imputable avec son solde.
+///   de `version`.
+/// - **Parent qui ne peut pas devenir non imputable** — les refus de
+///   [`refuse_unfit_parent_in_tx`], communs à [`create`] et au changement de
+///   parent, jugés après les désignations de change, dans cet ordre : désigné
+///   par un compte bancaire ([`DbError::AccountParentBankLinked`], revue
+///   d'intégration de la PR de l'Epic 46, H1), désigné par la facturation
+///   ([`DbError::AccountParentDesignated`], #1431), de bilan en devise
+///   mouvementé ([`DbError::AccountForeignParentHasEntries`]), mouvementé en
+///   toute devise ([`DbError::AccountParentHasEntries`], #1431). Les trois
+///   variantes qui le portent reçoivent `reactivated_number` (le message nomme
+///   le sous-compte, qui reste archivé).
 /// - **Parent désigné compte de gains, de pertes ou de conversion** (Story 37-1,
 ///   revue de code P2, 37-1-CR-P2-7) → [`DbError::AccountIsFxDifferenceAccount`] :
 ///   un compte désigné ne reçoit pas de sous-compte (AC-4), et réactiver un
 ///   enfant archivé lui en rendrait un — l'enfant archivé laisse le parent
 ///   repasser imputable, puis être désigné. La société est lue sur le pool
 ///   (`company_id` immuable), puis `companies` en partage **en premier verrou**
-///   (ordre global ; une désignation tient `companies` en exclusif), le parent
+///   (ordre global ; une désignation tient `companies` en exclusif), les
+///   réglages de facturation en partage (#1431, comme [`create`]), le parent
 ///   `FOR UPDATE` (en partage jusqu'à la revue d'intégration de la PR de
 ///   l'Epic 46 : il passe désormais non imputable), et ses désignations par les recherches verrouillantes de
 ///   [`fx_designations_of_in_tx`].
@@ -2086,6 +2080,11 @@ pub async fn reactivate(
     let company_id = company_of_account(pool, id).await?;
     let mut tx = pool.begin().await.map_err(map_db_error)?;
     let state = lock_company_currency_in_tx(&mut tx, company_id, CompanyLock::Share).await?;
+    // #1431 : les réglages de facturation en partage, **avant** le `FOR UPDATE`
+    // du parent — l'ordre de [`create`] et d'[`update`] (une modification des
+    // réglages les tient `FOR UPDATE`, puis lit les comptes) ; leurs
+    // désignations sont lues plus bas par [`refuse_unfit_parent_in_tx`].
+    lock_invoice_settings_share_in_tx(&mut tx, company_id).await?;
 
     let before = match sqlx::query_as::<_, Account>(FIND_BY_ID_SQL)
         .bind(id)
@@ -2145,42 +2144,20 @@ pub async fn reactivate(
             tx.rollback().await.map_err(map_db_error)?;
             return Err(e);
         }
-        // Revue d'intégration de la PR de l'Epic 46 (H1) : la réactivation est
-        // un chemin par lequel un compte redevient parent sans passer par
-        // [`guard_parent_change_in_tx`]. Un groupe dont le seul sous-compte est
-        // archivé peut repasser imputable, puis être lié à un compte bancaire
-        // (compte du plan ou compte de frais) ; réactiver le sous-compte lui
-        // rendrait un enfant actif — non imputable, avec ses écritures
-        // automatiques. Même refus, mêmes `details`, après celui des
-        // désignations de change (ordre du changement de parent).
+        // Revue d'intégration de la PR de l'Epic 46 (H1), puis #1431 : la
+        // réactivation est un chemin par lequel un compte redevient parent sans
+        // passer par [`guard_parent_change_in_tx`] — un groupe dont le seul
+        // sous-compte est archivé peut repasser imputable, puis recevoir des
+        // écritures, être lié à un compte bancaire ou désigné par la
+        // facturation ; réactiver le sous-compte le rendrait non imputable.
+        // Les refus de la création et du changement de parent, mêmes codes et
+        // mêmes `details`, après celui des désignations de change ; le message
+        // nomme le sous-compte, qui reste archivé.
         if let Err(e) =
-            refuse_bank_linked_parent_in_tx(&mut tx, company_id, parent_id, &parent_number).await
+            refuse_unfit_parent_in_tx(&mut tx, company_id, parent_id, &parent_number).await
         {
             tx.rollback().await.map_err(map_db_error)?;
-            return Err(match e {
-                DbError::AccountParentBankLinked {
-                    parent_account_id,
-                    parent_number,
-                    bank_account_id,
-                    bank_name,
-                    ..
-                } => DbError::AccountParentBankLinked {
-                    parent_account_id,
-                    parent_number,
-                    bank_account_id,
-                    bank_name,
-                    reactivated_number: Some(before.number.clone()),
-                },
-                other => other,
-            });
-        }
-        // Revue ciblée des correctifs H1 (M-A) : le parent passe non imputable
-        // plus bas ; un compte de bilan en devise qui porte des écritures y
-        // perdrait la réévaluation, sans recours tant que le sous-compte est
-        // actif — refusé comme à la création (37-5-CR-P3-1).
-        if let Err(e) = refuse_foreign_parent_with_entries_in_tx(&mut tx, parent_id).await {
-            tx.rollback().await.map_err(map_db_error)?;
-            return Err(e);
+            return Err(e.with_reactivated_number(&before.number));
         }
     }
 
@@ -3232,6 +3209,102 @@ async fn refuse_bank_linked_parent_in_tx(
         }),
         None => Ok(()),
     }
+}
+
+/// Refuse comme parent un compte que la **facturation** emploie (#1431) : désigné
+/// dans les réglages de facturation (créance, produit, TVA, créanciers, arrondi,
+/// escompte, frais bancaires, pertes sur créances — le premier dans l'ordre de
+/// [`company_invoice_settings::DESIGNATED_ACCOUNT_COLUMNS`]), puis compte de
+/// produit par défaut d'un article, **actif ou archivé** (un article archivé se
+/// réactive ; le premier par identifiant) → [`DbError::AccountParentDesignated`].
+/// Devenu parent, le compte passerait non imputable, et la validation d'une
+/// facture ou d'un règlement qui l'emploie serait refusée (`400
+/// ACCOUNT_NOT_POSTABLE`) sans que rien ne l'ait annoncé.
+///
+/// Rangé **sous** un groupe (membre), un tel compte reste imputable : seul le
+/// fait d'en devenir le parent est refusé.
+///
+/// **Verrous** : l'appelant tient les réglages de facturation en partage
+/// (avant le `FOR UPDATE` du parent) ; ils sont relus ici en partage, puis les
+/// articles en lecture verrouillante par l'index
+/// `idx_products_default_revenue_account` — un article qui désigne le parent
+/// pendant le geste attend sa fin, ou est vu.
+async fn refuse_designated_parent_in_tx(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    parent_id: i64,
+    parent_number: &str,
+) -> Result<(), DbError> {
+    let designation = match company_invoice_settings::designations_of_account_in_share_mode(
+        &mut *conn, company_id, parent_id,
+    )
+    .await?
+    .into_iter()
+    .next()
+    {
+        Some(setting) => Some(ParentDesignation::InvoiceSettings(setting)),
+        None => sqlx::query_as::<_, (i64, String)>(
+            "SELECT id, name FROM products WHERE default_revenue_account_id = ? \
+             AND company_id = ? ORDER BY id LIMIT 1 LOCK IN SHARE MODE",
+        )
+        .bind(parent_id)
+        .bind(company_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(map_db_error)?
+        .map(|(product_id, product_name)| ParentDesignation::Product {
+            product_id,
+            product_name,
+        }),
+    };
+    match designation {
+        Some(designation) => Err(DbError::AccountParentDesignated {
+            parent_account_id: parent_id,
+            parent_number: parent_number.to_string(),
+            designation,
+            reactivated_number: None,
+        }),
+        None => Ok(()),
+    }
+}
+
+/// Les refus d'un compte qui **deviendrait parent** — et donc non imputable —,
+/// communs aux trois chemins qui le rendent tel : la création d'un sous-compte
+/// ([`create_in_tx`]), le changement de parent ([`guard_parent_change_in_tx`],
+/// pour `PUT /accounts/{id}` et `POST /accounts/groups`) et la réactivation
+/// d'un sous-compte archivé ([`reactivate`]) — #1431, qui a aligné les deux
+/// derniers sur le premier. Dans cet ordre :
+///
+/// 1. désigné par un compte bancaire → [`DbError::AccountParentBankLinked`]
+///    ([`refuse_bank_linked_parent_in_tx`]) ;
+/// 2. désigné par la facturation → [`DbError::AccountParentDesignated`]
+///    ([`refuse_designated_parent_in_tx`]) ;
+/// 3. de bilan en devise et mouvementé →
+///    [`DbError::AccountForeignParentHasEntries`] (garde son code propre) ;
+/// 4. mouvementé, en toute devise → [`DbError::AccountParentHasEntries`] : il
+///    passerait non imputable avec un solde qu'aucune saisie ne corrigerait.
+///
+/// Les désignations de change, qui excluent au changement de parent celles du
+/// compte déplacé, restent jugées avant, par chaque appelant. Le parent est
+/// déjà verrouillé `FOR UPDATE` par l'appelant, et les réglages de facturation
+/// tenus en partage ; toutes les lectures sont verrouillantes.
+async fn refuse_unfit_parent_in_tx(
+    conn: &mut sqlx::MySqlConnection,
+    company_id: i64,
+    parent_id: i64,
+    parent_number: &str,
+) -> Result<(), DbError> {
+    refuse_bank_linked_parent_in_tx(&mut *conn, company_id, parent_id, parent_number).await?;
+    refuse_designated_parent_in_tx(&mut *conn, company_id, parent_id, parent_number).await?;
+    refuse_foreign_parent_with_entries_in_tx(&mut *conn, parent_id).await?;
+    if has_journal_line_locked(&mut *conn, parent_id).await? {
+        return Err(DbError::AccountParentHasEntries {
+            parent_account_id: parent_id,
+            parent_number: parent_number.to_string(),
+            reactivated_number: None,
+        });
+    }
+    Ok(())
 }
 
 /// Refuse un sous-compte sous un compte **candidat à la réévaluation**

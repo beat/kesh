@@ -492,6 +492,7 @@ async fn parent_mouvemente_refuse(pool: MySqlPool) {
         Err(DbError::AccountParentHasEntries {
             parent_account_id,
             parent_number,
+            reactivated_number: None,
         }) => {
             assert_eq!(parent_account_id, mouvemente);
             assert_eq!(parent_number, "11");
@@ -559,8 +560,8 @@ async fn course_un_cycle_ferme_par_un_ancetre_concurrent_est_vu(pool: MySqlPool)
 /// (M-A) : la réactivation passe le parent non imputable ; un parent de bilan en
 /// devise qui porte des écritures est refusé, comme à la création —
 /// `AccountForeignParentHasEntries` —, le sous-compte reste archivé et le parent
-/// imputable. Un parent en CHF mouvementé reste accepté (écart #1431, celui de
-/// la création).
+/// imputable. Un parent en CHF mouvementé est refusé aussi depuis #1431 —
+/// `AccountParentHasEntries`, qui nomme le sous-compte réactivé.
 #[sqlx::test(migrations = "./test-schema")]
 async fn reactivation_sous_un_parent_en_devise_mouvemente_refusee(pool: MySqlPool) {
     let s = seed_accounting_company(&pool).await.unwrap();
@@ -602,17 +603,26 @@ async fn reactivation_sous_un_parent_en_devise_mouvemente_refusee(pool: MySqlPoo
     );
     assert!(lire(&pool, usd).await.postable, "rien n'est écrit");
 
-    // En CHF, mouvementé : accepté, le parent passe non imputable.
+    // En CHF, mouvementé : refusé aussi depuis #1431, le parent reste imputable.
     sqlx::query("UPDATE accounts SET currency = NULL WHERE id = ?")
         .bind(usd)
         .execute(&pool)
         .await
         .unwrap();
+    let err = accounts::reactivate(&pool, enfant, v, s.admin_user_id, false)
+        .await
+        .unwrap_err();
     assert!(
-        accounts::reactivate(&pool, enfant, v, s.admin_user_id, false)
-            .await
-            .unwrap()
-            .active
+        matches!(
+            &err,
+            DbError::AccountParentHasEntries { parent_account_id, reactivated_number: Some(n), .. }
+                if *parent_account_id == usd && n == "10211"
+        ),
+        "{err:?}"
     );
-    assert!(!lire(&pool, usd).await.postable);
+    assert!(
+        !lire(&pool, enfant).await.active,
+        "le sous-compte reste archivé"
+    );
+    assert!(lire(&pool, usd).await.postable, "rien n'est écrit");
 }

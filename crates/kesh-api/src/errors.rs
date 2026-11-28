@@ -12,8 +12,8 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use kesh_db::errors::{
     AccountGroupReason, DbError, FxAccountField, FxAccountReason, ModificationGuard,
-    RejectedRevenueAccount, RevenueAccountRejection, ReversalBlocker, SettlementCancelBlocker,
-    UnvalidationBlocker,
+    ParentDesignation, RejectedRevenueAccount, RevenueAccountRejection, ReversalBlocker,
+    SettlementCancelBlocker, UnvalidationBlocker,
 };
 use kesh_i18n::{FluentArgs, I18nBundle, Locale};
 use serde::Serialize;
@@ -5335,26 +5335,103 @@ impl IntoResponse for AppError {
                         &t_args("error-account-parent-cycle", &fallback, &args),
                     )
                 }
+                // #1431 : refusé aussi à la création d'un sous-compte et à la
+                // réactivation, dont le message nomme le sous-compte archivé.
                 DbError::AccountParentHasEntries {
                     parent_account_id,
                     parent_number,
+                    reactivated_number,
                 } => {
                     let mut args = FluentArgs::new();
                     args.set("number", parent_number.clone());
-                    coded_response(
-                        StatusCode::CONFLICT,
-                        "ACCOUNT_PARENT_HAS_ENTRIES",
-                        t_args(
+                    let message = match reactivated_number {
+                        Some(child) => {
+                            args.set("child", child.clone());
+                            t_args(
+                                "error-account-reactivate-parent-has-entries",
+                                &format!(
+                                    "Le compte {child} ne peut pas être réactivé : son compte parent {parent_number} porte des écritures ; redevenu compte de groupe, il serait non imputable avec un solde qu'aucune saisie ne pourrait plus corriger. Le compte {child} reste archivé."
+                                ),
+                                &args,
+                            )
+                        }
+                        None => t_args(
                             "error-account-parent-has-entries",
                             &format!(
                                 "Le compte {parent_number} porte des écritures : y ranger ce compte le rendrait non imputable avec un solde qu'aucune saisie ne pourrait plus corriger. Choisissez un compte de groupe sans écriture."
                             ),
                             &args,
                         ),
+                    };
+                    coded_response(
+                        StatusCode::CONFLICT,
+                        "ACCOUNT_PARENT_HAS_ENTRIES",
+                        message,
                         serde_json::json!({
                             "parentAccountId": parent_account_id,
                             "parentNumber": parent_number,
                         }),
+                    )
+                }
+                // #1431 : un compte que la facturation emploie (réglages de
+                // facturation, compte de produit d'un article) ne devient pas
+                // parent — il passerait non imputable.
+                DbError::AccountParentDesignated {
+                    parent_account_id,
+                    parent_number,
+                    designation,
+                    reactivated_number,
+                } => {
+                    let mut args = FluentArgs::new();
+                    args.set("number", parent_number.clone());
+                    let message = match (&designation, &reactivated_number) {
+                        (ParentDesignation::InvoiceSettings(_), None) => t_args(
+                            "error-account-parent-designated-settings",
+                            &format!(
+                                "Le compte {parent_number} est désigné dans les paramètres de facturation : il doit rester imputable et ne peut pas devenir un compte de groupe. Choisissez un autre compte de groupe, ou désignez d'abord un autre compte dans Administration → Facturation."
+                            ),
+                            &args,
+                        ),
+                        (ParentDesignation::InvoiceSettings(_), Some(child)) => {
+                            args.set("child", child.clone());
+                            t_args(
+                                "error-account-reactivate-parent-designated-settings",
+                                &format!(
+                                    "Le compte {child} ne peut pas être réactivé : son compte parent {parent_number} est désigné dans les paramètres de facturation et doit rester imputable ; il ne peut pas redevenir un compte de groupe. Le compte {child} reste archivé."
+                                ),
+                                &args,
+                            )
+                        }
+                        (ParentDesignation::Product { product_name, .. }, None) => {
+                            args.set("product", product_name.clone());
+                            t_args(
+                                "error-account-parent-designated-product",
+                                &format!(
+                                    "Le compte {parent_number} est le compte de produit de l'article « {product_name} » : il doit rester imputable et ne peut pas devenir un compte de groupe. Choisissez un autre compte de groupe, ou changez d'abord le compte de produit de l'article."
+                                ),
+                                &args,
+                            )
+                        }
+                        (ParentDesignation::Product { product_name, .. }, Some(child)) => {
+                            args.set("product", product_name.clone());
+                            args.set("child", child.clone());
+                            t_args(
+                                "error-account-reactivate-parent-designated-product",
+                                &format!(
+                                    "Le compte {child} ne peut pas être réactivé : son compte parent {parent_number} est le compte de produit de l'article « {product_name} » et doit rester imputable ; il ne peut pas redevenir un compte de groupe. Le compte {child} reste archivé."
+                                ),
+                                &args,
+                            )
+                        }
+                    };
+                    let mut details = designation.details();
+                    details["parentAccountId"] = serde_json::json!(parent_account_id);
+                    details["parentNumber"] = serde_json::json!(parent_number);
+                    coded_response(
+                        StatusCode::CONFLICT,
+                        "ACCOUNT_PARENT_DESIGNATED",
+                        message,
+                        details,
                     )
                 }
                 // Epic 46, décision du mainteneur du 2026-11-26 : un compte

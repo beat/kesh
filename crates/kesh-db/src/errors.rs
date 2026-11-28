@@ -217,6 +217,96 @@ impl CurrencyUseSite {
     }
 }
 
+/// La désignation qui interdit à un compte de devenir **parent** (#1431) : un
+/// compte que la facturation emploie doit rester imputable, et un sous-compte
+/// actif le rendrait non imputable — la validation d'une facture ou d'un
+/// règlement qui l'emploie serait alors refusée (`400 ACCOUNT_NOT_POSTABLE`),
+/// sans que rien ne l'ait annoncé. Rendue par
+/// [`DbError::AccountParentDesignated`] ; les codes de `details` reprennent
+/// ceux de [`CurrencyUseSite`] (`invoiceSettings` avec `setting`, `product`
+/// avec `productId`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParentDesignation {
+    /// Désigné dans les réglages de facturation (code de
+    /// `DESIGNATED_ACCOUNT_COLUMNS` : `receivable`, `revenue`, `vatPayable`…).
+    InvoiceSettings(&'static str),
+    /// Compte de produit par défaut d'un article, actif ou archivé (le premier
+    /// par identifiant).
+    Product {
+        /// Identifiant de l'article.
+        product_id: i64,
+        /// Nom de l'article, pour le message.
+        product_name: String,
+    },
+}
+
+impl DbError {
+    /// Le refus d'un parent rendu par une **réactivation** (#1431) : les trois
+    /// variantes qui nomment le sous-compte dans leur message
+    /// ([`DbError::AccountParentBankLinked`], [`DbError::AccountParentDesignated`],
+    /// [`DbError::AccountParentHasEntries`]) reçoivent `reactivated_number` ;
+    /// toute autre erreur est rendue telle quelle. Les `details` ne changent pas.
+    pub fn with_reactivated_number(self, number: &str) -> Self {
+        match self {
+            Self::AccountParentBankLinked {
+                parent_account_id,
+                parent_number,
+                bank_account_id,
+                bank_name,
+                ..
+            } => Self::AccountParentBankLinked {
+                parent_account_id,
+                parent_number,
+                bank_account_id,
+                bank_name,
+                reactivated_number: Some(number.to_string()),
+            },
+            Self::AccountParentDesignated {
+                parent_account_id,
+                parent_number,
+                designation,
+                ..
+            } => Self::AccountParentDesignated {
+                parent_account_id,
+                parent_number,
+                designation,
+                reactivated_number: Some(number.to_string()),
+            },
+            Self::AccountParentHasEntries {
+                parent_account_id,
+                parent_number,
+                ..
+            } => Self::AccountParentHasEntries {
+                parent_account_id,
+                parent_number,
+                reactivated_number: Some(number.to_string()),
+            },
+            other => other,
+        }
+    }
+}
+
+impl ParentDesignation {
+    /// La part propre à la désignation des `details` de la réponse :
+    /// `{ designation: "invoiceSettings", setting }` ou `{ designation:
+    /// "product", productId, productName }`.
+    pub fn details(&self) -> serde_json::Value {
+        match self {
+            Self::InvoiceSettings(setting) => {
+                serde_json::json!({ "designation": "invoiceSettings", "setting": setting })
+            }
+            Self::Product {
+                product_id,
+                product_name,
+            } => serde_json::json!({
+                "designation": "product",
+                "productId": product_id,
+                "productName": product_name,
+            }),
+        }
+    }
+}
+
 /// Raison du refus d'un compte de produit référencé par une ligne de facture
 /// (Story 16-1a, #152 — décision D3).
 ///
@@ -1838,12 +1928,43 @@ pub enum DbError {
     /// qu'aucune saisie ne corrigerait plus (correctif `fix-api-parent-compte`,
     /// revue P1-2 ; motif de [`DbError::AccountForeignParentHasEntries`],
     /// étendu à toute devise au `PUT`). HTTP 409 `ACCOUNT_PARENT_HAS_ENTRIES`.
+    ///
+    /// Depuis #1431, refusé aussi à la création d'un sous-compte (`POST
+    /// /accounts` avec `parentId`) et à la réactivation d'un sous-compte
+    /// archivé (`PUT /accounts/{id}/reactivate`), qui rendent le parent non
+    /// imputable de la même façon.
     #[error("Le compte parent {parent_number} porte des écritures")]
     AccountParentHasEntries {
         /// Identifiant du parent demandé.
         parent_account_id: i64,
         /// Numéro du parent demandé.
         parent_number: String,
+        /// Numéro du sous-compte archivé dont la réactivation est refusée
+        /// (#1431) ; `None` pour une création ou un changement de parent. Ne
+        /// sert qu'au message : les `details` ne changent pas.
+        reactivated_number: Option<String>,
+    },
+
+    /// Le parent demandé est désigné dans les réglages de facturation ou comme
+    /// compte de produit par défaut d'un article (#1431) : devenu parent, il
+    /// passerait non imputable, et la validation d'une facture ou d'un
+    /// règlement qui l'emploie serait refusée. Refusé à la création d'un
+    /// sous-compte, au changement de parent (`PUT /accounts/{id}`, `POST
+    /// /accounts/groups`) et à la réactivation d'un sous-compte archivé. HTTP
+    /// 409 `ACCOUNT_PARENT_DESIGNATED`.
+    #[error("Le compte {parent_number} est désigné par la facturation ({designation:?})")]
+    AccountParentDesignated {
+        /// Identifiant du parent demandé.
+        parent_account_id: i64,
+        /// Numéro du parent demandé.
+        parent_number: String,
+        /// La première désignation trouvée (réglages de facturation d'abord,
+        /// dans l'ordre de `DESIGNATED_ACCOUNT_COLUMNS`, puis articles).
+        designation: ParentDesignation,
+        /// Numéro du sous-compte archivé dont la réactivation est refusée ;
+        /// `None` pour une création ou un changement de parent. Ne sert qu'au
+        /// message.
+        reactivated_number: Option<String>,
     },
 
     /// Changement de parent refusé : le parent demandé est désigné par un
@@ -2760,6 +2881,7 @@ impl DbError {
             Self::AccountParentCycle { .. } => "ACCOUNT_PARENT_CYCLE",
             Self::AccountParentHasEntries { .. } => "ACCOUNT_PARENT_HAS_ENTRIES",
             Self::AccountParentBankLinked { .. } => "ACCOUNT_PARENT_BANK_LINKED",
+            Self::AccountParentDesignated { .. } => "ACCOUNT_PARENT_DESIGNATED",
             Self::AccountGroupInvalid { .. } => "ACCOUNT_GROUP_INVALID",
             Self::AccountParentNotFound => "VALIDATION_ERROR",
             Self::AccountRoleInvalidForType { .. } => "ACCOUNT_ROLE_INVALID_FOR_TYPE",

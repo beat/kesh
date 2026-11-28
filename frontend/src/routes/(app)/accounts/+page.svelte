@@ -203,9 +203,10 @@
 		}));
 	});
 
-	// Options de parent : à la création, les comptes actifs ; à la modification
-	// (correctif `fix-api-parent-compte`), sans le compte, ses sous-comptes ni
-	// les comptes qui portent des écritures (voir `parentCandidates`).
+	// Options de parent : les comptes actifs, sans ceux qui portent des écritures
+	// (#1431 à la création) ; à la modification (correctif
+	// `fix-api-parent-compte`), ni le compte ni ses sous-comptes non plus (voir
+	// `parentCandidates`).
 	function toParentOptions(candidates: AccountResponse[]) {
 		return candidates.map((a) => ({ value: String(a.id), label: `${a.number} — ${a.name}` }));
 	}

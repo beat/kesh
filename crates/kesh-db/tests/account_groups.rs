@@ -675,9 +675,25 @@ async fn parent_mouvemente_d_un_groupe_cree_est_refuse(pool: MySqlPool) {
     );
     assert_eq!(etat(&pool, &s).await, avant);
 
-    // `POST /accounts` et `PUT /accounts/{id}` inchangés.
-    let enfant = compte(&pool, &s, "109", Some(parent)).await;
-    assert_eq!(lire(&pool, enfant).await.parent_id, Some(parent));
+    // `PUT /accounts/{id}` inchangé ; `POST /accounts` refuse de même depuis
+    // #1431.
+    let err = accounts::create(
+        &pool,
+        s.admin_user_id,
+        NewAccount::new(
+            s.company_id,
+            "109",
+            "Sous-compte",
+            AccountType::Asset,
+            Some(parent),
+        ),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, DbError::AccountParentHasEntries { .. }),
+        "{err:?}"
+    );
     let err = ranger(&pool, &s, a1, parent).await.unwrap_err();
     assert!(
         matches!(err, DbError::AccountParentHasEntries { .. }),
@@ -1190,9 +1206,25 @@ async fn creation_d_un_sous_compte_sous_un_compte_lie_refusee(pool: MySqlPool) {
     );
     assert_eq!(etat(&pool, &s).await, avant, "rien n'est écrit");
 
-    // Un parent mouvementé, non lié, reste accepté à la création (#1431 inchangée).
+    // Un parent mouvementé, non lié, est refusé lui aussi à la création depuis
+    // #1431 — la règle du `PUT`, `AccountParentHasEntries`.
     let mouvemente = compte(&pool, &s, "10", None).await;
     ligne(&pool, &s, mouvemente).await;
-    let enfant = compte(&pool, &s, "109", Some(mouvemente)).await;
-    assert_eq!(lire(&pool, enfant).await.parent_id, Some(mouvemente));
+    let err = accounts::create(
+        &pool,
+        s.admin_user_id,
+        NewAccount::new(
+            s.company_id,
+            "109",
+            "Sous-compte",
+            AccountType::Asset,
+            Some(mouvemente),
+        ),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, DbError::AccountParentHasEntries { parent_account_id, .. } if parent_account_id == mouvemente),
+        "{err:?}"
+    );
 }
