@@ -532,7 +532,7 @@ En multi-devises, désignez 6950.1 comme compte des gains \textbf{et} des pertes
 
 \paragraph{Plusieurs comptes, un seul miroir.} Plusieurs comptes peuvent partager le même compte miroir --- par exemple plusieurs comptes bancaires et un seul compte de découvert. Quand vous ouvrez un compte miroir, le dialogue ne montre pas de champ \textbf{Compte miroir} mais une phrase : «~Ce compte est le compte miroir de 1020.~» --- un compte miroir n'a pas lui-même de miroir. La phrase nomme les comptes que le plan \textbf{affiché} contient : si les seuls comptes qui le désignent sont archivés et que \emph{Afficher les archivés} est décoché, le champ \textbf{Compte miroir} paraît à la place, et Kesh refuse alors, au moment d'enregistrer, ce que la règle ci-dessus interdit.
 
-\paragraph{Ce qui est refusé tant qu'un compte est miroir.} Tant qu'au moins un compte le désigne, un compte miroir n'accepte \textbf{aucune écriture} (il est non postable), \textbf{ne redevient pas postable}, \textbf{ne change pas de type}, \textbf{ne reçoit pas de rôle}, \textbf{ne reçoit pas de sous-compte} (ni à la création d'un compte sous lui, ni en changeant le parent d'un compte) et \textbf{ne s'archive pas} (voir \emph{Suppression d'un compte}) ; le message nomme les comptes qui le désignent. Retirez d'abord le lien (\emph{Aucun}) sur chacun d'eux.
+\paragraph{Ce qui est refusé tant qu'un compte est miroir.} Tant qu'au moins un compte le désigne, un compte miroir n'accepte \textbf{aucune écriture} (il est non postable), \textbf{ne redevient pas postable}, \textbf{ne change pas de type}, \textbf{ne reçoit pas de rôle}, \textbf{ne reçoit pas de sous-compte} (ni à la création d'un compte sous lui, ni en changeant le parent d'un compte, ni par \emph{Créer des groupes}) et \textbf{ne s'archive pas} (voir \emph{Suppression d'un compte}) ; le message nomme les comptes qui le désignent. Retirez d'abord le lien (\emph{Aucun}) sur chacun d'eux.
 
 \begin{keshwarning}
 \textbf{Ne choisissez pas comme miroir un compte que les réglages de facturation, un article ou une règle de rapprochement désignent.} Un compte miroir est non postable : le flux qui l'emploierait --- une facture, une facture fournisseur, un rapprochement --- serait refusé, et le message nommerait le compte. Désignez d'abord un autre compte dans ces réglages.
@@ -576,6 +576,9 @@ trois zones. \textbf{Rien n'est créé ni déplacé avant votre confirmation.}
     le signale par une erreur qui nomme le compte bancaire, et ne les offre pas comme parent ; Kesh
     le refuse aussi à la confirmation, et quand on y range un compte dessous, à la création d'un
     compte comme à \emph{Modifier le compte}. Ranger ces comptes \emph{dans} un groupe reste possible : ils restent imputables.
+    De même, \textbf{un compte miroir ne devient jamais un groupe} (\S\ref{sec:compte-miroir}) : ni groupe réutilisé, ni
+    parent d'un groupe créé ; la page le signale par une erreur qui nomme les comptes qui le désignent, et ne l'offre
+    pas comme parent.
     Un groupe ne réunit que des comptes \textbf{d'un même type} : des types mêlés sont refusés ;
     décochez les comptes d'un type pour lever le refus. Kesh signale aussi, sans bloquer, des devises
     mêlées (le groupe s'affiche en CHF), les comptes de même préfixe non cochés et deux banques
@@ -4540,7 +4543,8 @@ Un compte qui a un \textbf{compte miroir} (\S\ref{sec:compte-miroir}) et dont le
 pas au bilan ni au compte de résultat avec un montant négatif : son solde, changé de signe, paraît \textbf{sous son
 miroir}, de l'autre côté du même rapport. Un compte dont le solde est dans son sens normal reste à sa place. Sous le
 nom du miroir, une mention en petit dit de quel compte vient le montant : «~Solde de 2270 AVS/AI/APG~», ou
-«~Soldes de~…~» quand plusieurs comptes partagent ce miroir --- par niveaux (hiérarchie montrée, la vue de la
+«~Soldes de~…~» quand plusieurs comptes partagent ce miroir ; le numéro de chaque compte nommé ouvre son grand livre
+sur la période du rapport (le miroir, lui, ne porte aucune écriture) --- par niveaux (hiérarchie montrée, la vue de la
 première visite) comme à plat, sur la ligne du miroir quand son groupe est ouvert ; un groupe fermé ne la reprend
 pas.
 

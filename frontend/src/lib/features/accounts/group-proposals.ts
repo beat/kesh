@@ -71,6 +71,23 @@ export type ProposalKind = 'create' | 'attach' | 'reuse';
 /** Le niveau d'un message ; seule une erreur bloque. */
 export type MessageLevel = 'error' | 'warning' | 'info';
 
+/**
+ * Les **comptes miroirs** du plan chargé (Epic 47) : pour chaque compte désigné comme miroir, les numéros des
+ * comptes qui le désignent, archivés compris s'ils sont chargés. Un compte miroir ne reçoit pas de sous-compte :
+ * le serveur refuse qu'il devienne un groupe, réutilisé ou parent d'un groupe créé (`409 ACCOUNT_IS_MIRROR`
+ * `child`) ; la page le dit avant la confirmation (revue d'intégration P1 de la PR de l'Epic 47, M-2).
+ */
+export function mirrorTargets(accounts: readonly AccountResponse[]): Map<number, string> {
+	const sources = new Map<number, string[]>();
+	for (const a of [...accounts].sort(byNumber)) {
+		if (a.mirrorAccountId == null) continue;
+		const liste = sources.get(a.mirrorAccountId) ?? [];
+		liste.push(a.number);
+		sources.set(a.mirrorAccountId, liste);
+	}
+	return new Map([...sources].map(([id, nums]) => [id, nums.join(', ')]));
+}
+
 /** Les codes des messages d'une proposition (traduits par `routes/(app)/accounts/groups/messages.ts`). */
 export type ProposalMessageCode =
 	// erreurs
@@ -92,6 +109,8 @@ export type ProposalMessageCode =
 	| 'parentHasEntries'
 	| 'numberBankLinked'
 	| 'parentBankLinked'
+	| 'numberIsMirror'
+	| 'parentIsMirror'
 	// avertissements
 	| 'root'
 	| 'mixedNames'
@@ -363,8 +382,9 @@ export function checkProposals(
 	mode: GroupMode,
 	links: BankLinks = NO_LINKS,
 ): CheckedProposal[] {
+	const mirrors = mirrorTargets(accounts);
 	const base = set.skeletons.map((s) =>
-		judgeAlone(s, editOf(s, edits), accounts, selection, mode, set.singles, links),
+		judgeAlone(s, editOf(s, edits), accounts, selection, mode, set.singles, links, mirrors),
 	);
 	const accepted = base.filter((p) => p.edit.state === 'accepted');
 	for (const p of base) {
@@ -398,6 +418,7 @@ function judgeAlone(
 	mode: GroupMode,
 	singles: readonly AccountResponse[],
 	links: BankLinks,
+	mirrors: ReadonlyMap<number, string>,
 ): CheckedProposal {
 	const excluded = new Set(edit.excluded);
 	const included = skeleton.members.filter((m) => !excluded.has(m.id));
@@ -444,6 +465,8 @@ function judgeAlone(
 			push(p, 'error', 'numberTakenEntries', params);
 		} else if (links.has(existing.id)) {
 			push(p, 'error', 'numberBankLinked', { ...params, bank: links.get(existing.id) as string });
+		} else if (mirrors.has(existing.id)) {
+			push(p, 'error', 'numberIsMirror', { ...params, sources: mirrors.get(existing.id) as string });
 		} else {
 			p.canReuse = true;
 			if (edit.reuse) {
@@ -473,6 +496,10 @@ function judgeAlone(
 			const bank = links.get(parentId);
 			if (parent && bank !== undefined) {
 				push(p, 'error', 'parentBankLinked', { number: parent.number, name: parent.name, bank });
+			}
+			const sources = mirrors.get(parentId);
+			if (parent && sources !== undefined) {
+				push(p, 'error', 'parentIsMirror', { number: parent.number, name: parent.name, sources });
 			}
 		}
 	}
@@ -723,7 +750,7 @@ export function previewTree(
 /**
  * Les comptes que peut prendre pour parent un groupe à créer : actifs, sans
  * écriture (règle du `PUT`, #1351), non désignés par un compte bancaire
- * ({@link BankLinks}), hors des membres de la proposition — plus le parent déjà
+ * ({@link BankLinks}) ni comptes miroirs ({@link mirrorTargets}), hors des membres de la proposition — plus le parent déjà
  * choisi, pour qu'il reste lisible.
  */
 export function parentOptionsFor(
@@ -733,12 +760,13 @@ export function parentOptionsFor(
 ): AccountResponse[] {
 	const memberIds = new Set(proposal.members.map((m) => m.id));
 	const current = proposal.edit.parent;
+	const mirrors = mirrorTargets(accounts);
 	return accounts
 		.filter(
 			(a) =>
 				a.active &&
 				!memberIds.has(a.id) &&
-				((a.currencyLocked !== true && !links.has(a.id)) || a.id === current),
+				((a.currencyLocked !== true && !links.has(a.id) && !mirrors.has(a.id)) || a.id === current),
 		)
 		.sort(byNumber);
 }

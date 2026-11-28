@@ -116,6 +116,18 @@ export function proposalMessageText(m: ProposalMessage): string {
 				'Le parent { $number } « { $name } » est le compte du compte bancaire « { $bank } » : il ne peut pas devenir un groupe. Choisissez un autre parent.',
 				{ number: p.number, name: p.name, bank: p.bank },
 			);
+		case 'numberIsMirror':
+			return i18nMsg(
+				'accounts-groups-msg-number-is-mirror',
+				'Le compte { $number } « { $name } » est le compte miroir de { $sources } : un compte miroir ne reçoit pas de sous-compte et ne peut pas devenir un groupe. Saisissez un autre numéro.',
+				{ number: p.number, name: p.name, sources: p.sources },
+			);
+		case 'parentIsMirror':
+			return i18nMsg(
+				'accounts-groups-msg-parent-is-mirror',
+				'Le parent { $number } « { $name } » est le compte miroir de { $sources } : il ne peut pas recevoir de sous-compte. Choisissez un autre parent.',
+				{ number: p.number, name: p.name, sources: p.sources },
+			);
 		case 'root':
 			return i18nMsg('accounts-groups-msg-root', 'Sans parent, le groupe sera une racine du plan.');
 		case 'mixedNames':

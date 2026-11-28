@@ -1200,3 +1200,81 @@ async fn creation_d_un_sous_compte_sous_un_compte_lie_refusee(pool: MySqlPool) {
     let enfant = compte(&pool, &s, "109", Some(mouvemente)).await;
     assert_eq!(lire(&pool, enfant).await.parent_id, Some(mouvemente));
 }
+
+/// Revue d'intégration P1 de la PR de l'Epic 47 (L-1) — un **compte miroir** ne
+/// reçoit pas de sous-compte par la route groupée : refusé en groupe réutilisé
+/// (au rangement de son premier membre) et en parent d'un groupe créé (étape
+/// sans compte), `ACCOUNT_IS_MIRROR` `child` nommant la source, sans rien écrire.
+#[sqlx::test(migrations = "./test-schema")]
+async fn compte_miroir_ne_devient_pas_groupe(pool: MySqlPool) {
+    use kesh_db::errors::AccountIsMirrorReason;
+    let s = seed_accounting_company(&pool).await.unwrap();
+    let source = compte(&pool, &s, "1029", None).await;
+    let miroir = compte_dans(
+        &pool,
+        s.admin_user_id,
+        s.company_id,
+        "2199.1",
+        AccountType::Liability,
+        None,
+    )
+    .await;
+    sqlx::query("UPDATE accounts SET postable = FALSE WHERE id = ?")
+        .bind(miroir)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE accounts SET mirror_account_id = ? WHERE id = ?")
+        .bind(miroir)
+        .bind(source)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let membre_passif = compte_dans(
+        &pool,
+        s.admin_user_id,
+        s.company_id,
+        "2198",
+        AccountType::Liability,
+        None,
+    )
+    .await;
+    let avant = etat(&pool, &s).await;
+    let sources_de = |e: &DbError| match e {
+        DbError::AccountIsMirror { reason, sources } => {
+            assert_eq!(*reason, AccountIsMirrorReason::Child);
+            sources.iter().map(|x| x.id).collect::<Vec<_>>()
+        }
+        other => panic!("ACCOUNT_IS_MIRROR attendu, reçu {other:?}"),
+    };
+
+    let e = appliquer(
+        &pool,
+        &s,
+        &[reutiliser(miroir, membres(&pool, &[membre_passif]).await)],
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        (e.group_index, e.account_id),
+        (Some(0), Some(membre_passif))
+    );
+    assert_eq!(sources_de(&e.source), vec![source]);
+    assert_eq!(etat(&pool, &s).await, avant, "tout ou rien");
+
+    let e = appliquer(
+        &pool,
+        &s,
+        &[creer(
+            "219",
+            Some(miroir),
+            membres(&pool, &[membre_passif]).await,
+        )],
+    )
+    .await
+    .unwrap_err();
+    assert_eq!((e.group_index, e.account_id), (Some(0), None));
+    assert_eq!(sources_de(&e.source), vec![source]);
+    assert_eq!(etat(&pool, &s).await, avant, "tout ou rien");
+    assert_eq!(lire(&pool, membre_passif).await.parent_id, None);
+}

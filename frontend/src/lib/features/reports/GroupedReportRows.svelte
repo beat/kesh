@@ -179,7 +179,7 @@
 				<!-- Story 47-3 (§ Recâblage, point 3) : la mention « Solde de … » d'un compte
 				     miroir, comme à la vue à plat. Seules les lignes du bilan et du compte de
 				     résultat portent `mirrorOf` ; rien ne s'affiche ailleurs. -->
-				<MirrorOfNote account={row} />
+				<MirrorOfNote account={row} from={period.startDate} to={period.endDate} />
 			{/if}
 		</td>
 		{#each columns as col (col.id)}

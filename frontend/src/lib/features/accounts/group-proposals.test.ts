@@ -12,6 +12,7 @@ import {
 	commonLeadingWords,
 	isGroupAccount,
 	longestCommonPrefix,
+	mirrorTargets,
 	parentOptionsFor,
 	previewTree,
 	proposalSkeletons,
@@ -597,5 +598,44 @@ describe('comptes désignés par un compte bancaire (Epic 46, garde du mainteneu
 		const options = parentOptionsFor(accounts, sans, links).map((a) => a.number);
 		expect(options).not.toContain('1040');
 		expect(parentOptionsFor(accounts, sans).map((a) => a.number)).toContain('1040');
+	});
+});
+
+// Revue d'intégration P1 de la PR de l'Epic 47 (M-2) — un compte miroir ne reçoit pas de sous-compte : la page le
+// refuse avant la confirmation, comme le serveur (`409 ACCOUNT_IS_MIRROR` `child`).
+describe('group-proposals — compte miroir (Epic 47)', () => {
+	/** 1040 est le compte miroir de 6900 et de 6901 (archivé compris). */
+	const plan = accounts.map((a) =>
+		a.number === '6900' || a.number === '6901'
+			? { ...a, mirrorAccountId: idOf('1040'), ...(a.number === '6901' ? { active: false } : {}) }
+			: a,
+	);
+
+	it('mirrorTargets : la cible et ses sources dans l’ordre du plan, archivées comprises', () => {
+		const m = mirrorTargets(plan);
+		expect([...m]).toEqual([[idOf('1040'), '6900, 6901']]);
+		expect(mirrorTargets(accounts).size).toBe(0);
+	});
+
+	it('groupe à réutiliser qui est un compte miroir → refus, la coche « réutiliser » ne s’offre pas', () => {
+		const selection = sel('10400', '10401');
+		const set = proposalSkeletons(plan, selection, 'digit');
+		const p = byKey(checkProposals(set, {}, plan, selection, 'digit'), 'digit:1040');
+		expect(codes(p, 'error')).toEqual(['numberIsMirror']);
+		expect(p.canReuse).toBe(false);
+		expect(p.messages[0].params.sources).toBe('6900, 6901');
+		// Sans miroir, le même compte se réutilise.
+		const libre = byKey(checkProposals(set, {}, accounts, selection, 'digit'), 'digit:1040');
+		expect(libre.canReuse).toBe(true);
+	});
+
+	it('parent qui est un compte miroir → refus, et absent des parents offerts', () => {
+		const selection = sel('1030', '1031');
+		const set = proposalSkeletons(plan, selection, 'digit');
+		const first = byKey(checkProposals(set, {}, plan, selection, 'digit'), 'digit:103');
+		const p = byKey(checkProposals(set, edit(first, { parent: idOf('1040') }), plan, selection, 'digit'), 'digit:103');
+		expect(codes(p, 'error')).toContain('parentIsMirror');
+		expect(parentOptionsFor(plan, first).map((a) => a.number)).not.toContain('1040');
+		expect(parentOptionsFor(accounts, first).map((a) => a.number)).toContain('1040');
 	});
 });

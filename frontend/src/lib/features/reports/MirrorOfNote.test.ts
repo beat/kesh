@@ -24,19 +24,23 @@ function compte(over: Partial<AccountBalance> = {}): AccountBalance {
 	};
 }
 
+/** Période du rapport, pour les liens des sources. */
+const periode = { from: '2026-01-01', to: '2026-12-31' };
+
 describe('MirrorOfNote (Story 47-4)', () => {
 	it('rien sans `mirrorOf`', () => {
-		const { container } = render(MirrorOfNote, { account: compte() });
+		const { container } = render(MirrorOfNote, { account: compte(), ...periode });
 		expect(container.textContent).toBe('');
 	});
 
 	it('rien pour un `mirrorOf` vide', () => {
-		const { container } = render(MirrorOfNote, { account: compte({ mirrorOf: [] }) });
+		const { container } = render(MirrorOfNote, { account: compte({ mirrorOf: [] }), ...periode });
 		expect(container.textContent).toBe('');
 	});
 
 	it('une source : clé `-one`, numéro et nom', () => {
 		const { getByTestId } = render(MirrorOfNote, {
+			...periode,
 			account: compte({
 				mirrorOf: [{ accountId: 22, accountNumber: '2270', accountName: 'AVS/AI/APG', balance: '-1200.00' }],
 			}),
@@ -46,6 +50,7 @@ describe('MirrorOfNote (Story 47-4)', () => {
 
 	it('plusieurs sources : clé `-other`, dans l’ordre reçu, séparées par des virgules', () => {
 		const { getByTestId } = render(MirrorOfNote, {
+			...periode,
 			account: compte({
 				mirrorOf: [
 					{ accountId: 22, accountNumber: '2270', accountName: 'AVS/AI/APG', balance: '-1200.00' },
@@ -59,12 +64,21 @@ describe('MirrorOfNote (Story 47-4)', () => {
 		);
 	});
 
-	it('texte seul : aucun lien', () => {
+	it('le numéro de chaque source ouvre son grand livre sur la période (liens de l’Epic 55)', () => {
 		const { container } = render(MirrorOfNote, {
+			...periode,
 			account: compte({
-				mirrorOf: [{ accountId: 22, accountNumber: '2270', accountName: 'AVS/AI/APG', balance: '-1200.00' }],
+				mirrorOf: [
+					{ accountId: 22, accountNumber: '2270', accountName: 'AVS/AI/APG', balance: '-1200.00' },
+					{ accountId: 23, accountNumber: '2271', accountName: 'LPP', balance: '-5.00' },
+				],
 			}),
 		});
-		expect(container.querySelector('a')).toBeNull();
+		const liens = [...container.querySelectorAll('a')];
+		expect(liens.map((a) => a.textContent)).toEqual(['2270', '2271']);
+		expect(liens.map((a) => a.getAttribute('href'))).toEqual([
+			'/reports?tab=general-ledger&accountId=22&from=2026-01-01&to=2026-12-31',
+			'/reports?tab=general-ledger&accountId=23&from=2026-01-01&to=2026-12-31',
+		]);
 	});
 });

@@ -85,7 +85,7 @@
 								<td class="px-2 py-1 font-mono"
 									><AccountLink accountId={r.accountId} number={r.accountNumber} from={dto.period.startDate} to={dto.period.endDate} /></td
 								>
-								<td class="px-2 py-1">{r.accountName}<AccountCurrencyBalance account={r} /><MirrorOfNote account={r} /></td>
+								<td class="px-2 py-1">{r.accountName}<AccountCurrencyBalance account={r} /><MirrorOfNote account={r} from={dto.period.startDate} to={dto.period.endDate} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(r.balance)}</td>
 							</tr>
 						{/each}
@@ -127,7 +127,7 @@
 								<td class="px-2 py-1 font-mono"
 									><AccountLink accountId={e.accountId} number={e.accountNumber} from={dto.period.startDate} to={dto.period.endDate} /></td
 								>
-								<td class="px-2 py-1">{e.accountName}<AccountCurrencyBalance account={e} /><MirrorOfNote account={e} /></td>
+								<td class="px-2 py-1">{e.accountName}<AccountCurrencyBalance account={e} /><MirrorOfNote account={e} from={dto.period.startDate} to={dto.period.endDate} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(e.balance)}</td>
 							</tr>
 						{/each}

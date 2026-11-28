@@ -254,9 +254,12 @@ describe('BalanceSheetView — Story 47-4, mention « Solde de … » sous un co
 		// Sous le libellé, dans la cellule du nom de la ligne du miroir.
 		expect(note.closest('tr')?.getAttribute('data-testid')).toBe('report-row-1040.1');
 		expect(note.closest('td')?.textContent).toContain('Créances sociales');
-		// Texte seul, sans lien.
-		expect(note.querySelector('a')).toBeNull();
+		// La mention n'est pas dans un lien ; le numéro de la source y ouvre le grand livre de la source
+		// (liens de compte de l'Epic 55, revue d'intégration P1 de la PR de l'Epic 47, M-1).
 		expect(note.closest('a')).toBeNull();
+		expect(note.querySelector('a')?.getAttribute('href')).toBe(
+			'/reports?tab=general-ledger&accountId=22&from=2026-01-01&to=2026-12-31',
+		);
 		// Ligne sans `mirrorOf` : aucune mention.
 		expect(queryByTestId('mirror-of-1000')).toBeNull();
 		expect(getByTestId('report-row-1000').textContent).not.toContain('Solde de');

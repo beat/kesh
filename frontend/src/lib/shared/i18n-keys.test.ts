@@ -1293,7 +1293,9 @@ const ATTENDU = {
 	// Branche pr/47-comptes-miroirs-v2 (l'Epic 47 reposé sur main à 0c44f7d1a, 2026-11-28) : **3972**, relevé par
 	// la garde (« expected 3972 to be 3965 », `kesh-gate-logs/s47-v2/garde-i18n-1.log`) = 3965 + les 7 sites de
 	// l'Epic 47 (5 de la 47-2, champ « Compte miroir » ; 2 de la 47-4, `MirrorOfNote.svelte`).
-	sitesTotal: 3972,
+	// **3974** (revue d'intégration P1 de la PR de l'Epic 47, M-2), relevé par la garde (« expected 3974 to be
+	// 3972 ») : + `accounts-groups-msg-number-is-mirror` et `accounts-groups-msg-parent-is-mirror` (`groups/messages.ts`).
+	sitesTotal: 3974,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/
