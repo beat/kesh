@@ -5350,7 +5350,7 @@ impl IntoResponse for AppError {
                             t_args(
                                 "error-account-reactivate-parent-has-entries",
                                 &format!(
-                                    "Le compte {child} ne peut pas être réactivé : son compte parent {parent_number} porte des écritures ; un compte de groupe n'est pas imputable, et ce solde ne pourrait plus être corrigé. Le compte {child} reste archivé."
+                                    "Le compte {child} ne peut pas être réactivé : son compte parent {parent_number} porte des écritures ; un compte de groupe n'est pas imputable, et ce solde ne pourrait plus être corrigé. Le compte {child} reste archivé. Marche à suivre : manuel utilisateur, § « Réorganiser le plan comptable »."
                                 ),
                                 &args,
                             )
@@ -5358,7 +5358,7 @@ impl IntoResponse for AppError {
                         None => t_args(
                             "error-account-parent-has-entries",
                             &format!(
-                                "Le compte {parent_number} porte des écritures : un compte de groupe n'est pas imputable, et ce solde ne pourrait plus être corrigé. Choisissez un compte de groupe sans écriture."
+                                "Le compte {parent_number} porte des écritures : un compte de groupe n'est pas imputable, et ce solde ne pourrait plus être corrigé. Choisissez un compte de groupe sans écriture. Marche à suivre : manuel utilisateur, § « Réorganiser le plan comptable »."
                             ),
                             &args,
                         ),
@@ -5388,7 +5388,7 @@ impl IntoResponse for AppError {
                         (ParentDesignation::InvoiceSettings(_), None) => t_args(
                             "error-account-parent-designated-settings",
                             &format!(
-                                "Le compte {parent_number} est désigné dans les paramètres de facturation : il doit rester imputable, ce qu'un compte de groupe n'est pas. Choisissez un autre compte de groupe, ou désignez d'abord un autre compte dans Administration → Facturation."
+                                "Le compte {parent_number} est désigné dans les paramètres de facturation : il doit rester imputable, ce qu'un compte de groupe n'est pas. Choisissez un autre compte de groupe, ou désignez d'abord un autre compte dans Administration → Facturation. Marche à suivre : manuel utilisateur, § « Réorganiser le plan comptable »."
                             ),
                             &args,
                         ),
@@ -5397,7 +5397,7 @@ impl IntoResponse for AppError {
                             t_args(
                                 "error-account-reactivate-parent-designated-settings",
                                 &format!(
-                                    "Le compte {child} ne peut pas être réactivé : son compte parent {parent_number} est désigné dans les paramètres de facturation et doit rester imputable, ce qu'un compte de groupe n'est pas. Le compte {child} reste archivé."
+                                    "Le compte {child} ne peut pas être réactivé : son compte parent {parent_number} est désigné dans les paramètres de facturation et doit rester imputable, ce qu'un compte de groupe n'est pas. Le compte {child} reste archivé. Marche à suivre : manuel utilisateur, § « Réorganiser le plan comptable »."
                                 ),
                                 &args,
                             )
@@ -5407,7 +5407,7 @@ impl IntoResponse for AppError {
                             t_args(
                                 "error-account-parent-designated-product",
                                 &format!(
-                                    "Le compte {parent_number} est le compte de produit de l'article « {product_name} » : il doit rester imputable, ce qu'un compte de groupe n'est pas. Choisissez un autre compte de groupe, ou changez d'abord le compte de produit de l'article."
+                                    "Le compte {parent_number} est le compte de produit de l'article « {product_name} » : il doit rester imputable, ce qu'un compte de groupe n'est pas. Choisissez un autre compte de groupe, ou changez d'abord le compte de produit de l'article. Marche à suivre : manuel utilisateur, § « Réorganiser le plan comptable »."
                                 ),
                                 &args,
                             )
@@ -5418,7 +5418,7 @@ impl IntoResponse for AppError {
                             t_args(
                                 "error-account-reactivate-parent-designated-product",
                                 &format!(
-                                    "Le compte {child} ne peut pas être réactivé : son compte parent {parent_number} est le compte de produit de l'article « {product_name} » et doit rester imputable, ce qu'un compte de groupe n'est pas. Le compte {child} reste archivé."
+                                    "Le compte {child} ne peut pas être réactivé : son compte parent {parent_number} est le compte de produit de l'article « {product_name} » et doit rester imputable, ce qu'un compte de groupe n'est pas. Le compte {child} reste archivé. Marche à suivre : manuel utilisateur, § « Réorganiser le plan comptable »."
                                 ),
                                 &args,
                             )

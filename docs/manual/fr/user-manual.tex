@@ -457,7 +457,7 @@ Le plan comptable est la colonne vertébrale de votre comptabilité. Kesh fourni
     \item \textbf{Numéro} : par exemple 1020.1 pour un sous-compte de la banque.
     \item \textbf{Nom} : par exemple « UBS compte courant ».
     \item \textbf{Type} : Actif, Passif, Produit ou Charge.
-    \item \textbf{Compte parent (optionnel)} : compte de niveau supérieur (1020 dans l'exemple). Le compte d'un compte bancaire (son compte du plan, ou le compte de frais d'un compte PayPal, Wise ou Stripe) ne reçoit pas de sous-compte : il reçoit des écritures automatiques et ne doit pas devenir un compte de regroupement --- si 1020 est le compte de votre compte bancaire, rangez plutôt 1020 et ses voisins sous un groupe (\S\ref{sec:creer-groupes}). Depuis la version~0.21.0, ne reçoit pas non plus de sous-compte un compte qui \textbf{porte des écritures} --- son solde ne se corrigerait plus ---, ni un compte que la \textbf{facturation} emploie : désigné dans \emph{Administration} → \emph{Facturation} (créance, produit, TVA, créanciers, arrondi, escompte, frais bancaires, pertes) ou compte de produit d'un \textbf{article} --- devenu compte de regroupement, il ne serait plus imputable, et la validation des factures ou des règlements qui l'emploient serait refusée. Le message nomme le réglage ou l'article ; désignez-y d'abord un autre compte, ou choisissez un autre parent. Le champ ne propose pas les comptes qui portent des écritures. Il se change ensuite par \emph{Modifier le compte} (\S\ref{sec:modification-compte}).
+    \item \textbf{Compte parent (optionnel)} : compte de niveau supérieur (1020 dans l'exemple). Le compte d'un compte bancaire (son compte du plan, ou le compte de frais d'un compte PayPal, Wise ou Stripe) ne reçoit pas de sous-compte : il reçoit des écritures automatiques et ne doit pas devenir un compte de regroupement --- si 1020 est le compte de votre compte bancaire, rangez plutôt 1020 et ses voisins sous un groupe (\S\ref{sec:creer-groupes}). Depuis la version~0.21.0, ne reçoit pas non plus de sous-compte un compte qui \textbf{porte des écritures} --- son solde ne se corrigerait plus ---, ni un compte que la \textbf{facturation} emploie : désigné dans \emph{Administration} → \emph{Facturation} (créance, produit, TVA, créanciers, arrondi, escompte, frais bancaires, pertes) ou compte de produit d'un \textbf{article} --- devenu compte de regroupement, il ne serait plus imputable, et la validation des factures ou des règlements qui l'emploient serait refusée. Le message nomme le réglage ou l'article ; désignez-y d'abord un autre compte, ou choisissez un autre parent (\S\ref{sec:reorganiser-plan}). Le champ ne propose pas les comptes qui portent des écritures. Il se change ensuite par \emph{Modifier le compte} (\S\ref{sec:modification-compte}).
     \item \textbf{Rôle} : fonction du compte dans l'application (\emph{Créances clients}, \emph{TVA due}, \emph{Capital}, \emph{Résultat de l'exercice}\ldots) ou \emph{Aucun}. Voir la section \emph{Rôles des comptes} ci-dessous.
     \item \textbf{Postable} : décocher pour un compte de regroupement (compte titre) sur lequel on ne saisit pas d'écriture.
 \end{itemize}
@@ -494,7 +494,7 @@ le compte d'un compte bancaire (son compte du plan, ou le compte de frais d'un c
 PayPal, Wise ou Stripe), qui reçoit des écritures automatiques, et --- depuis la version~0.21.0
 --- un compte désigné dans \emph{Administration} → \emph{Facturation} ou compte de produit d'un
 article, qui doit rester imputable~; le message dit lequel. Depuis la version~0.21.0, la
-\emph{création} d'un compte refuse elle aussi un parent qui porte des écritures.
+\emph{création} d'un compte refuse elle aussi un parent qui porte des écritures. Pour restructurer autour d'un tel compte, voir \S\ref{sec:reorganiser-plan}.
 
 \begin{keshwarning}
 \textbf{Changer le type d'un compte qui porte des écritures reclasse tout son historique.} Le type — Actif, Passif, Produit, Charge — ne décrit pas seulement le compte : c'est lui qui décide dans quel état ses montants apparaissent. Les rapports le lisent \textbf{au moment où vous les demandez}, jamais au moment où l'écriture a été passée.
@@ -595,7 +595,49 @@ groupe ne se range pas dans la même confirmation que ses comptes («~un niveau 
 Déplacer un groupe existant reste un geste de \emph{Modifier le compte}
 (\S\ref{sec:modification-compte}). Cette fonction n'est pas ouverte aux clés d'API.
 
-\subsection{Suppression d'un compte}
+\subsection{Réorganiser le plan comptable}\label{sec:reorganiser-plan}
+
+Deux règles bornent la réorganisation d'un plan qui sert déjà. Le \textbf{numéro} d'un compte ne
+se modifie pas après sa création (\S\ref{sec:modification-compte})~: renuméroter, c'est créer un
+compte neuf. Et \textbf{un compte de regroupement ne porte pas d'écritures}~: on ne peut pas
+désigner comme parent un compte qui en a, \textbf{même si son solde est nul} --- ses écritures y
+resteraient, sur un compte non imputable où plus rien ne les corrigerait. Kesh refuse un tel
+parent à la création d'un compte, par \emph{Modifier le compte}, à la réactivation d'un
+sous-compte et à la confirmation de \emph{Créer des groupes} (\texttt{ACCOUNT\_\allowbreak
+PARENT\_\allowbreak HAS\_\allowbreak ENTRIES})~; le message renvoie à cette section.
+
+On ne transforme donc pas l'ancien compte en groupe~: on le remplace, en trois temps.
+
+\begin{enumerate}
+    \item \textbf{Créer les nouveaux comptes} (\S\ref{sec:ajout-compte})~: le compte de groupe,
+    sans écriture, puis les comptes imputables, avec ce groupe pour parent. Par exemple, pour
+    scinder 6500 \emph{Administration}, qui porte des écritures, créez le groupe 650
+    \emph{Administration}, puis 6501 \emph{Informatique} et 6502 \emph{Fournitures de bureau}
+    rangés sous 650.
+    \item \textbf{Reporter le solde} par une \textbf{écriture de reclassement}
+    (\emph{Mensuel} → \emph{Écritures} → \emph{Nouvelle écriture}), datée dans un exercice ouvert
+    et hors de toute période verrouillée (\S\ref{sec:verrou-periode})~: elle solde l'ancien compte
+    et porte le montant sur le ou les nouveaux comptes, en autant de lignes qu'il le faut. Pour
+    un solde débiteur de 1\,200.-- sur 6500~: 6501 au débit, 6500 au crédit, 1\,200.--. Le grand
+    livre de l'ancien compte (\S\ref{sec:grand-livre}) donne le solde à reporter --- pour un
+    compte de charge ou de produit, celui de l'exercice en cours. Les écritures passées restent
+    sur l'ancien compte~: l'historique ne se réécrit pas.
+    \item \textbf{Archiver l'ancien compte} (\S\ref{sec:suppression-compte})~: il n'est plus
+    proposé à la saisie et reste visible dans les écritures historiques. Kesh ne vérifie pas
+    que son solde est nul~: contrôlez-le au grand livre avant d'archiver. S'il portait un rôle
+    unique (\emph{Créances clients}, \emph{TVA due}\ldots), attribuez ce rôle au nouveau compte
+    \emph{après} l'archivage~: un rôle unique n'est porté que par un seul compte actif.
+\end{enumerate}
+
+\paragraph{Un compte désigné par la facturation.} Un compte désigné dans \emph{Administration} →
+\emph{Facturation}, ou compte de produit d'un article du \emph{Catalogue}, doit rester imputable~:
+il ne devient pas parent, même sans écriture (\texttt{ACCOUNT\_\allowbreak PARENT\_\allowbreak
+DESIGNATED}~; le message nomme le réglage ou l'article et renvoie lui aussi à cette section).
+\textbf{On change d'abord la désignation, puis on restructure}~: désignez un autre compte dans le
+réglage, ou changez le compte de produit de l'article, puis suivez la marche ci-dessus --- ou,
+si l'ancien compte ne porte aucune écriture, choisissez-le directement comme parent.
+
+\subsection{Suppression d'un compte}\label{sec:suppression-compte}
 
 Un compte ne peut être supprimé que s'il n'a aucune écriture ni sous-compte. Sinon, vous pouvez l'\textbf{archiver} (le compte reste visible dans les écritures historiques mais n'est plus proposé à la saisie).
 

@@ -3,7 +3,7 @@
 Status: review
 
 *Fiche rédigée le 2026-11-28, branche `fix/1431-parent-creation-reactivation`, partie de `origin/main` à `0c44f7d1a`.
-Correctif hors epic, pour la release **v0.21.0** (4 décembre). **Aucune migration.** Le mainteneur a proposé le refus et
+Correctif hors epic, pour la **release du 4 décembre**. **Aucune migration.** Le mainteneur a proposé le refus et
 laissé le contrat de l'API à notre lecture du code ; les détails ci-dessous sont les nôtres.*
 
 ## Intention
@@ -74,8 +74,17 @@ lien bancaire, devise, écritures — aucune lecture des réglages de facturatio
   écritures, désigner un autre compte), non un état à étendre. Écarté : sauter les deux refus quand le parent est déjà
   non imputable — plus permissif, mais il ferait diverger la création du `PUT` et du rattachement, et changerait la
   règle de ces deux routes. Les messages ne disent plus « redevenu compte de groupe », vrai seulement pour un parent sans
-  autre sous-compte. **À confirmer par le mainteneur** (contrat sur des livres tenus). Réversible : une condition sur
-  `postable` dans `refuse_unfit_parent_in_tx`.
+  autre sous-compte. ~~À confirmer par le mainteneur~~ **Confirmé par le mainteneur** le 2026-11-28, par le principe
+  qu'il a posé : « Un compte de regroupement ne porte pas d'écritures : on ne peut pas désigner comme parent un compte qui
+  en a, même si son solde est nul. » *(Annoté le 2026-11-28 ; la fiche disait « à confirmer ».)*
+- **C-1431-6 — Refus, non confirmation ; marche à suivre au manuel** (décision du mainteneur, 2026-11-28). Les deux refus
+  restent des refus sans confirmation possible. Le numéro d'un compte ne se modifiant pas, une réorganisation se fait en
+  créant les nouveaux comptes, en reportant le solde par une écriture de reclassement, puis en archivant l'ancien compte ;
+  pour un compte désigné, « on change d'abord la désignation, puis on restructure ». Le manuel utilisateur porte cette
+  marche (§ « Réorganiser le plan comptable », `sec:reorganiser-plan`), et les six messages des deux refus (création ou
+  changement de parent, réactivation ; réglage ou article) y renvoient, dans les quatre locales. Le manuel n'existe qu'en
+  français (`docs/manual/{de,en,it}/` ne portent qu'un README) : les messages allemand, italien et anglais citent le titre
+  français de la section, en le disant.
 
 ## Tests
 
@@ -91,7 +100,7 @@ Mutations : voir le Dev Agent Record.
 
 ## Notes de version
 
-*À reprendre au CHANGELOG de la v0.21.0, section « Changed » (changements de contrat de l'API).*
+*À reprendre au CHANGELOG de la release du 4 décembre, section « Changed » (changements de contrat de l'API).*
 
 - **Un compte qui porte des écritures, désigné dans les réglages de facturation ou compte de produit d'un article, ne
   reçoit plus de sous-compte par la création ou la réactivation d'un sous-compte** ([#1431](https://github.com/guycorbaz/kesh/issues/1431)). Créer un sous-compte sous un
@@ -108,6 +117,10 @@ Mutations : voir le Dev Agent Record.
   `PUT /accounts/{id}` (`parentId`) et `POST /accounts/groups` peuvent répondre `409 ACCOUNT_PARENT_DESIGNATED`. Détails
   au guide de l'API, § 10. L'API ne change pas de version.
 - Le champ *Compte parent* de la création d'un compte ne propose plus les comptes qui portent des écritures.
+- **Réorganiser le plan comptable** : le manuel utilisateur dit la marche à suivre — créer les nouveaux comptes, reporter
+  le solde par une écriture de reclassement, archiver l'ancien compte ; pour un compte désigné par la facturation, changer
+  d'abord la désignation. Un compte qui porte des écritures ne devient pas compte de groupe, même à solde nul. Les messages
+  des deux refus renvoient à cette section (le manuel n'existe qu'en français).
 
 ## Dev Agent Record
 
