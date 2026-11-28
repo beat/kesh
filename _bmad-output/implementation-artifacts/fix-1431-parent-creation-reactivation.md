@@ -111,8 +111,42 @@ Mutations : voir le Dev Agent Record.
 
 ## Dev Agent Record
 
-*(Complété après les gates.)*
+Journaux hors dépôt (répertoire de journaux du correctif, donné par l'orchestrateur).
+
+**Mutations** (`mutations.py`, au commit `01708501f`, binaires `accounts_parent_guard_e2e`, `account_parent_change`,
+`account_groups`, `fx_revaluation` — 71 tests ; source restaurée par `git checkout` après chacune) :
+
+| Mutation | Rouges |
+|---|---|
+| M1 — garde des écritures retirée | 9 (dont création et réactivation mouvementées, groupes) |
+| M2 — garde des désignations retirée | 6 (création, réactivation, `PUT`, route groupée) |
+| M3 — articles jamais lus | 3 (création, réactivation, `PUT`) |
+| M4 — création revenue à l'ancienne garde | 6 |
+| M5 — réactivation revenue à l'ancienne garde | 4 |
+| M6 — `PUT` sans désignation | 2 |
+| M7 — message de réactivation sans le sous-compte | 5 |
+
+Le verrou des réglages ajouté à la réactivation (C-1431-3) n'est couvert par aucune mutation : une course ne se prouve
+pas par un test déterministe ; il est établi à la lecture de l'ordre des verrous.
+
+**Gates réellement exécutés**
+
+- `cargo fmt --check` et `cargo clippy --workspace --all-targets -D warnings` : verts (dans `scripts/test-fast.sh --ci`).
+- Nextest complet (`scripts/test-fast.sh --ci`) au commit `76cbc615c` : 6999 exécutés, 6998 passés, 19 ignorés, **1 rouge** —
+  `textes_coherents::aucun_chemin_de_station_dans_les_fichiers_versionnes`, sur le prompt de revue P1, qui citait des
+  chemins de station ; corrigé en `69f5ba31b`.
+- Nextest complet (`scripts/test-fast.sh --ci`, fmt et clippy compris) au **dernier commit de code `670a7b2f6`** :
+  **7002 exécutés, 7002 passés**, 19 ignorés (`test-fast-ci-final.log`).
+- Frontend au commit `01708501f` (dernier changement du frontend) : `npm run check` 0 erreur (30 avertissements
+  préexistants), `lint-i18n-ownership` vert, `test:unit` 5765 tests / 329 fichiers verts.
+- Manuel utilisateur : `make user` sur une copie, vert (3 passes) ; PDF aplati relu.
+- `gate-ci` et E2E complet : **non exécutés** (réservés à l'orchestrateur avant la PR).
 
 ## Change Log
 
 - 2026-11-28 — fiche et implémentation (`01708501f`).
+- 2026-11-28 — revue de code, boucle : P1 (Opus, complète) 0 CRITICAL / 0 HIGH / 1 MEDIUM / 8 LOW → remédiation
+  `69f5ba31b` (M-1 tranché par le choix C-1431-5, à confirmer par le mainteneur ; L-1 à L-8 corrigés dans la story) ;
+  P2 (Sonnet, ciblée sur `69f5ba31b`) 0 au-dessus de LOW, 2 LOW → lot `670a7b2f6` (message d'un parent mouvementé
+  neutre, test renommé ; les messages du lien bancaire, antérieurs à la story, laissés) ; P3 (Sonnet, ciblée sur
+  `670a7b2f6`) 0 finding. Boucle close. Prompts versionnés : `fix-1431-review-prompt-p1.md`, `-p2.md`, `-p3.md`.
