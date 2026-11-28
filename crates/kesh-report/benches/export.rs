@@ -52,6 +52,7 @@ fn make_account_balance(i: usize, ty: AccountType) -> AccountBalance {
         role: None,
         currency: None,
         balance_currency: None,
+        mirror_of: Vec::new(),
     }
 }
 

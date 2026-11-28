@@ -182,6 +182,16 @@ describe('parentCandidates', () => {
 		expect(parentCandidates([...PLAN, sousM], sousM).map((a) => a.id)).toContain(6);
 	});
 
+	it('écarte un compte miroir, sauf s’il est le parent actuel (M-1)', () => {
+		const miroir = acc({ id: 9, number: '2100.1', name: 'Miroir' });
+		const source = acc({ id: 10, number: '1020', name: 'Banque', mirrorAccountId: 9 });
+		const plan = [V, miroir, source];
+		expect(parentCandidates(plan, null).map((a) => a.id)).toEqual([4, 10]);
+		expect(parentCandidates(plan, V).map((a) => a.id)).toEqual([10]);
+		const sous = acc({ id: 11, number: '2100.2', name: 'Sous miroir', parentId: 9 });
+		expect(parentCandidates([...plan, sous], sous).map((a) => a.id)).toContain(9);
+	});
+
 	it('se termine sur une liste qui porterait un cycle', () => {
 		const X = acc({ id: 7, number: '7', name: 'X', parentId: 8 });
 		const Y = acc({ id: 8, number: '8', name: 'Y', parentId: 7 });

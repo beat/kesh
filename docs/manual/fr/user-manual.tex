@@ -317,7 +317,12 @@ porte tous, et les chiffres. Un mois peut être négatif : sa barre part sous l'
     \item Kesh ne passe aucune écriture de clôture : il n'y a rien à écarter à ce titre.
 \end{itemize}
 Le total des barres \textbf{égale le compte de résultat} de l'exercice : c'est ce qui permet
-de les recouper. Le grand livre d'un poste ou les écritures d'un mois peuvent en revanche
+de les recouper. Une exception : un compte de produits ou de charges qui a un \textbf{compte miroir}
+(\S\ref{sec:rapports-miroirs}) \emph{et} dont le solde est de sens inverse. L'accueil lit
+les soldes réels ; le compte de résultat présente ce solde sous le miroir, si bien que ses
+totaux des produits et des charges dépassent alors ceux des barres du même montant ; le
+\textbf{résultat net} reste le même. Un compte miroir dont le compte d'origine garde un solde de
+sens normal ne change rien. Le grand livre d'un poste ou les écritures d'un mois peuvent en revanche
 montrer des lignes que le graphique n'a pas retenues : les deux écritures d'une paire écartée,
 dont la somme est nulle.
 
@@ -460,6 +465,7 @@ Le plan comptable est la colonne vertébrale de votre comptabilité. Kesh fourni
     \item \textbf{Compte parent (optionnel)} : compte de niveau supérieur (1020 dans l'exemple). Le compte d'un compte bancaire (son compte du plan, ou le compte de frais d'un compte PayPal, Wise ou Stripe) ne reçoit pas de sous-compte : il reçoit des écritures automatiques et ne doit pas devenir un compte de regroupement --- si 1020 est le compte de votre compte bancaire, rangez plutôt 1020 et ses voisins sous un groupe (\S\ref{sec:creer-groupes}). Il se change ensuite par \emph{Modifier le compte} (\S\ref{sec:modification-compte}).
     \item \textbf{Rôle} : fonction du compte dans l'application (\emph{Créances clients}, \emph{TVA due}, \emph{Capital}, \emph{Résultat de l'exercice}\ldots) ou \emph{Aucun}. Voir la section \emph{Rôles des comptes} ci-dessous.
     \item \textbf{Postable} : décocher pour un compte de regroupement (compte titre) sur lequel on ne saisit pas d'écriture.
+    \item \textbf{Compte miroir} : \emph{Aucun}, ou le compte de présentation sur lequel le solde de ce compte paraîtra s'il est de sens inverse (\S\ref{sec:compte-miroir}).
 \end{itemize}
 
 Aucune case du plan comptable ne fait d'un compte un compte bancaire. Le compte bancaire se
@@ -477,7 +483,7 @@ l'exige (\S\ref{sec:import-dans-kesh}).
 
 On modifie un compte actif par le bouton crayon de sa ligne (\emph{Modifier le compte}), présent pour
 les rôles Comptable et Administrateur ; aucune ligne du plan ne s'ouvre d'un clic. Vous pouvez modifier le \textbf{nom}, le \textbf{rôle},
-l'indicateur \textbf{postable} et le \textbf{compte parent}. Le \textbf{numéro} n'est jamais modifiable après la création
+l'indicateur \textbf{postable}, le \textbf{compte parent} et le \textbf{compte miroir} (\S\ref{sec:compte-miroir}). Le \textbf{numéro} n'est jamais modifiable après la création
 (pour préserver le journal d'audit). Le \textbf{type} se modifie librement tant que le compte ne porte aucune écriture ; au-delà, Kesh vous avertit avant de le laisser faire (voir ci-dessous).
 
 \paragraph{Ranger un compte sous un autre.} Le champ \textbf{Compte parent (optionnel)} range le
@@ -508,6 +514,29 @@ C'est pourquoi Kesh \textbf{refuse le changement au premier essai} et vous indiq
 
 \paragraph{Un compte lié à un compte bancaire ou à une carte.} Un compte du plan lié à un compte bancaire \textbf{non archivé} ne change pas de type vers un type que ce lien n'admet plus : un compte bancaire se lie à un actif ou à un passif, une carte de crédit à un \textbf{passif} seulement (\S\ref{sec:carte-credit}). Le refus nomme le compte bancaire (\texttt{ACCOUNT\_LINKED\_\allowbreak TO\_BANK\_ACCOUNT}) et aucune confirmation ne le lève : changez d'abord le compte lié du compte bancaire, sur la page \emph{Comptes bancaires}. Un compte lié à un compte bancaire \textbf{archivé} se retype comme les autres.
 
+\paragraph{Un compte qui a un compte miroir.} Un compte ne se retype pas vers un type qui le mettrait du même côté du rapport que son compte miroir : le refus s'affiche sous le champ \textbf{Compte miroir}. Choisissez \emph{Aucun} dans ce champ en même temps que le nouveau type (\S\ref{sec:compte-miroir}).
+
+\subsection{Compte miroir}\label{sec:compte-miroir}
+
+Un compte dont le solde change de sens --- une banque à découvert, une créance sociale devenue une dette, des gains de change que les pertes dépassent --- paraît dans les rapports \textbf{du mauvais côté}, avec un montant négatif. Le \textbf{compte miroir} règle cette présentation : vous désignez, pour ce compte, un compte de présentation de l'autre côté du même rapport, et son solde, quand il est de sens inverse, y paraît --- dans le bilan, comme le prévoit sa présentation (art.~959a CO), ou dans le compte de résultat. \textbf{Aucune écriture n'est passée et rien n'est compensé} : le compte garde ses écritures et son solde, que la balance de vérification et le grand livre montrent tels quels ; ce que montrent les rapports est décrit au \S\ref{sec:rapports-miroirs}. (Les avertissements sur la structure du bilan et du compte de résultat, au chapitre des rapports, restent valables.)
+
+\paragraph{Créer le compte de présentation, puis le choisir.} Le compte miroir est un compte \textbf{de présentation} : créez-le par \emph{Nouveau compte}, \textbf{Postable} décoché, \textbf{sans rôle} et \textbf{sans compte parent}, de l'autre côté du compte qu'il complète (un passif pour un actif et inversement, une charge pour un produit et inversement). Ne lui donnez pas de compte parent : un compte qui reçoit un premier sous-compte devient non postable, si bien que 6900.1 créé sous 6900 Charges financières rendrait 6900 non postable --- l'inverse de l'exemple de l'\emph{Ajout d'un compte}, qui pose un parent. Ouvrez ensuite le compte à compléter par \emph{Modifier le compte} (ou choisissez son miroir dès sa création) : le champ \textbf{Compte miroir}, en dernier, ne propose que les comptes qui conviennent --- actifs, de l'autre côté du type choisi, non postables, sans rôle, sans miroir eux-mêmes et \textbf{sans sous-compte} (un compte de groupe n'est jamais un compte miroir) ; Kesh refuse au moment d'enregistrer un compte qui porte des écritures, un compte de fonds propres qui désignerait un miroir, ou --- en modifiant le \textbf{type} d'un compte --- un retypage qui le mettrait du même côté du rapport que son miroir ; le message s'affiche sous le champ. Pour retyper un tel compte, choisissez \emph{Aucun} dans le champ \textbf{Compte miroir} \textbf{en même temps} que le nouveau type, puis désignez un compte de l'autre côté si vous le souhaitez. \emph{Aucun} retire le lien.
+
+Exemples, sur le plan PME livré (les comptes de présentation sont à créer, sans compte parent) :
+\begin{itemize}
+    \item 1020 Banque, à découvert : son miroir est 2100.1 « Découvert bancaire » (passif, non postable) ;
+    \item 2270 AVS/AI/APG, quand les acomptes dépassent la dette : son miroir est 1040.1 « Créances AVS/AI/APG » (actif, non postable) ;
+    \item 6950.1 « Gains de change » (produit, postable, à créer), quand les pertes l'emportent : son miroir est 6900.1 « Pertes de change » (charge, non postable).
+\end{itemize}
+En multi-devises, désignez 6950.1 comme compte des gains \textbf{et} des pertes de change : un compte non postable comme 6900.1 ne peut pas être un compte de différence de change.
+
+\paragraph{Plusieurs comptes, un seul miroir.} Plusieurs comptes peuvent partager le même compte miroir --- par exemple plusieurs comptes bancaires et un seul compte de découvert. Quand vous ouvrez un compte miroir, le dialogue ne montre pas de champ \textbf{Compte miroir} mais une phrase : «~Ce compte est le compte miroir de 1020.~» --- un compte miroir n'a pas lui-même de miroir. La phrase nomme les comptes que le plan \textbf{affiché} contient : si les seuls comptes qui le désignent sont archivés et que \emph{Afficher les archivés} est décoché, le champ \textbf{Compte miroir} paraît à la place, et Kesh refuse alors, au moment d'enregistrer, ce que la règle ci-dessus interdit.
+
+\paragraph{Ce qui est refusé tant qu'un compte est miroir.} Tant qu'au moins un compte le désigne, un compte miroir n'accepte \textbf{aucune écriture} (il est non postable), \textbf{ne redevient pas postable}, \textbf{ne change pas de type}, \textbf{ne reçoit pas de rôle}, \textbf{ne reçoit pas de sous-compte} (ni à la création d'un compte sous lui, ni en changeant le parent d'un compte) et \textbf{ne s'archive pas} (voir \emph{Suppression d'un compte}) ; le message nomme les comptes qui le désignent. Retirez d'abord le lien (\emph{Aucun}) sur chacun d'eux.
+
+\begin{keshwarning}
+\textbf{Ne choisissez pas comme miroir un compte que les réglages de facturation, un article ou une règle de rapprochement désignent.} Un compte miroir est non postable : le flux qui l'emploierait --- une facture, une facture fournisseur, un rapprochement --- serait refusé, et le message nommerait le compte. Désignez d'abord un autre compte dans ces réglages.
+\end{keshwarning}
 \subsection{Créer des groupes d'après les numéros}\label{sec:creer-groupes}
 
 Pour structurer un plan existant --- une banque par groupe, puis les liquidités ---, le bouton
@@ -594,6 +623,8 @@ Déplacer un groupe existant reste un geste de \emph{Modifier le compte}
 Un compte ne peut être supprimé que s'il n'a aucune écriture ni sous-compte. Sinon, vous pouvez l'\textbf{archiver} (le compte reste visible dans les écritures historiques mais n'est plus proposé à la saisie).
 
 Pour retrouver un compte archivé, cocher \emph{Afficher les archivés} en haut de la page. Un bouton \textbf{Réactiver} permet de le remettre en service. La réactivation est refusée si son \textbf{compte parent} est lui-même archivé (il faut le réactiver d'abord), si son \textbf{rôle} a été attribué à un autre compte pendant son archivage — le message d'erreur nomme alors le compte concerné, dont il faut retirer le rôle au préalable —, si son compte parent est un compte de différence de change désigné, ou, depuis la version~0.20.0, si son compte parent est \textbf{désigné par un compte bancaire} (son compte comptable, ou le compte de frais d'un compte PayPal, Wise ou Stripe, même clos ou archivé) : un tel compte reçoit des écritures automatiques et ne peut pas redevenir un compte de regroupement ; le sous-compte reste archivé, et le message nomme le compte parent et le compte bancaire ; de même si son compte parent est un compte d'actif ou de passif \textbf{en devise qui porte des écritures}, comme à la création d'un sous-compte. Réactivé, un sous-compte rend son compte parent \textbf{non imputable}, comme la création d'un sous-compte (depuis la version~0.20.0 ; auparavant, un compte parent repassé imputable pendant l'archivage de son dernier sous-compte le restait).
+
+\paragraph{Archiver un compte miroir.} Un compte qui est le compte miroir d'au moins un compte ne s'archive pas : le dialogue d'archivage le dit, nomme les comptes qui le désignent, et ne propose que \emph{Annuler}. Retirez d'abord le lien sur chacun d'eux (\emph{Modifier le compte}, \textbf{Compte miroir} : \emph{Aucun}), puis archivez. Si l'un de ces comptes est \textbf{archivé}, il ne se modifie pas : le message vous dit de le \textbf{réactiver} d'abord (\emph{Afficher les archivés}, \textbf{Réactiver}), puis de retirer son lien, avant d'archiver le compte miroir.
 
 \label{sec:plan-comptable-archivage}
 
@@ -4388,7 +4419,9 @@ d'actif et de passif à solde non nul, avec les totaux Actifs, Passifs et Capita
 Par défaut, les comptes de chaque section se présentent \textbf{dans la hiérarchie de votre
 plan comptable}, groupes ouverts, chaque groupe avec son sous-total
 (\S\ref{sec:rapports-groupes})~; case \emph{Hiérarchie des groupes} décochée, le bilan est
-la liste à plat, \textbf{triée par numéro de compte}, des versions précédentes.
+la liste à plat, \textbf{triée par numéro de compte}, des versions précédentes. Le solde de sens
+inverse d'un compte qui a un \textbf{compte miroir} paraît sous ce miroir, de l'autre côté
+(\S\ref{sec:rapports-miroirs}).
 
 \begin{keshwarning}[title=\faExclamationTriangle\ Le bilan n'est pas encore structuré selon l'art.~959a CO]
 Les groupes affichés sont ceux de \textbf{votre} plan comptable~: Kesh ne contrôle pas qu'ils
@@ -4424,7 +4457,8 @@ Filtres : date de référence (par défaut fin d'exercice en cours), exercice à
 \emph{Mensuel} → \emph{Rapports} → \emph{Compte de résultat}. Liste les comptes de produits
 et les comptes de charges à solde non nul, et le résultat de la période~; comme au bilan, par
 défaut dans la hiérarchie de votre plan (\S\ref{sec:rapports-groupes}), ou à plat, case
-\emph{Hiérarchie des groupes} décochée.
+\emph{Hiérarchie des groupes} décochée. Le solde de sens inverse d'un compte qui a un
+\textbf{compte miroir} paraît sous ce miroir, de l'autre côté (\S\ref{sec:rapports-miroirs}).
 
 \begin{keshwarning}[title=\faExclamationTriangle\ Le compte de résultat n'est pas encore structuré selon l'art.~959b CO]
 Kesh ne propose \textbf{pas} les présentations \emph{par nature} et \emph{par fonction}, et ne
@@ -4499,6 +4533,74 @@ que le rapport redemandé n'est pas affiché, elle reste celle du rapport à l'�
 Les boutons d'export PDF et CSV reprennent la présentation affichée
 (\S\ref{sec:rapports-exports}).
 
+\subsection{Comptes miroirs dans les rapports}\label{sec:rapports-miroirs}
+
+Un compte qui a un \textbf{compte miroir} (\S\ref{sec:compte-miroir}) et dont le solde est \textbf{de sens inverse}
+--- une banque à découvert, une dette sociale débitrice, des gains de change que les pertes dépassent --- ne paraît
+pas au bilan ni au compte de résultat avec un montant négatif : son solde, changé de signe, paraît \textbf{sous son
+miroir}, de l'autre côté du même rapport. Un compte dont le solde est dans son sens normal reste à sa place. Sous le
+nom du miroir, une mention en petit dit de quel compte vient le montant : «~Solde de 2270 AVS/AI/APG~», ou
+«~Soldes de~…~» quand plusieurs comptes partagent ce miroir --- par niveaux (hiérarchie montrée, la vue de la
+première visite) comme à plat, sur la ligne du miroir quand son groupe est ouvert ; un groupe fermé ne la reprend
+pas.
+
+\keshscreenshot{mi-bilan.png}{Bilan avec deux comptes miroirs : 1040.1 et 2100.1 présentent les soldes de 2270 et de 1020, avec la mention « Solde de … ».}
+
+\begin{itemize}
+    \item \textbf{Rien n'est compensé et aucune écriture n'est passée.} Le montant présenté sous le miroir est le
+        solde du compte d'origine, entier ; il n'est déduit d'aucun autre compte. C'est la présentation usuelle d'un
+        solde de sens inverse --- un découvert bancaire parmi les dettes, une créance
+        parmi les actifs. Les avertissements sur la structure du bilan et du compte de résultat, ci-dessus, restent
+        valables : le miroir ne règle que le signe d'un solde.
+    \item \textbf{Les exports PDF et CSV} du bilan et du compte de résultat montrent la même présentation, le miroir
+        comme un compte ordinaire, sans la mention ; le serveur MCP de même ; l'API ajoute à la ligne du miroir la liste
+        des comptes d'origine. Un miroir dont aucun compte n'a de solde de sens inverse ne paraît pas.
+    \item \textbf{La balance des comptes et le grand livre} restent sur les soldes réels : le compte d'origine y
+        garde son solde, de sens inverse, et le miroir, qui ne porte aucune écriture, y reste à zéro.
+    \item \textbf{L'accueil} lit lui aussi les soldes réels (\S\ref{sec:graphiques-accueil}).
+    \item \textbf{Un miroir rangé sous un groupe de l'autre côté} --- un passif sous un groupe d'actifs, par
+        exemple --- donne à ce groupe des comptes dans deux sections : le groupe et ses groupes parents ne sont
+        alors pas montrés, leurs comptes remontant d'un rang, et les totaux restent justes. D'où le conseil de créer
+        le miroir sans compte parent (\S\ref{sec:compte-miroir}).
+\end{itemize}
+
+\keshscreenshot{mi-resultat.png}{Compte de résultat : 6900.1 présente en charges le solde de 6950.1, qui n'apparaît plus parmi les produits.}
+
+\paragraph{Un exemple chiffré.} Une société tient le plan \textbf{PME} livré. Elle a créé, sans compte parent, les
+comptes de présentation 1040.1 «~Créances AVS/AI/APG~» (actif), 2100.1 «~Découvert bancaire~» (passif) et 6900.1
+«~Pertes de change~» (charge), tous trois non postables, et le compte de produit 6950.1 «~Gains de change~» ; elle a
+désigné 2100.1 comme miroir de 1020 Banque, 1040.1 comme miroir de 2270 AVS/AI/APG et 6900.1 comme miroir de 6950.1.
+Ses écritures, chacune contre 2800 Capital social : 1000 Caisse au débit de 500.00, 1010 Poste au débit de
+12'000.00, 1020 Banque au crédit de 800.00, 2000 Créanciers au crédit de 3'000.00, 2270 AVS/AI/APG au débit de
+1'200.00, 3200 Prestations de services au crédit de 2'000.00, 6900 Charges financières au débit de 50.00 et 6950.1
+au débit de 250.00 ; 2800 a donc un solde créditeur de 8'200.00.
+
+% exemple-presentation:debut
+\begin{center}
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.22\linewidth}>{\raggedright\arraybackslash}p{0.35\linewidth}>{\raggedright\arraybackslash}p{0.35\linewidth}}
+\toprule
+ & \textbf{Sans miroir} & \textbf{Avec les miroirs} \\
+\midrule
+Actif & 1000 : 500.00 ; 1010 : 12'000.00 ; 1020 : $-$800.00 & 1000 : 500.00 ; 1010 : 12'000.00 ; 1040.1 : 1'200.00 (solde de 2270) \\
+Total de l'actif & 11'700.00 & 13'700.00 \\
+Passif (hors fonds propres) & 2000 : 3'000.00 ; 2270 : $-$1'200.00 & 2000 : 3'000.00 ; 2100.1 : 800.00 (solde de 1020) \\
+Total du passif & 1'800.00 & 3'800.00 \\
+Fonds propres & 2800 : 8'200.00 ; résultat 1'700.00 ; total 9'900.00 & identiques \\
+Produits & 3200 : 2'000.00 ; 6950.1 : $-$250.00 ; total 1'750.00 & 3200 : 2'000.00 ; total 2'000.00 \\
+Charges & 6900 : 50.00 ; total 50.00 & 6900 : 50.00 ; 6900.1 : 250.00 (solde de 6950.1) ; total 300.00 \\
+Résultat de l'exercice & 1'700.00 & 1'700.00 \\
+\bottomrule
+\end{tabular}
+\end{center}
+% exemple-presentation:fin
+
+Les deux côtés du bilan augmentent de 2'000.00, les produits et les charges de 250.00 chacun ; l'équation du bilan
+(13'700.00 = 3'800.00 + 9'900.00) et le résultat ne changent pas. La balance des comptes montre toujours 1020 à
+$-$800.00, 2270 à $-$1'200.00 et 6950.1 à $-$250.00.
+
+\keshscreenshot{mi-balance.png}{Balance des comptes : 1020, 2270 et 6950.1 gardent leurs soldes réels, de sens inverse.}
+
 \subsection{Balance des comptes}
 
 \emph{Mensuel} → \emph{Rapports} → \emph{Balance}. Pour chaque compte, sur la période choisie : le \textbf{solde
@@ -4512,7 +4614,10 @@ d'ouverture}, les \textbf{mouvements} débit et crédit, et le \textbf{solde de 
         bilan à la fin de la période ; celle d'un compte de résultat, son montant \textbf{depuis le début de l'exercice} —
         égal au compte de résultat quand la période commence au premier jour de l'exercice, puisque le compte de
         résultat ne porte que les mouvements de la période choisie. Ouverture et clôture sont, dans tous les cas,
-        celles du grand livre (\S\ref{sec:grand-livre}) sur la même période.
+        celles du grand livre (\S\ref{sec:grand-livre}) sur la même période. Avec un \textbf{compte miroir}, la
+        concordance ne se lit plus ligne à ligne : la balance garde le solde réel du compte, de sens inverse, que le
+        bilan ou le compte de résultat présente sous le miroir (\S\ref{sec:rapports-miroirs}) ; les totaux de chaque
+        côté du bilan augmentent du même montant, et le résultat reste le même.
     \item \textbf{La ligne « Résultat reporté (calculé) ».} Kesh ne passe aucune écriture de clôture : le résultat des
         exercices antérieurs n'est porté par aucun compte. Une ligne calculée le montre, sous les comptes — la même
         valeur qu'au bilan, « Perte reportée » à l'écran si elle est négative. Contrairement au bilan, la balance la

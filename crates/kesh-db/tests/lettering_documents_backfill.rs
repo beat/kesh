@@ -256,7 +256,8 @@ async fn colonnes_du_numero_interne(pool: &MySqlPool, poser: bool) {
             .expect("colonnes du numéro interne");
     }
     // Story 37-1 : de même, les colonnes multi-devises (`20261114000001`) que
-    // lisent `companies`, `fiscal_years` et `accounts` du dépôt courant.
+    // lisent `companies`, `fiscal_years` et `accounts` du dépôt courant (avec
+    // la colonne du compte miroir, Story 47-1).
     common::colonnes_multi_devises(pool, poser).await;
 }
 

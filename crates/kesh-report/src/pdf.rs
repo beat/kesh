@@ -2738,6 +2738,7 @@ mod tests {
                     role: None,
                     currency: None,
                     balance_currency: None,
+                    mirror_of: Vec::new(),
                 }]
             },
             liabilities: if empty {
@@ -2753,6 +2754,7 @@ mod tests {
                     role: None,
                     currency: None,
                     balance_currency: None,
+                    mirror_of: Vec::new(),
                 }]
             },
             equity: vec![],
@@ -2781,6 +2783,7 @@ mod tests {
                     role: None,
                     currency: None,
                     balance_currency: None,
+                    mirror_of: Vec::new(),
                 }]
             },
             expenses: if empty {
@@ -2796,6 +2799,7 @@ mod tests {
                     role: None,
                     currency: None,
                     balance_currency: None,
+                    mirror_of: Vec::new(),
                 }]
             },
             total_revenues: if empty { Decimal::ZERO } else { dec!(2000) },
@@ -2970,6 +2974,7 @@ mod tests {
             role: Some(role),
             currency: None,
             balance_currency: None,
+            mirror_of: Vec::new(),
         };
         // 120 comptes EquityOther + 1 EquityCapital → 2 groupes de rôle, > 1 page A4.
         let mut equity: Vec<AccountBalance> = vec![eq(0, AccountRole::EquityCapital)];
@@ -3338,6 +3343,7 @@ mod tests {
             open: None,
             active: Some(true),
             role: None,
+            mirror_of: Vec::new(),
         };
         for gabarit in [
             Gabarit::bilan(false),
@@ -3401,6 +3407,7 @@ mod tests {
                 role: None,
                 currency: None,
                 balance_currency: None,
+                mirror_of: Vec::new(),
             });
             liabilities.push(AccountBalance {
                 account_id: 500 + i as i64,
@@ -3412,6 +3419,7 @@ mod tests {
                 role: None,
                 currency: None,
                 balance_currency: None,
+                mirror_of: Vec::new(),
             });
         }
         let bs = BalanceSheet {
@@ -3840,6 +3848,7 @@ mod tests {
             role: None,
             currency: cur.map(String::from),
             balance_currency: cur.map(|_| dec!(110)),
+            mirror_of: Vec::new(),
         };
         let bs = BalanceSheet {
             assets: vec![compte(20, Some("USD")), compte(21, None)],
@@ -4107,6 +4116,7 @@ mod tests {
             role: None,
             currency: Some(cur.into()),
             balance_currency: Some(fx),
+            mirror_of: Vec::new(),
         };
         bs.assets
             .push(compte("1030", dec!(4.67), "EUR", dec!(4.92)));

@@ -10,7 +10,8 @@
 
 use kesh_db::entities::account::{
     Account, AccountType, AccountUpdate, CurrencyChange, GroupKind, GroupMember, GroupProposal,
-    MAX_GROUP_MEMBERS, MAX_GROUP_PROPOSALS, NewAccount, OwnFxAccountsChange, ParentChange,
+    MAX_GROUP_MEMBERS, MAX_GROUP_PROPOSALS, MirrorChange, NewAccount, OwnFxAccountsChange,
+    ParentChange,
 };
 use kesh_db::errors::{AccountGroupReason, DbError, GroupStepError};
 use kesh_db::repositories::accounts;
@@ -221,6 +222,7 @@ async fn ranger(
             currency: CurrencyChange::Unchanged,
             own_fx_accounts: OwnFxAccountsChange::Unchanged,
             parent: ParentChange::Under(parent),
+            mirror: MirrorChange::Unchanged,
         },
         false,
     )
@@ -340,6 +342,7 @@ async fn membre_retype_depuis_l_apercu_rend_409_et_non_mixed_types(pool: MySqlPo
             currency: CurrencyChange::Unchanged,
             own_fx_accounts: OwnFxAccountsChange::Unchanged,
             parent: ParentChange::Unchanged,
+            mirror: MirrorChange::Unchanged,
         },
         false,
     )
@@ -1097,6 +1100,7 @@ async fn reactivation_sous_un_compte_lie_refusee(pool: MySqlPool) {
                 currency: CurrencyChange::Unchanged,
                 own_fx_accounts: OwnFxAccountsChange::Unchanged,
                 parent: ParentChange::Unchanged,
+                mirror: MirrorChange::Unchanged,
             },
             false,
         )

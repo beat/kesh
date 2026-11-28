@@ -61,6 +61,7 @@ async fn ranger(
             currency: CurrencyChange::Unchanged,
             own_fx_accounts: OwnFxAccountsChange::Unchanged,
             parent,
+            mirror: kesh_db::entities::MirrorChange::Unchanged,
         },
         false,
     )
@@ -316,6 +317,7 @@ async fn parent_de_change_ou_en_devise_mouvemente_refuse(pool: MySqlPool) {
             currency: CurrencyChange::Foreign("EUR".into()),
             own_fx_accounts: OwnFxAccountsChange::Own(OwnFxAccounts { gain: g, loss: p }),
             parent: ParentChange::Unchanged,
+            mirror: kesh_db::entities::MirrorChange::Unchanged,
         },
         false,
     )
@@ -352,6 +354,7 @@ async fn parent_de_change_ou_en_devise_mouvemente_refuse(pool: MySqlPool) {
             currency: CurrencyChange::Unchanged,
             own_fx_accounts: OwnFxAccountsChange::Own(OwnFxAccounts { gain: g2, loss: p }),
             parent: ParentChange::Under(g2),
+            mirror: kesh_db::entities::MirrorChange::Unchanged,
         },
         false,
     )
@@ -420,6 +423,7 @@ async fn sous_son_ancien_compte_propre_retire_dans_le_meme_put(pool: MySqlPool) 
                 currency,
                 own_fx_accounts: OwnFxAccountsChange::Own(OwnFxAccounts { gain, loss }),
                 parent,
+                mirror: kesh_db::entities::MirrorChange::Unchanged,
             },
             false,
         )
@@ -479,7 +483,7 @@ async fn sous_son_ancien_compte_propre_retire_dans_le_meme_put(pool: MySqlPool) 
     assert_eq!(lire(&pool, eur2).await.parent_id, None);
 }
 
-/// Revue P1-2 (décision de Beat) : un parent qui porte des écritures, même en
+/// Revue P1-2 (décision du responsable de l'epic) : un parent qui porte des écritures, même en
 /// CHF, est refusé ; le même compte, sans écriture, est accepté.
 #[sqlx::test(migrations = "./test-schema")]
 async fn parent_mouvemente_refuse(pool: MySqlPool) {

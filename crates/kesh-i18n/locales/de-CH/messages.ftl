@@ -266,6 +266,11 @@ accounts-retype-closed-years = Betroffene abgeschlossene Geschäftsjahre: { $yea
 accounts-retype-confirm = Kontotyp trotzdem ändern
 account-field-parent-optional = Übergeordnetes Konto (optional)
 accounts-parent-none = Keines
+# Story 47-2 — compte miroir au dialogue d'un compte
+accounts-mirror-label = Spiegelkonto
+accounts-mirror-none = Keines
+accounts-mirror-help = Das Spiegelkonto ist ein Darstellungskonto: nicht buchbar, ohne Rolle und ohne Buchung. Ein Saldo dieses Kontos mit umgekehrtem Vorzeichen erscheint dort in der Bilanz oder der Erfolgsrechnung.
+accounts-mirror-of = Dieses Konto ist das Spiegelkonto von { $numbers }.
 accounts-parent-archived = Das übergeordnete Konto { $number } ist archiviert. Reaktivieren Sie es zuerst.
 error-account-parent-cycle = Das Konto { $number } ist dieses Konto selbst oder eines seiner Unterkonten: Ein Konto kann nicht unter sich selbst eingeordnet werden.
 error-account-parent-has-entries = Das Konto { $number } enthält Buchungen: Würde dieses Konto darunter eingeordnet, würde es mit einem Saldo nicht bebuchbar, den keine Erfassung mehr korrigieren könnte. Wählen Sie ein Gruppenkonto ohne Buchungen.
@@ -1202,6 +1207,22 @@ error-account-in-foreign-currency = Dieses Konto wird in { $currency } geführt:
 error-account-is-fx-difference-account = Dieses Konto ist ein Kursdifferenzkonto der Firma: Es kann weder archiviert, umtypisiert oder nicht bebuchbar gemacht werden noch eine Währung, ein Unterkonto oder eine Ertragsrolle erhalten.
 error-account-is-fx-difference-account-own = Dieses Konto ist ein Kursdifferenzkonto des Fremdwährungskontos { $number }: Es kann weder archiviert, umtypisiert oder nicht bebuchbar gemacht werden noch eine Währung, ein Unterkonto oder eine Ertragsrolle erhalten.
 error-account-is-fx-transit-account = Dieses Konto ist das Umrechnungskonto der Firma: Es kann weder archiviert, ausserhalb der Bilanz umtypisiert oder nicht bebuchbar gemacht werden noch eine Währung oder ein Unterkonto erhalten.
+# Story 47-1 (AC-9) — Spiegelkonto: Ablehnungen von MIRROR_ACCOUNT_INVALID (ein Schlüssel pro Grund) und ACCOUNT_IS_MIRROR.
+error-mirror-account-self = Ein Konto kann nicht sein eigenes Spiegelkonto sein.
+error-mirror-account-unknown = Das Spiegelkonto ist nicht auffindbar oder gehört nicht zu dieser Firma.
+error-mirror-account-archived = Das Spiegelkonto ist archiviert.
+error-mirror-account-account-type = Das Spiegelkonto muss auf der anderen Seite desselben Berichts stehen: ein Passivkonto für ein Aktivkonto, ein Aktivkonto für ein Passivkonto, ein Aufwandkonto für ein Ertragskonto, ein Ertragskonto für ein Aufwandkonto.
+error-mirror-account-equity = Ein Eigenkapitalkonto (Kapital, übriges Eigenkapital, Gewinnvortrag, Jahresergebnis) bestimmt kein Spiegelkonto.
+error-mirror-account-not-presentation = Das Spiegelkonto muss ein Darstellungskonto sein: nicht bebuchbar, ohne Rolle und ohne Buchung.
+error-mirror-account-has-children = Das Spiegelkonto kann kein Gruppenkonto sein: Es hat Unterkonten.
+error-mirror-account-chain = Spiegelkonten lassen sich nicht verketten: Das Konto { $number } ist bereits durch einen Spiegel verbunden.
+error-account-is-mirror-archive = Dieses Konto ist das Spiegelkonto von { $sources }: Es lässt sich erst archivieren, wenn die Verknüpfung entfernt ist.
+error-account-is-mirror-postable = Dieses Konto ist das Spiegelkonto von { $sources }: Es bleibt nicht bebuchbar, solange die Verknüpfung besteht.
+error-account-is-mirror-account-type = Dieses Konto ist das Spiegelkonto von { $sources }: Sein Typ ändert sich nicht, solange die Verknüpfung besteht.
+error-account-is-mirror-role = Dieses Konto ist das Spiegelkonto von { $sources }: Es erhält keine Rolle, solange die Verknüpfung besteht.
+error-account-is-mirror-child = Dieses Konto ist das Spiegelkonto von { $sources }: Es erhält kein Unterkonto, solange die Verknüpfung besteht.
+error-account-is-mirror-reactivate-first = { $archived } ist archiviert: Reaktivieren Sie es zuerst und entfernen Sie dann sein Spiegelkonto.
+error-account-is-mirror-reactivate-first-many = { $archived } sind archiviert: Reaktivieren Sie sie zuerst und entfernen Sie dann ihr Spiegelkonto.
 # Story 37-3a — Buchungen in Fremdwährung.
 error-multi-currency-disabled-fiscal-year = Dieses Geschäftsjahr ist einwährungsbasiert: Dieser Vorgang in Fremdwährung ist darin nicht möglich.
 error-fx-multiple-currencies = Eine Buchung enthält nur eine Fremdwährung (hier: { $currencies }). Buchen Sie einen Währungswechsel über das Umrechnungskonto, in zwei Buchungen.
@@ -2242,6 +2263,10 @@ reports-retained-earnings-loss = Verlustvortrag
 # Alerts + badges UI (2 — code review Pass 1 i18n leaks)
 reports-equation-warning = ⚠️ Bilanzgleichung ungültig (Quelldaten prüfen).
 reports-archived-label = archiviert
+
+# Story 47-4 — unter der Zeile eines Spiegelkontos.
+reports-mirror-of-one = Saldo von { $sources }
+reports-mirror-of-other = Salden von { $sources }
 
 # Berichte-Seite — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Buchhaltungsberichte

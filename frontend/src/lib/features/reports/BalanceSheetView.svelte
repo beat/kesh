@@ -10,6 +10,7 @@
 	import AccountCurrencyBalance from './AccountCurrencyBalance.svelte';
 	import AccountLink from './AccountLink.svelte';
 	import GroupedReportRows, { BALANCE_COLUMNS } from './GroupedReportRows.svelte';
+	import MirrorOfNote from './MirrorOfNote.svelte';
 	import {
 		formatCurrencyFigure,
 		formatReportAmount,
@@ -161,11 +162,11 @@
 							/>
 						{:else}
 						{#each dto.assets as a (a.accountId)}
-							<tr class:opacity-60={!a.active}>
+							<tr class:opacity-60={!a.active} data-testid="report-row-{a.accountNumber}">
 								<td class="px-2 py-1 font-mono">
 									<AccountLink accountId={a.accountId} number={a.accountNumber} from={dto.period.startDate} to={dto.period.endDate} />
 								</td>
-								<td class="px-2 py-1">{a.accountName}<AccountCurrencyBalance account={a} /></td>
+								<td class="px-2 py-1">{a.accountName}<AccountCurrencyBalance account={a} /><MirrorOfNote account={a} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(a.balance)}</td>
 							</tr>
 						{/each}
@@ -205,11 +206,11 @@
 							/>
 						{:else}
 						{#each dto.liabilities as l (l.accountId)}
-							<tr class:opacity-60={!l.active}>
+							<tr class:opacity-60={!l.active} data-testid="report-row-{l.accountNumber}">
 								<td class="px-2 py-1 font-mono">
 									<AccountLink accountId={l.accountId} number={l.accountNumber} from={dto.period.startDate} to={dto.period.endDate} />
 								</td>
-								<td class="px-2 py-1">{l.accountName}<AccountCurrencyBalance account={l} /></td>
+								<td class="px-2 py-1">{l.accountName}<AccountCurrencyBalance account={l} /><MirrorOfNote account={l} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(l.balance)}</td>
 							</tr>
 						{/each}

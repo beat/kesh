@@ -1373,6 +1373,7 @@ mod tests {
                 role: None,
                 currency: None,
                 balance_currency: None,
+                mirror_of: Vec::new(),
             }],
             liabilities: vec![],
             equity: vec![],
@@ -1457,6 +1458,7 @@ mod tests {
                     role: None,
                     currency: None,
                     balance_currency: None,
+                    mirror_of: Vec::new(),
                 },
                 AccountBalance {
                     account_id: 2,
@@ -1468,6 +1470,7 @@ mod tests {
                     role: None,
                     currency: None,
                     balance_currency: None,
+                    mirror_of: Vec::new(),
                 },
                 AccountBalance {
                     account_id: 3,
@@ -1479,6 +1482,7 @@ mod tests {
                     role: None,
                     currency: None,
                     balance_currency: None,
+                    mirror_of: Vec::new(),
                 },
             ],
             liabilities: vec![],
@@ -1591,6 +1595,7 @@ mod tests {
             role: Some(role),
             currency: None,
             balance_currency: None,
+            mirror_of: Vec::new(),
         };
         let bs = BalanceSheet {
             period: period(),
@@ -1604,6 +1609,7 @@ mod tests {
                 role: None,
                 currency: None,
                 balance_currency: None,
+                mirror_of: Vec::new(),
             }],
             liabilities: vec![AccountBalance {
                 account_id: 8,
@@ -1615,6 +1621,7 @@ mod tests {
                 role: Some(kesh_db::entities::AccountRole::Payable),
                 currency: None,
                 balance_currency: None,
+                mirror_of: Vec::new(),
             }],
             equity: vec![
                 equity(
@@ -2204,6 +2211,7 @@ mod tests {
                 role: None,
                 currency: None,
                 balance_currency: None,
+                mirror_of: Vec::new(),
             }],
             liabilities: vec![],
             equity: vec![],

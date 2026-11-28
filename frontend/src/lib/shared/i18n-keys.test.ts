@@ -1290,7 +1290,10 @@ const ATTENDU = {
 	// Fusion de pr/46-rapports-groupes-v2 (ecf6cf835, main avec les Epics 39 et 40, garde de la 46-5) dans
 	// epic/55-navigation (2026-11-26) : les deux côtés gardés ; 3958 (pr/46) + 7 (Epic 55, 3789 → 3796 de son côté)
 	// = **3965**, confirmé par la garde (`kesh-gate-logs/s55-revue/fusion/gardes-1.log`).
-	sitesTotal: 3965,
+	// Branche pr/47-comptes-miroirs-v2 (l'Epic 47 reposé sur main à 0c44f7d1a, 2026-11-28) : **3972**, relevé par
+	// la garde (« expected 3972 to be 3965 », `kesh-gate-logs/s47-v2/garde-i18n-1.log`) = 3965 + les 7 sites de
+	// l'Epic 47 (5 de la 47-2, champ « Compte miroir » ; 2 de la 47-4, `MirrorOfNote.svelte`).
+	sitesTotal: 3972,
 	sitesNonResolus: 31,
 	relais: 6,
 	// Story 26-1 (#620, AC3-bis) : **10 → 11** — `lib/features/bank-import/

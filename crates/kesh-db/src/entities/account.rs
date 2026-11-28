@@ -250,6 +250,12 @@ pub struct Account {
     /// Compte de pertes de change propre (Story 37-1), même régime que
     /// [`Self::fx_gain_account_id`].
     pub fx_loss_account_id: Option<i64>,
+    /// Compte **miroir** de ce compte (Story 47-1, R1) : compte de présentation,
+    /// sans écriture, de l'autre côté du même rapport, où les rapports présentent
+    /// le solde de sens inverse de ce compte. `None` = aucun. Pointeur logique
+    /// sans clé étrangère, tenu par le dépôt (`accounts::check_mirror`) ; un lien
+    /// hors règle (import, SQL) est lu comme absent (`accounts::retain_valid_links`).
+    pub mirror_account_id: Option<i64>,
     pub version: i32,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
@@ -317,6 +323,33 @@ impl OwnFxAccountsChange {
     }
 }
 
+/// Changement du compte miroir d'un compte à la mise à jour (Story 47-1, AC-3) —
+/// trois états, sur le patron de [`CurrencyChange`], résolus **dans le dépôt**
+/// sous le `FOR UPDATE` du compte.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MirrorChange {
+    /// Champ absent de la requête : le miroir ne change pas (un client qui ne
+    /// connaît pas le champ n'efface rien).
+    #[default]
+    Unchanged,
+    /// Le lien est retiré (`mirror_account_id` à `NULL`).
+    Clear,
+    /// Le compte désigné comme miroir.
+    Set(i64),
+}
+
+impl MirrorChange {
+    /// Le miroir du compte après le changement, depuis le miroir actuel.
+    pub fn resolve(&self, current: Option<i64>) -> Option<i64> {
+        match self {
+            Self::Unchanged => current,
+            Self::Clear => None,
+            Self::Set(id) => Some(*id),
+        }
+    }
+}
+
 /// Changement du compte parent d'un compte à la mise à jour (correctif
 /// `fix-api-parent-compte`) — trois états, comme [`CurrencyChange`], résolus
 /// **dans le dépôt**, sous le `FOR UPDATE` du compte.
@@ -344,6 +377,26 @@ impl ParentChange {
             Self::Under(id) => Some(*id),
         }
     }
+}
+
+/// Un lien de miroir **valide** d'une société, tel que le lisent les rapports
+/// (Story 47-1, AC-8) : la source, et de quoi construire la ligne du compte
+/// miroir, qui n'a aucune écriture (les agrégats des rapports ne la portent pas).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MirrorLink {
+    /// Le compte qui désigne le miroir.
+    pub source_id: i64,
+    /// Le compte miroir.
+    pub mirror_id: i64,
+    /// Son numéro.
+    pub mirror_number: String,
+    /// Son nom.
+    pub mirror_name: String,
+    /// Son type (de l'autre côté du même rapport que la source).
+    pub mirror_account_type: AccountType,
+    /// Actif ou archivé (exigé par `AccountBalance`).
+    pub mirror_active: bool,
 }
 
 /// D'où viennent les comptes de différence de change résolus pour un compte en
@@ -407,6 +460,9 @@ pub struct NewAccount {
     /// Comptes de différence de change propres (Story 37-1, AC-4 bis) ;
     /// `None` = suivre le réglage de la société.
     pub own_fx_accounts: Option<OwnFxAccounts>,
+    /// Compte miroir posé dès la création (Story 47-1, AC-3, AC-4 ; choix
+    /// C-47-1-5), même contrôle qu'à la modification ; `None` = aucun.
+    pub mirror_account_id: Option<i64>,
 }
 
 impl NewAccount {
@@ -431,6 +487,7 @@ impl NewAccount {
             postable: true,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         }
     }
 
@@ -463,6 +520,9 @@ pub struct AccountUpdate {
     pub currency: CurrencyChange,
     /// Comptes de différence propres (Story 37-1, AC-4 bis), trois états.
     pub own_fx_accounts: OwnFxAccountsChange,
+    /// Compte miroir (Story 47-1, AC-3), trois états — `Unchanged` côté API
+    /// quand le champ est absent.
+    pub mirror: MirrorChange,
     /// Compte parent (correctif `fix-api-parent-compte`), trois états —
     /// absent côté API = inchangé. Mêmes contrôles qu'à la création, plus le
     /// refus d'un cycle (cf. `repositories::accounts::update`).

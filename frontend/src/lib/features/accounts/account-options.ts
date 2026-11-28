@@ -132,6 +132,11 @@ export function bankAccountsNotLinkedTo<T extends { journalAccountId: number | n
  *   409 `ACCOUNT_PARENT_HAS_ENTRIES`, revue P1-2). Le parent **actuel** reste
  *   proposé même s'il porte des écritures, pour que le champ l'affiche.
  *
+ * - Dans les deux cas, **sauf** les comptes miroirs — ceux qu'un compte du plan
+ *   chargé désigne comme son miroir : un compte miroir ne reçoit pas de
+ *   sous-compte (409 `ACCOUNT_IS_MIRROR` `child`, revue d'intégration P1 de
+ *   l'Epic 47, M-1) ; le parent actuel reste proposé.
+ *
  * Le serveur reste le juge (parent archivé ou mouvementé entre-temps, compte de
  * change) : ce filtre n'écarte que ce qui ne peut pas passer.
  */
@@ -139,7 +144,11 @@ export function parentCandidates(
 	accounts: AccountResponse[],
 	account: Pick<AccountResponse, 'id' | 'parentId'> | null,
 ): AccountResponse[] {
-	if (account === null) return accounts.filter((a) => a.active);
+	const miroirs = new Set(
+		accounts.map((a) => a.mirrorAccountId ?? null).filter((id): id is number => id !== null),
+	);
+	const pasMiroir = (a: AccountResponse) => !miroirs.has(a.id) || a.id === account?.parentId;
+	if (account === null) return accounts.filter((a) => a.active && pasMiroir(a));
 	const exclus = new Set<number>([account.id]);
 	// Point fixe : un compte est exclu dès que son parent l'est. Borné par le
 	// nombre de comptes, même si la liste reçue portait un cycle.
@@ -157,6 +166,7 @@ export function parentCandidates(
 		(a) =>
 			a.active &&
 			!exclus.has(a.id) &&
+			pasMiroir(a) &&
 			(a.currencyLocked !== true || a.id === account.parentId),
 	);
 }

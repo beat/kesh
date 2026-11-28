@@ -11,9 +11,9 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use kesh_db::errors::{
-    AccountGroupReason, DbError, FxAccountField, FxAccountReason, ModificationGuard,
-    RejectedRevenueAccount, RevenueAccountRejection, ReversalBlocker, SettlementCancelBlocker,
-    UnvalidationBlocker,
+    AccountGroupReason, AccountIsMirrorReason, DbError, FxAccountField, FxAccountReason,
+    MirrorReason, MirrorSourceAccount, ModificationGuard, RejectedRevenueAccount,
+    RevenueAccountRejection, ReversalBlocker, SettlementCancelBlocker, UnvalidationBlocker,
 };
 use kesh_i18n::{FluentArgs, I18nBundle, Locale};
 use serde::Serialize;
@@ -2252,6 +2252,172 @@ fn fx_account_invalid_response(
         "error": { "code": "FX_ACCOUNT_INVALID", "message": message, "details": details }
     });
     (StatusCode::BAD_REQUEST, Json(body)).into_response()
+}
+
+/// Clé i18n et repli du refus `MIRROR_ACCOUNT_INVALID` pour une raison (Story
+/// 47-1, AC-9) — `match` **sans cas par défaut** : une raison ajoutée à la liste
+/// close ne compile pas sans sa clé. `number` : le compte en cause (`chain`).
+pub(crate) fn mirror_account_invalid_message(
+    reason: MirrorReason,
+    number: &str,
+) -> (&'static str, String) {
+    match reason {
+        MirrorReason::SelfLink => (
+            "error-mirror-account-self",
+            "Un compte ne peut pas être son propre compte miroir.".to_string(),
+        ),
+        MirrorReason::Unknown => (
+            "error-mirror-account-unknown",
+            "Le compte miroir est introuvable ou n’appartient pas à cette société.".to_string(),
+        ),
+        MirrorReason::Archived => (
+            "error-mirror-account-archived",
+            "Le compte miroir est archivé.".to_string(),
+        ),
+        MirrorReason::AccountType => (
+            "error-mirror-account-account-type",
+            "Le compte miroir doit être de l’autre côté du même rapport : un passif pour un actif, un actif pour un passif, une charge pour un produit, un produit pour une charge.".to_string(),
+        ),
+        MirrorReason::Equity => (
+            "error-mirror-account-equity",
+            "Un compte de fonds propres (capital, autres fonds propres, bénéfice reporté, résultat de l’exercice) ne désigne pas de compte miroir.".to_string(),
+        ),
+        MirrorReason::NotPresentationAccount => (
+            "error-mirror-account-not-presentation",
+            "Le compte miroir doit être un compte de présentation : non imputable, sans rôle et sans écriture.".to_string(),
+        ),
+        MirrorReason::HasChildren => (
+            "error-mirror-account-has-children",
+            "Le compte miroir ne peut pas être un compte de groupe : il a des sous-comptes.".to_string(),
+        ),
+        MirrorReason::Chain => (
+            "error-mirror-account-chain",
+            format!(
+                "Les comptes miroirs ne s’enchaînent pas : le compte {number} est déjà lié par un miroir."
+            ),
+        ),
+    }
+}
+
+/// Corps `400 MIRROR_ACCOUNT_INVALID` (Story 47-1, AC-4, AC-9) : `details`
+/// `{ reason[, linkedAccountNumber] }`, message traduit qui nomme le compte en
+/// cause.
+fn mirror_account_invalid_response(
+    reason: MirrorReason,
+    linked_account_number: Option<String>,
+) -> Response {
+    let number = linked_account_number.clone().unwrap_or_default();
+    let (key, fallback) = mirror_account_invalid_message(reason, &number);
+    let mut args = FluentArgs::new();
+    args.set("number", number);
+    let message = t_args(key, &fallback, &args);
+    let mut details = serde_json::json!({ "reason": reason.as_str() });
+    if let Some(number) = linked_account_number {
+        details["linkedAccountNumber"] = serde_json::json!(number);
+    }
+    coded_response(
+        StatusCode::BAD_REQUEST,
+        "MIRROR_ACCOUNT_INVALID",
+        message,
+        details,
+    )
+}
+
+/// Clé i18n et repli du refus `ACCOUNT_IS_MIRROR` pour un geste (Story 47-1,
+/// AC-9) — `match` sans cas par défaut. `sources` : les comptes qui désignent
+/// le miroir, « numéro nom », séparés par des virgules.
+pub(crate) fn account_is_mirror_message(
+    reason: AccountIsMirrorReason,
+    sources: &str,
+) -> (&'static str, String) {
+    match reason {
+        AccountIsMirrorReason::Archive => (
+            "error-account-is-mirror-archive",
+            format!(
+                "Ce compte est le compte miroir de {sources} : il ne s’archive qu’une fois le lien retiré."
+            ),
+        ),
+        AccountIsMirrorReason::Postable => (
+            "error-account-is-mirror-postable",
+            format!(
+                "Ce compte est le compte miroir de {sources} : il reste non imputable tant que le lien demeure."
+            ),
+        ),
+        AccountIsMirrorReason::AccountType => (
+            "error-account-is-mirror-account-type",
+            format!(
+                "Ce compte est le compte miroir de {sources} : il ne change pas de type tant que le lien demeure."
+            ),
+        ),
+        AccountIsMirrorReason::Role => (
+            "error-account-is-mirror-role",
+            format!(
+                "Ce compte est le compte miroir de {sources} : il ne reçoit pas de rôle tant que le lien demeure."
+            ),
+        ),
+        AccountIsMirrorReason::Child => (
+            "error-account-is-mirror-child",
+            format!(
+                "Ce compte est le compte miroir de {sources} : il ne reçoit pas de sous-compte tant que le lien demeure."
+            ),
+        ),
+    }
+}
+
+/// Clé i18n et repli de la phrase ajoutée quand une ou plusieurs sources sont
+/// archivées (Story 47-1, AC-5, AC-9) : une clé pour une source, une pour
+/// plusieurs (Story 47-5, accord au pluriel). `archived` : les sources archivées,
+/// « numéro nom », séparées par des virgules ; `count` : leur nombre.
+fn account_is_mirror_reactivate_message(archived: &str, count: usize) -> (&'static str, String) {
+    if count > 1 {
+        (
+            "error-account-is-mirror-reactivate-first-many",
+            format!(
+                "{archived} sont archivés : réactivez-les d’abord, puis retirez leur compte miroir."
+            ),
+        )
+    } else {
+        (
+            "error-account-is-mirror-reactivate-first",
+            format!(
+                "{archived} est archivé : réactivez-le d’abord, puis retirez son compte miroir."
+            ),
+        )
+    }
+}
+
+/// Corps `409 ACCOUNT_IS_MIRROR` (Story 47-1, AC-5, AC-9) : `details`
+/// `{ reason, sources: [{ id, number, name, active }] }`. Le message nomme les
+/// sources et, si l'une est archivée, dit de la réactiver d'abord.
+fn account_is_mirror_response(
+    reason: AccountIsMirrorReason,
+    sources: Vec<MirrorSourceAccount>,
+) -> Response {
+    let nommer = |list: &mut dyn Iterator<Item = &MirrorSourceAccount>| -> String {
+        list.map(|s| format!("{} {}", s.number, s.name))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let all = nommer(&mut sources.iter());
+    let (key, fallback) = account_is_mirror_message(reason, &all);
+    let mut args = FluentArgs::new();
+    args.set("sources", all);
+    let mut message = t_args(key, &fallback, &args);
+    let count = sources.iter().filter(|s| !s.active).count();
+    if count > 0 {
+        let archived = nommer(&mut sources.iter().filter(|s| !s.active));
+        let (key, fallback) = account_is_mirror_reactivate_message(&archived, count);
+        let mut args = FluentArgs::new();
+        args.set("archived", archived);
+        message.push(' ');
+        message.push_str(&t_args(key, &fallback, &args));
+    }
+    coded_response(
+        StatusCode::CONFLICT,
+        "ACCOUNT_IS_MIRROR",
+        message,
+        serde_json::json!({ "reason": reason.as_str(), "sources": sources }),
+    )
 }
 
 /// Clé i18n et repli d'un motif de contre-passation (Story 24-4a), partagés
@@ -5917,6 +6083,14 @@ impl IntoResponse for AppError {
                         details,
                     )
                 }
+                // Story 47-1 (AC-4, AC-5, AC-9) — le compte miroir.
+                DbError::MirrorAccountInvalid {
+                    reason,
+                    linked_account_number,
+                } => mirror_account_invalid_response(reason, linked_account_number),
+                DbError::AccountIsMirror { reason, sources } => {
+                    account_is_mirror_response(reason, sources)
+                }
                 // Story 37-3a (AC-4, AC-6, AC-7) — refus du contrôle central des
                 // lignes en devise : une table, partagée avec les lots
                 // (`FailedProposal`, AC-5).
@@ -7545,6 +7719,157 @@ mod tests {
         assert_eq!(
             body["error"]["message"], SUPPLIER_INVOICE_DUPLICATE_UNVALIDATE_FR,
             "texte (règle 2, Unvalidation)"
+        );
+    }
+
+    /// Story 47-1 (AC-9) — chaque raison des deux refus du compte miroir a sa
+    /// clé dans les **quatre** catalogues ; la liste close est parcourue, aucune
+    /// raison sans clé. (L'égalité des replis à la valeur fr-CH : garde G9.)
+    #[test]
+    fn mirror_refusals_have_a_key_per_reason_in_the_four_catalogs() {
+        let catalogue = |locale: &str| -> String {
+            std::fs::read_to_string(format!(
+                "{}/../kesh-i18n/locales/{locale}/messages.ftl",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap_or_else(|e| panic!("catalogue {locale} : {e}"))
+        };
+        let valeur = |texte: &str, cle: &str| -> Option<String> {
+            texte
+                .lines()
+                .find_map(|l| l.strip_prefix(&format!("{cle} = ")))
+                .map(str::to_string)
+        };
+        let mut cles: Vec<(&str, String)> = Vec::new();
+        for reason in MirrorReason::ALL {
+            let (cle, repli) = mirror_account_invalid_message(reason, "{ $number }");
+            cles.push((cle, repli));
+        }
+        for reason in AccountIsMirrorReason::ALL {
+            let (cle, repli) = account_is_mirror_message(reason, "{ $sources }");
+            cles.push((cle, repli));
+        }
+        for count in [1, 2] {
+            let (cle, repli) = account_is_mirror_reactivate_message("{ $archived }", count);
+            cles.push((cle, repli));
+        }
+        assert_eq!(
+            cles.len(),
+            15,
+            "huit raisons, cinq gestes, une phrase au singulier et au pluriel"
+        );
+        let fr = catalogue("fr-CH");
+        for locale in ["fr-CH", "de-CH", "it-CH", "en-CH"] {
+            let texte = catalogue(locale);
+            for (cle, _) in &cles {
+                assert!(valeur(&texte, cle).is_some(), "{cle} absente de {locale}");
+            }
+        }
+        // L'égalité de chaque repli à la valeur fr-CH est tenue par la garde commune
+        // G9 (`tests/textes_coherents.rs`), qui porte ces treize clés depuis la 47-5.
+        // Aucun numéro de compte en dur (G4-bis) : variables Fluent.
+        for (cle, _) in &cles {
+            let v = valeur(&fr, cle).unwrap();
+            assert!(!v.chars().any(|c| c.is_ascii_digit()), "{cle} : {v}");
+        }
+    }
+
+    /// Story 47-1 (AC-9) — statuts, codes et détails des deux refus ; le
+    /// message nomme le compte en cause et, pour une source archivée, dit de la
+    /// réactiver d'abord.
+    #[tokio::test]
+    async fn mirror_refusals_map_to_their_status_code_and_details() {
+        let (status, body) = response_body(
+            AppError::Database(DbError::MirrorAccountInvalid {
+                reason: MirrorReason::Chain,
+                linked_account_number: Some("1179".into()),
+            })
+            .into_response(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"]["code"], "MIRROR_ACCOUNT_INVALID");
+        assert_eq!(body["error"]["details"]["reason"], "chain");
+        assert_eq!(body["error"]["details"]["linkedAccountNumber"], "1179");
+        assert!(body["error"]["message"].as_str().unwrap().contains("1179"));
+
+        let (_, body) = response_body(
+            AppError::Database(DbError::MirrorAccountInvalid {
+                reason: MirrorReason::NotPresentationAccount,
+                linked_account_number: None,
+            })
+            .into_response(),
+        )
+        .await;
+        assert_eq!(
+            body["error"]["details"],
+            serde_json::json!({ "reason": "notPresentationAccount" })
+        );
+
+        let (status, body) = response_body(
+            AppError::Database(DbError::AccountIsMirror {
+                reason: AccountIsMirrorReason::Archive,
+                sources: vec![
+                    MirrorSourceAccount {
+                        id: 3,
+                        number: "2260".into(),
+                        name: "Source AVS".into(),
+                        active: false,
+                    },
+                    MirrorSourceAccount {
+                        id: 4,
+                        number: "2270".into(),
+                        name: "Source LPP".into(),
+                        active: true,
+                    },
+                ],
+            })
+            .into_response(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"]["code"], "ACCOUNT_IS_MIRROR");
+        assert_eq!(body["error"]["details"]["reason"], "archive");
+        assert_eq!(
+            body["error"]["details"]["sources"],
+            serde_json::json!([
+                { "id": 3, "number": "2260", "name": "Source AVS", "active": false },
+                { "id": 4, "number": "2270", "name": "Source LPP", "active": true }
+            ])
+        );
+        let message = body["error"]["message"].as_str().unwrap();
+        assert!(
+            message.contains("2260 Source AVS, 2270 Source LPP"),
+            "{message}"
+        );
+        assert!(message.contains("réactivez"), "{message}");
+        assert!(
+            message.ends_with("2260 Source AVS est archivé : réactivez-le d’abord, puis retirez son compte miroir."),
+            "{message}"
+        );
+
+        // Story 47-5 — deux sources archivées : la phrase passe au pluriel.
+        let archivee = |id: i64, number: &str, name: &str| MirrorSourceAccount {
+            id,
+            number: number.into(),
+            name: name.into(),
+            active: false,
+        };
+        let (_, body) = response_body(
+            AppError::Database(DbError::AccountIsMirror {
+                reason: AccountIsMirrorReason::Archive,
+                sources: vec![
+                    archivee(3, "2260", "Source AVS"),
+                    archivee(4, "2270", "Source LPP"),
+                ],
+            })
+            .into_response(),
+        )
+        .await;
+        let message = body["error"]["message"].as_str().unwrap();
+        assert!(
+            message.ends_with("2260 Source AVS, 2270 Source LPP sont archivés : réactivez-les d’abord, puis retirez leur compte miroir."),
+            "{message}"
         );
     }
 

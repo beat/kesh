@@ -28,6 +28,7 @@
 //! | G23 | #723 | le serveur MCP : le manuel liste exactement les plages admises par défaut et les cinq portées (dans l'ordre), nomme `100.64.0.0/10` hors des défauts ; l'écran le nomme, ainsi que Traefik et Docker, dans les quatre langues |
 //! | G24 | #816 | la table des libellés de `reason` de l'écran de saisie d'un relevé (`manual-statement-reason-label.ts`) a exactement les clés de `ManualStatementReason::ALL`, dans les deux sens |
 //! | G25 | #1161 | l'axe analytique s'appelle « compte analytique » : ni « projet » ni sa traduction dans la valeur des quatre catalogues, les manuels français, `api-external.md`, le README et les littéraux de `routes/projects.rs` et `kesh-report/src/pdf.rs` (hors liste fermée d'exceptions au sens courant) |
+//! | G26 | Epic 47 (NFR-47-4) | l'exemple chiffré des comptes miroirs : chaque montant d'`EXEMPLE_PRESENTATION` (`reports_e2e.rs`, entre `// exemple-presentation:debut` et `:fin`) figure, comme jeton entier, dans le bloc `% exemple-presentation` du manuel utilisateur |
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -766,6 +767,9 @@ fn les_replis_rust_suivent_le_catalogue() {
         ("{ $format }", "{format}"),
         ("{ $fiscalYear }", "{fiscal_year_name}"),
     ];
+    // Story 47-5 — les comptes sources d'un compte miroir, et ceux qui sont archivés.
+    const SOURCES: &[(&str, &str)] = &[("{ $sources }", "{sources}")];
+    const ARCHIVEES: &[(&str, &str)] = &[("{ $archived }", "{archived}")];
     type Cles = &'static [(&'static str, usize, &'static [(&'static str, &'static str)])];
     const TABLE: [(&str, Cles); 9] = [
         // Story 31-5 (#469, C-31-5-15) — les six refus du journal d'audit.
@@ -964,6 +968,34 @@ fn les_replis_rust_suivent_le_catalogue() {
                 ("error-source-document-gone", 1, &[]),
                 ("error-data-length-or-range", 1, &[]),
                 ("error-invalid-input-generic", 2, &[]),
+                // Story 47-1 (AC-9), reprises par la 47-5 (revue P1 de la 47-1, L9) —
+                // les refus du compte miroir : huit raisons, cinq gestes, et la
+                // phrase de réactivation au singulier et au pluriel (47-5).
+                ("error-mirror-account-self", 1, &[]),
+                ("error-mirror-account-unknown", 1, &[]),
+                ("error-mirror-account-archived", 1, &[]),
+                ("error-mirror-account-account-type", 1, &[]),
+                ("error-mirror-account-equity", 1, &[]),
+                ("error-mirror-account-not-presentation", 1, &[]),
+                // Revue d'intégration P1 de l'Epic 47 (M-1) : un compte de groupe
+                // n'est pas miroir, un miroir ne reçoit pas de sous-compte.
+                ("error-mirror-account-has-children", 1, &[]),
+                (
+                    "error-mirror-account-chain",
+                    1,
+                    &[("{ $number }", "{number}")],
+                ),
+                ("error-account-is-mirror-archive", 1, SOURCES),
+                ("error-account-is-mirror-postable", 1, SOURCES),
+                ("error-account-is-mirror-account-type", 1, SOURCES),
+                ("error-account-is-mirror-role", 1, SOURCES),
+                ("error-account-is-mirror-child", 1, SOURCES),
+                ("error-account-is-mirror-reactivate-first", 1, ARCHIVEES),
+                (
+                    "error-account-is-mirror-reactivate-first-many",
+                    1,
+                    ARCHIVEES,
+                ),
             ],
         ),
         (
@@ -2357,14 +2389,21 @@ fn la_sauvegarde_automatique_dit_vrai() {
 /// marqueurs avec eux). Erreur si un marqueur manque : sans elle, un bloc supprimé ferait
 /// passer G23 (a) et (b) à vide.
 fn bloc_marque<'a>(source: &'a str, nom: &str) -> Result<&'a str, String> {
-    let debut = format!("% {nom}:debut");
-    let fin = format!("% {nom}:fin");
-    let i = source
-        .find(&debut)
-        .ok_or(format!("bloc absent : {debut}"))?
-        + debut.len();
+    bloc_entre(source, &format!("% {nom}:debut"), &format!("% {nom}:fin"))
+}
+
+/// **Fonction pure de G26** — sœur de [`bloc_marque`] pour un source **Rust** brut : le
+/// texte entre `// <nom>:debut` et `// <nom>:fin`, mêmes erreurs (absent, non fermé).
+fn bloc_marque_rs<'a>(source: &'a str, nom: &str) -> Result<&'a str, String> {
+    bloc_entre(source, &format!("// {nom}:debut"), &format!("// {nom}:fin"))
+}
+
+/// Corps commun de [`bloc_marque`] et de [`bloc_marque_rs`] : le texte entre deux
+/// marqueurs, erreur nommant le marqueur manquant.
+fn bloc_entre<'a>(source: &'a str, debut: &str, fin: &str) -> Result<&'a str, String> {
+    let i = source.find(debut).ok_or(format!("bloc absent : {debut}"))? + debut.len();
     let j = source[i..]
-        .find(&fin)
+        .find(fin)
         .ok_or(format!("bloc non fermé : {fin}"))?;
     Ok(&source[i..i + j])
 }
@@ -3271,5 +3310,100 @@ fn aucun_chemin_de_station_dans_les_fichiers_versionnes() {
         "{} fichier(s) versionné(s) citent un chemin de station ({motif}…) :\n  - {}",
         fautifs.len(),
         fautifs.join("\n  - ")
+    );
+}
+
+// ============================================================
+// G26 — l'exemple chiffré des comptes miroirs (Epic 47, NFR-47-4)
+// ============================================================
+
+/// **Fonction pure de G26** — les montants d'un texte, **jetons entiers** de la forme
+/// `-?\d+(?:['’]\d{3})*\.\d{2}`, apostrophes retirées et signe ignoré : `3'800.00` rend
+/// `3800.00`, jamais `800.00` ; `1040.1` n'est pas un montant.
+fn montants_jetons(texte: &str) -> std::collections::BTreeSet<String> {
+    static JETON: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"-?\d+(?:['’]\d{3})*\.\d{2}").unwrap());
+    JETON
+        .find_iter(texte)
+        .map(|m| m.as_str().trim_start_matches('-').replace(['\'', '’'], ""))
+        .collect()
+}
+
+/// **Fonction pure de G26** — les montants de la liste du test (`bloc_rs`) absents du bloc
+/// du manuel (`bloc_tex`), comparés en jetons entiers. Erreur si la liste a moins de
+/// quatorze montants : un bloc vidé passerait à vide.
+fn montants_absents_du_manuel(bloc_rs: &str, bloc_tex: &str) -> Result<Vec<String>, String> {
+    let liste = montants_jetons(bloc_rs);
+    if liste.len() < 14 {
+        return Err(format!(
+            "liste du test lue à {} montant(s), 14 au moins attendus",
+            liste.len()
+        ));
+    }
+    let manuel = montants_jetons(bloc_tex);
+    Ok(liste.into_iter().filter(|m| !manuel.contains(m)).collect())
+}
+
+/// G26 — témoins des fonctions pures, sur textes fabriqués.
+#[test]
+fn g26_les_fonctions_pures() {
+    // Blocs Rust : absent, non fermé, lu entre ses marqueurs.
+    assert!(bloc_marque_rs("rien", "exemple-presentation").is_err());
+    assert!(bloc_marque_rs("// exemple-presentation:debut\nx", "exemple-presentation").is_err());
+    assert_eq!(
+        bloc_marque_rs(
+            "a\n// exemple-presentation:debut\nX\n// exemple-presentation:fin\nb",
+            "exemple-presentation"
+        )
+        .unwrap(),
+        "\nX\n"
+    );
+    // Le préfixe LaTeX n'ouvre pas un bloc Rust, ni l'inverse.
+    assert!(bloc_marque_rs("% e:debut x % e:fin", "e").is_err());
+    assert!(bloc_marque("// e:debut x // e:fin", "e").is_err());
+
+    // Jetons entiers : 800.00 n'est pas lu dans 3'800.00 ; signe et apostrophes retirés.
+    let j = montants_jetons("1040.1 : 3'800.00 ; $-$1’200.00 ; 50.00");
+    assert_eq!(
+        j.into_iter().collect::<Vec<_>>(),
+        ["1200.00", "3800.00", "50.00"]
+    );
+
+    // La comparaison : liste trop courte en erreur ; un montant retiré du manuel rougit.
+    let liste = r#"["13700.00", "11700.00", "3800.00", "1800.00", "9900.00", "8200.00", "1200.00",
+        "800.00", "2000.00", "1750.00", "300.00", "250.00", "50.00", "1700.00"]"#;
+    assert!(montants_absents_du_manuel(r#"["1.00"]"#, "1.00").is_err());
+    let manuel_complet = "13'700.00 11'700.00 3'800.00 1'800.00 9'900.00 8'200.00 1'200.00 \
+        800.00 2'000.00 1'750.00 300.00 250.00 50.00 1'700.00";
+    assert_eq!(
+        montants_absents_du_manuel(liste, manuel_complet).unwrap(),
+        Vec::<String>::new()
+    );
+    // 800.00 retiré : 3'800.00 ne le couvre pas.
+    let sans_800 = manuel_complet.replace(" 800.00", "");
+    assert_eq!(
+        montants_absents_du_manuel(liste, &sans_800).unwrap(),
+        ["800.00"]
+    );
+}
+
+/// **G26** (Epic 47, NFR-47-4 ; Story 47-4, AC-8) — l'exemple chiffré des comptes miroirs
+/// du manuel utilisateur est celui que rejoue le test d'intégration de la 47-3 : chaque
+/// montant d'`EXEMPLE_PRESENTATION` (`reports_e2e.rs`, bloc `// exemple-presentation`)
+/// figure, comme jeton entier, dans le bloc `% exemple-presentation` du manuel. Les deux
+/// sources sont lues **brutes** (`lire`), jamais normalisées.
+#[test]
+fn l_exemple_des_comptes_miroirs_du_manuel_est_celui_du_test() {
+    let rs = lire("crates/kesh-api/tests/reports_e2e.rs");
+    let tex = lire("docs/manual/fr/user-manual.tex");
+    let bloc_rs = bloc_marque_rs(&rs, "exemple-presentation")
+        .unwrap_or_else(|e| panic!("G26 — reports_e2e.rs : {e}"));
+    let bloc_tex = bloc_marque(&tex, "exemple-presentation")
+        .unwrap_or_else(|e| panic!("G26 — user-manual.tex : {e}"));
+    let absents = montants_absents_du_manuel(bloc_rs, bloc_tex)
+        .unwrap_or_else(|e| panic!("G26 — reports_e2e.rs : {e}"));
+    assert!(
+        absents.is_empty(),
+        "G26 — montant(s) de l'exemple absent(s) du manuel : {absents:?}"
     );
 }

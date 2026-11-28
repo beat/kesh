@@ -329,6 +329,9 @@ pub fn serialize_accounts_csv<W: Write>(rows: &[Account], writer: W) -> Result<(
         "version",
         "created_at",
         "updated_at",
+        // Story 47-1 (AC-13) : le compte miroir, à la fin de la ligne (vide =
+        // aucun) — l'ordre des colonnes d'avant ne bouge pas.
+        "mirror_account_id",
     ])
     .map_err(|e| map_csv_err("accounts", e))?;
     for a in rows {
@@ -348,6 +351,7 @@ pub fn serialize_accounts_csv<W: Write>(rows: &[Account], writer: W) -> Result<(
             a.version.to_string(),
             fmt_dt(a.created_at),
             fmt_dt(a.updated_at),
+            fmt_opt_i64(a.mirror_account_id),
         ])
         .map_err(|e| map_csv_err("accounts", e))?;
     }
@@ -1933,6 +1937,7 @@ mod tests {
             currency: None,
             fx_gain_account_id: None,
             fx_loss_account_id: None,
+            mirror_account_id: None,
             version: 1,
             created_at: naive_dt(2026, 1, 1, 0, 0, 0),
             updated_at: naive_dt(2026, 1, 2, 12, 30, 45),
@@ -2274,8 +2279,9 @@ mod tests {
         assert_eq!(
             lines.next().unwrap(),
             "id;company_id;number;name;account_type;parent_id;active;role;postable;\
-             currency;fx_gain_account_id;fx_loss_account_id;version;created_at;updated_at",
-            "en-tête CSV des comptes (15 colonnes depuis la Story 37-1)"
+             currency;fx_gain_account_id;fx_loss_account_id;version;created_at;updated_at;\
+             mirror_account_id",
+            "en-tête CSV des comptes (16 colonnes depuis la Story 47-1)"
         );
 
         let row = lines.next().unwrap();
@@ -2288,6 +2294,24 @@ mod tests {
             row.contains(";Receivable;true;;;;1;"),
             "devise et comptes propres vides : {row}"
         );
+    }
+
+    /// Story 47-1 (AC-13) — un compte lié à un miroir : la cellule en fin de
+    /// ligne porte l'identifiant du miroir ; vide sans miroir.
+    #[test]
+    fn serialize_accounts_csv_carries_the_mirror_account() {
+        let mut compte = sample_account();
+        compte.mirror_account_id = Some(42);
+        let mut buf = Vec::new();
+        serialize_accounts_csv(&[compte, sample_account()], &mut buf).expect("serialize ok");
+        let text = std::str::from_utf8(&buf[3..]).unwrap();
+        let mut lines = text.split("\r\n");
+        let header: Vec<&str> = lines.next().unwrap().split(';').collect();
+        assert_eq!(header.last(), Some(&"mirror_account_id"));
+        let liee = lines.next().unwrap();
+        assert!(liee.ends_with(";42"), "miroir en fin de ligne : {liee}");
+        let sans = lines.next().unwrap();
+        assert!(sans.ends_with(";"), "cellule vide sans miroir : {sans}");
     }
 
     /// Story 37-1 (AC-6) — un compte en devise avec comptes de différence

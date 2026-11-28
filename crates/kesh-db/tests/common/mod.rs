@@ -137,19 +137,28 @@ const COLONNES_MULTI_DEVISES: &[(&str, &str, &str)] = &[
     ("accounts", "fx_loss_account_id", "BIGINT NULL"),
 ];
 
-/// Story 37-1 — pose (`true`) ou retire (`false`) les colonnes multi-devises
-/// sur une base d'**avant** la migration 37-1 : un semis qui passe par le dépôt
-/// courant (`companies::create`, `journal_entries::create_in_tx`…) les lit.
-/// ⚠️ Le retrait est **obligatoire** avant `MIGRATOR.run()`, qui les ajoute
-/// lui-même (sans `IF NOT EXISTS`). Même geste que les colonnes de la 33-1a
-/// posées le temps d'un semis (`migrations_upgrade_path.rs`,
-/// `lettering_documents_backfill.rs`).
+/// La colonne de `20261119000001_account_mirror` (Story 47-1) que le dépôt
+/// courant **lit** : `columns!()` d'`Account`, et la garde des lignes
+/// d'écriture (`validate_lines_accounts_in_tx`, AC-6). Posée et retirée avec
+/// les colonnes multi-devises par [`colonnes_multi_devises`] (toute base
+/// d'avant la 37-1 est aussi d'avant la 47-1), ou seule par [`colonne_miroir`].
+const COLONNES_MIROIR: &[(&str, &str, &str)] = &[("accounts", "mirror_account_id", "BIGINT NULL")];
+
+/// Story 47-1 — pose (`true`) ou retire (`false`) la colonne du compte miroir
+/// sur une base d'**avant** la migration 47-1 mais d'après la 37-1 : un semis
+/// qui passe par le dépôt courant (écritures, comptes) la lit. ⚠️ Le retrait est
+/// **obligatoire** avant `MIGRATOR.run()`, qui l'ajoute lui-même.
 #[allow(dead_code)]
-pub async fn colonnes_multi_devises(pool: &MySqlPool, poser: bool) {
-    for (table, colonne, definition) in COLONNES_MULTI_DEVISES
-        .iter()
-        .chain(COLONNES_LIGNES_EN_DEVISE.iter())
-    {
+pub async fn colonne_miroir(pool: &MySqlPool, poser: bool) {
+    poser_ou_retirer(pool, COLONNES_MIROIR.iter(), poser).await;
+}
+
+async fn poser_ou_retirer<'a>(
+    pool: &MySqlPool,
+    colonnes: impl Iterator<Item = &'a (&'a str, &'a str, &'a str)>,
+    poser: bool,
+) {
+    for (table, colonne, definition) in colonnes {
         let sql = if poser {
             format!("ALTER TABLE {table} ADD COLUMN {colonne} {definition}")
         } else {
@@ -158,7 +167,7 @@ pub async fn colonnes_multi_devises(pool: &MySqlPool, poser: bool) {
         sqlx::query(&sql)
             .execute(pool)
             .await
-            .unwrap_or_else(|e| panic!("colonne multi-devises {table}.{colonne} : {e}"));
+            .unwrap_or_else(|e| panic!("colonne {table}.{colonne} : {e}"));
     }
 }
 
@@ -185,4 +194,24 @@ pub async fn colonnes_types_de_ligne(pool: &MySqlPool, poser: bool) {
             .await
             .unwrap_or_else(|e| panic!("colonne {table}.line_type : {e}"));
     }
+}
+
+/// Story 37-1 — pose (`true`) ou retire (`false`) les colonnes multi-devises
+/// sur une base d'**avant** la migration 37-1 : un semis qui passe par le dépôt
+/// courant (`companies::create`, `journal_entries::create_in_tx`…) les lit.
+/// ⚠️ Le retrait est **obligatoire** avant `MIGRATOR.run()`, qui les ajoute
+/// lui-même (sans `IF NOT EXISTS`). Même geste que les colonnes de la 33-1a
+/// posées le temps d'un semis (`migrations_upgrade_path.rs`,
+/// `lettering_documents_backfill.rs`).
+#[allow(dead_code)]
+pub async fn colonnes_multi_devises(pool: &MySqlPool, poser: bool) {
+    poser_ou_retirer(
+        pool,
+        COLONNES_MULTI_DEVISES
+            .iter()
+            .chain(COLONNES_LIGNES_EN_DEVISE.iter())
+            .chain(COLONNES_MIROIR.iter()),
+        poser,
+    )
+    .await;
 }

@@ -26,6 +26,20 @@ export interface AccountBalance {
 	currency?: string;
 	/** Story 37-4 — solde en devise, signé comme `balance` ; absent hors compte en devise. */
 	balanceCurrency?: string;
+	/** Story 47-3 / 47-4 — sur la ligne d'un **compte miroir** seulement : les comptes dont
+	 *  le solde de sens inverse paraît sur cette ligne. Absent (champ omis du JSON) partout
+	 *  ailleurs ; les vues affichent alors la ligne comme avant. */
+	mirrorOf?: MirrorSource[];
+}
+
+/** Story 47-4 — un compte dont le solde de sens inverse est présenté sous son miroir
+ *  (`MirrorSource` de `kesh-report`). */
+export interface MirrorSource {
+	accountId: number;
+	accountNumber: string;
+	accountName: string;
+	/** Solde brut de la source, signé dans sa nature (donc négatif) — chaîne décimale. */
+	balance: string;
 }
 
 // --- Story 46-2 — bilan et compte de résultat par groupes (contrat de la 46-1) ---
@@ -91,6 +105,10 @@ export interface GroupedRowBase {
 export interface GroupedRow extends GroupedRowBase {
 	balance: string;
 	role?: AccountRole | null;
+	/** Story 47-3 (§ *Recâblage*, point 3) — sur la ligne `account` d'un **compte
+	 *  miroir** seulement, comme `AccountBalance.mirrorOf` sur la ligne à plat ;
+	 *  absent partout ailleurs (et jamais à la balance). */
+	mirrorOf?: MirrorSource[];
 }
 
 /**

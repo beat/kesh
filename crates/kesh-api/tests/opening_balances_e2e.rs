@@ -213,6 +213,7 @@ async fn create_acc(
             postable: true,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await
@@ -842,6 +843,7 @@ async fn create_non_postable_acc(
             postable: false,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await

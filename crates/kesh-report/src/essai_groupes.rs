@@ -30,6 +30,8 @@ pub fn ab(id: i64, nom: &str, balance: Decimal, ty: AccountType) -> AccountBalan
         role: None,
         currency: None,
         balance_currency: None,
+        // Champ de l'Epic 47 (présentation miroir), vide : un compte ordinaire.
+        mirror_of: Vec::new(),
     }
 }
 

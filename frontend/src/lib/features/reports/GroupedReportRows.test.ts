@@ -169,3 +169,28 @@ describe('GroupedReportRows — Story 55-2, lien de compte', () => {
 		expect(container.querySelector('[data-testid="grouped-group-10"] a')).toBeNull();
 	});
 });
+
+describe('GroupedReportRows — compte miroir (Story 47-3, § Recâblage, point 3)', () => {
+	it('la ligne d’un compte miroir porte « Solde de … », sous son libellé ; aucune autre ligne', () => {
+		const rows = lignes('header').map((r) =>
+			r.kind === 'account' && r.accountNumber === '1000'
+				? {
+						...r,
+						mirrorOf: [
+							{ accountId: 2100, accountNumber: '2100', accountName: 'Découvert', balance: '-400' },
+						],
+					}
+				: r,
+		);
+		const { container } = rendre(rows, 'header');
+		const note = container.querySelector('[data-testid="mirror-of-1000"]');
+		expect(note?.textContent).toBe('Solde de 2100 Découvert');
+		expect(note?.closest('tr')?.getAttribute('data-testid')).toBe('grouped-account-1000');
+		expect(container.querySelectorAll('[data-testid^="mirror-of-"]')).toHaveLength(1);
+	});
+
+	it('sans `mirrorOf`, aucune mention (la ligne est rendue comme avant)', () => {
+		const { container } = rendre(lignes('footer'), 'footer');
+		expect(container.querySelectorAll('[data-testid^="mirror-of-"]')).toHaveLength(0);
+	});
+});

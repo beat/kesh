@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use kesh_db::entities::account::{
     Account, AccountRole, AccountType, AccountUpdate, CurrencyChange, GroupKind, GroupMember,
-    GroupProposal, NewAccount, OwnFxAccounts, OwnFxAccountsChange, ParentChange,
+    GroupProposal, MirrorChange, NewAccount, OwnFxAccounts, OwnFxAccountsChange, ParentChange,
 };
 use kesh_db::errors::{DbError, FxAccountField, FxAccountReason, GroupStepError, map_db_error};
 use kesh_db::repositories::{accounts, letterings};
@@ -59,6 +59,11 @@ pub struct CreateAccountRequest {
     /// Compte de pertes de change propre (Story 37-1, AC-4 bis).
     #[serde(default)]
     pub fx_loss_account_id: Option<i64>,
+    /// Compte miroir (Story 47-2, AC-1) : un identifiant = posé ; absent ou
+    /// `null` = aucun miroir. Les règles (cible de la société, de l'autre côté,
+    /// compte de présentation, pas de chaîne) sont jugées par le dépôt.
+    #[serde(default)]
+    pub mirror_account_id: Option<i64>,
 }
 
 fn default_true() -> bool {
@@ -274,7 +279,25 @@ pub struct UpdateAccountRequest {
     /// `currency` : un client qui ne connaît pas le champ ne détache rien.
     #[serde(default, deserialize_with = "present_or_null")]
     pub parent_id: Option<Option<i64>>,
+    /// Compte miroir (Story 47-2, AC-1), mêmes trois états que `currency` :
+    /// `None` = champ **absent** → miroir **inchangé** (un client qui ne
+    /// connaît pas le champ n'efface rien) ; `Some(None)` = `null` → lien
+    /// retiré ; `Some(Some(id))` = le miroir posé. Traduit en [`MirrorChange`]
+    /// par [`mirror_for_update`], sans lecture préalable : le dépôt juge sous
+    /// le `FOR UPDATE` du compte.
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub mirror_account_id: Option<Option<i64>>,
     pub version: i32,
+}
+
+/// Traduit les trois états de `mirrorAccountId` d'un `PUT` (Story 47-2, AC-1)
+/// en [`MirrorChange`] : absent = inchangé, `null` = retiré, entier = posé.
+fn mirror_for_update(field: Option<Option<i64>>) -> MirrorChange {
+    match field {
+        None => MirrorChange::Unchanged,
+        Some(None) => MirrorChange::Clear,
+        Some(Some(id)) => MirrorChange::Set(id),
+    }
 }
 
 #[derive(Deserialize)]
@@ -391,6 +414,11 @@ pub struct AccountResponse {
     /// un compte « par défaut ».
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fx_loss_account_id: Option<i64>,
+    /// Compte miroir (Story 47-2, AC-1) ; **absent** quand le compte n'en a
+    /// pas. Le sens inverse (« qui me désigne ») n'est pas rendu : il se
+    /// déduit de la liste des comptes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mirror_account_id: Option<i64>,
     pub version: i32,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
@@ -418,6 +446,7 @@ impl AccountResponse {
             currency_locked,
             fx_gain_account_id: a.fx_gain_account_id,
             fx_loss_account_id: a.fx_loss_account_id,
+            mirror_account_id: a.mirror_account_id,
             version: a.version,
             created_at: a.created_at,
             updated_at: a.updated_at,
@@ -492,6 +521,7 @@ pub async fn create_account(
         postable: req.postable,
         currency,
         own_fx_accounts,
+        mirror_account_id: req.mirror_account_id,
     };
 
     // ⚠️ **Rejouée sur interblocage** (Story 37-1, AC-4 bis, 37-1-CR3-P2-1 ;
@@ -518,8 +548,9 @@ pub async fn create_account(
 }
 
 /// PUT /api/v1/accounts/{id} — modifie un compte : nom, type, rôle,
-/// postabilité, devise, comptes propres et parent (`parentId`, correctif
-/// `fix-api-parent-compte` : absent = inchangé, `null` = racine).
+/// postabilité, devise, comptes propres, parent (`parentId`, correctif
+/// `fix-api-parent-compte` : absent = inchangé, `null` = racine) et compte
+/// miroir (`mirrorAccountId`, Story 47-2 : absent = inchangé, `null` = retiré).
 /// Story 6.2: Validate company exists (defensive: company_id staleness window).
 pub async fn update_account(
     State(state): State<AppState>,
@@ -583,6 +614,7 @@ pub async fn update_account(
         postable,
         currency,
         own_fx_accounts,
+        mirror: mirror_for_update(req.mirror_account_id),
         parent,
     };
 
@@ -810,13 +842,30 @@ pub async fn archive_account(
         .await?
         .ok_or(AppError::Database(DbError::NotFound))?;
 
-    let account = accounts::archive_guarded(
-        &state.pool,
-        id,
-        req.version,
-        current_user.user_id,
-        req.confirm_designated,
-    )
+    // **Rejouée sur interblocage, par précaution** (Story 47-2, AC-1 ;
+    // opération `accounts::archive`) : l'archivage de T prend sa ligne `FOR
+    // UPDATE`, puis lit « qui désigne T » sous verrou, pendant qu'une pose de
+    // miroir A → T tient A puis verrouille T. Lue au code, cette paire attend
+    // sans cycle : la pose verrouille T (`guard_mirror_update`, puis
+    // `guard_mirror_set_in_tx`) **avant** d'écrire le lien de A, si bien que
+    // l'archivage, qui tient T, ne lit jamais un lien de A en cours
+    // d'écriture ; quand A désigne déjà T, l'archivage prend bien la ligne de A
+    // en partage, mais aucun geste qui tient A n'attend alors T (un miroir gardé
+    // ou reposé tel quel ne verrouille pas sa cible ; revue P2 de la 47-2,
+    // P2-L1). **Aucun interblocage n'est établi ni provoqué par un test**. Un cycle reste
+    // possible par d'autres verrous (société, réglages) ; le rejeu est sans
+    // risque — le dépôt ouvre et conclut sa propre transaction à chaque
+    // tentative et refait tous ses contrôles — et rend alors le refus métier
+    // (`ACCOUNT_IS_MIRROR`) plutôt qu'un 500 (revue P1 de la 47-2, L4).
+    let (version, user_id, confirm) = (req.version, current_user.user_id, req.confirm_designated);
+    let account = crate::retry::retry_app_on_deadlock("accounts::archive", || {
+        let pool = state.pool.clone();
+        async move {
+            accounts::archive_guarded(&pool, id, version, user_id, confirm)
+                .await
+                .map_err(AppError::from)
+        }
+    })
     .await?;
     Ok(Json(response(&state, account).await?))
 }

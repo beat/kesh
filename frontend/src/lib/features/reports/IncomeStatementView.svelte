@@ -9,6 +9,7 @@
 	import AccountCurrencyBalance from './AccountCurrencyBalance.svelte';
 	import AccountLink from './AccountLink.svelte';
 	import GroupedReportRows, { BALANCE_COLUMNS } from './GroupedReportRows.svelte';
+	import MirrorOfNote from './MirrorOfNote.svelte';
 	import { formatReportAmount, isReportEmpty } from './reports.api';
 	import ReportPeriodHeading from './ReportPeriodHeading.svelte';
 	import type { ExerciceBornes } from './reports-url';
@@ -80,11 +81,11 @@
 							/>
 						{:else}
 						{#each dto.revenues as r (r.accountId)}
-							<tr>
+							<tr data-testid="report-row-{r.accountNumber}">
 								<td class="px-2 py-1 font-mono"
 									><AccountLink accountId={r.accountId} number={r.accountNumber} from={dto.period.startDate} to={dto.period.endDate} /></td
 								>
-								<td class="px-2 py-1">{r.accountName}<AccountCurrencyBalance account={r} /></td>
+								<td class="px-2 py-1">{r.accountName}<AccountCurrencyBalance account={r} /><MirrorOfNote account={r} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(r.balance)}</td>
 							</tr>
 						{/each}
@@ -122,11 +123,11 @@
 							/>
 						{:else}
 						{#each dto.expenses as e (e.accountId)}
-							<tr>
+							<tr data-testid="report-row-{e.accountNumber}">
 								<td class="px-2 py-1 font-mono"
 									><AccountLink accountId={e.accountId} number={e.accountNumber} from={dto.period.startDate} to={dto.period.endDate} /></td
 								>
-								<td class="px-2 py-1">{e.accountName}<AccountCurrencyBalance account={e} /></td>
+								<td class="px-2 py-1">{e.accountName}<AccountCurrencyBalance account={e} /><MirrorOfNote account={e} /></td>
 								<td class="px-2 py-1 text-right font-mono">{fmt(e.balance)}</td>
 							</tr>
 						{/each}

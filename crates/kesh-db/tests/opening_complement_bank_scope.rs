@@ -40,6 +40,7 @@ async fn setup(pool: &MySqlPool) -> (SeededCompany, i64, i64) {
         postable: true,
         currency: None,
         own_fx_accounts: None,
+        mirror_account_id: None,
     };
     let retained = accounts::create(
         pool,

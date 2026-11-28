@@ -30,7 +30,7 @@ use kesh_db::entities::{Account, AccountRole};
 use rust_decimal::Decimal;
 use serde::{Serialize, Serializer};
 
-use crate::balance_sheet::{AccountBalance, BalanceSheet};
+use crate::balance_sheet::{AccountBalance, BalanceSheet, MirrorSource};
 use crate::income_statement::IncomeStatement;
 use crate::opening::is_debit_natured;
 use crate::trial_balance::{TrialBalance, TrialBalanceRow};
@@ -827,6 +827,14 @@ pub struct LigneRapport {
     /// `null` pour un compte sans rôle.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<Option<AccountRole>>,
+    /// Les comptes dont le solde de sens inverse paraît sur cette ligne, quand
+    /// elle est celle d'un **compte miroir** (`account` seulement, Story 47-3,
+    /// § *Recâblage*, point 3), relus tels quels de
+    /// [`AccountBalance::mirror_of`] ; vide — et omis du JSON — partout
+    /// ailleurs, comme sur la ligne à plat. Un compte de groupe ne peut pas être
+    /// miroir (`check_mirror`), si bien qu'une ligne `own` n'en porte jamais.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub mirror_of: Vec<MirrorSource>,
 }
 
 impl LigneRapport {
@@ -844,6 +852,7 @@ impl LigneRapport {
             open: l.ouvert,
             active: source.map(|a| a.active),
             role: source.map(|a| a.role),
+            mirror_of: source.map(|a| a.mirror_of.clone()).unwrap_or_default(),
         }
     }
 
@@ -2143,6 +2152,7 @@ mod tests {
             open: Some(false),
             active: None,
             role: None,
+            mirror_of: Vec::new(),
         };
         assert_eq!(
             serde_json::to_value(&ligne).unwrap(),
@@ -2162,6 +2172,23 @@ mod tests {
             (Some("account"), Some(true))
         );
         assert!(v["role"].is_null() && v.as_object().unwrap().contains_key("role"));
+        // Sans miroir, `mirrorOf` est omis (ligne ci-dessus) ; avec, il paraît
+        // comme sur la ligne à plat (Story 47-3, § Recâblage, point 3).
+        assert!(!v.as_object().unwrap().contains_key("mirrorOf"));
+        let miroir = LigneRapport {
+            mirror_of: vec![MirrorSource {
+                account_id: 3,
+                account_number: "1020".into(),
+                account_name: "Banque".into(),
+                balance: dec!(-800),
+            }],
+            ..compte
+        };
+        assert_eq!(
+            serde_json::to_value(&miroir).unwrap()["mirrorOf"],
+            serde_json::json!([{"accountId": 3, "accountNumber": "1020",
+                "accountName": "Banque", "balance": "-800"}])
+        );
     }
 
     // ---- Balance par groupes (Story 46-6a) ------------------------------
@@ -2617,5 +2644,49 @@ mod tests {
             (Some("group"), Some(true))
         );
         assert!(v.get("active").is_none() && v.get("role").is_none());
+    }
+
+    /// Story 47-3, § *Recâblage*, point 3 (revue d'intégration P1, H-1) : la
+    /// ligne `account` d'un compte miroir porte `mirror_of`, à tout niveau où
+    /// elle paraît ; aucune autre ligne n'en porte.
+    #[test]
+    fn la_ligne_groupee_d_un_miroir_porte_ses_sources() {
+        use crate::essai_groupes::{arbre, bilan_essai, options};
+        let mut bs = bilan_essai();
+        let source = MirrorSource {
+            account_id: 2100,
+            account_number: "2100".into(),
+            account_name: "Découvert".into(),
+            balance: dec!(-5.006),
+        };
+        let i = bs
+            .assets
+            .iter()
+            .position(|a| a.account_number == "1020")
+            .unwrap();
+        bs.assets[i].mirror_of = vec![source.clone()];
+        for niveau in [NiveauDetail::Tous, NiveauDetail::Niveau(3)] {
+            for position in [PositionSousTotal::Titre, PositionSousTotal::Pied] {
+                let g =
+                    AvecGroupes::bilan(bs.clone(), &arbre(), &options(niveau, position, &[], &[]));
+                let lignes = &g.grouped_rows.as_ref().unwrap().assets;
+                let avec: Vec<_> = lignes.iter().filter(|l| !l.mirror_of.is_empty()).collect();
+                assert_eq!(avec.len(), 1, "{niveau:?} {position:?} : {lignes:?}");
+                assert_eq!(
+                    (avec[0].kind, avec[0].account_number.as_str()),
+                    (GenreLigne::Compte, "1020")
+                );
+                assert_eq!(avec[0].mirror_of, vec![source.clone()]);
+            }
+        }
+        // Groupe 10 fermé : la ligne du miroir n'est pas affichée, aucune ligne
+        // ne porte la mention (elle ne remonte pas au titre du groupe).
+        let g = AvecGroupes::bilan(
+            bs,
+            &arbre(),
+            &options(NiveauDetail::Niveau(1), PositionSousTotal::Titre, &[], &[]),
+        );
+        let lignes = &g.grouped_rows.unwrap().assets;
+        assert!(lignes.iter().all(|l| l.mirror_of.is_empty()), "{lignes:?}");
     }
 }

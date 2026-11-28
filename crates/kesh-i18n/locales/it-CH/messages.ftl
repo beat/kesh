@@ -266,6 +266,11 @@ accounts-retype-closed-years = Esercizi chiusi interessati: { $years }. Il loro 
 accounts-retype-confirm = Cambia comunque il tipo
 account-field-parent-optional = Conto padre (facoltativo)
 accounts-parent-none = Nessuno
+# Story 47-2 — compte miroir au dialogue d'un compte
+accounts-mirror-label = Conto specchio
+accounts-mirror-none = Nessuno
+accounts-mirror-help = Il conto specchio è un conto di presentazione: non registrabile, senza ruolo né registrazioni. Il saldo di questo conto, se di segno inverso, vi figura nel bilancio o nel conto economico.
+accounts-mirror-of = Questo conto è il conto specchio di { $numbers }.
 accounts-parent-archived = Il conto padre { $number } è archiviato. Riattivatelo prima.
 error-account-parent-cycle = Il conto { $number } è questo conto stesso o uno dei suoi sottoconti: un conto non può essere collocato sotto sé stesso.
 error-account-parent-has-entries = Il conto { $number } porta delle registrazioni: collocandovi sotto questo conto, diventerebbe non imputabile con un saldo che nessuna registrazione potrebbe più correggere. Scegliete un conto di gruppo senza registrazioni.
@@ -1202,6 +1207,22 @@ error-account-in-foreign-currency = Questo conto è tenuto in { $currency }: non
 error-account-is-fx-difference-account = Questo conto è un conto di differenza di cambio della società: non può essere né archiviato, né cambiato di tipo, né reso non imputabile, né ricevere una valuta, un sottoconto o un ruolo di ricavo.
 error-account-is-fx-difference-account-own = Questo conto è un conto di differenza di cambio del conto in valuta { $number }: non può essere né archiviato, né cambiato di tipo, né reso non imputabile, né ricevere una valuta, un sottoconto o un ruolo di ricavo.
 error-account-is-fx-transit-account = Questo conto è il conto di conversione della società: non può essere né archiviato, né cambiato di tipo fuori dal bilancio, né reso non imputabile, né ricevere una valuta o un sottoconto.
+# Story 47-1 (AC-9) — conto specchio: rifiuti di MIRROR_ACCOUNT_INVALID (una chiave per motivo) e di ACCOUNT_IS_MIRROR.
+error-mirror-account-self = Un conto non può essere il proprio conto specchio.
+error-mirror-account-unknown = Il conto specchio è introvabile o non appartiene a questa società.
+error-mirror-account-archived = Il conto specchio è archiviato.
+error-mirror-account-account-type = Il conto specchio deve trovarsi dall’altra parte dello stesso rendiconto: un passivo per un attivo, un attivo per un passivo, un costo per un ricavo, un ricavo per un costo.
+error-mirror-account-equity = Un conto di capitale proprio (capitale, altro capitale proprio, utile riportato, risultato d’esercizio) non designa un conto specchio.
+error-mirror-account-not-presentation = Il conto specchio deve essere un conto di presentazione: non imputabile, senza ruolo e senza registrazioni.
+error-mirror-account-has-children = Il conto specchio non può essere un conto di gruppo: ha dei sottoconti.
+error-mirror-account-chain = I conti specchio non si concatenano: il conto { $number } è già collegato da uno specchio.
+error-account-is-mirror-archive = Questo conto è il conto specchio di { $sources }: si archivia solo dopo aver rimosso il collegamento.
+error-account-is-mirror-postable = Questo conto è il conto specchio di { $sources }: resta non imputabile finché il collegamento rimane.
+error-account-is-mirror-account-type = Questo conto è il conto specchio di { $sources }: non cambia tipo finché il collegamento rimane.
+error-account-is-mirror-role = Questo conto è il conto specchio di { $sources }: non riceve un ruolo finché il collegamento rimane.
+error-account-is-mirror-child = Questo conto è il conto specchio di { $sources }: non riceve un sottoconto finché il collegamento rimane.
+error-account-is-mirror-reactivate-first = { $archived } è archiviato: riattivatelo prima, poi rimuovete il suo conto specchio.
+error-account-is-mirror-reactivate-first-many = { $archived } sono archiviati: riattivateli prima, poi rimuovete il loro conto specchio.
 # Story 37-3a — registrazioni in valuta.
 error-multi-currency-disabled-fiscal-year = Questo esercizio è monovaluta: questa operazione in valuta non vi è possibile.
 error-fx-multiple-currencies = Una registrazione porta una sola valuta estera (qui: { $currencies }). Registri un cambio tra valute tramite il conto di conversione, in due registrazioni.
@@ -2242,6 +2263,10 @@ reports-retained-earnings-loss = Perdita riportata
 # Alerts + badges UI (2 — code review Pass 1 i18n leaks)
 reports-equation-warning = ⚠️ Equazione di bilancio non bilanciata (verificare i dati sorgente).
 reports-archived-label = archiviato
+
+# Story 47-4 — sotto la riga di un conto specchio.
+reports-mirror-of-one = Saldo di { $sources }
+reports-mirror-of-other = Saldi di { $sources }
 
 # Pagina rapporti — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Rapporti contabili

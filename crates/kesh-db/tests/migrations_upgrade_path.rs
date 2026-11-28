@@ -46,9 +46,9 @@ async fn apply_migrations_up_to(
     assert!(
         n <= all.len(),
         "apply_migrations_up_to: n={} > total={} — vérifier que le calcul \
-         `total - 64` (fenêtre d'upgrade, FRONTIÈRE figée à 34) reste \
+         `total - 65` (fenêtre d'upgrade, FRONTIÈRE figée à 34) reste \
          cohérent avec l'ajout de migrations futures. Si une migration a été ajoutée à \
-         la branche, l'assertion `total == 98` du test upgrade_path_preserves_data \
+         la branche, l'assertion `total == 99` du test upgrade_path_preserves_data \
          doit également échouer, c'est son rôle : elle signale qu'il faut décider \
          explicitement si la fenêtre s'élargit (bumper `total` seul) ou si la \
          frontière doit rester à 34 (bumper `total` ET la fenêtre). Cf. garde-fou \
@@ -65,8 +65,8 @@ async fn apply_migrations_up_to(
     sub.run(pool).await
 }
 
-/// AC #15a — cas générique upgrade path : `total - 64` migrations appliquées
-/// (**34** à ce jour) + seed + `MIGRATOR.run()` final, qui applique les **64**
+/// AC #15a — cas générique upgrade path : `total - 65` migrations appliquées
+/// (**34** à ce jour) + seed + `MIGRATOR.run()` final, qui applique les **65**
 /// dernières. Assertion : seed préservé à travers la fenêtre d'upgrade.
 ///
 /// ⚠️ Les nombres ci-dessus se recomptent, ils ne se relisent pas — cf. le
@@ -136,13 +136,14 @@ async fn upgrade_path_preserves_data(pool: MySqlPool) {
     // + invoice_line_types (Story 49-1a, refs #1242) = 96.
     // + paypal_import (Story 38-11b, Epic 38) = 97 (reprise de `main`, 2026-11-24).
     // + stripe_import (Story 40-7b, Epic 40) = 98 (reprise de `main` à 1e23edb55, 2026-11-25).
+    // + account_mirror (Story 47-1, Epic 47) = 99 (sur `main` à 0c44f7d1a, 2026-11-28).
     let total = kesh_db::MIGRATOR.migrations.len();
     assert_eq!(
-        total, 98,
-        "98 migrations attendues (97 précédentes + Story 40-7b : stripe_import)"
+        total, 99,
+        "99 migrations attendues (98 précédentes + Story 47-1 : account_mirror)"
     );
 
-    // Étape 1 : applique toutes les migrations sauf les 64 dernières. La
+    // Étape 1 : applique toutes les migrations sauf les 65 dernières. La
     // fenêtre d'upgrade démarre donc à la 35ᵉ, `20260614000001_vat_accounts_config`
     // (Story 18-1a), et court jusqu'à la dernière du dépôt. Ne pas ré-énumérer
     // ici les migrations de la fenêtre : une liste nominative se périme à chaque
@@ -157,7 +158,7 @@ async fn upgrade_path_preserves_data(pool: MySqlPool) {
     //
     // Frontière actuelle : **34**. Le test applique donc les 34 premières
     // migrations (jusqu'à `20260613000001_vat_rates_crud` incluse), seede des
-    // données, puis joue les 64 restantes comme « fenêtre d’upgrade ».
+    // données, puis joue les 65 restantes comme « fenêtre d’upgrade ».
     //
     // ⚠️ `N` DOIT être incrémenté en même temps que `total`. Le laisser à 63
     // avec `total = 98` porterait la frontière à 35 : le test continuerait de
@@ -234,16 +235,17 @@ async fn upgrade_path_preserves_data(pool: MySqlPool) {
     // Story 49-1a : 61 → 62, frontière inchangée (96 - 62 = 34).
     // Story 38-11b : 62 → 63, frontière inchangée (97 - 63 = 34).
     // Story 40-7b : 63 → 64, frontière inchangée (98 - 64 = 34).
+    // Story 47-1 : 64 → 65, frontière inchangée (99 - 65 = 34).
     //
     // ⚠️ J'ai d'abord porté `total` à 69 SANS toucher à ce soustracteur : le socle
     // est alors passé de 34 à 35 migrations, la fenêtre a glissé d'un cran, et le
     // test a rougi non plus sur son compteur mais sur `COUNT(accounts) : expected
     // 4, got 2` — un échec qui ne ressemble en rien à sa cause. *Les deux nombres
     // se bougent du même pas, et le commentaire ci-dessus le disait.*
-    let n_before_upgrade_window = total - 64;
+    let n_before_upgrade_window = total - 65;
     apply_migrations_up_to(&pool, n_before_upgrade_window)
         .await
-        .expect("apply_migrations_up_to(total - 64) failed");
+        .expect("apply_migrations_up_to(total - 65) failed");
 
     // Étape 2 : seed 1 company + 1 user + 2 accounts + 1 invoice + 1 contact.
     let company_id: i64 = sqlx::query_scalar(
@@ -3982,4 +3984,210 @@ async fn line_types_migration_resumes_after_a_half_run(pool: MySqlPool) {
         .await
         .unwrap();
     assert!(succes, "la migration est inscrite réussie");
+}
+
+/// Version de la migration de la Story 47-1.
+const MIROIR_VERSION: i64 = 20261119000001;
+
+/// Story 47-1 (AC-2) — une base d'**avant** la migration du compte miroir,
+/// **peuplée** (société, comptes en CHF et en devise, archivé, à rôle), monte
+/// sans écart : données d'avant intactes, `mirror_account_id` à `NULL` partout,
+/// `kesh_version_min_required` inchangé (migration non breaking). Montage
+/// **résolu par version** (P6), assertion de montage : la colonne est absente
+/// avant. Semis en SQL brut (le dépôt lit la colonne neuve).
+#[sqlx::test(migrations = false)]
+async fn compte_miroir_la_montee_garde_les_comptes_et_pose_null(pool: MySqlPool) {
+    apply_migrations_up_to(
+        &pool,
+        common::migrations_before(MIROIR_VERSION, "account_mirror"),
+    )
+    .await
+    .expect("apply_migrations_up_to(avant account_mirror) failed");
+    let colonne = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() \
+             AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'mirror_account_id'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    assert_eq!(
+        colonne().await,
+        0,
+        "assertion de montage : la migration n'a pas tourné"
+    );
+
+    let company_id: i64 = sqlx::query_scalar(
+        "INSERT INTO companies (name, address, org_type, accounting_language, instance_language) \
+         VALUES ('Miroir SA', 'Rue 1, 1000 Lausanne', 'Pme', 'FR', 'FR') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO accounts (company_id, number, name, account_type, postable, active, role, currency) VALUES \
+         (?, '1000', 'Caisse', 'Asset', TRUE, TRUE, NULL, NULL), \
+         (?, '1179', 'Créances sociales', 'Asset', FALSE, TRUE, NULL, NULL), \
+         (?, '1020', 'Banque EUR', 'Asset', TRUE, TRUE, NULL, 'EUR'), \
+         (?, '2270', 'Dettes sociales', 'Liability', TRUE, FALSE, NULL, NULL), \
+         (?, '2200', 'TVA due', 'Liability', TRUE, TRUE, 'VatPayable', NULL)",
+    )
+    .bind(company_id)
+    .bind(company_id)
+    .bind(company_id)
+    .bind(company_id)
+    .bind(company_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    type Ligne = (
+        String,
+        String,
+        String,
+        bool,
+        bool,
+        Option<String>,
+        Option<String>,
+        i32,
+    );
+    let lire = || async {
+        sqlx::query_as::<_, Ligne>(
+            "SELECT number, name, account_type, postable, active, role, currency, version \
+             FROM accounts WHERE company_id = ? ORDER BY number",
+        )
+        .bind(company_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+    let avant = lire().await;
+    let min_avant: String =
+        sqlx::query_scalar("SELECT kesh_version_min_required FROM _kesh_version WHERE id = 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    kesh_db::MIGRATOR.run(&pool).await.expect("montée");
+
+    assert_eq!(colonne().await, 1);
+    assert_eq!(lire().await, avant, "comptes d'avant intacts");
+    let poses: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM accounts WHERE mirror_account_id IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(poses, 0, "aucun miroir posé par la montée");
+    let min_apres: String =
+        sqlx::query_scalar("SELECT kesh_version_min_required FROM _kesh_version WHERE id = 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(min_apres, min_avant, "migration non breaking");
+    assert_eq!(min_apres, "0.17.6");
+}
+
+/// Le compte miroir publié après la 0.20.0 — sa migration porte un numéro
+/// (`20261119000001`) **antérieur** à ceux de la 0.20.0 (`20261120000001`,
+/// `20261120000003`) : elle a été écrite avant elles, et son fichier ne se
+/// renomme pas (une installation l'a déjà appliquée, P8). Une base en 0.20.0
+/// porte donc toutes les migrations du dépôt **sauf** celle-ci, et la montée
+/// doit l'appliquer quand même, hors de l'ordre des numéros. Montage résolu par
+/// version (P6), assertions de montage : la migration Stripe appliquée, la
+/// colonne du miroir absente.
+#[sqlx::test(migrations = false)]
+async fn compte_miroir_s_applique_sur_une_base_0_20_0(pool: MySqlPool) {
+    let all = &kesh_db::MIGRATOR.migrations;
+    let sans_miroir: Vec<_> = all
+        .iter()
+        .filter(|m| m.version != MIROIR_VERSION)
+        .cloned()
+        .collect();
+    assert_eq!(
+        sans_miroir.len() + 1,
+        all.len(),
+        "la migration du miroir est au dépôt"
+    );
+    assert!(
+        all.iter().any(|m| m.version > MIROIR_VERSION),
+        "assertion de montage : des migrations de numéro supérieur précèdent la montée"
+    );
+    let base_0_20_0 = Migrator {
+        migrations: Cow::Owned(sans_miroir),
+        ignore_missing: kesh_db::MIGRATOR.ignore_missing,
+        locking: kesh_db::MIGRATOR.locking,
+        no_tx: kesh_db::MIGRATOR.no_tx,
+    };
+    base_0_20_0.run(&pool).await.expect("base 0.20.0");
+    let colonne = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() \
+             AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'mirror_account_id'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    assert_eq!(
+        colonne().await,
+        0,
+        "assertion de montage : pas de colonne du miroir"
+    );
+    let stripe: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM _sqlx_migrations WHERE version = 20261120000003 AND success = 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        stripe, 1,
+        "assertion de montage : la dernière migration de la 0.20.0 appliquée"
+    );
+
+    let company_id: i64 = sqlx::query_scalar(
+        "INSERT INTO companies (name, address, org_type, accounting_language, instance_language) \
+         VALUES ('Miroir SA', 'Rue 1, 1000 Lausanne', 'Pme', 'FR', 'FR') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO accounts (company_id, number, name, account_type, postable) VALUES \
+         (?, '1020', 'Banque', 'Asset', TRUE), (?, '2100.1', 'Découvert', 'Liability', FALSE)",
+    )
+    .bind(company_id)
+    .bind(company_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    kesh_db::MIGRATOR
+        .run(&pool)
+        .await
+        .expect("montée depuis la 0.20.0");
+
+    assert_eq!(colonne().await, 1, "la migration du miroir a tourné");
+    let inscrites: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations WHERE success = 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        inscrites as usize,
+        all.len(),
+        "toutes les migrations inscrites"
+    );
+    let poses: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM accounts WHERE company_id = ? AND mirror_account_id IS NOT NULL",
+    )
+    .bind(company_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(poses, 0, "aucun miroir posé par la montée");
+    // Un second démarrage ne refait rien et ne refuse rien (checksums relus).
+    kesh_db::MIGRATOR
+        .run(&pool)
+        .await
+        .expect("second démarrage");
 }

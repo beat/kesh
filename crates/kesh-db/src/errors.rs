@@ -151,6 +151,117 @@ impl AccountGroupReason {
     ];
 }
 
+/// Raison du refus d'un compte miroir (Story 47-1, AC-4) — `details.reason` de
+/// `MIRROR_ACCOUNT_INVALID`. **Liste close**, dans l'ordre où les règles sont
+/// jugées par [`crate::repositories::accounts::check_mirror`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MirrorReason {
+    /// La cible est le compte lui-même.
+    SelfLink,
+    /// Cible introuvable ou d'une autre société (non distingués, anti-IDOR).
+    Unknown,
+    /// Cible archivée.
+    Archived,
+    /// La cible n'est pas de l'autre côté du même rapport (actif ↔ passif,
+    /// produit ↔ charge).
+    AccountType,
+    /// Le compte source porte un rôle de fonds propres (D8).
+    Equity,
+    /// La cible n'est pas un compte de présentation : imputable, ou porteuse
+    /// d'un rôle, ou d'au moins une ligne d'écriture (C-47-1-2).
+    NotPresentationAccount,
+    /// La cible a des sous-comptes : un compte de groupe (Epic 46) n'est pas
+    /// un compte miroir (revue d'intégration P1 de l'Epic 47, M-1).
+    HasChildren,
+    /// La cible a elle-même un miroir, ou la source est déjà le miroir d'un
+    /// autre compte.
+    Chain,
+}
+
+impl MirrorReason {
+    /// Le code de la raison côté API (`details.reason`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SelfLink => "self",
+            Self::Unknown => "unknown",
+            Self::Archived => "archived",
+            Self::AccountType => "accountType",
+            Self::Equity => "equity",
+            Self::NotPresentationAccount => "notPresentationAccount",
+            Self::HasChildren => "hasChildren",
+            Self::Chain => "chain",
+        }
+    }
+
+    /// La liste close, dans l'ordre de jugement.
+    pub const ALL: [Self; 8] = [
+        Self::SelfLink,
+        Self::Unknown,
+        Self::Archived,
+        Self::AccountType,
+        Self::Equity,
+        Self::NotPresentationAccount,
+        Self::HasChildren,
+        Self::Chain,
+    ];
+}
+
+/// Le geste refusé sur un compte désigné comme miroir (Story 47-1, AC-5) —
+/// `details.reason` de `ACCOUNT_IS_MIRROR`. **Liste close.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AccountIsMirrorReason {
+    /// L'archiver (`confirm_designated` ne le lève pas).
+    Archive,
+    /// Le rendre imputable.
+    Postable,
+    /// Le retyper.
+    AccountType,
+    /// Lui poser un rôle.
+    Role,
+    /// Lui donner un sous-compte (création sous lui, ou changement de parent
+    /// vers lui) : un compte miroir ne devient pas un compte de groupe (revue
+    /// d'intégration P1 de l'Epic 47, M-1).
+    Child,
+}
+
+impl AccountIsMirrorReason {
+    /// Le code de la raison côté API (`details.reason`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Archive => "archive",
+            Self::Postable => "postable",
+            Self::AccountType => "accountType",
+            Self::Role => "role",
+            Self::Child => "child",
+        }
+    }
+
+    /// La liste close.
+    pub const ALL: [Self; 5] = [
+        Self::Archive,
+        Self::Postable,
+        Self::AccountType,
+        Self::Role,
+        Self::Child,
+    ];
+}
+
+/// Un compte qui désigne un compte comme son miroir (Story 47-1, AC-5) —
+/// `details.sources[]` de `ACCOUNT_IS_MIRROR`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MirrorSourceAccount {
+    /// Identifiant du compte source.
+    pub id: i64,
+    /// Son numéro.
+    pub number: String,
+    /// Son nom.
+    pub name: String,
+    /// Actif ou archivé : une source archivée se réactive d'abord pour retirer
+    /// le lien.
+    pub active: bool,
+}
+
 /// La désignation qui fait d'un compte un compte de différence de change
 /// (Story 37-1, AC-4, AC-4 bis) — `details.designation` de
 /// `ACCOUNT_IS_FX_DIFFERENCE_ACCOUNT`.
@@ -1401,6 +1512,30 @@ pub enum DbError {
         holder_account_id: Option<i64>,
         /// Le numéro de ce compte.
         holder_number: Option<String>,
+    },
+
+    /// Un compte miroir est refusé (Story 47-1, AC-4) — à la création ou à la
+    /// modification d'un compte qui en désigne un. Mappé vers HTTP **400**
+    /// `MIRROR_ACCOUNT_INVALID`, `details: { reason[, linkedAccountNumber] }`.
+    #[error("Compte miroir refusé ({reason:?})")]
+    MirrorAccountInvalid {
+        /// La raison, de la liste close.
+        reason: MirrorReason,
+        /// Le compte en cause, pour la raison `chain` : la cible qui a déjà un
+        /// miroir, ou le compte dont la source est déjà le miroir.
+        linked_account_number: Option<String>,
+    },
+
+    /// Le geste viderait de son sens un compte désigné comme miroir par au
+    /// moins un compte de la société, source archivée comprise (Story 47-1,
+    /// AC-5). Mappé vers HTTP **409** `ACCOUNT_IS_MIRROR`,
+    /// `details: { reason, sources }`.
+    #[error("Le compte est le compte miroir d'un autre compte ({reason:?})")]
+    AccountIsMirror {
+        /// Le geste refusé.
+        reason: AccountIsMirrorReason,
+        /// Les comptes qui le désignent, triés par numéro (jamais vide).
+        sources: Vec<MirrorSourceAccount>,
     },
 
     /// Une écriture porte des comptes de **deux devises étrangères
@@ -2726,6 +2861,8 @@ impl DbError {
             Self::AccountCurrencyProviderLinked { .. } => "ACCOUNT_CURRENCY_PROVIDER_LINKED",
             Self::AccountInForeignCurrency { .. } => "ACCOUNT_IN_FOREIGN_CURRENCY",
             Self::AccountIsFxDifferenceAccount { .. } => "ACCOUNT_IS_FX_DIFFERENCE_ACCOUNT",
+            Self::MirrorAccountInvalid { .. } => "MIRROR_ACCOUNT_INVALID",
+            Self::AccountIsMirror { .. } => "ACCOUNT_IS_MIRROR",
             Self::FxMultipleCurrencies { .. } => "FX_MULTIPLE_CURRENCIES",
             Self::AccountRequiresCurrency { .. } => "ACCOUNT_REQUIRES_CURRENCY",
             Self::FxAccountInChf { .. } => "FX_ACCOUNT_IN_CHF",

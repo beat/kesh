@@ -29,6 +29,7 @@ use kesh_report::groupes::{
     ArbreComptes, AvecGroupes, LigneBalanceGroupee, NIVEAU_MAX, NiveauDetail, OptionsGroupes,
     PositionSousTotal, SectionsBilan, SectionsResultat,
 };
+use kesh_report::presentation::{present_balance_sheet, present_income_statement};
 use kesh_report::project_report::{ProjectPeriodMode, resolve_scope};
 use kesh_report::{
     AgedReceivables, BalanceSheet, GeneralLedger, HomepageSummary, IncomeStatement, JournalReport,
@@ -806,11 +807,15 @@ pub async fn bilan_par_groupes<U: Usage>(
     acces.exiger(EXIGENCES_BILAN.pour(&usage))?;
     validate_fiscal_year_id(demande.fiscal_year_id)?;
     let period = resoudre_periode(acces, lecture, &demande).await?;
-    let bilan = generate_balance_sheet(lecture.pool(), acces.company_id(), &period).await?;
-    // Point d'insertion prévu de la présentation miroir de l'Epic 47 (Story
-    // 47-3, pas encore dans cette base) : elle s'appliquera ici, au bilan brut,
-    // **avant** le regroupement (AC-9, décision de Guy « miroir puis groupes ») ;
-    // les groupes se calculeront alors sur les sections présentées.
+    let brut = generate_balance_sheet(lecture.pool(), acces.company_id(), &period).await?;
+    // Toujours présenté (Story 47-3, R6) ; liens lus sans instantané commun avec
+    // les soldes : un lien modifié entre les deux ne change qu'une présentation.
+    let liens = accounts::mirror_links(lecture.pool(), acces.company_id()).await?;
+    // La présentation miroir s'applique au bilan brut **avant** le regroupement
+    // (Story 46-1 AC-9, fiche 47-3 § *Recâblage*, « miroir puis groupes ») : les
+    // groupes se calculent sur les sections présentées, et la ligne d'un miroir
+    // entre dans le groupe du miroir.
+    let bilan = present_balance_sheet(brut, &liens);
     let contenu = match groupes {
         None => AvecGroupes::sans_groupes(bilan),
         Some(g) => AvecGroupes::bilan(bilan, &arbre_des_comptes(acces, lecture).await?, &g.options),
@@ -842,9 +847,11 @@ pub async fn compte_de_resultat_par_groupes<U: Usage>(
     acces.exiger(EXIGENCES_COMPTE_DE_RESULTAT.pour(&usage))?;
     validate_fiscal_year_id(demande.fiscal_year_id)?;
     let period = resoudre_periode(acces, lecture, &demande).await?;
-    let resultat = generate_income_statement(lecture.pool(), acces.company_id(), &period).await?;
-    // Point d'insertion prévu de la présentation miroir de l'Epic 47 (Story
-    // 47-3, pas encore dans cette base), avant le regroupement (AC-9).
+    let brut = generate_income_statement(lecture.pool(), acces.company_id(), &period).await?;
+    let liens = accounts::mirror_links(lecture.pool(), acces.company_id()).await?;
+    // Présentation miroir avant le regroupement (Story 46-1 AC-9, fiche 47-3
+    // § *Recâblage*) : les groupes se calculent sur les sections présentées.
+    let resultat = present_income_statement(brut, &liens);
     let contenu = match groupes {
         None => AvecGroupes::sans_groupes(resultat),
         Some(g) => AvecGroupes::compte_de_resultat(

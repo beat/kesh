@@ -79,6 +79,12 @@ export interface AccountResponse {
 	 */
 	fxGainAccountId?: number;
 	fxLossAccountId?: number;
+	/**
+	 * Story 47-2 (AC-5) — compte miroir (compte de présentation de l'autre côté,
+	 * Story 47-1) ; **absent** quand le compte n'en a pas. Le sens inverse
+	 * (« qui me désigne ») se déduit de la liste (`mirrorSourceNumbers`).
+	 */
+	mirrorAccountId?: number;
 	version: number;
 	createdAt: string;
 	updatedAt: string;
@@ -125,6 +131,8 @@ export interface CreateAccountRequest {
 	 */
 	fxGainAccountId?: number | null;
 	fxLossAccountId?: number | null;
+	/** Story 47-2 (AC-5) — compte miroir ; absent ou `null` = aucun. */
+	mirrorAccountId?: number | null;
 }
 
 /**
@@ -169,6 +177,12 @@ export interface UpdateAccountRequest {
 	 * l'envoie que s'il change (`parentFieldForUpdate`).
 	 */
 	parentId?: number | null;
+	/**
+	 * Story 47-2 (AC-5) — **absent = miroir inchangé**, `null` = retiré, valeur
+	 * = compte miroir. Le formulaire ne l'envoie que s'il change
+	 * (`mirrorFieldForUpdate`).
+	 */
+	mirrorAccountId?: number | null;
 }
 
 /**

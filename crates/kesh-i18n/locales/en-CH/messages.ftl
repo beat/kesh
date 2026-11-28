@@ -266,6 +266,11 @@ accounts-retype-closed-years = Closed fiscal years affected: { $years }. Their r
 accounts-retype-confirm = Change the type anyway
 account-field-parent-optional = Parent account (optional)
 accounts-parent-none = None
+# Story 47-2 — compte miroir au dialogue d'un compte
+accounts-mirror-label = Mirror account
+accounts-mirror-none = None
+accounts-mirror-help = The mirror account is a presentation account: not postable, with no role and no entries. This account’s balance, when of opposite sign, appears there in the balance sheet or income statement.
+accounts-mirror-of = This account is the mirror account of { $numbers }.
 accounts-parent-archived = Parent account { $number } is archived. Reactivate it first.
 error-account-parent-cycle = Account { $number } is this account itself or one of its sub-accounts: an account cannot be placed under itself.
 error-account-parent-has-entries = Account { $number } carries entries: placing this account under it would make it non-postable with a balance that no entry could correct any more. Choose a group account without entries.
@@ -1202,6 +1207,22 @@ error-account-in-foreign-currency = This account is kept in { $currency }: it ca
 error-account-is-fx-difference-account = This account is an exchange difference account of the company: it cannot be archived, retyped, made non-postable, or receive a currency, a sub-account or a revenue role.
 error-account-is-fx-difference-account-own = This account is an exchange difference account of the foreign-currency account { $number }: it cannot be archived, retyped, made non-postable, or receive a currency, a sub-account or a revenue role.
 error-account-is-fx-transit-account = This account is the company’s conversion account: it cannot be archived, retyped outside the balance sheet, made non-postable, or receive a currency or a sub-account.
+# Story 47-1 (AC-9) — mirror account: refusals of MIRROR_ACCOUNT_INVALID (one key per reason) and ACCOUNT_IS_MIRROR.
+error-mirror-account-self = An account cannot be its own mirror account.
+error-mirror-account-unknown = The mirror account cannot be found or does not belong to this company.
+error-mirror-account-archived = The mirror account is archived.
+error-mirror-account-account-type = The mirror account must be on the other side of the same report: a liability for an asset, an asset for a liability, an expense for a revenue, a revenue for an expense.
+error-mirror-account-equity = An equity account (capital, other equity, retained earnings, result for the year) does not designate a mirror account.
+error-mirror-account-not-presentation = The mirror account must be a presentation account: non-postable, without a role and without entries.
+error-mirror-account-has-children = The mirror account cannot be a group account: it has sub-accounts.
+error-mirror-account-chain = Mirror accounts do not chain: account { $number } is already linked by a mirror.
+error-account-is-mirror-archive = This account is the mirror account of { $sources }: it can only be archived once the link is removed.
+error-account-is-mirror-postable = This account is the mirror account of { $sources }: it stays non-postable while the link remains.
+error-account-is-mirror-account-type = This account is the mirror account of { $sources }: its type does not change while the link remains.
+error-account-is-mirror-role = This account is the mirror account of { $sources }: it receives no role while the link remains.
+error-account-is-mirror-child = This account is the mirror account of { $sources }: it receives no sub-account while the link remains.
+error-account-is-mirror-reactivate-first = { $archived } is archived: reactivate it first, then remove its mirror account.
+error-account-is-mirror-reactivate-first-many = { $archived } are archived: reactivate them first, then remove their mirror account.
 # Story 37-3a — foreign-currency entries.
 error-multi-currency-disabled-fiscal-year = This fiscal year is single-currency: this foreign-currency operation is not possible in it.
 error-fx-multiple-currencies = An entry carries a single foreign currency (here: { $currencies }). Book a conversion between currencies through the conversion account, in two entries.
@@ -2242,6 +2263,10 @@ reports-retained-earnings-loss = Accumulated loss
 # Alerts + badges UI (2 — code review Pass 1 i18n leaks)
 reports-equation-warning = ⚠️ Balance sheet equation unbalanced (verify source data).
 reports-archived-label = archived
+
+# Story 47-4 — under the line of a mirror account.
+reports-mirror-of-one = Balance of { $sources }
+reports-mirror-of-other = Balances of { $sources }
 
 # Reports page — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Accounting Reports

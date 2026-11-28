@@ -266,6 +266,11 @@ accounts-retype-closed-years = Exercices clos concernés : { $years }. Leur rés
 accounts-retype-confirm = Changer le type quand même
 account-field-parent-optional = Compte parent (optionnel)
 accounts-parent-none = Aucun
+# Story 47-2 — compte miroir au dialogue d'un compte
+accounts-mirror-label = Compte miroir
+accounts-mirror-none = Aucun
+accounts-mirror-help = Le compte miroir est un compte de présentation : non postable, sans rôle ni écriture. Le solde de ce compte, s’il est de sens inverse, y paraît dans le bilan ou le compte de résultat.
+accounts-mirror-of = Ce compte est le compte miroir de { $numbers }.
 accounts-parent-archived = Le compte parent { $number } est archivé. Réactivez-le d'abord.
 error-account-parent-cycle = Le compte { $number } est ce compte ou l'un de ses sous-comptes : un compte ne peut pas être rangé sous lui-même.
 error-account-parent-has-entries = Le compte { $number } porte des écritures : y ranger ce compte le rendrait non imputable avec un solde qu'aucune saisie ne pourrait plus corriger. Choisissez un compte de groupe sans écriture.
@@ -1271,6 +1276,22 @@ error-account-in-foreign-currency = Ce compte est tenu en { $currency } : il ne 
 error-account-is-fx-difference-account = Ce compte est un compte de différence de change de la société : il ne peut être ni archivé, ni retypé, ni rendu non imputable, ni recevoir de devise, de sous-compte ou de rôle de produit.
 error-account-is-fx-difference-account-own = Ce compte est un compte de différence de change du compte en devise { $number } : il ne peut être ni archivé, ni retypé, ni rendu non imputable, ni recevoir de devise, de sous-compte ou de rôle de produit.
 error-account-is-fx-transit-account = Ce compte est le compte de conversion de la société : il ne peut être ni archivé, ni retypé hors du bilan, ni rendu non imputable, ni recevoir de devise ou de sous-compte.
+# Story 47-1 (AC-9) — compte miroir : refus de MIRROR_ACCOUNT_INVALID (une clé par raison) et d’ACCOUNT_IS_MIRROR.
+error-mirror-account-self = Un compte ne peut pas être son propre compte miroir.
+error-mirror-account-unknown = Le compte miroir est introuvable ou n’appartient pas à cette société.
+error-mirror-account-archived = Le compte miroir est archivé.
+error-mirror-account-account-type = Le compte miroir doit être de l’autre côté du même rapport : un passif pour un actif, un actif pour un passif, une charge pour un produit, un produit pour une charge.
+error-mirror-account-equity = Un compte de fonds propres (capital, autres fonds propres, bénéfice reporté, résultat de l’exercice) ne désigne pas de compte miroir.
+error-mirror-account-not-presentation = Le compte miroir doit être un compte de présentation : non imputable, sans rôle et sans écriture.
+error-mirror-account-has-children = Le compte miroir ne peut pas être un compte de groupe : il a des sous-comptes.
+error-mirror-account-chain = Les comptes miroirs ne s’enchaînent pas : le compte { $number } est déjà lié par un miroir.
+error-account-is-mirror-archive = Ce compte est le compte miroir de { $sources } : il ne s’archive qu’une fois le lien retiré.
+error-account-is-mirror-postable = Ce compte est le compte miroir de { $sources } : il reste non imputable tant que le lien demeure.
+error-account-is-mirror-account-type = Ce compte est le compte miroir de { $sources } : il ne change pas de type tant que le lien demeure.
+error-account-is-mirror-role = Ce compte est le compte miroir de { $sources } : il ne reçoit pas de rôle tant que le lien demeure.
+error-account-is-mirror-child = Ce compte est le compte miroir de { $sources } : il ne reçoit pas de sous-compte tant que le lien demeure.
+error-account-is-mirror-reactivate-first = { $archived } est archivé : réactivez-le d’abord, puis retirez son compte miroir.
+error-account-is-mirror-reactivate-first-many = { $archived } sont archivés : réactivez-les d’abord, puis retirez leur compte miroir.
 # Story 37-3a — écritures en devise.
 error-multi-currency-disabled-fiscal-year = Cet exercice est mono-devise : cette opération en devise n’y est pas possible.
 error-fx-multiple-currencies = Une écriture ne porte qu’une devise étrangère (ici : { $currencies }). Passez une conversion entre devises par le compte de conversion, en deux écritures.
@@ -2332,6 +2353,10 @@ reports-retained-earnings-loss = Perte reportée
 # Alertes + badges UI (2 — code review Pass 1 i18n leaks)
 reports-equation-warning = ⚠️ Équation bilan déséquilibrée (vérifier données source).
 reports-archived-label = archivé
+
+# Story 47-4 — sous la ligne d’un compte miroir (bilan, compte de résultat) : le ou les comptes dont le solde y est présenté ; numéros et noms déjà joints.
+reports-mirror-of-one = Solde de { $sources }
+reports-mirror-of-other = Soldes de { $sources }
 
 # Page rapports — chrome (3 — code review Pass 1 i18n leaks)
 reports-page-title = Rapports comptables

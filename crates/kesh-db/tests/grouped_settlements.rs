@@ -1324,6 +1324,10 @@ async fn the_upgrade_keeps_unit_settlements_and_allows_a_group(pool: MySqlPool) 
         "assertion de montage : la migration n'a pas tourné"
     );
 
+    // Story 47-1 : la colonne du compte miroir, que lit la garde des lignes
+    // d'écriture, posée le temps du peuplement puis retirée avant la montée.
+    common::colonne_miroir(&pool, true).await;
+
     // Le peuplement, au schéma d'avant : une facture réglée par une écriture
     // unitaire, une facture fournisseur payée. Story 49-1a : le dépôt de la
     // facture écrit `line_type`, colonne d'une migration postérieure — posée le
@@ -1396,6 +1400,7 @@ async fn the_upgrade_keeps_unit_settlements_and_allows_a_group(pool: MySqlPool) 
 
     // La montée.
     common::colonnes_types_de_ligne(&pool, false).await;
+    common::colonne_miroir(&pool, false).await;
     kesh_db::MIGRATOR.run(&pool).await.expect("montée");
 
     assert_eq!(

@@ -78,6 +78,7 @@
 	import { i18nMsg } from '$lib/shared/utils/i18n.svelte';
 	import AccountCurrencyBalance from './AccountCurrencyBalance.svelte';
 	import AccountLink from './AccountLink.svelte';
+	import MirrorOfNote from './MirrorOfNote.svelte';
 	import { formatCurrencyFigure } from './reports.api';
 	import type { SubtotalPosition } from './reports.types';
 
@@ -173,6 +174,12 @@
 					account={row}
 					testIdPrefix={row.kind === 'group' || row.kind === 'subtotal' ? 'group-fx' : 'account-fx'}
 				/>
+			{/if}
+			{#if row.kind === 'account'}
+				<!-- Story 47-3 (§ Recâblage, point 3) : la mention « Solde de … » d'un compte
+				     miroir, comme à la vue à plat. Seules les lignes du bilan et du compte de
+				     résultat portent `mirrorOf` ; rien ne s'affiche ailleurs. -->
+				<MirrorOfNote account={row} />
 			{/if}
 		</td>
 		{#each columns as col (col.id)}

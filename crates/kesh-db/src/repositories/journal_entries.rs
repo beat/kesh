@@ -232,6 +232,11 @@ async fn insert_lines(
 ///    [`DbError::AccountsNotPostable`], qui **nomme** tous ces comptes. Il n'est
 ///    construit qu'après le contrôle d'appartenance : un compte d'une autre
 ///    société ne livre jamais son numéro (KF-002).
+///    **Story 47-1 (AC-6, R4)** : un compte désigné comme **miroir** par un
+///    compte de la société y est joint **sans condition** — y compris quand
+///    `enforce_postable` est faux (flux automatiques) — : aucune écriture ne
+///    se passe sur un compte miroir. Lecture verrouillante séparée, par l'index
+///    `idx_accounts_mirror`.
 ///
 /// La décision se prend en Rust, et non par une clause `WHERE` : une clause
 /// filtrerait le compte sans dire **pourquoi** il manque. La liste des flux qui
@@ -298,19 +303,52 @@ async fn validate_lines_accounts_in_tx(
         .map(|(id, _, _, _, currency)| (*id, currency.clone()))
         .collect();
 
-    // (2) Non imputable — saisie manuelle seulement.
-    if enforce_postable {
-        let non_postable: Vec<NonPostableAccount> = found
-            .into_iter()
-            .filter(|(_, _, _, postable, _)| !postable)
-            .map(|(account_id, account_number, _, _, _)| NonPostableAccount {
-                account_id,
-                account_number,
-            })
-            .collect();
-        if !non_postable.is_empty() {
-            return Err(DbError::accounts_not_postable(non_postable));
-        }
+    // (2) Story 47-1 (AC-6, R4) — les comptes désignés comme MIROIR par un
+    // compte de la société : aucune écriture, quel que soit `enforce_postable`
+    // (les flux automatiques passent `false`). Seconde instruction
+    // VERROUILLANTE, par l'index `idx_accounts_mirror`, et non un `EXISTS`
+    // corrélé dans la première : sous REPEATABLE READ, une sous-requête non
+    // verrouillante lirait l'instantané de la transaction, déjà ouvert par les
+    // lectures qui précèdent (`books_locked_through`, appelants) ; une pose
+    // commitée pendant l'attente du verrou sur la cible n'y serait pas vue. La
+    // lecture verrouillante lit la dernière version commitée et pose ses
+    // verrous d'intervalle, qui font aussi attendre une pose concurrente.
+    // ⚠️ Coût assumé (revue P1 de la 47-1, L4 ; raisonné, non mesuré) : tant
+    // qu'aucun compte de la société n'a de miroir, l'index ne porte que des
+    // `(société, NULL, id)`, et le verrou d'intervalle de cette recherche couvre
+    // l'écart où tombe l'`INSERT` d'un compte neuf de la même société. Une
+    // création de compte peut donc attendre la fin d'une écriture comptable en
+    // cours — attente transitoire, sans interblocage identifié (la création ne
+    // tient rien que l'écriture attende).
+    let mirrors_sql = format!(
+        "SELECT DISTINCT mirror_account_id FROM accounts \
+         WHERE company_id = ? AND mirror_account_id IN ({placeholders}) LOCK IN SHARE MODE"
+    );
+    let mut q = sqlx::query_scalar::<_, i64>(&mirrors_sql).bind(company_id);
+    for id in account_ids {
+        q = q.bind(id);
+    }
+    let mirrors: std::collections::HashSet<i64> = q
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(map_db_error)?
+        .into_iter()
+        .collect();
+
+    // (3) Non imputable (saisie manuelle seulement) ou miroir (toujours) : les
+    // deux familles réunies dans UNE erreur, qui nomme les comptes — un compte
+    // miroir est non imputable par construction (AC-4), même code, même
+    // message (`ACCOUNT_NOT_POSTABLE`).
+    let non_postable: Vec<NonPostableAccount> = found
+        .into_iter()
+        .filter(|(id, _, _, postable, _)| (enforce_postable && !postable) || mirrors.contains(id))
+        .map(|(account_id, account_number, _, _, _)| NonPostableAccount {
+            account_id,
+            account_number,
+        })
+        .collect();
+    if !non_postable.is_empty() {
+        return Err(DbError::accounts_not_postable(non_postable));
     }
     Ok(devises)
 }
@@ -5555,6 +5593,7 @@ mod tests {
                 postable: true,
                 currency: None,
                 own_fx_accounts: None,
+                mirror_account_id: None,
             },
         )
         .await

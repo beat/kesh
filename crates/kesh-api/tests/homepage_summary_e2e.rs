@@ -355,6 +355,7 @@ async fn new_account(
             postable: true,
             currency: None,
             own_fx_accounts: None,
+            mirror_account_id: None,
         },
     )
     .await
@@ -1468,4 +1469,71 @@ async fn reading_writes_nothing(pool: MySqlPool) {
     app.summary(&c.jwt).await;
     assert_eq!(dec_of(&b["totalExpenses"]), dec!(7), "contrôle : {b}");
     assert_eq!(count().await, before, "la lecture n'écrit aucune trace");
+}
+
+// ============================================================
+// Story 47-3, AC-9 — l'accueil reste sur les soldes réels
+// ============================================================
+
+/// Un produit à solde débiteur, doté d'un compte miroir (charge) : le compte de
+/// résultat le présente en charge, l'accueil le garde où il est. Le résultat net
+/// ne bouge dans aucun des deux ; les totaux, si — sonde négative : appliquer la
+/// présentation à l'accueil fait rougir ce test.
+#[sqlx::test(migrations = "../kesh-db/test-schema")]
+async fn mirror_leaves_the_homepage_on_real_balances(pool: MySqlPool) {
+    let c = setup(&pool, "miroir").await;
+    let (u, f, co) = (c.user_id, c.fy_id, c.company_id);
+    let mirror = accounts::create(
+        &pool,
+        u,
+        NewAccount {
+            company_id: co,
+            number: "6100.1".into(),
+            name: "Pertes de change".into(),
+            account_type: AccountType::Expense,
+            parent_id: None,
+            role: None,
+            postable: false,
+            currency: None,
+            own_fx_accounts: None,
+            mirror_account_id: None,
+        },
+    )
+    .await
+    .unwrap()
+    .id;
+    let gains = accounts::create(
+        &pool,
+        u,
+        NewAccount {
+            company_id: co,
+            number: "3100".into(),
+            name: "Gains de change".into(),
+            account_type: AccountType::Revenue,
+            parent_id: None,
+            role: None,
+            postable: true,
+            currency: None,
+            own_fx_accounts: None,
+            mirror_account_id: Some(mirror),
+        },
+    )
+    .await
+    .unwrap()
+    .id;
+    post(&pool, u, f, co, month_k(0), c.bank, c.revenue, dec!(2000)).await;
+    post(&pool, u, f, co, month_k(0), gains, c.bank, dec!(250)).await;
+
+    let app = spawn_app(pool).await;
+    let b = app.summary(&c.jwt).await;
+    // L'accueil : produits 2000 − 250, aucune charge.
+    assert_eq!(dec_of(&b["totalRevenues"]), dec!(1750), "{b}");
+    assert_eq!(dec_of(&b["totalExpenses"]), dec!(0), "{b}");
+    // Le compte de résultat : 250 passés en charge, même résultat net.
+    let (rev, exp) = app.income_totals(&c.jwt, c.fy_id).await;
+    assert_eq!((rev, exp), (dec!(2000), dec!(250)));
+    assert_eq!(
+        rev - exp,
+        dec_of(&b["totalRevenues"]) - dec_of(&b["totalExpenses"])
+    );
 }
