@@ -604,7 +604,11 @@ désigner comme parent un compte qui en a, \textbf{même si son solde est nul} -
 resteraient, sur un compte non imputable où plus rien ne les corrigerait. Kesh refuse un tel
 parent à la création d'un compte, par \emph{Modifier le compte}, à la réactivation d'un
 sous-compte et à la confirmation de \emph{Créer des groupes} (\texttt{ACCOUNT\_\allowbreak
-PARENT\_\allowbreak HAS\_\allowbreak ENTRIES})~; le message renvoie à cette section.
+PARENT\_\allowbreak HAS\_\allowbreak ENTRIES})~; le message renvoie à cette section. Pour un
+compte d'actif ou de passif en devise, le refus est \texttt{ACCOUNT\_\allowbreak FOREIGN\_\allowbreak
+PARENT\_\allowbreak HAS\_\allowbreak ENTRIES} (\S\ref{sec:devise-compte}).
+Le compte d'un compte bancaire a sa propre règle (\S\ref{sec:ajout-compte})~: il ne se remplace
+pas ainsi, on range plutôt ce compte et ses voisins sous un groupe.
 
 On ne transforme donc pas l'ancien compte en groupe~: on le remplace, en trois temps.
 

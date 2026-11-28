@@ -84,7 +84,10 @@ lien bancaire, devise, écritures — aucune lecture des réglages de facturatio
   marche (§ « Réorganiser le plan comptable », `sec:reorganiser-plan`), et les six messages des deux refus (création ou
   changement de parent, réactivation ; réglage ou article) y renvoient, dans les quatre locales. Le manuel n'existe qu'en
   français (`docs/manual/{de,en,it}/` ne portent qu'un README) : les messages allemand, italien et anglais citent le titre
-  français de la section, en le disant.
+  français de la section, en le disant. Si un manuel allemand, italien ou anglais voit le jour, ces dix-huit messages (six
+  clés, trois locales) seront à reprendre. Les avertissements de l'aperçu de *Créer des groupes*
+  (`frontend/src/routes/(app)/accounts/groups/messages.ts`) et le message d'`ACCOUNT_FOREIGN_PARENT_HAS_ENTRIES` ne
+  renvoient pas au manuel : hors de la demande (revue P4, LOW-1).
 
 ## Tests
 
@@ -163,3 +166,9 @@ pas par un test déterministe ; il est établi à la lecture de l'ordre des verr
   P2 (Sonnet, ciblée sur `69f5ba31b`) 0 au-dessus de LOW, 2 LOW → lot `670a7b2f6` (message d'un parent mouvementé
   neutre, test renommé ; les messages du lien bancaire, antérieurs à la story, laissés) ; P3 (Sonnet, ciblée sur
   `670a7b2f6`) 0 finding. Boucle close. Prompts versionnés : `fix-1431-review-prompt-p1.md`, `-p2.md`, `-p3.md`.
+- 2026-11-28 — décisions du mainteneur : refus, non confirmation ; C-1431-5 confirmé par le principe « un compte de
+  regroupement ne porte pas d'écritures » ; marche à suivre au manuel (C-1431-6). Commit `6faee0819` : section
+  « Réorganiser le plan comptable » du manuel utilisateur (§ 6.5), renvoi dans les six messages des deux refus (quatre
+  locales et textes de repli), phrase au guide de l'API. Revue P4 (Sonnet, ciblée sur `6faee0819`, prompt
+  `fix-1431-review-prompt-p4.md`) : 0 au-dessus de LOW, 3 LOW, tous de texte — corrigés en un lot sans passe de plus
+  (manuel : refus en devise et compte bancaire nommés ; fiche : limite des renvois en français), vérifiés par `grep`.
