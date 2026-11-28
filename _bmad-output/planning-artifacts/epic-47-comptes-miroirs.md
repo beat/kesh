@@ -145,7 +145,7 @@ type » est à ajouter au rejeu de l'exemple par niveaux, à la fusion.
 
 **Kickoff : 2026-11-18** (esquisse) ; **orientation approuvée par Guy le 2026-11-19** (§ *Revue de Guy*) **et par le responsable de l'epic le même jour, telle quelle** (§ *Revue du responsable de l'epic*) : **kickoff accompli le 2026-11-19**. Numéro réservé au responsable de l'epic (contributeur) par Guy ; responsable : le responsable de l'epic.
 Branche `epic/47-comptes-miroirs`, partie de `main` = `773df80d` (v0.19.0). **Passe après l'Epic 46** (rapports par
-groupes de comptes), préparé en parallèle. Release : un epic = une release, **ultérieure à la 0.20.0** (Guy, 2026-11-19), numéro au tag par le Project Lead.
+groupes de comptes), préparé en parallèle. Release : un epic = une release, **ultérieure à la 0.20.0** (Guy, 2026-11-19), numéro au tag par le Project Lead. *(Annoté le 2026-11-28, à la reprise de `main` après la release du 28 novembre : release visée, **celle du 4 décembre** ; son numéro se donne au tag.)*
 
 Règles des fichiers communs (`CLAUDE.md` § *Travailler à plusieurs développeurs*) : rien au `CHANGELOG.md` (section
 *Note de version* par fiche) ; aucun PDF de manuel commité ; i18n et `sprint-status.yaml` en bloc propre ; compteurs
@@ -367,7 +367,7 @@ Hors les 56 issues masquées du compte de l'agent du responsable de l'epic (#126
 
 **Objectif de l'epic** (règle de release, non barrière) : moins d'issues ouvertes au tag de sa release qu'au tag de la
 release précédente (la 0.20.0, compte **à relever au tag v0.20.0**) ; le compte au tag de l'Epic 47 s'écrit à sa PR
-de release et à sa rétrospective, avec l'écart et sa cause.
+de release et à sa rétrospective, avec l'écart et sa cause. *(Annoté le 2026-11-28 : une release est sortie entre-temps, celle du 28 novembre (`287deea33`) ; le tag précédent de la release du 4 décembre est désormais le sien.)*
 
 ## Questions — répondues (Guy, 2026-11-19), réponses adoptées (Guy et le responsable de l'epic, 2026-11-19)
 
